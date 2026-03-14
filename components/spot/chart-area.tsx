@@ -126,6 +126,46 @@ function computeEMA(data: number[], period: number): (number | null)[] {
   return r
 }
 
+function computeDEMA(data: number[], period: number): (number | null)[] {
+  const ema1 = computeEMA(data, period)
+  const validEma = ema1.map(v => v ?? 0)
+  const ema2 = computeEMA(validEma, period)
+  return ema1.map((v, i) => v !== null && ema2[i] !== null ? 2 * v - ema2[i]! : null)
+}
+
+function computeTEMA(data: number[], period: number): (number | null)[] {
+  const ema1 = computeEMA(data, period)
+  const validEma1 = ema1.map(v => v ?? 0)
+  const ema2 = computeEMA(validEma1, period)
+  const validEma2 = ema2.map(v => v ?? 0)
+  const ema3 = computeEMA(validEma2, period)
+  return ema1.map((v, i) => v !== null && ema2[i] !== null && ema3[i] !== null ? 3 * v - 3 * ema2[i]! + ema3[i]! : null)
+}
+
+function computeWMA(data: number[], period: number): (number | null)[] {
+  const r: (number | null)[] = []
+  const denom = (period * (period + 1)) / 2
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) { r.push(null); continue }
+    let s = 0
+    for (let j = 0; j < period; j++) s += data[i - j] * (period - j)
+    r.push(s / denom)
+  }
+  return r
+}
+
+function computeHMA(data: number[], period: number): (number | null)[] {
+  const half = Math.floor(period / 2)
+  const wmaHalf = computeWMA(data, half)
+  const wmaFull = computeWMA(data, period)
+  const diff: number[] = []
+  for (let i = 0; i < data.length; i++) {
+    diff.push(wmaHalf[i] !== null && wmaFull[i] !== null ? 2 * wmaHalf[i]! - wmaFull[i]! : 0)
+  }
+  const sqrtP = Math.max(2, Math.floor(Math.sqrt(period)))
+  return computeWMA(diff, sqrtP)
+}
+
 function computeBB(data: number[], period: number, mult: number) {
   const sma = computeSMA(data, period)
   const upper: (number | null)[] = []
@@ -273,6 +313,152 @@ function computeCCI(klines: Kline[], period: number): (number | null)[] {
   return r
 }
 
+function computeIchimoku(klines: Kline[]) {
+  const n = klines.length
+  const tenkan: (number | null)[] = Array(n).fill(null)
+  const kijun: (number | null)[] = Array(n).fill(null)
+  const senkouA: (number | null)[] = Array(n).fill(null)
+  const senkouB: (number | null)[] = Array(n).fill(null)
+  const chikou: (number | null)[] = Array(n).fill(null)
+  function hlAvg(end: number, period: number): number | null {
+    if (end < period - 1) return null
+    let hi = -Infinity, lo = Infinity
+    for (let j = 0; j < period; j++) { hi = Math.max(hi, klines[end - j].high); lo = Math.min(lo, klines[end - j].low) }
+    return (hi + lo) / 2
+  }
+  for (let i = 0; i < n; i++) {
+    tenkan[i] = hlAvg(i, 9); kijun[i] = hlAvg(i, 26)
+    if (tenkan[i] !== null && kijun[i] !== null) { const aIdx = i + 26; if (aIdx < n) senkouA[aIdx] = (tenkan[i]! + kijun[i]!) / 2 }
+    const b = hlAvg(i, 52); if (b !== null) { const bIdx = i + 26; if (bIdx < n) senkouB[bIdx] = b }
+    const cIdx = i - 26; if (cIdx >= 0) chikou[cIdx] = klines[i].close
+  }
+  return { tenkan, kijun, senkouA, senkouB, chikou }
+}
+
+function computeParabolicSAR(klines: Kline[]): (number | null)[] {
+  if (klines.length < 2) return klines.map(() => null)
+  const r: (number | null)[] = [null]
+  let isLong = klines[1].close > klines[0].close, af = 0.02, ep = isLong ? klines[0].high : klines[0].low, sar = isLong ? klines[0].low : klines[0].high
+  for (let i = 1; i < klines.length; i++) {
+    sar = sar + af * (ep - sar)
+    if (isLong) {
+      if (klines[i].low < sar) { isLong = false; sar = ep; ep = klines[i].low; af = 0.02 }
+      else if (klines[i].high > ep) { ep = klines[i].high; af = Math.min(af + 0.02, 0.2) }
+    } else {
+      if (klines[i].high > sar) { isLong = true; sar = ep; ep = klines[i].high; af = 0.02 }
+      else if (klines[i].low < ep) { ep = klines[i].low; af = Math.min(af + 0.02, 0.2) }
+    }
+    r.push(sar)
+  }
+  return r
+}
+
+function computeDonchian(klines: Kline[], period: number) {
+  const upper: (number | null)[] = [], lower: (number | null)[] = [], mid: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (i < period - 1) { upper.push(null); lower.push(null); mid.push(null); continue }
+    let hi = -Infinity, lo = Infinity
+    for (let j = 0; j < period; j++) { hi = Math.max(hi, klines[i - j].high); lo = Math.min(lo, klines[i - j].low) }
+    upper.push(hi); lower.push(lo); mid.push((hi + lo) / 2)
+  }
+  return { upper, lower, middle: mid }
+}
+
+function computeKeltner(klines: Kline[], emaPeriod: number, atrPeriod: number, mult: number) {
+  const ema = computeEMA(klines.map(k => k.close), emaPeriod)
+  const atr = computeATR(klines, atrPeriod)
+  const upper: (number | null)[] = [], lower: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (ema[i] === null || atr[i] === null) { upper.push(null); lower.push(null); continue }
+    upper.push(ema[i]! + mult * atr[i]!); lower.push(ema[i]! - mult * atr[i]!)
+  }
+  return { upper, middle: ema, lower }
+}
+
+function computeSupertrend(klines: Kline[], period: number, mult: number) {
+  const atr = computeATR(klines, period)
+  const st: (number | null)[] = [], direction: number[] = []
+  let prevUp = 0, prevDn = 0, prevDir = 1
+  for (let i = 0; i < klines.length; i++) {
+    if (atr[i] === null) { st.push(null); direction.push(1); continue }
+    const hl2 = (klines[i].high + klines[i].low) / 2
+    let ub = hl2 + mult * atr[i]!, lb = hl2 - mult * atr[i]!
+    if (i > 0) { lb = lb > prevDn ? lb : prevDn; ub = ub < prevUp ? ub : prevUp }
+    prevUp = ub; prevDn = lb
+    let dir = prevDir
+    if (i > 0) { if (prevDir === -1 && klines[i].close > prevUp) dir = 1; else if (prevDir === 1 && klines[i].close < prevDn) dir = -1 }
+    prevDir = dir; direction.push(dir); st.push(dir === 1 ? lb : ub)
+  }
+  return { values: st, direction }
+}
+
+function computeADX(klines: Kline[], period: number): { adx: (number | null)[]; pdi: (number | null)[]; ndi: (number | null)[] } {
+  const pDM: number[] = [], nDM: number[] = [], tr: number[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (i === 0) { pDM.push(0); nDM.push(0); tr.push(klines[i].high - klines[i].low); continue }
+    const up = klines[i].high - klines[i - 1].high, dn = klines[i - 1].low - klines[i].low
+    pDM.push(up > dn && up > 0 ? up : 0); nDM.push(dn > up && dn > 0 ? dn : 0)
+    tr.push(Math.max(klines[i].high - klines[i].low, Math.abs(klines[i].high - klines[i - 1].close), Math.abs(klines[i].low - klines[i - 1].close)))
+  }
+  const sTR = computeEMA(tr, period), sPDM = computeEMA(pDM, period), sNDM = computeEMA(nDM, period)
+  const pdi: (number | null)[] = [], ndi: (number | null)[] = [], dx: number[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (!sTR[i] || !sPDM[i] || !sNDM[i] || sTR[i] === 0) { pdi.push(null); ndi.push(null); continue }
+    const p = (sPDM[i]! / sTR[i]!) * 100, n = (sNDM[i]! / sTR[i]!) * 100
+    pdi.push(p); ndi.push(n); dx.push(p + n === 0 ? 0 : (Math.abs(p - n) / (p + n)) * 100)
+  }
+  const adxRaw = computeEMA(dx, period)
+  const adx: (number | null)[] = []; let di2 = 0
+  for (let i = 0; i < klines.length; i++) { if (pdi[i] === null) adx.push(null); else { adx.push(adxRaw[di2] ?? null); di2++ } }
+  return { adx, pdi, ndi }
+}
+
+function computeMFI(klines: Kline[], period: number): (number | null)[] {
+  const r: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (i < period) { r.push(null); continue }
+    let pos = 0, neg = 0
+    for (let j = i - period + 1; j <= i; j++) {
+      const tp = (klines[j].high + klines[j].low + klines[j].close) / 3
+      const prevTp = j > 0 ? (klines[j - 1].high + klines[j - 1].low + klines[j - 1].close) / 3 : tp
+      const mf = tp * klines[j].volume
+      if (tp > prevTp) pos += mf; else neg += mf
+    }
+    r.push(neg === 0 ? 100 : 100 - 100 / (1 + pos / neg))
+  }
+  return r
+}
+
+function computeROC(data: number[], period: number): (number | null)[] {
+  return data.map((v, i) => i < period || data[i - period] === 0 ? null : ((v - data[i - period]) / data[i - period]) * 100)
+}
+
+function computeMomentum(data: number[], period: number): (number | null)[] {
+  return data.map((v, i) => i < period ? null : v - data[i - period])
+}
+
+function computeCMF(klines: Kline[], period: number): (number | null)[] {
+  const r: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (i < period - 1) { r.push(null); continue }
+    let sumMFV = 0, sumVol = 0
+    for (let j = 0; j < period; j++) {
+      const k = klines[i - j]; const range = k.high - k.low
+      const clv = range === 0 ? 0 : ((k.close - k.low) - (k.high - k.close)) / range
+      sumMFV += clv * k.volume; sumVol += k.volume
+    }
+    r.push(sumVol === 0 ? 0 : sumMFV / sumVol)
+  }
+  return r
+}
+
+function computeTRIX(data: number[], period: number): (number | null)[] {
+  const ema1 = computeEMA(data, period)
+  const ema2 = computeEMA(ema1.map(v => v ?? 0), period)
+  const ema3 = computeEMA(ema2.map(v => v ?? 0), period)
+  return ema3.map((v, i) => (v === null || i === 0 || ema3[i - 1] === null || ema3[i - 1] === 0) ? null : ((v - ema3[i - 1]!) / ema3[i - 1]!) * 10000)
+}
+
 // ── CSS variable reader ──
 function getCSSColor(varName: string, fallback: string): string {
   if (typeof window === "undefined") return fallback
@@ -296,7 +482,7 @@ export function ChartArea({
   const chartRef = React.useRef<IChartApi | null>(null)
   const mainSeriesRef = React.useRef<ISeriesApi<any> | null>(null)
   const volumeSeriesRef = React.useRef<ISeriesApi<"Histogram"> | null>(null)
-  const indicatorSeriesRef = React.useRef<Map<string, ISeriesApi<"Line">>>(new Map())
+  const indicatorSeriesRef = React.useRef<Map<string, ISeriesApi<any>>>(new Map())
   const klinesRef = React.useRef<Kline[]>([])
   const chartTypeRef = React.useRef<ChartType>("candles")
 
@@ -346,11 +532,11 @@ export function ChartArea({
     // Read actual CSS custom property colors so chart matches card
     const el = document.documentElement
     const cs = getComputedStyle(el)
-    const bg = cs.getPropertyValue("--card").trim() || (isDark ? "#09090b" : "#ffffff")
-    const chartBg = bg.startsWith("oklch") ? bg : bg
+    const rawBg = cs.getPropertyValue("--card").trim()
+    const chartBg = rawBg || (isDark ? "#111113" : "#ffffff")
     const text = isDark ? "#71717a" : "#a1a1aa"
-    const grid = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)"
-    const border = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"
+    const grid = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.05)"
+    const border = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)"
     const labelBg = isDark ? "#27272a" : "#e4e4e7"
 
     const chart = createChart(containerRef.current, {
@@ -449,13 +635,42 @@ export function ChartArea({
       indicatorSeriesRef.current.set(key, s)
     }
 
+    function addOscillator(key: string, values: (number | null)[], color: string, scaleId: string) {
+      const d: LineData<Time>[] = []
+      for (let i = 0; i < values.length; i++) {
+        if (values[i] !== null) d.push({ time: times[i], value: values[i]! })
+      }
+      const s = chart!.addSeries(LineSeries, {
+        color,
+        lineWidth: 1,
+        crosshairMarkerVisible: false,
+        priceScaleId: scaleId,
+      })
+      s.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
+      s.setData(d)
+      indicatorSeriesRef.current.set(key, s)
+    }
+
     // Moving Averages
+    if (activeIndicators.has("ma9")) addLine("ma9", computeSMA(closes, 9), "#f97316")
     if (activeIndicators.has("ma20")) addLine("ma20", computeSMA(closes, 20), "#f59e0b")
     if (activeIndicators.has("ma50")) addLine("ma50", computeSMA(closes, 50), "#3b82f6")
+    if (activeIndicators.has("ma100")) addLine("ma100", computeSMA(closes, 100), "#06b6d4")
     if (activeIndicators.has("ma200")) addLine("ma200", computeSMA(closes, 200), "#8b5cf6")
     if (activeIndicators.has("ema9")) addLine("ema9", computeEMA(closes, 9), "#ec4899")
     if (activeIndicators.has("ema21")) addLine("ema21", computeEMA(closes, 21), "#06b6d4")
     if (activeIndicators.has("ema50")) addLine("ema50", computeEMA(closes, 50), "#14b8a6")
+    if (activeIndicators.has("ema100")) addLine("ema100", computeEMA(closes, 100), "#84cc16")
+    if (activeIndicators.has("ema200")) addLine("ema200", computeEMA(closes, 200), "#a855f7")
+    // Advanced MAs
+    if (activeIndicators.has("dema9")) addLine("dema9", computeDEMA(closes, 9), "#fb923c")
+    if (activeIndicators.has("dema21")) addLine("dema21", computeDEMA(closes, 21), "#38bdf8")
+    if (activeIndicators.has("tema9")) addLine("tema9", computeTEMA(closes, 9), "#f472b6")
+    if (activeIndicators.has("tema21")) addLine("tema21", computeTEMA(closes, 21), "#4ade80")
+    if (activeIndicators.has("wma20")) addLine("wma20", computeWMA(closes, 20), "#c084fc")
+    if (activeIndicators.has("wma50")) addLine("wma50", computeWMA(closes, 50), "#22d3ee")
+    if (activeIndicators.has("hma9")) addLine("hma9", computeHMA(closes, 9), "#fb7185")
+    if (activeIndicators.has("hma21")) addLine("hma21", computeHMA(closes, 21), "#34d399")
     // Overlays
     if (activeIndicators.has("bb")) {
       const bb = computeBB(closes, 20, 2)
@@ -463,21 +678,34 @@ export function ChartArea({
       addLine("bb-m", bb.middle, "#6366f1")
       addLine("bb-l", bb.lower, "#6366f1")
     }
-    if (activeIndicators.has("vwap")) addLine("vwap", computeVWAP(klines), "#f97316")
-    // Oscillators (overlay on separate price scale)
-    function addOscillator(key: string, values: (number | null)[], color: string, scaleId: string) {
-      const d: LineData<Time>[] = []
-      for (let i = 0; i < values.length; i++) {
-        if (values[i] !== null) d.push({ time: times[i], value: values[i]! })
-      }
-      const s = chart!.addSeries(LineSeries, {
-        color, lineWidth: 1, crosshairMarkerVisible: false, priceScaleId: scaleId,
-        lastValueVisible: false, priceLineVisible: false,
-      })
-      s.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
-      s.setData(d)
-      indicatorSeriesRef.current.set(key, s)
+    if (activeIndicators.has("vwap")) addLine("vwap", computeVWAP(klines), "#f97316", 2)
+    if (activeIndicators.has("ichimoku")) {
+      const ich = computeIchimoku(klines)
+      addLine("ich-tenkan", ich.tenkan, "#ef4444")
+      addLine("ich-kijun", ich.kijun, "#3b82f6")
+      addLine("ich-senkouA", ich.senkouA, "#22c55e")
+      addLine("ich-senkouB", ich.senkouB, "#ef4444")
+      addLine("ich-chikou", ich.chikou, "#a855f7")
     }
+    if (activeIndicators.has("sar")) addLine("sar", computeParabolicSAR(klines), "#fbbf24")
+    if (activeIndicators.has("donchian")) {
+      const dc = computeDonchian(klines, 20)
+      addLine("dc-u", dc.upper, "#2dd4bf")
+      addLine("dc-m", dc.middle, "#2dd4bf")
+      addLine("dc-l", dc.lower, "#2dd4bf")
+    }
+    if (activeIndicators.has("keltner")) {
+      const kc = computeKeltner(klines, 20, 10, 1.5)
+      addLine("kc-u", kc.upper, "#a78bfa")
+      addLine("kc-m", kc.middle, "#a78bfa")
+      addLine("kc-l", kc.lower, "#a78bfa")
+    }
+    if (activeIndicators.has("supertrend")) {
+      const stR = computeSupertrend(klines, 10, 3)
+      addLine("st-bull", stR.values.map((v, i) => stR.direction[i] === 1 ? v : null), "#22c55e")
+      addLine("st-bear", stR.values.map((v, i) => stR.direction[i] === -1 ? v : null), "#ef4444")
+    }
+    // Oscillators
     if (activeIndicators.has("rsi")) addOscillator("rsi", computeRSI(closes, 14), "#a855f7", "rsi")
     if (activeIndicators.has("macd")) {
       const m = computeMACD(closes)
@@ -491,8 +719,19 @@ export function ChartArea({
     }
     if (activeIndicators.has("williamsR")) addOscillator("williamsR", computeWilliamsR(klines, 14), "#ef4444", "wr")
     if (activeIndicators.has("cci")) addOscillator("cci", computeCCI(klines, 20), "#0ea5e9", "cci")
+    if (activeIndicators.has("adx")) {
+      const dx = computeADX(klines, 14)
+      addOscillator("adx", dx.adx, "#f97316", "adx")
+      addOscillator("adx-pdi", dx.pdi, "#22c55e", "adx")
+      addOscillator("adx-ndi", dx.ndi, "#ef4444", "adx")
+    }
+    if (activeIndicators.has("mfi")) addOscillator("mfi", computeMFI(klines, 14), "#ec4899", "mfi")
+    if (activeIndicators.has("roc")) addOscillator("roc", computeROC(closes, 12), "#8b5cf6", "roc")
+    if (activeIndicators.has("momentum")) addOscillator("momentum", computeMomentum(closes, 10), "#06b6d4", "mom")
+    if (activeIndicators.has("trix")) addOscillator("trix", computeTRIX(closes, 15), "#14b8a6", "trix")
     if (activeIndicators.has("atr")) addOscillator("atr", computeATR(klines, 14), "#f43f5e", "atr")
     if (activeIndicators.has("obv")) addOscillator("obv", computeOBV(klines), "#84cc16", "obv")
+    if (activeIndicators.has("cmf")) addOscillator("cmf", computeCMF(klines, 20), "#fb923c", "cmf")
   }, [activeIndicators, isDark])
 
   // ── Data fetching ──
@@ -629,13 +868,13 @@ export function ChartArea({
       <div className="flex items-center gap-0.5 border-b border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
         {INTERVALS.map((iv) => (
           <button
-            key={iv}
-            onClick={() => setInterval(iv)}
+            key={iv.value}
+            onClick={() => setInterval(iv.value)}
             className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
-              interval === iv ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+              interval === iv.value ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {iv}
+            {iv.label}
           </button>
         ))}
 

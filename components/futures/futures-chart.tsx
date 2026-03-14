@@ -23,33 +23,79 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-const INTERVALS = ["1min", "5min", "15min", "1h", "4h", "1d"]
+const INTERVALS = [
+  { label: "1m", value: "1m" },
+  { label: "3m", value: "3m" },
+  { label: "5m", value: "5m" },
+  { label: "15m", value: "15m" },
+  { label: "30m", value: "30m" },
+  { label: "1h", value: "1h" },
+  { label: "2h", value: "2h" },
+  { label: "4h", value: "4h" },
+  { label: "12h", value: "12h" },
+  { label: "1d", value: "1d" },
+  { label: "3d", value: "3d" },
+  { label: "1w", value: "1w" },
+  { label: "1M", value: "1M" },
+]
 
 type ChartType = "candles" | "line" | "area"
 type IndicatorKey =
-  | "ma20" | "ma50" | "ma200"
-  | "ema9" | "ema21" | "ema50"
-  | "bb" | "vwap"
+  | "ma9" | "ma20" | "ma50" | "ma100" | "ma200"
+  | "ema9" | "ema21" | "ema50" | "ema100" | "ema200"
+  | "dema9" | "dema21" | "tema9" | "tema21"
+  | "wma20" | "wma50" | "hma9" | "hma21"
+  | "bb" | "vwap" | "ichimoku" | "sar" | "donchian" | "keltner" | "supertrend"
   | "rsi" | "macd" | "stochastic" | "atr" | "obv" | "williamsR" | "cci"
+  | "adx" | "mfi" | "roc" | "momentum" | "cmf" | "trix"
 
 interface IndicatorDef { key: IndicatorKey; label: string; color: string; group: string }
 
 const INDICATORS: IndicatorDef[] = [
+  // Moving Averages
+  { key: "ma9", label: "MA 9", color: "#f97316", group: "Moving Averages" },
   { key: "ma20", label: "MA 20", color: "#f59e0b", group: "Moving Averages" },
   { key: "ma50", label: "MA 50", color: "#3b82f6", group: "Moving Averages" },
+  { key: "ma100", label: "MA 100", color: "#06b6d4", group: "Moving Averages" },
   { key: "ma200", label: "MA 200", color: "#8b5cf6", group: "Moving Averages" },
   { key: "ema9", label: "EMA 9", color: "#ec4899", group: "Moving Averages" },
   { key: "ema21", label: "EMA 21", color: "#06b6d4", group: "Moving Averages" },
   { key: "ema50", label: "EMA 50", color: "#14b8a6", group: "Moving Averages" },
+  { key: "ema100", label: "EMA 100", color: "#84cc16", group: "Moving Averages" },
+  { key: "ema200", label: "EMA 200", color: "#a855f7", group: "Moving Averages" },
+  // Advanced MAs
+  { key: "dema9", label: "DEMA 9", color: "#fb923c", group: "Advanced MAs" },
+  { key: "dema21", label: "DEMA 21", color: "#38bdf8", group: "Advanced MAs" },
+  { key: "tema9", label: "TEMA 9", color: "#f472b6", group: "Advanced MAs" },
+  { key: "tema21", label: "TEMA 21", color: "#4ade80", group: "Advanced MAs" },
+  { key: "wma20", label: "WMA 20", color: "#c084fc", group: "Advanced MAs" },
+  { key: "wma50", label: "WMA 50", color: "#22d3ee", group: "Advanced MAs" },
+  { key: "hma9", label: "HMA 9", color: "#fb7185", group: "Advanced MAs" },
+  { key: "hma21", label: "HMA 21", color: "#34d399", group: "Advanced MAs" },
+  // Overlays
   { key: "bb", label: "Bollinger Bands", color: "#6366f1", group: "Overlays" },
   { key: "vwap", label: "VWAP", color: "#f97316", group: "Overlays" },
+  { key: "ichimoku", label: "Ichimoku Cloud", color: "#ef4444", group: "Overlays" },
+  { key: "sar", label: "Parabolic SAR", color: "#fbbf24", group: "Overlays" },
+  { key: "donchian", label: "Donchian Channel (20)", color: "#2dd4bf", group: "Overlays" },
+  { key: "keltner", label: "Keltner Channel", color: "#a78bfa", group: "Overlays" },
+  { key: "supertrend", label: "Supertrend (10,3)", color: "#22c55e", group: "Overlays" },
+  // Oscillators
   { key: "rsi", label: "RSI (14)", color: "#a855f7", group: "Oscillators" },
   { key: "macd", label: "MACD", color: "#22c55e", group: "Oscillators" },
   { key: "stochastic", label: "Stochastic (14,3,3)", color: "#eab308", group: "Oscillators" },
   { key: "williamsR", label: "Williams %R (14)", color: "#ef4444", group: "Oscillators" },
   { key: "cci", label: "CCI (20)", color: "#0ea5e9", group: "Oscillators" },
+  { key: "adx", label: "ADX (14)", color: "#f97316", group: "Oscillators" },
+  { key: "mfi", label: "MFI (14)", color: "#ec4899", group: "Oscillators" },
+  { key: "roc", label: "ROC (12)", color: "#8b5cf6", group: "Oscillators" },
+  { key: "momentum", label: "Momentum (10)", color: "#06b6d4", group: "Oscillators" },
+  { key: "trix", label: "TRIX (15)", color: "#14b8a6", group: "Oscillators" },
+  // Volatility
   { key: "atr", label: "ATR (14)", color: "#f43f5e", group: "Volatility" },
+  // Volume
   { key: "obv", label: "OBV", color: "#84cc16", group: "Volume" },
+  { key: "cmf", label: "CMF (20)", color: "#fb923c", group: "Volume" },
 ]
 
 // ── Indicator Math ───────────────────────────────────────────────────────
@@ -79,6 +125,234 @@ function computeEMA(data: number[], period: number): (number | null)[] {
     const prev = r[i - 1]
     if (prev === null) { r.push(null); continue }
     r.push(data[i] * k + prev * (1 - k))
+  }
+  return r
+}
+
+function computeDEMA(data: number[], period: number): (number | null)[] {
+  const ema1 = computeEMA(data, period)
+  const ema1Valid = ema1.filter((v) => v !== null) as number[]
+  const ema2 = computeEMA(ema1Valid, period)
+  const r: (number | null)[] = []
+  let ei = 0
+  for (let i = 0; i < data.length; i++) {
+    if (ema1[i] === null) { r.push(null); continue }
+    const e2 = ema2[ei] ?? null
+    r.push(e2 !== null ? 2 * ema1[i]! - e2 : null)
+    ei++
+  }
+  return r
+}
+
+function computeTEMA(data: number[], period: number): (number | null)[] {
+  const ema1 = computeEMA(data, period)
+  const ema1V = ema1.filter((v) => v !== null) as number[]
+  const ema2 = computeEMA(ema1V, period)
+  const ema2V = ema2.filter((v) => v !== null) as number[]
+  const ema3 = computeEMA(ema2V, period)
+  const r: (number | null)[] = []
+  let e1i = 0, e2i = 0
+  for (let i = 0; i < data.length; i++) {
+    if (ema1[i] === null) { r.push(null); continue }
+    const e2 = ema2[e1i] ?? null
+    const e3 = e2 !== null ? (ema3[e2i] ?? null) : null
+    if (e2 !== null) e2i++
+    e1i++
+    r.push(e3 !== null && e2 !== null ? 3 * ema1[i]! - 3 * e2 + e3 : null)
+  }
+  return r
+}
+
+function computeWMA(data: number[], period: number): (number | null)[] {
+  const r: (number | null)[] = []
+  const denom = (period * (period + 1)) / 2
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) { r.push(null); continue }
+    let s = 0
+    for (let j = 0; j < period; j++) s += data[i - j] * (period - j)
+    r.push(s / denom)
+  }
+  return r
+}
+
+function computeHMA(data: number[], period: number): (number | null)[] {
+  const half = Math.floor(period / 2)
+  const wmaHalf = computeWMA(data, half)
+  const wmaFull = computeWMA(data, period)
+  const diff: number[] = []
+  for (let i = 0; i < data.length; i++) {
+    if (wmaHalf[i] !== null && wmaFull[i] !== null) diff.push(2 * wmaHalf[i]! - wmaFull[i]!)
+    else diff.push(0)
+  }
+  const sqrtP = Math.max(2, Math.round(Math.sqrt(period)))
+  const hma = computeWMA(diff, sqrtP)
+  const r: (number | null)[] = []
+  let hi = 0
+  for (let i = 0; i < data.length; i++) {
+    if (wmaHalf[i] === null || wmaFull[i] === null) { r.push(null); continue }
+    r.push(hma[hi] ?? null)
+    hi++
+  }
+  return r
+}
+
+function computeIchimoku(klines: Kline[]) {
+  const tenkan: (number | null)[] = [], kijun: (number | null)[] = []
+  const senkouA: (number | null)[] = [], senkouB: (number | null)[] = []
+  const chikou: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (i >= 8) { let h = -Infinity, l = Infinity; for (let j = 0; j < 9; j++) { h = Math.max(h, klines[i - j].high); l = Math.min(l, klines[i - j].low) }; tenkan.push((h + l) / 2) } else tenkan.push(null)
+    if (i >= 25) { let h = -Infinity, l = Infinity; for (let j = 0; j < 26; j++) { h = Math.max(h, klines[i - j].high); l = Math.min(l, klines[i - j].low) }; kijun.push((h + l) / 2) } else kijun.push(null)
+    senkouA.push(tenkan[i] !== null && kijun[i] !== null ? (tenkan[i]! + kijun[i]!) / 2 : null)
+    if (i >= 51) { let h = -Infinity, l = Infinity; for (let j = 0; j < 52; j++) { h = Math.max(h, klines[i - j].high); l = Math.min(l, klines[i - j].low) }; senkouB.push((h + l) / 2) } else senkouB.push(null)
+    chikou.push(klines[i].close)
+  }
+  return { tenkan, kijun, senkouA, senkouB, chikou }
+}
+
+function computeParabolicSAR(klines: Kline[]): (number | null)[] {
+  if (klines.length < 2) return klines.map(() => null)
+  const r: (number | null)[] = [null]
+  let bull = true, af = 0.02, ep = klines[0].high, sar = klines[0].low
+  for (let i = 1; i < klines.length; i++) {
+    sar = sar + af * (ep - sar)
+    if (bull) {
+      if (klines[i].low < sar) { bull = false; sar = ep; ep = klines[i].low; af = 0.02 }
+      else { if (klines[i].high > ep) { ep = klines[i].high; af = Math.min(af + 0.02, 0.2) } }
+    } else {
+      if (klines[i].high > sar) { bull = true; sar = ep; ep = klines[i].high; af = 0.02 }
+      else { if (klines[i].low < ep) { ep = klines[i].low; af = Math.min(af + 0.02, 0.2) } }
+    }
+    r.push(sar)
+  }
+  return r
+}
+
+function computeDonchian(klines: Kline[], period: number) {
+  const upper: (number | null)[] = [], lower: (number | null)[] = [], middle: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (i < period - 1) { upper.push(null); lower.push(null); middle.push(null); continue }
+    let h = -Infinity, l = Infinity
+    for (let j = 0; j < period; j++) { h = Math.max(h, klines[i - j].high); l = Math.min(l, klines[i - j].low) }
+    upper.push(h); lower.push(l); middle.push((h + l) / 2)
+  }
+  return { upper, middle, lower }
+}
+
+function computeKeltner(klines: Kline[], emaPeriod: number, atrPeriod: number, mult: number) {
+  const closes = klines.map((k) => k.close)
+  const ema = computeEMA(closes, emaPeriod)
+  const atr = computeATR(klines, atrPeriod)
+  const upper: (number | null)[] = [], lower: (number | null)[] = [], middle: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (ema[i] === null || atr[i] === null) { upper.push(null); lower.push(null); middle.push(null); continue }
+    upper.push(ema[i]! + mult * atr[i]!); lower.push(ema[i]! - mult * atr[i]!); middle.push(ema[i])
+  }
+  return { upper, middle, lower }
+}
+
+function computeSupertrend(klines: Kline[], period: number, multiplier: number) {
+  const atr = computeATR(klines, period)
+  const values: (number | null)[] = [], direction: (1 | -1)[] = []
+  let prevUpper = 0, prevLower = 0, prevDir: 1 | -1 = 1
+  for (let i = 0; i < klines.length; i++) {
+    if (atr[i] === null) { values.push(null); direction.push(1); continue }
+    const hl2 = (klines[i].high + klines[i].low) / 2
+    let upper = hl2 + multiplier * atr[i]!, lower = hl2 - multiplier * atr[i]!
+    if (i > 0) { lower = lower > prevLower ? lower : prevLower; upper = upper < prevUpper ? upper : prevUpper }
+    let dir: 1 | -1 = prevDir
+    if (klines[i].close > prevUpper) dir = 1
+    else if (klines[i].close < prevLower) dir = -1
+    values.push(dir === 1 ? lower : upper)
+    direction.push(dir); prevUpper = upper; prevLower = lower; prevDir = dir
+  }
+  return { values, direction }
+}
+
+function computeADX(klines: Kline[], period: number) {
+  const pdi: (number | null)[] = [], ndi: (number | null)[] = [], adx: (number | null)[] = []
+  const pdm: number[] = [], ndm: number[] = [], tr: number[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (i === 0) { pdm.push(0); ndm.push(0); tr.push(klines[i].high - klines[i].low); continue }
+    const upMove = klines[i].high - klines[i - 1].high
+    const downMove = klines[i - 1].low - klines[i].low
+    pdm.push(upMove > downMove && upMove > 0 ? upMove : 0)
+    ndm.push(downMove > upMove && downMove > 0 ? downMove : 0)
+    tr.push(Math.max(klines[i].high - klines[i].low, Math.abs(klines[i].high - klines[i - 1].close), Math.abs(klines[i].low - klines[i - 1].close)))
+  }
+  const smPdm = computeSMA(pdm, period), smNdm = computeSMA(ndm, period), smTr = computeSMA(tr, period)
+  const dx: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (smTr[i] === null || smTr[i] === 0) { pdi.push(null); ndi.push(null); dx.push(null); continue }
+    const p = (smPdm[i]! / smTr[i]!) * 100, n = (smNdm[i]! / smTr[i]!) * 100
+    pdi.push(p); ndi.push(n)
+    dx.push(p + n === 0 ? 0 : (Math.abs(p - n) / (p + n)) * 100)
+  }
+  const dxValid = dx.filter((v) => v !== null) as number[]
+  const adxRaw = computeSMA(dxValid, period)
+  let ai = 0
+  for (let i = 0; i < klines.length; i++) {
+    if (dx[i] === null) { adx.push(null); continue }
+    adx.push(adxRaw[ai] ?? null); ai++
+  }
+  return { adx, pdi, ndi }
+}
+
+function computeMFI(klines: Kline[], period: number): (number | null)[] {
+  const r: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (i < period) { r.push(null); continue }
+    let posFlow = 0, negFlow = 0
+    for (let j = i - period + 1; j <= i; j++) {
+      const tp = (klines[j].high + klines[j].low + klines[j].close) / 3
+      const prevTp = (klines[j - 1].high + klines[j - 1].low + klines[j - 1].close) / 3
+      const mf = tp * klines[j].volume
+      if (tp > prevTp) posFlow += mf; else negFlow += mf
+    }
+    r.push(negFlow === 0 ? 100 : 100 - 100 / (1 + posFlow / negFlow))
+  }
+  return r
+}
+
+function computeROC(data: number[], period: number): (number | null)[] {
+  return data.map((v, i) => i < period ? null : ((v - data[i - period]) / data[i - period]) * 100)
+}
+
+function computeMomentum(data: number[], period: number): (number | null)[] {
+  return data.map((v, i) => i < period ? null : v - data[i - period])
+}
+
+function computeCMF(klines: Kline[], period: number): (number | null)[] {
+  const r: (number | null)[] = []
+  for (let i = 0; i < klines.length; i++) {
+    if (i < period - 1) { r.push(null); continue }
+    let adSum = 0, volSum = 0
+    for (let j = 0; j < period; j++) {
+      const k = klines[i - j]
+      const range = k.high - k.low
+      const mfm = range === 0 ? 0 : ((k.close - k.low) - (k.high - k.close)) / range
+      adSum += mfm * k.volume; volSum += k.volume
+    }
+    r.push(volSum === 0 ? 0 : adSum / volSum)
+  }
+  return r
+}
+
+function computeTRIX(data: number[], period: number): (number | null)[] {
+  const e1 = computeEMA(data, period)
+  const e1v = e1.filter((v) => v !== null) as number[]
+  const e2 = computeEMA(e1v, period)
+  const e2v = e2.filter((v) => v !== null) as number[]
+  const e3 = computeEMA(e2v, period)
+  const r: (number | null)[] = []
+  let prevE3: number | null = null, ei = 0
+  for (let i = 0; i < data.length; i++) {
+    if (e1[i] === null) { r.push(null); continue }
+    const curE3 = e3[ei] ?? null
+    ei++
+    if (curE3 === null || prevE3 === null) { r.push(null); prevE3 = curE3; continue }
+    r.push(prevE3 === 0 ? 0 : ((curE3 - prevE3) / prevE3) * 100)
+    prevE3 = curE3
   }
   return r
 }
@@ -251,7 +525,7 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
   const chartRef = React.useRef<IChartApi | null>(null)
   const mainSeriesRef = React.useRef<ISeriesApi<any> | null>(null)
   const volumeSeriesRef = React.useRef<ISeriesApi<"Histogram"> | null>(null)
-  const indicatorSeriesRef = React.useRef<Map<string, ISeriesApi<"Line">>>(new Map())
+  const indicatorSeriesRef = React.useRef<Map<string, ISeriesApi<any>>>(new Map())
   const klinesRef = React.useRef<Kline[]>([])
   const chartTypeRef = React.useRef<ChartType>("candles")
 
@@ -298,11 +572,11 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
 
     const el = document.documentElement
     const cs = getComputedStyle(el)
-    const bg = cs.getPropertyValue("--card").trim() || (isDark ? "#09090b" : "#ffffff")
-    const chartBg = bg.startsWith("oklch") ? bg : bg
+    const rawBg = cs.getPropertyValue("--card").trim()
+    const chartBg = rawBg || (isDark ? "#111113" : "#ffffff")
     const text = isDark ? "#71717a" : "#a1a1aa"
-    const grid = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)"
-    const border = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"
+    const grid = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.05)"
+    const border = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)"
     const labelBg = isDark ? "#27272a" : "#e4e4e7"
 
     const chart = createChart(containerRef.current, {
@@ -400,19 +674,6 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
       indicatorSeriesRef.current.set(key, s)
     }
 
-    if (activeIndicators.has("ma20")) addLine("ma20", computeSMA(closes, 20), "#f59e0b")
-    if (activeIndicators.has("ma50")) addLine("ma50", computeSMA(closes, 50), "#3b82f6")
-    if (activeIndicators.has("ma200")) addLine("ma200", computeSMA(closes, 200), "#8b5cf6")
-    if (activeIndicators.has("ema9")) addLine("ema9", computeEMA(closes, 9), "#ec4899")
-    if (activeIndicators.has("ema21")) addLine("ema21", computeEMA(closes, 21), "#06b6d4")
-    if (activeIndicators.has("ema50")) addLine("ema50", computeEMA(closes, 50), "#14b8a6")
-    if (activeIndicators.has("bb")) {
-      const bb = computeBB(closes, 20, 2)
-      addLine("bb-u", bb.upper, "#6366f1")
-      addLine("bb-m", bb.middle, "#6366f1")
-      addLine("bb-l", bb.lower, "#6366f1")
-    }
-    if (activeIndicators.has("vwap")) addLine("vwap", computeVWAP(klines), "#f97316")
     function addOscillator(key: string, values: (number | null)[], color: string, scaleId: string) {
       const d: LineData<Time>[] = []
       for (let i = 0; i < values.length; i++) {
@@ -426,6 +687,62 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
       s.setData(d)
       indicatorSeriesRef.current.set(key, s)
     }
+
+    // Moving Averages
+    if (activeIndicators.has("ma9")) addLine("ma9", computeSMA(closes, 9), "#f97316")
+    if (activeIndicators.has("ma20")) addLine("ma20", computeSMA(closes, 20), "#f59e0b")
+    if (activeIndicators.has("ma50")) addLine("ma50", computeSMA(closes, 50), "#3b82f6")
+    if (activeIndicators.has("ma100")) addLine("ma100", computeSMA(closes, 100), "#06b6d4")
+    if (activeIndicators.has("ma200")) addLine("ma200", computeSMA(closes, 200), "#8b5cf6")
+    if (activeIndicators.has("ema9")) addLine("ema9", computeEMA(closes, 9), "#ec4899")
+    if (activeIndicators.has("ema21")) addLine("ema21", computeEMA(closes, 21), "#06b6d4")
+    if (activeIndicators.has("ema50")) addLine("ema50", computeEMA(closes, 50), "#14b8a6")
+    if (activeIndicators.has("ema100")) addLine("ema100", computeEMA(closes, 100), "#84cc16")
+    if (activeIndicators.has("ema200")) addLine("ema200", computeEMA(closes, 200), "#a855f7")
+    // Advanced MAs
+    if (activeIndicators.has("dema9")) addLine("dema9", computeDEMA(closes, 9), "#fb923c")
+    if (activeIndicators.has("dema21")) addLine("dema21", computeDEMA(closes, 21), "#38bdf8")
+    if (activeIndicators.has("tema9")) addLine("tema9", computeTEMA(closes, 9), "#f472b6")
+    if (activeIndicators.has("tema21")) addLine("tema21", computeTEMA(closes, 21), "#4ade80")
+    if (activeIndicators.has("wma20")) addLine("wma20", computeWMA(closes, 20), "#c084fc")
+    if (activeIndicators.has("wma50")) addLine("wma50", computeWMA(closes, 50), "#22d3ee")
+    if (activeIndicators.has("hma9")) addLine("hma9", computeHMA(closes, 9), "#fb7185")
+    if (activeIndicators.has("hma21")) addLine("hma21", computeHMA(closes, 21), "#34d399")
+    // Overlays
+    if (activeIndicators.has("bb")) {
+      const bb = computeBB(closes, 20, 2)
+      addLine("bb-u", bb.upper, "#6366f1")
+      addLine("bb-m", bb.middle, "#6366f1")
+      addLine("bb-l", bb.lower, "#6366f1")
+    }
+    if (activeIndicators.has("vwap")) addLine("vwap", computeVWAP(klines), "#f97316", 2)
+    if (activeIndicators.has("ichimoku")) {
+      const ich = computeIchimoku(klines)
+      addLine("ich-tenkan", ich.tenkan, "#ef4444")
+      addLine("ich-kijun", ich.kijun, "#3b82f6")
+      addLine("ich-senkouA", ich.senkouA, "#22c55e")
+      addLine("ich-senkouB", ich.senkouB, "#ef4444")
+      addLine("ich-chikou", ich.chikou, "#a855f7")
+    }
+    if (activeIndicators.has("sar")) addLine("sar", computeParabolicSAR(klines), "#fbbf24")
+    if (activeIndicators.has("donchian")) {
+      const dc = computeDonchian(klines, 20)
+      addLine("dc-u", dc.upper, "#2dd4bf")
+      addLine("dc-m", dc.middle, "#2dd4bf")
+      addLine("dc-l", dc.lower, "#2dd4bf")
+    }
+    if (activeIndicators.has("keltner")) {
+      const kc = computeKeltner(klines, 20, 10, 1.5)
+      addLine("kc-u", kc.upper, "#a78bfa")
+      addLine("kc-m", kc.middle, "#a78bfa")
+      addLine("kc-l", kc.lower, "#a78bfa")
+    }
+    if (activeIndicators.has("supertrend")) {
+      const stR = computeSupertrend(klines, 10, 3)
+      addLine("st-bull", stR.values.map((v, i) => stR.direction[i] === 1 ? v : null), "#22c55e")
+      addLine("st-bear", stR.values.map((v, i) => stR.direction[i] === -1 ? v : null), "#ef4444")
+    }
+    // Oscillators
     if (activeIndicators.has("rsi")) addOscillator("rsi", computeRSI(closes, 14), "#a855f7", "rsi")
     if (activeIndicators.has("macd")) {
       const m = computeMACD(closes)
@@ -439,8 +756,19 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     }
     if (activeIndicators.has("williamsR")) addOscillator("williamsR", computeWilliamsR(klines, 14), "#ef4444", "wr")
     if (activeIndicators.has("cci")) addOscillator("cci", computeCCI(klines, 20), "#0ea5e9", "cci")
+    if (activeIndicators.has("adx")) {
+      const dx = computeADX(klines, 14)
+      addOscillator("adx", dx.adx, "#f97316", "adx")
+      addOscillator("adx-pdi", dx.pdi, "#22c55e", "adx")
+      addOscillator("adx-ndi", dx.ndi, "#ef4444", "adx")
+    }
+    if (activeIndicators.has("mfi")) addOscillator("mfi", computeMFI(klines, 14), "#ec4899", "mfi")
+    if (activeIndicators.has("roc")) addOscillator("roc", computeROC(closes, 12), "#8b5cf6", "roc")
+    if (activeIndicators.has("momentum")) addOscillator("momentum", computeMomentum(closes, 10), "#06b6d4", "mom")
+    if (activeIndicators.has("trix")) addOscillator("trix", computeTRIX(closes, 15), "#14b8a6", "trix")
     if (activeIndicators.has("atr")) addOscillator("atr", computeATR(klines, 14), "#f43f5e", "atr")
     if (activeIndicators.has("obv")) addOscillator("obv", computeOBV(klines), "#84cc16", "obv")
+    if (activeIndicators.has("cmf")) addOscillator("cmf", computeCMF(klines, 20), "#fb923c", "cmf")
   }, [activeIndicators, isDark])
 
   // ── Data fetching ──
@@ -574,13 +902,13 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
       <div className="flex items-center gap-0.5 border-b border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
         {INTERVALS.map((iv) => (
           <button
-            key={iv}
-            onClick={() => setInterval(iv)}
+            key={iv.value}
+            onClick={() => setInterval(iv.value)}
             className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
-              interval === iv ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+              interval === iv.value ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {iv}
+            {iv.label}
           </button>
         ))}
 
