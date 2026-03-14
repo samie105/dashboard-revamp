@@ -4,14 +4,12 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
-  ArrowDown01Icon,
   ArrowLeft01Icon,
   Wallet01Icon,
   UserIcon,
   Settings01Icon,
   Logout01Icon,
 } from "@hugeicons/core-free-icons"
-import type { CoinData } from "@/lib/actions"
 import { getUserBalances } from "@/lib/actions"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { NotificationBell } from "@/components/notifications"
@@ -24,37 +22,35 @@ import {
 import { useAuth } from "@/components/auth-provider"
 import { TopNav } from "@/components/top-nav"
 
-export function SpotTopBar({
-  coin,
-  onOpenSearch,
-}: {
-  coin: CoinData
-  onOpenSearch: () => void
-}) {
+/**
+ * Shared header for full-bleed trading pages (Forex, Binary, etc.)
+ * Mirrors the SpotTopBar pattern: back · logo · TopNav · {children} · actions
+ */
+export function TradingHeader({ children }: { children?: React.ReactNode }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
   const [totalBalance, setTotalBalance] = React.useState<number | null>(null)
 
-  // Fetch balance once on mount
   React.useEffect(() => {
     if (!user?.userId) return
     let cancelled = false
     getUserBalances(user.userId).then((res) => {
       if (!cancelled && res.success) setTotalBalance(res.totalUsd)
     })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [user?.userId])
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
     : "User"
   const initials = displayName.charAt(0).toUpperCase()
-  const isPositive = coin.change24h >= 0
 
   return (
-    <header className="flex items-center gap-4 border-b border-border/10 bg-background/80 px-3 py-2 backdrop-blur-xl">
-      {/* Back button */}
+    <header className="flex items-center gap-4 border-b border-border/10 bg-background/80 px-3 py-2 backdrop-blur-xl shrink-0">
+      {/* Back */}
       <button
         onClick={() => router.push("/")}
         className="rounded-lg p-1.5 transition-colors hover:bg-accent shrink-0"
@@ -77,68 +73,32 @@ export function SpotTopBar({
 
       <div className="h-5 w-px bg-border/30 shrink-0" />
 
-      {/* Trading switcher */}
+      {/* Trading switcher dropdown */}
       <TopNav />
 
       <div className="h-5 w-px bg-border/30 shrink-0 hidden md:block" />
 
-      {/* Pair selector + stats */}
-      <button
-        onClick={onOpenSearch}
-        className="flex items-center gap-2 shrink-0"
-      >
-        {coin.image && (
-          <img src={coin.image} alt="" className="h-5 w-5 rounded-full" />
-        )}
-        <span className="text-sm font-bold">{coin.symbol}/USDT</span>
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
-          className="h-3 w-3 text-muted-foreground"
-        />
-      </button>
+      {/* Page-specific center content (pair info, asset info, etc.) */}
+      {children}
 
-      <span
-        className={`text-sm font-bold tabular-nums ${isPositive ? "text-emerald-500" : "text-red-500"}`}
-      >
-        $
-        {coin.price < 1
-          ? coin.price.toFixed(4)
-          : coin.price.toLocaleString(undefined, {
-              maximumFractionDigits: 2,
-            })}
-      </span>
-
-      <span
-        className={`text-xs font-medium tabular-nums ${isPositive ? "text-emerald-500" : "text-red-500"}`}
-      >
-        {isPositive ? "+" : ""}
-        {coin.change24h.toFixed(2)}%
-      </span>
-
-      <div className="hidden md:flex items-center gap-4 text-[11px] text-muted-foreground ml-2">
-        <div className="flex flex-col">
-          <span>24h Vol</span>
-          <span className="font-medium text-foreground tabular-nums">
-            ${(coin.volume24h / 1e6).toFixed(2)}M
-          </span>
-        </div>
-        <div className="hidden lg:flex flex-col">
-          <span>Mkt Cap</span>
-          <span className="font-medium text-foreground tabular-nums">
-            ${(coin.marketCap / 1e9).toFixed(2)}B
-          </span>
-        </div>
-      </div>
-
-      {/* Right: actions */}
+      {/* Right-side actions */}
       <div className="flex items-center gap-1 md:gap-2 ml-auto">
         {totalBalance !== null && (
           <div className="flex items-center gap-1.5 rounded-lg bg-accent/50 px-2.5 py-1 mr-1 md:mr-2">
-            <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0 md:hidden" />
+            <HugeiconsIcon
+              icon={Wallet01Icon}
+              className="h-3.5 w-3.5 text-primary shrink-0 md:hidden"
+            />
             <div className="flex flex-col items-end">
-              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Balance</span>
+              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">
+                Balance
+              </span>
               <span className="text-xs font-bold tabular-nums text-foreground">
-                ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                $
+                {totalBalance.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </span>
             </div>
           </div>

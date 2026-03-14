@@ -173,7 +173,7 @@ export function SpotClient({
       {/* ═══ DESKTOP: 3-column main + standalone bottom orders ═══ */}
       <div className="hidden lg:flex flex-1 flex-col overflow-hidden p-1 gap-1">
         {/* MAIN ROW */}
-        <div className="flex-1 min-h-0 grid grid-cols-[220px_1fr_280px] gap-1 overflow-hidden">
+        <div className="flex-1 min-h-0 grid grid-cols-[330px_1fr_330px] gap-1 overflow-hidden">
           {/* LEFT — Market/Pair List */}
           <div data-onboarding="spot-markets" className="overflow-hidden">
             <MarketSelect
@@ -248,7 +248,7 @@ export function SpotClient({
         </div>
 
         {/* BOTTOM ROW — Open Orders (standalone) */}
-        <div data-onboarding="spot-orders" className="shrink-0 min-h-[120px] max-h-[30vh]">
+        <div data-onboarding="spot-orders" className="shrink-0 h-[260px]">
           <OpenOrdersPanel />
         </div>
       </div>

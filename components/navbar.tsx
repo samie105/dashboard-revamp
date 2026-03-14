@@ -33,7 +33,7 @@ import { NotificationBell } from "@/components/notifications"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { TopNav } from "@/components/top-nav"
 
-export function Navbar() {
+export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   const isMobile = useIsMobile()
   const [profileOpen, setProfileOpen] = React.useState(false)
   const [walletOpen, setWalletOpen] = React.useState(false)
@@ -148,7 +148,7 @@ export function Navbar() {
       </div>
 
       {/* Desktop: inline top nav */}
-      <TopNav />
+      {!hideDiscover && <TopNav />}
 
       {/* Desktop: search */}
       <div className="flex flex-1 items-center gap-4">
@@ -163,18 +163,6 @@ export function Navbar() {
       </div>
 
       <div className="flex items-center gap-0.5 md:gap-1 ml-auto">
-        {/* Deposit — desktop only */}
-        <a 
-          href="/deposit" 
-          className="hidden md:inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground font-semibold text-xs px-3.5 h-7 rounded-lg transition-colors hover:bg-primary/90 active:scale-[0.97] mr-1"
-        >
-          <HugeiconsIcon
-            icon={Exchange01Icon}
-            className="h-3.5 w-3.5 text-primary-foreground [&_path]:stroke-current [&_path]:fill-none [&_path]:opacity-100"
-          />
-          Deposit
-        </a>
-
         {/* Wallet — bottom sheet on mobile, hover on desktop */}
         {isMobile ? (
           <Sheet open={walletOpen} onOpenChange={setWalletOpen}>

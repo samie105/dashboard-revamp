@@ -22,8 +22,8 @@ export function AnimatedOrderBook({
   const [flashAsks, setFlashAsks] = React.useState<Set<number>>(new Set())
   const [flashBids, setFlashBids] = React.useState<Set<number>>(new Set())
 
-  const asks = rawAsks.length > 0 ? rawAsks.slice(-14) : []
-  const bids = rawBids.length > 0 ? rawBids.slice(0, 14) : []
+  const asks = rawAsks.length > 0 ? rawAsks.slice(-20) : []
+  const bids = rawBids.length > 0 ? rawBids.slice(0, 20) : []
 
   const maxTotal = Math.max(
     asks[0]?.total ?? 0,

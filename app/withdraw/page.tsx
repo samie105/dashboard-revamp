@@ -19,8 +19,10 @@ function WithdrawSkeleton() {
 
 export default function WithdrawPage() {
   return (
-    <Suspense fallback={<WithdrawSkeleton />}>
-      <WithdrawClient />
-    </Suspense>
+    <div className="mx-auto w-full max-w-[1400px] px-4 pb-6 pt-6 sm:px-6">
+      <Suspense fallback={<WithdrawSkeleton />}>
+        <WithdrawClient />
+      </Suspense>
+    </div>
   )
 }

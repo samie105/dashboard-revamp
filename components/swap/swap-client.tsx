@@ -326,9 +326,10 @@ interface SwapClientProps {
   coins: CoinData[]
   prices: Record<string, number>
   error?: string
+  compact?: boolean
 }
 
-export function SwapClient({ coins, prices, error }: SwapClientProps) {
+export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const available = coins.filter((c) => c.price > 0)
 
   // URL params
@@ -401,30 +402,8 @@ export function SwapClient({ coins, prices, error }: SwapClientProps) {
     return "Swap"
   }, [fromCoin, toCoin, fromAmount, numericFrom, quoteLoading])
 
-  return (
+  const swapCard = (
     <>
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-xl font-bold tracking-tight">Swap</h1>
-          <p className="text-xs text-muted-foreground">
-            Swap tokens across chains with the best rates
-          </p>
-        </div>
-        <div className="hidden sm:flex items-center gap-2">
-          {CHAINS.map((chain) => (
-            <div key={chain.id} className="flex items-center gap-1.5 rounded-full border border-border/40 bg-accent/30 px-2.5 py-1">
-              <img src={chain.icon} alt={chain.label} className="h-3.5 w-3.5 rounded-full" />
-              <span className="text-[10px] font-medium">{chain.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Tight 2-column grid: swap card left, info stacked right */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]">
-        {/* LEFT — Swap card */}
-        <div>
           <div className="rounded-2xl border border-border/40 bg-card shadow-sm">
             {/* Card header */}
             <div className="flex items-center justify-between border-b border-border/30 px-4 py-3">
@@ -588,14 +567,6 @@ export function SwapClient({ coins, prices, error }: SwapClientProps) {
               )}
             </div>
           </div>
-        </div>
-
-        {/* RIGHT — Info cards stacked */}
-        <div className="flex flex-col gap-4">
-          <SwapHistory />
-          <HowItWorks />
-        </div>
-      </div>
 
       {/* Token Modals */}
       <TokenSelectModal
@@ -612,6 +583,44 @@ export function SwapClient({ coins, prices, error }: SwapClientProps) {
         onSelect={setToCoin}
         exclude={fromCoin?.symbol}
       />
+    </>
+  )
+
+  if (compact) return swapCard
+
+  return (
+    <>
+      {/* Page header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-0.5">
+          <h1 className="text-xl font-bold tracking-tight">Swap</h1>
+          <p className="text-xs text-muted-foreground">
+            Swap tokens across chains with the best rates
+          </p>
+        </div>
+        <div className="hidden sm:flex items-center gap-2">
+          {CHAINS.map((chain) => (
+            <div key={chain.id} className="flex items-center gap-1.5 rounded-full border border-border/40 bg-accent/30 px-2.5 py-1">
+              <img src={chain.icon} alt={chain.label} className="h-3.5 w-3.5 rounded-full" />
+              <span className="text-[10px] font-medium">{chain.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tight 2-column grid: swap card left, info stacked right */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]">
+        {/* LEFT — Swap card */}
+        <div>
+          {swapCard}
+        </div>
+
+        {/* RIGHT — Info cards stacked */}
+        <div className="flex flex-col gap-4">
+          <SwapHistory />
+          <HowItWorks />
+        </div>
+      </div>
     </>
   )
 }

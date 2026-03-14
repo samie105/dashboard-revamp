@@ -23,6 +23,7 @@ import { useWallet } from "@/components/wallet-provider"
 import { useProfile } from "@/components/profile-provider"
 import { executeTrade } from "@/lib/actions"
 import { markOnboardingComplete } from "@/lib/profile-actions"
+import { Navbar } from "@/components/navbar"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { FuturesChart } from "./futures-chart"
 
@@ -507,6 +508,8 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
+      {/* Navbar */}
+      <Navbar hideDiscover />
       {/* ── Top Bar ── */}
       <div data-onboarding="futures-topbar" className="flex items-center gap-3 border-b border-border/10 px-3 py-2">
         <button onClick={() => router.push("/")} className="text-muted-foreground hover:text-foreground">
@@ -530,7 +533,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
       {/* ═══ DESKTOP: 3-column grid layout ═══ */}
       <div className="hidden lg:flex flex-1 flex-col overflow-hidden p-1 gap-1">
         {/* MAIN ROW */}
-        <div className="flex-1 min-h-0 grid grid-cols-[200px_1fr_280px] gap-1 overflow-hidden">
+        <div className="flex-1 min-h-0 grid grid-cols-[330px_1fr_330px] gap-1 overflow-hidden">
           {/* LEFT — Market list */}
           <div data-onboarding="futures-markets" className="overflow-hidden">
             <MarketList markets={liveMarkets} selected={selected} onSelect={setSelected} />
@@ -557,7 +560,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
         </div>
 
         {/* BOTTOM ROW — Positions (standalone) */}
-        <div className="shrink-0 min-h-[120px] max-h-[30vh]">
+        <div className="shrink-0 h-[260px]">
           <PositionsPanel />
         </div>
       </div>

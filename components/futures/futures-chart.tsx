@@ -39,6 +39,86 @@ const INTERVALS = [
   { label: "1M", value: "1M" },
 ]
 
+// ── Drawing Tools ────────────────────────────────────────────────────────
+
+type DrawingType =
+  | "line" | "hline" | "vline" | "ray"
+  | "channel" | "fib" | "rect" | "text"
+  | "longpos" | "shortpos" | "pitchfork" | "measure" | "arrow"
+type DrawTool = "select" | DrawingType
+
+interface DrawPoint { price: number; time: number }
+interface Drawing {
+  id: string
+  type: DrawingType
+  points: DrawPoint[]
+  color: string
+  text?: string
+  selected?: boolean
+}
+
+const POINT_COUNT: Record<DrawingType, number> = {
+  line: 2, hline: 1, vline: 1, ray: 2, channel: 3,
+  fib: 2, rect: 2, text: 1, longpos: 3, shortpos: 3,
+  pitchfork: 3, measure: 2, arrow: 2,
+}
+
+const DRAW_PALETTE = ["#f97316", "#3b82f6", "#22c55e", "#ef4444", "#a855f7", "#eab308", "#06b6d4", "#ec4899", "#ffffff", "#64748b"]
+
+// ── Drawing tool groups for collapsible sidebar ──────────────────────────
+
+interface ToolDef { tool: DrawTool; title: string; icon: React.ReactNode }
+interface ToolGroup { label: string; tools: ToolDef[] }
+
+const SZ = 18
+
+const TOOL_GROUPS: ToolGroup[] = [
+  {
+    label: "Lines",
+    tools: [
+      { tool: "line",  title: "Trend Line",      icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="4" y1="20" x2="20" y2="4"/></svg> },
+      { tool: "hline", title: "Horizontal Line",  icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg> },
+      { tool: "vline", title: "Vertical Line",    icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="3" x2="12" y2="21"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg> },
+      { tool: "ray",   title: "Ray",              icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="4" y1="20" x2="18" y2="6"/><path d="M16 6h4v4"/></svg> },
+      { tool: "arrow", title: "Arrow",            icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 19l14-14M19 5h-6M19 5v6"/></svg> },
+    ],
+  },
+  {
+    label: "Shapes",
+    tools: [
+      { tool: "rect",    title: "Rectangle",   icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="1.5"/></svg> },
+      { tool: "channel", title: "Channel",      icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M3 21l6-6 4 4 8-8" opacity="0.4"/></svg> },
+    ],
+  },
+  {
+    label: "Analysis",
+    tools: [
+      { tool: "fib",       title: "Fibonacci",  icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="3" y1="4" x2="21" y2="4"/><line x1="3" y1="9" x2="21" y2="9" opacity="0.6"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="20" x2="21" y2="20" opacity="0.6"/></svg> },
+      { tool: "pitchfork", title: "Pitchfork",  icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 4v16M12 10l-6 10M12 10l6 10"/></svg> },
+      { tool: "measure",   title: "Measure",    icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 20h16M4 20V8M20 20V8M8 20v-3M12 20V8M16 20v-3"/></svg> },
+    ],
+  },
+  {
+    label: "Positions",
+    tools: [
+      { tool: "longpos",  title: "Long Position",  icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" strokeWidth="1.8" strokeLinecap="round"><path d="M12 4l-4 6h8z" fill="#10b981" stroke="#10b981"/><line x1="4" y1="12" x2="20" y2="12" stroke="#f97316"/><path d="M12 20l-4-6h8z" fill="#ef4444" stroke="#ef4444"/></svg> },
+      { tool: "shortpos", title: "Short Position", icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" strokeWidth="1.8" strokeLinecap="round"><path d="M12 4l-4 6h8z" fill="#ef4444" stroke="#ef4444"/><line x1="4" y1="12" x2="20" y2="12" stroke="#f97316"/><path d="M12 20l-4-6h8z" fill="#10b981" stroke="#10b981"/></svg> },
+    ],
+  },
+  {
+    label: "Annotate",
+    tools: [
+      { tool: "text", title: "Text Annotation", icon: <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 7h14M9 7v12M15 7v12"/></svg> },
+    ],
+  },
+]
+
+const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
+const FIB_COLORS: Record<number, string> = {
+  0: "#94a3b8", 0.236: "#3b82f6", 0.382: "#22c55e", 0.5: "#f97316",
+  0.618: "#f59e0b", 0.786: "#a855f7", 1: "#64748b",
+}
+
 type ChartType = "candles" | "line" | "area"
 type IndicatorKey =
   | "ma9" | "ma20" | "ma50" | "ma100" | "ma200"
@@ -512,6 +592,73 @@ function getCSSColor(varName: string, fallback: string): string {
   return v
 }
 
+// ── Popover tool group for drawing sidebar ──────────────────────────────
+
+function PopoverToolGroup({
+  group,
+  activeTool,
+  onSelect,
+}: {
+  group: ToolGroup
+  activeTool: DrawTool
+  onSelect: (tool: DrawTool) => void
+}) {
+  const hasActive = group.tools.some((t) => t.tool === activeTool)
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
+
+  const displayTool = group.tools.find((t) => t.tool === activeTool) ?? group.tools[0]
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={`relative rounded-lg p-1.5 transition-all ${
+          hasActive ? "bg-primary/10 text-primary shadow-sm" : "text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/30"
+        }`}
+        title={group.label}
+      >
+        {displayTool.icon}
+        <svg
+          width="6" height="6" viewBox="0 0 24 24" fill="currentColor"
+          className="absolute bottom-0.5 right-0.5 opacity-60"
+        >
+          <path d="M7 10l5 5 5-5z" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-full top-0 ml-1 z-50 flex flex-col gap-0.5 rounded-lg border border-border/40 bg-card/95 backdrop-blur-md p-1 shadow-xl min-w-[140px]">
+          <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">{group.label}</span>
+          {group.tools.map(({ tool, title, icon }) => (
+            <button
+              key={tool}
+              title={title}
+              onClick={() => { onSelect(tool); setOpen(false) }}
+              className={`flex items-center gap-2 rounded-md px-2 py-1 text-xs transition-all ${
+                activeTool === tool
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
+              }`}
+            >
+              {icon}
+              <span className="whitespace-nowrap">{title}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Component ────────────────────────────────────────────────────────────
 
 interface FuturesChartProps {
@@ -537,7 +684,18 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
   const [activeIndicators, setActiveIndicators] = React.useState<Set<IndicatorKey>>(new Set())
   const [showIndicatorMenu, setShowIndicatorMenu] = React.useState(false)
   const [crosshairMode, setCrosshairMode] = React.useState<"normal" | "magnet">("normal")
+  const [klinesVersion, setKlinesVersion] = React.useState(0)
   const indicatorBtnRef = React.useRef<HTMLButtonElement>(null)
+
+  // Drawing tools state
+  const [activeTool, setActiveTool] = React.useState<DrawTool>("select")
+  const [drawings, setDrawings] = React.useState<Drawing[]>([])
+  const [draftPoints, setDraftPoints] = React.useState<DrawPoint[]>([])
+  const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  const [drawColor, setDrawColor] = React.useState("#f97316")
+  const [drawTick, setDrawTick] = React.useState(0)
+  const [mouseXY, setMouseXY] = React.useState<{ x: number; y: number } | null>(null)
+  const svgRef = React.useRef<SVGSVGElement>(null)
 
   chartTypeRef.current = chartType
 
@@ -608,8 +766,13 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     })
     ro.observe(containerRef.current)
 
+    // Redraw SVG overlays on pan/zoom
+    const onRangeChange = () => setDrawTick((t) => t + 1)
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
+
     return () => {
       ro.disconnect()
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange)
       indicatorSeriesRef.current.clear()
       mainSeriesRef.current = null
       volumeSeriesRef.current = null
@@ -769,7 +932,7 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     if (activeIndicators.has("atr")) addOscillator("atr", computeATR(klines, 14), "#f43f5e", "atr")
     if (activeIndicators.has("obv")) addOscillator("obv", computeOBV(klines), "#84cc16", "obv")
     if (activeIndicators.has("cmf")) addOscillator("cmf", computeCMF(klines, 20), "#fb923c", "cmf")
-  }, [activeIndicators, isDark])
+  }, [activeIndicators, isDark, klinesVersion])
 
   // ── Data fetching ──
   React.useEffect(() => {
@@ -783,6 +946,7 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
         if (cancelled) return
         if (res.success && res.data.length > 0) {
           klinesRef.current = res.data
+          setKlinesVersion((v) => v + 1)
           applyAllData(res.data)
           setHasData(true)
         }
@@ -799,6 +963,7 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
         if (cancelled) return
         if (res.success && res.data.length > 0) {
           klinesRef.current = res.data
+          setKlinesVersion((v) => v + 1)
           applyAllData(res.data)
         }
       } catch {}
@@ -849,6 +1014,329 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
   // ── Handlers ──
   const isPositive = change24h >= 0
 
+  // ── Drawing coordinate helpers ──
+  function chartToScreen(price: number, time: number): { x: number; y: number } | null {
+    const chart = chartRef.current
+    const series = mainSeriesRef.current
+    if (!chart || !series) return null
+    const x = chart.timeScale().timeToCoordinate(Math.floor(time) as Time)
+    const y = series.priceToCoordinate(price)
+    if (x === null || y === null) return null
+    return { x, y }
+  }
+
+  function screenToChart(x: number, y: number): DrawPoint | null {
+    const chart = chartRef.current
+    const series = mainSeriesRef.current
+    if (!chart || !series) return null
+    const t = chart.timeScale().coordinateToTime(x)
+    const price = series.coordinateToPrice(y)
+    if (t === null || price === null) return null
+    return { price, time: Number(t) }
+  }
+
+  // ── Drawing event handlers ──
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { setActiveTool("select"); setDraftPoints([]) }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        const tag = (e.target as HTMLElement)?.tagName
+        if (tag === "INPUT" || tag === "TEXTAREA") return
+        setDrawings((prev) => prev.filter((d) => d.id !== selectedId))
+        setSelectedId(null)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [selectedId])
+
+  function handleSvgMouseDown(e: React.MouseEvent<SVGSVGElement>) {
+    if (activeTool === "select") { setSelectedId(null); return }
+    const rect = svgRef.current!.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const pt = screenToChart(x, y)
+    if (!pt) return
+    const required = POINT_COUNT[activeTool as DrawingType]
+    const newPoints = [...draftPoints, pt]
+    if (newPoints.length >= required) {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      setDrawings((prev) => [...prev, { id, type: activeTool as DrawingType, points: newPoints, color: drawColor }])
+      setDraftPoints([])
+    } else {
+      setDraftPoints(newPoints)
+    }
+  }
+
+  function handleSvgMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    const rect = svgRef.current!.getBoundingClientRect()
+    setMouseXY({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+  }
+
+  function handleSvgLeave() { setMouseXY(null) }
+
+  function deleteDrawing(id: string) {
+    setDrawings((prev) => prev.filter((d) => d.id !== id))
+    if (selectedId === id) setSelectedId(null)
+  }
+
+  // ── SVG drawing renderers ──
+  function renderDrawing(d: Drawing): React.ReactNode {
+    const SVG_EXT = 9999
+    const pts = d.points.map((p) => chartToScreen(p.price, p.time)).filter(Boolean) as { x: number; y: number }[]
+    const col = d.color
+    const sel = d.id === selectedId
+    const stroke = sel ? 2.5 : 1.5
+    const selProps = sel ? { filter: "drop-shadow(0 0 3px " + col + "99)" } : {}
+
+    switch (d.type) {
+      case "line": {
+        if (pts.length < 2) return null
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <line x1={pts[0].x} y1={pts[0].y} x2={pts[1].x} y2={pts[1].y} stroke={col} strokeWidth={stroke} />
+            <circle cx={pts[0].x} cy={pts[0].y} r={3} fill={col} opacity={0.7} />
+            <circle cx={pts[1].x} cy={pts[1].y} r={3} fill={col} opacity={0.7} />
+          </g>
+        )
+      }
+      case "ray": {
+        if (pts.length < 2) return null
+        const dx = pts[1].x - pts[0].x
+        const dy = pts[1].y - pts[0].y
+        const len = Math.sqrt(dx * dx + dy * dy) || 1
+        const scale = SVG_EXT * 2 / len
+        const x2 = pts[0].x + dx * scale
+        const y2 = pts[0].y + dy * scale
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <line x1={pts[0].x} y1={pts[0].y} x2={x2} y2={y2} stroke={col} strokeWidth={stroke} />
+            <circle cx={pts[0].x} cy={pts[0].y} r={3} fill={col} opacity={0.7} />
+          </g>
+        )
+      }
+      case "arrow": {
+        if (pts.length < 2) return null
+        const dx = pts[1].x - pts[0].x
+        const dy = pts[1].y - pts[0].y
+        const angle = Math.atan2(dy, dx)
+        const al = 10, aw = 5
+        const ax1 = pts[1].x - al * Math.cos(angle - 0.4)
+        const ay1 = pts[1].y - al * Math.sin(angle - 0.4)
+        const ax2 = pts[1].x - al * Math.cos(angle + 0.4)
+        const ay2 = pts[1].y - al * Math.sin(angle + 0.4)
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <line x1={pts[0].x} y1={pts[0].y} x2={pts[1].x} y2={pts[1].y} stroke={col} strokeWidth={stroke} />
+            <polyline points={`${ax1},${ay1} ${pts[1].x},${pts[1].y} ${ax2},${ay2}`} stroke={col} strokeWidth={stroke} fill="none" />
+          </g>
+        )
+      }
+      case "hline": {
+        if (pts.length < 1) return null
+        const price = d.points[0].price
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <line x1={0} y1={pts[0].y} x2={SVG_EXT} y2={pts[0].y} stroke={col} strokeWidth={stroke} strokeDasharray="4 3" />
+            <text x={pts[0].x > 100 ? pts[0].x - 6 : pts[0].x + 6} y={pts[0].y - 4} fill={col} fontSize={9} textAnchor="end">{price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</text>
+          </g>
+        )
+      }
+      case "vline": {
+        if (pts.length < 1) return null
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <line x1={pts[0].x} y1={0} x2={pts[0].x} y2={SVG_EXT} stroke={col} strokeWidth={stroke} strokeDasharray="4 3" />
+          </g>
+        )
+      }
+      case "channel": {
+        if (pts.length < 3) return null
+        // p0->p1 = first line, p2 is offset for second parallel line
+        const dx = pts[1].x - pts[0].x
+        const dy = pts[1].y - pts[0].y
+        const len = Math.sqrt(dx * dx + dy * dy) || 1
+        // perpendicular offset: direction from p0 to p2 projected onto perp axis
+        const nx = -dy / len, ny = dx / len
+        const proj = (pts[2].x - pts[0].x) * nx + (pts[2].y - pts[0].y) * ny
+        const ox = nx * proj, oy = ny * proj
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <line x1={pts[0].x} y1={pts[0].y} x2={pts[1].x} y2={pts[1].y} stroke={col} strokeWidth={stroke} />
+            <line x1={pts[0].x + ox} y1={pts[0].y + oy} x2={pts[1].x + ox} y2={pts[1].y + oy} stroke={col} strokeWidth={stroke} />
+            <line x1={pts[0].x} y1={pts[0].y} x2={pts[0].x + ox} y2={pts[0].y + oy} stroke={col} strokeWidth={1} strokeDasharray="3 3" opacity={0.5} />
+            <line x1={pts[1].x} y1={pts[1].y} x2={pts[1].x + ox} y2={pts[1].y + oy} stroke={col} strokeWidth={1} strokeDasharray="3 3" opacity={0.5} />
+          </g>
+        )
+      }
+      case "rect": {
+        if (pts.length < 2) return null
+        const x = Math.min(pts[0].x, pts[1].x)
+        const y = Math.min(pts[0].y, pts[1].y)
+        const w = Math.abs(pts[1].x - pts[0].x)
+        const h = Math.abs(pts[1].y - pts[0].y)
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <rect x={x} y={y} width={w} height={h} fill={col + "18"} stroke={col} strokeWidth={stroke} />
+          </g>
+        )
+      }
+      case "fib": {
+        if (pts.length < 2) return null
+        const p0 = d.points[0], p1 = d.points[1]
+        const priceRange = p1.price - p0.price
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            {FIB_LEVELS.map((lvl) => {
+              const price = p0.price + priceRange * lvl
+              const s = chartToScreen(price, p0.time)
+              if (!s) return null
+              const fc = FIB_COLORS[lvl] || "#94a3b8"
+              return (
+                <g key={lvl}>
+                  <line x1={0} y1={s.y} x2={SVG_EXT} y2={s.y} stroke={fc} strokeWidth={1.2} strokeDasharray="5 3" />
+                  <text x={6} y={s.y - 3} fill={fc} fontSize={8.5}>{(lvl * 100).toFixed(1)}% {price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</text>
+                </g>
+              )
+            })}
+          </g>
+        )
+      }
+      case "pitchfork": {
+        if (pts.length < 3) return null
+        // Andrews Pitchfork: p0=handle, p1/p2=tines
+        const midX = (pts[1].x + pts[2].x) / 2
+        const midY = (pts[1].y + pts[2].y) / 2
+        const dx = midX - pts[0].x, dy = midY - pts[0].y
+        const ext = SVG_EXT * 2
+        const len = Math.sqrt(dx * dx + dy * dy) || 1
+        const mx2 = midX + (dx / len) * ext
+        const my2 = midY + (dy / len) * ext
+        const tx = dx, ty = dy
+        const t1x2 = pts[1].x + (tx / len) * ext
+        const t1y2 = pts[1].y + (ty / len) * ext
+        const t2x2 = pts[2].x + (tx / len) * ext
+        const t2y2 = pts[2].y + (ty / len) * ext
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <line x1={pts[0].x} y1={pts[0].y} x2={mx2} y2={my2} stroke={col} strokeWidth={stroke} />
+            <line x1={pts[1].x} y1={pts[1].y} x2={t1x2} y2={t1y2} stroke={col} strokeWidth={stroke} opacity={0.85} />
+            <line x1={pts[2].x} y1={pts[2].y} x2={t2x2} y2={t2y2} stroke={col} strokeWidth={stroke} opacity={0.85} />
+            <line x1={pts[1].x} y1={pts[1].y} x2={pts[2].x} y2={pts[2].y} stroke={col} strokeWidth={1} strokeDasharray="4 3" opacity={0.5} />
+            <circle cx={pts[0].x} cy={pts[0].y} r={3} fill={col} opacity={0.7} />
+          </g>
+        )
+      }
+      case "measure": {
+        if (pts.length < 2) return null
+        const p0 = d.points[0], p1 = d.points[1]
+        const priceDiff = p1.price - p0.price
+        const pricePct = ((priceDiff / p0.price) * 100).toFixed(2)
+        const bars = Math.abs(Math.round((p1.time - p0.time) / 60))
+        const x = Math.min(pts[0].x, pts[1].x)
+        const y = Math.min(pts[0].y, pts[1].y)
+        const w = Math.abs(pts[1].x - pts[0].x)
+        const h = Math.abs(pts[1].y - pts[0].y)
+        const positive = priceDiff >= 0
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <rect x={x} y={y} width={w} height={h} fill={positive ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)"} stroke={positive ? "#10b981" : "#ef4444"} strokeWidth={1} strokeDasharray="4 3" />
+            <text x={x + w / 2} y={y + h / 2} fill={positive ? "#10b981" : "#ef4444"} fontSize={10} textAnchor="middle" dominantBaseline="middle" fontWeight="600">
+              {positive ? "+" : ""}{pricePct}%
+            </text>
+            <text x={x + w / 2} y={y + h / 2 + 14} fill="#94a3b8" fontSize={8.5} textAnchor="middle">{bars} bars</text>
+          </g>
+        )
+      }
+      case "longpos": {
+        if (pts.length < 3) return null
+        const entry = d.points[0], target = d.points[1], stop = d.points[2]
+        const es = chartToScreen(entry.price, entry.time)
+        const ts = chartToScreen(target.price, entry.time)
+        const ss = chartToScreen(stop.price, entry.time)
+        if (!es || !ts || !ss) return null
+        const w = 120
+        const x = es.x
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <rect x={x} y={Math.min(es.y, ts.y)} width={w} height={Math.abs(ts.y - es.y)} fill="rgba(16,185,129,0.15)" stroke="#10b981" strokeWidth={1} />
+            <rect x={x} y={Math.min(es.y, ss.y)} width={w} height={Math.abs(ss.y - es.y)} fill="rgba(239,68,68,0.15)" stroke="#ef4444" strokeWidth={1} />
+            <line x1={0} y1={es.y} x2={x + w + 10} y2={es.y} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3" />
+            <line x1={0} y1={ts.y} x2={x + w + 10} y2={ts.y} stroke="#10b981" strokeWidth={1.2} strokeDasharray="3 3" />
+            <line x1={0} y1={ss.y} x2={x + w + 10} y2={ss.y} stroke="#ef4444" strokeWidth={1.2} strokeDasharray="3 3" />
+            <text x={x + 4} y={es.y - 3} fill="#f97316" fontSize={8.5}>Entry {entry.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</text>
+            <text x={x + 4} y={ts.y - 3} fill="#10b981" fontSize={8.5}>Target {target.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</text>
+            <text x={x + 4} y={ss.y - 3} fill="#ef4444" fontSize={8.5}>Stop {stop.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</text>
+          </g>
+        )
+      }
+      case "shortpos": {
+        if (pts.length < 3) return null
+        const entry = d.points[0], target = d.points[1], stop = d.points[2]
+        const es = chartToScreen(entry.price, entry.time)
+        const ts = chartToScreen(target.price, entry.time)
+        const ss = chartToScreen(stop.price, entry.time)
+        if (!es || !ts || !ss) return null
+        const w = 120
+        const x = es.x
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <rect x={x} y={Math.min(es.y, ts.y)} width={w} height={Math.abs(ts.y - es.y)} fill="rgba(239,68,68,0.15)" stroke="#ef4444" strokeWidth={1} />
+            <rect x={x} y={Math.min(es.y, ss.y)} width={w} height={Math.abs(ss.y - es.y)} fill="rgba(16,185,129,0.15)" stroke="#10b981" strokeWidth={1} />
+            <line x1={0} y1={es.y} x2={x + w + 10} y2={es.y} stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 3" />
+            <line x1={0} y1={ts.y} x2={x + w + 10} y2={ts.y} stroke="#ef4444" strokeWidth={1.2} strokeDasharray="3 3" />
+            <line x1={0} y1={ss.y} x2={x + w + 10} y2={ss.y} stroke="#10b981" strokeWidth={1.2} strokeDasharray="3 3" />
+            <text x={x + 4} y={es.y - 3} fill="#f97316" fontSize={8.5}>Entry {entry.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</text>
+            <text x={x + 4} y={ts.y - 3} fill="#ef4444" fontSize={8.5}>Target {target.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</text>
+            <text x={x + 4} y={ss.y - 3} fill="#10b981" fontSize={8.5}>Stop {stop.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</text>
+          </g>
+        )
+      }
+      case "text": {
+        if (pts.length < 1) return null
+        return (
+          <g key={d.id} style={selProps} onClick={() => setSelectedId(d.id)} className="cursor-pointer">
+            <text x={pts[0].x} y={pts[0].y} fill={col} fontSize={12} fontWeight="600">{d.text || "Label"}</text>
+          </g>
+        )
+      }
+      default: return null
+    }
+  }
+
+  function renderDraft(): React.ReactNode {
+    const SVG_EXT = 9999
+    if (activeTool === "select" || draftPoints.length === 0) return null
+    const pts = draftPoints.map((p) => chartToScreen(p.price, p.time)).filter(Boolean) as { x: number; y: number }[]
+    const cur = mouseXY
+    if (!cur) return null
+    const col = drawColor
+
+    if ((activeTool === "line" || activeTool === "ray" || activeTool === "arrow" || activeTool === "channel" || activeTool === "measure") && pts.length >= 1) {
+      return (
+        <line x1={pts[pts.length - 1].x} y1={pts[pts.length - 1].y} x2={cur.x} y2={cur.y}
+          stroke={col} strokeWidth={1.5} strokeDasharray="5 3" opacity={0.7} />
+      )
+    }
+    if (activeTool === "fib" && pts.length >= 1) {
+      const dx = cur.x - pts[0].x
+      const dy = cur.y - pts[0].y
+      return <rect x={Math.min(pts[0].x, cur.x)} y={Math.min(pts[0].y, cur.y)} width={Math.abs(dx)} height={Math.abs(dy)} fill={col + "18"} stroke={col} strokeWidth={1} strokeDasharray="4 3" opacity={0.7} />
+    }
+    if (activeTool === "rect" && pts.length >= 1) {
+      const dx = cur.x - pts[0].x
+      const dy = cur.y - pts[0].y
+      return <rect x={Math.min(pts[0].x, cur.x)} y={Math.min(pts[0].y, cur.y)} width={Math.abs(dx)} height={Math.abs(dy)} fill={col + "18"} stroke={col} strokeWidth={1} strokeDasharray="4 3" opacity={0.7} />
+    }
+    if ((activeTool === "longpos" || activeTool === "shortpos") && pts.length === 1) {
+      return <line x1={0} y1={pts[0].y} x2={SVG_EXT} y2={pts[0].y} stroke={col} strokeWidth={1} strokeDasharray="4 3" opacity={0.6} />
+    }
+    if ((activeTool === "longpos" || activeTool === "shortpos") && pts.length >= 2) {
+      return <line x1={0} y1={cur.y} x2={SVG_EXT} y2={cur.y} stroke={activeTool === "longpos" ? "#ef4444" : "#10b981"} strokeWidth={1} strokeDasharray="4 3" opacity={0.6} />
+    }
+    return null
+  }
+
   function handleFit() { chartRef.current?.timeScale().fitContent() }
 
   function handleCrosshair() {
@@ -898,22 +1386,24 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
 
   return (
     <div data-onboarding="futures-chart" className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
-      {/* Toolbar */}
+      {/* ── TOP BAR: Indicators + Chart type + Tools + Price ── */}
       <div className="flex items-center gap-0.5 border-b border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
-        {INTERVALS.map((iv) => (
-          <button
-            key={iv.value}
-            onClick={() => setInterval(iv.value)}
-            className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
-              interval === iv.value ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {iv.label}
-          </button>
-        ))}
+        {/* Indicators */}
+        <button
+          ref={indicatorBtnRef}
+          onClick={() => setShowIndicatorMenu((p) => !p)}
+          className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
+            activeIndicators.size > 0 || showIndicatorMenu
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Indicators{activeIndicators.size > 0 && ` (${activeIndicators.size})`}
+        </button>
 
         <div className="mx-1 h-4 w-px bg-border/30 shrink-0" />
 
+        {/* Chart type */}
         {(["candles", "line", "area"] as const).map((t) => (
           <button
             key={t}
@@ -935,20 +1425,7 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
 
         <div className="mx-1 h-4 w-px bg-border/30 shrink-0" />
 
-        <button
-          ref={indicatorBtnRef}
-          onClick={() => setShowIndicatorMenu((p) => !p)}
-          className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
-            activeIndicators.size > 0 || showIndicatorMenu
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Indicators{activeIndicators.size > 0 && ` (${activeIndicators.size})`}
-        </button>
-
-        <div className="mx-1 h-4 w-px bg-border/30 shrink-0" />
-
+        {/* Tools */}
         <button
           onClick={handleCrosshair}
           title={crosshairMode === "normal" ? "Magnet crosshair" : "Normal crosshair"}
@@ -965,8 +1442,9 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
 
+        {/* Price */}
         <div className="ml-auto flex items-center gap-3 shrink-0">
-          <div className="hidden sm:flex items-center gap-2 text-[9px] tabular-nums">
+          <div className="hidden sm:flex items-center gap-2 tabular-nums">
             <span className="text-xl font-bold text-foreground">
               ${markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
@@ -978,23 +1456,135 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
         </div>
       </div>
 
-      {/* Chart container */}
-      <div ref={containerRef} className="flex-1 min-h-0 relative">
-        {!hasData && (
-          <div className="absolute inset-0 flex items-center justify-center z-10 bg-card">
-            {loading ? (
-              <HugeiconsIcon icon={Loading03Icon} className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : (
-              <p className="text-xs text-muted-foreground">No chart data available</p>
+      {/* ── MIDDLE: Drawing sidebar (left) + Chart ── */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left drawing toolbar — vertical, collapsible groups */}
+        <div className="flex flex-col items-center border-r border-border/20 px-0.5 py-1 shrink-0 overflow-y-auto w-10">
+          {/* Select / Move — always at top */}
+          <button
+            title="Select / Move"
+            onClick={() => { setActiveTool("select"); setDraftPoints([]) }}
+            className={`rounded-lg p-1.5 transition-all ${
+              activeTool === "select"
+                ? "bg-primary/10 text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
+            }`}
+          >
+            <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4l16 7-7 2-3 8z"/></svg>
+          </button>
+
+          <div className="my-1 w-5 h-px bg-border/30 shrink-0" />
+
+          {/* Tool groups with popover */}
+          <div className="flex flex-col items-center gap-0.5">
+            {TOOL_GROUPS.map((g) => (
+              <PopoverToolGroup
+                key={g.label}
+                group={g}
+                activeTool={activeTool}
+                onSelect={(tool) => { setActiveTool(tool); setDraftPoints([]) }}
+              />
+            ))}
+          </div>
+
+          <div className="my-1 w-5 h-px bg-border/30 shrink-0" />
+
+          {/* Color palette — top 6 */}
+          <div className="flex flex-col items-center gap-1">
+            {DRAW_PALETTE.slice(0, 6).map((c) => (
+              <button
+                key={c}
+                title={c}
+                onClick={() => setDrawColor(c)}
+                className={`rounded-full w-4 h-4 shrink-0 transition-transform ${drawColor === c ? "scale-125 ring-1 ring-offset-1 ring-offset-card ring-white/40" : "hover:scale-110"}`}
+                style={{ background: c }}
+              />
+            ))}
+          </div>
+
+          {/* Actions pinned to bottom */}
+          <div className="mt-auto flex flex-col items-center gap-0.5 pt-1">
+            {selectedId && (
+              <button
+                title="Delete selected"
+                onClick={() => deleteDrawing(selectedId)}
+                className="rounded-lg p-1.5 text-red-400 hover:text-red-500 transition-colors"
+              >
+                <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+              </button>
+            )}
+            {drawings.length > 0 && (
+              <button
+                title="Clear all drawings"
+                onClick={() => { setDrawings([]); setSelectedId(null) }}
+                className="rounded-lg p-1.5 text-muted-foreground hover:text-red-400 transition-colors"
+              >
+                <svg width={SZ} height={SZ} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M5 6l1 14h12l1-14"/></svg>
+              </button>
+            )}
+            {draftPoints.length > 0 && (
+              <span className="text-[8px] text-primary text-center leading-tight mt-0.5">
+                {POINT_COUNT[activeTool as DrawingType] - draftPoints.length}
+              </span>
             )}
           </div>
-        )}
-        {intervalLoading && hasData && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full bg-card/90 border border-border/20 px-3 py-1 shadow-lg backdrop-blur-sm">
-            <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin text-primary" />
-            <span className="text-[10px] text-muted-foreground">Loading {interval}...</span>
+        </div>
+
+        {/* Chart container */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div ref={containerRef} className="flex-1 min-h-0 relative [&_div[class*='apply-common-tooltip']]:!hidden [&_a[href*='tradingview']]:!hidden [&_div[class*='tv-']]:!hidden">
+            {!hasData && (
+              <div className="absolute inset-0 flex items-center justify-center z-10 bg-card">
+                {loading ? (
+                  <HugeiconsIcon icon={Loading03Icon} className="h-6 w-6 animate-spin text-muted-foreground" />
+                ) : (
+                  <p className="text-xs text-muted-foreground">No chart data available</p>
+                )}
+              </div>
+            )}
+            {intervalLoading && hasData && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full bg-card/90 border border-border/20 px-3 py-1 shadow-lg backdrop-blur-sm">
+                <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin text-primary" />
+                <span className="text-[10px] text-muted-foreground">Loading {interval}...</span>
+              </div>
+            )}
+
+            {/* SVG Drawing layer */}
+            <svg
+              ref={svgRef}
+              className="absolute inset-0 w-full h-full overflow-hidden"
+              style={{ pointerEvents: activeTool === "select" ? "none" : "all", zIndex: 15, cursor: activeTool === "select" ? "default" : "crosshair" }}
+              onMouseDown={handleSvgMouseDown}
+              onMouseMove={handleSvgMouseMove}
+              onMouseLeave={handleSvgLeave}
+            >
+              {drawings.map((d) => <React.Fragment key={d.id}>{renderDrawing(d)}</React.Fragment>)}
+              {renderDraft()}
+              {activeTool !== "select" && mouseXY && (
+                <>
+                  <line x1={mouseXY.x} y1={0} x2={mouseXY.x} y2={9999} stroke="rgba(255,255,255,0.08)" strokeWidth={1} strokeDasharray="3 3" />
+                  <line x1={0} y1={mouseXY.y} x2={9999} y2={mouseXY.y} stroke="rgba(255,255,255,0.08)" strokeWidth={1} strokeDasharray="3 3" />
+                </>
+              )}
+            </svg>
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* ── BOTTOM BAR: Interval / Duration selector ── */}
+      <div className="flex items-center gap-0.5 border-t border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
+        {INTERVALS.map((iv) => (
+          <button
+            key={iv.value}
+            onClick={() => setInterval(iv.value)}
+            className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
+              interval === iv.value ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {iv.label}
+          </button>
+        ))}
+        {(loading || intervalLoading) && <HugeiconsIcon icon={Loading03Icon} className="ml-auto h-3 w-3 animate-spin text-muted-foreground" />}
       </div>
 
       {/* Indicator menu portal */}

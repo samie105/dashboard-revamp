@@ -89,10 +89,10 @@ export function MarketSelect({
       </div>
 
       {/* Column header */}
-      <div className="grid grid-cols-[1fr_auto_auto] gap-1 px-2.5 py-1 text-[10px] text-muted-foreground">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
         <span>Pair</span>
-        <span className="w-14 text-right">Price</span>
-        <span className="w-12 text-right">24h</span>
+        <span className="w-20 text-right">Price</span>
+        <span className="w-16 text-right">24h</span>
       </div>
 
       {/* Scrollable list */}
@@ -109,7 +109,7 @@ export function MarketSelect({
               <button
                 key={coin.symbol}
                 onClick={() => onSelect(coin.symbol)}
-                className={`grid w-full grid-cols-[1fr_auto_auto] items-center gap-1 px-2.5 py-[7px] text-left transition-colors ${
+                className={`grid w-full grid-cols-[1fr_auto_auto] items-center gap-2 px-3 py-2 text-left transition-colors ${
                   active ? "bg-primary/5" : "hover:bg-accent/30"
                 }`}
               >
@@ -131,20 +131,20 @@ export function MarketSelect({
                       <img
                         src={coin.image}
                         alt=""
-                        className="h-4 w-4 rounded-full ring-1 ring-card"
+                        className="h-5 w-5 rounded-full ring-1 ring-card"
                       />
                     )}
                     <img
                       src={USDT_IMAGE}
                       alt=""
-                      className="h-3.5 w-3.5 rounded-full ring-1 ring-card -ml-1.5"
+                      className="h-4 w-4 rounded-full ring-1 ring-card -ml-1.5"
                     />
                   </div>
-                  <span className="truncate text-xs font-medium">
+                  <span className="truncate text-sm font-semibold">
                     {coin.symbol}
                   </span>
                 </div>
-                <span className="w-14 text-right text-[11px] tabular-nums">
+                <span className="w-20 text-right text-xs font-medium tabular-nums">
                   $
                   {coin.price < 1
                     ? coin.price.toFixed(4)
@@ -153,10 +153,10 @@ export function MarketSelect({
                       })}
                 </span>
                 <span
-                  className={`w-12 text-right text-[10px] font-semibold tabular-nums ${pos ? "text-emerald-500" : "text-red-500"}`}
+                  className={`w-16 text-right text-xs font-bold tabular-nums ${pos ? "text-emerald-500" : "text-red-500"}`}
                 >
                   {pos ? "+" : ""}
-                  {coin.change24h.toFixed(1)}%
+                  {coin.change24h.toFixed(2)}%
                 </span>
               </button>
             )

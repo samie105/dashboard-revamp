@@ -55,32 +55,56 @@ function toPlain(doc: unknown): ProfileData {
 
 export async function fetchProfile(): Promise<ProfileResult> {
   try {
-    const { userId } = await auth()
+    let userId: string | null = null
+    try {
+      const authResult = await auth()
+      userId = authResult.userId
+    } catch {
+      // auth() itself failed — treat as unauthenticated
+      return { success: false, error: "Unauthorized" }
+    }
+
     if (!userId) return { success: false, error: "Unauthorized" }
-
-    const clerkUser = await currentUser()
-    if (!clerkUser) return { success: false, error: "Unauthorized" }
-
-    const email = clerkUser.emailAddresses[0]?.emailAddress ?? ""
 
     await connectDB()
 
-    let profile = await DashboardProfile.findOne({ authUserId: userId })
-
-    if (!profile) {
-      // Check for email collision from a different auth provider
-      const existing = await DashboardProfile.findOne({ email: email.toLowerCase() })
-      if (existing) {
-        return { success: false, error: "A profile with this email already exists" }
-      }
-
-      profile = await DashboardProfile.create({
-        authUserId: userId,
-        email,
-        displayName: `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim(),
-        avatarUrl: clerkUser.imageUrl ?? "",
-      })
+    // Always check MongoDB first — avoids calling Clerk API for returning users
+    const existing = await DashboardProfile.findOne({ authUserId: userId })
+    if (existing) {
+      return { success: true, profile: toPlain(existing) }
     }
+
+    // New user — try to get details from Clerk to seed the profile
+    let email = ""
+    let displayName = ""
+    let avatarUrl = ""
+
+    try {
+      const clerkUser = await currentUser()
+      if (clerkUser) {
+        email = clerkUser.emailAddresses[0]?.emailAddress ?? ""
+        displayName = `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim()
+        avatarUrl = clerkUser.imageUrl ?? ""
+
+        // Guard against email collision from a different auth provider
+        if (email) {
+          const emailCollision = await DashboardProfile.findOne({ email: email.toLowerCase() })
+          if (emailCollision) {
+            return { success: false, error: "A profile with this email already exists" }
+          }
+        }
+      }
+    } catch (clerkErr) {
+      // Clerk API unreachable — still create a minimal profile so the user can proceed
+      console.warn("[fetchProfile] currentUser() failed, creating minimal profile:", clerkErr)
+    }
+
+    const profile = await DashboardProfile.create({
+      authUserId: userId,
+      email,
+      displayName,
+      avatarUrl,
+    })
 
     return { success: true, profile: toPlain(profile) }
   } catch (error) {

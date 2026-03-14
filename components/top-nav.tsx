@@ -3,12 +3,16 @@
 import { cn } from "@/lib/utils"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
-  Book01Icon,
-  Brain01Icon,
+  Activity01Icon,
+  Exchange01Icon,
+  ChartLineData02Icon,
+  RepeatIcon,
+  Link01Icon,
+  Copy01Icon,
   Store01Icon,
-  UserGroup02Icon,
-  Video01Icon,
-  DollarCircleIcon,
+  BarChartIcon,
+  GlobeIcon,
+  BinaryCodeIcon,
 } from "@hugeicons/core-free-icons"
 import {
   NavigationMenu,
@@ -23,7 +27,7 @@ type MegaMenuItem = {
   name: string
   description: string
   href: string
-  icon: typeof Book01Icon
+  icon: typeof Activity01Icon
   tag?: string
 }
 
@@ -38,45 +42,63 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   {
-    label: "Discover",
+    label: "Trading",
     mega: {
-      columns: 1,
+      columns: 2,
       items: [
         {
-          name: "Store",
-          description: "Shop exclusive merch & gear",
-          href: "https://shop.worldstreetgold.com",
+          name: "Markets",
+          description: "Full market screener",
+          href: "/trading/markets",
+          icon: BarChartIcon,
+        },
+        {
+          name: "Spot",
+          description: "Spot trading markets",
+          href: "/spot",
+          icon: Exchange01Icon,
+        },
+        {
+          name: "Futures",
+          description: "Perpetual futures trading",
+          href: "/futures",
+          icon: ChartLineData02Icon,
+        },
+        {
+          name: "Forex",
+          description: "Currency pair trading",
+          href: "/forex",
+          icon: GlobeIcon,
+        },
+        {
+          name: "Binary",
+          description: "Binary options trading",
+          href: "/binary",
+          icon: BinaryCodeIcon,
+        },
+        {
+          name: "Swap",
+          description: "One-tap conversion",
+          href: "/swap",
+          icon: RepeatIcon,
+        },
+        {
+          name: "Bridge",
+          description: "Cross-chain transfers",
+          href: "/bridge",
+          icon: Link01Icon,
+        },
+        {
+          name: "Copy Trading",
+          description: "Mirror top traders",
+          href: "/copy-trading",
+          icon: Copy01Icon,
+        },
+        {
+          name: "P2P Trading",
+          description: "Peer-to-peer exchange",
+          href: "/p2p",
           icon: Store01Icon,
-        },
-        {
-          name: "Academy",
-          description: "Learn trading from experts",
-          href: "https://academy.worldstreetgold.com",
-          icon: Book01Icon,
-        },
-        {
-          name: "Social",
-          description: "Connect with the community",
-          href: "https://social.worldstreetgold.com",
-          icon: UserGroup02Icon,
-        },
-        {
-          name: "Xstream",
-          description: "Live streams & broadcasts",
-          href: "https://xtreme.worldstreetgold.com",
-          icon: Video01Icon,
-        },
-        {
-          name: "Forex Trading",
-          description: "Trade global currency pairs",
-          href: "https://trader.worldstreetgold.com",
-          icon: DollarCircleIcon,
-        },
-        {
-          name: "Vivid AI",
-          description: "AI-powered trading insights",
-          href: "/vivid",
-          icon: Brain01Icon,
         },
       ],
     },

@@ -16,6 +16,7 @@ import {
 import type { CoinData, TradeResult } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
 import { fetchProfile } from "@/lib/profile-actions"
+import { SwapClient } from "@/components/swap/swap-client"
 
 const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
 
@@ -421,10 +422,11 @@ function EmptyState({
 interface DashboardGridProps {
   coins: CoinData[]
   tradesByPair: Record<string, TradeResult[]>
+  prices: Record<string, number>
   error?: string
 }
 
-export function DashboardGrid({ coins, tradesByPair, error }: DashboardGridProps) {
+export function DashboardGrid({ coins, tradesByPair, prices, error }: DashboardGridProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-5">
       {/* Column 1: Markets + Recent Trades stacked */}
@@ -433,8 +435,9 @@ export function DashboardGrid({ coins, tradesByPair, error }: DashboardGridProps
         <RecentTrades coins={coins} tradesByPair={tradesByPair} error={error} />
       </div>
 
-      {/* Column 2: Watchlist */}
+      {/* Column 2: Swap + Watchlist */}
       <div className="flex flex-col gap-4 lg:col-span-2">
+        <SwapClient coins={coins} prices={prices} error={error} compact />
         <Watchlist coins={coins} error={error} />
       </div>
     </div>

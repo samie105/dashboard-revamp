@@ -26,6 +26,7 @@ async function DashboardGridLoader() {
   return (
     <DashboardGrid
       coins={pricesData.coins}
+      prices={pricesData.prices}
       tradesByPair={{
         BTC: btcTrades.data,
         ETH: ethTrades.data,

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import {
   fetchProfile as fetchProfileAction,
   updateProfile as updateProfileAction,
@@ -35,6 +36,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = React.useState<ProfileData | null>(null)
   const [profileLoading, setProfileLoading] = React.useState(false)
   const [profileError, setProfileError] = React.useState<string | null>(null)
+  const router = useRouter()
 
   const fetchProfile = React.useCallback(async () => {
     try {
@@ -46,14 +48,19 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       if (data.success && data.profile) {
         setProfile(data.profile)
       } else {
-        setProfileError(data.error ?? "Failed to load profile")
+        const err = data.error ?? "Failed to load profile"
+        setProfileError(err)
+        // Server says the session is invalid — force redirect to login
+        if (err === "Unauthorized") {
+          router.replace("/login")
+        }
       }
     } catch {
       setProfileError("Network error loading profile")
     } finally {
       setProfileLoading(false)
     }
-  }, [])
+  }, [router])
 
   const updateProfile = React.useCallback(
     async (updates: Parameters<typeof updateProfileAction>[0]): Promise<boolean> => {
