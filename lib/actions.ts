@@ -1003,12 +1003,21 @@ export async function getChartData(
 // ── getSpotKlines (CoinGecko OHLC primary, KuCoin fallback) ────────────────
 
 const SPOT_INTERVAL_MAP: Record<string, { type: string; seconds: number; cgDays: number }> = {
+  "1m":  { type: "1min",  seconds: 60,    cgDays: 1 },
+  "3m":  { type: "3min",  seconds: 180,   cgDays: 1 },
+  "5m":  { type: "5min",  seconds: 300,   cgDays: 1 },
+  "15m": { type: "15min", seconds: 900,   cgDays: 2 },
+  "30m": { type: "30min", seconds: 1800,  cgDays: 3 },
+  "1H":  { type: "1hour", seconds: 3600,  cgDays: 7 },
+  "2H":  { type: "2hour", seconds: 7200,  cgDays: 14 },
+  "4H":  { type: "4hour", seconds: 14400, cgDays: 30 },
+  "12H": { type: "12hour", seconds: 43200, cgDays: 60 },
+  "1D":  { type: "1day",  seconds: 86400, cgDays: 180 },
+  "1W":  { type: "1week", seconds: 604800, cgDays: 365 },
   "1M":  { type: "1min",  seconds: 60,    cgDays: 1 },
+  "3M":  { type: "3min",  seconds: 180,   cgDays: 1 },
   "5M":  { type: "5min",  seconds: 300,   cgDays: 1 },
   "15M": { type: "15min", seconds: 900,   cgDays: 2 },
-  "1H":  { type: "1hour", seconds: 3600,  cgDays: 7 },
-  "4H":  { type: "4hour", seconds: 14400, cgDays: 30 },
-  "1D":  { type: "1day",  seconds: 86400, cgDays: 180 },
 }
 
 const spotKlinesCache = new Map<string, { data: KlinesResponse; ts: number }>()
@@ -1479,46 +1488,113 @@ export interface KlinesResponse {
 const klinesCache = new Map<string, { data: KlinesResponse; ts: number }>()
 const KLINES_TTL = 5_000
 
+// Hyperliquid supported intervals
+const FUTURES_INTERVAL_MAP: Record<string, string> = {
+  "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+  "1h": "1h", "2h": "2h", "4h": "4h", "12h": "12h",
+  "1d": "1d", "3d": "3d", "1w": "1w", "1M": "1M",
+  // legacy formats from old chart
+  "1min": "1m", "5min": "5m", "15min": "15m",
+}
+
+async function fetchHyperliquidCandles(
+  coin: string,
+  interval: string,
+  count = 300,
+): Promise<Kline[] | null> {
+  const hlInterval = FUTURES_INTERVAL_MAP[interval] || "1h"
+
+  // Calculate start time based on interval
+  const intervalMs: Record<string, number> = {
+    "1m": 60_000, "3m": 180_000, "5m": 300_000, "15m": 900_000, "30m": 1_800_000,
+    "1h": 3_600_000, "2h": 7_200_000, "4h": 14_400_000, "12h": 43_200_000,
+    "1d": 86_400_000, "3d": 259_200_000, "1w": 604_800_000, "1M": 2_592_000_000,
+  }
+  const ms = intervalMs[hlInterval] || 3_600_000
+  const startTime = Date.now() - ms * count
+
+  // Strip -PERP suffix for Hyperliquid — it expects just the coin name like "BTC"
+  const cleanCoin = coin.replace(/-PERP$/, "").replace(/USDT$/, "").replace(/USD$/, "")
+
+  const res = await fetch("https://api.hyperliquid.xyz/info", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "candleSnapshot",
+      coin: cleanCoin,
+      interval: hlInterval,
+      startTime,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  })
+
+  if (!res.ok) return null
+  const data = await res.json()
+  if (!Array.isArray(data) || data.length === 0) return null
+
+  return data.map((c: { t: number; o: string; h: string; l: string; c: string; v: string }) => ({
+    time: Number(c.t),
+    open: Number(c.o),
+    high: Number(c.h),
+    low: Number(c.l),
+    close: Number(c.c),
+    volume: Number(c.v),
+  }))
+}
+
 export async function getFuturesKlines(
   symbol: string,
-  interval = "1min",
+  interval = "1h",
 ): Promise<KlinesResponse> {
   const perpSymbol = symbol.includes("-PERP") ? symbol : `${symbol}-PERP`
-  const cacheKey = `${perpSymbol}:${interval}`
+  const mappedInterval = FUTURES_INTERVAL_MAP[interval] || interval
+  const cacheKey = `${perpSymbol}:${mappedInterval}`
 
   const cached = klinesCache.get(cacheKey)
   if (cached && Date.now() - cached.ts < KLINES_TTL) return cached.data
 
+  // Try backend first
   try {
-    const url = `${BACKEND_URL}/api/futures/market/${encodeURIComponent(perpSymbol)}/klines?interval=${encodeURIComponent(interval)}`
+    const url = `${BACKEND_URL}/api/futures/market/${encodeURIComponent(perpSymbol)}/klines?interval=${encodeURIComponent(mappedInterval)}`
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(8_000),
     })
 
-    if (!res.ok) throw new Error(`Klines API returned ${res.status}`)
-
-    const json = await res.json()
-
-    // Normalize: backend may return { data: [...] } or [...] directly
-    const raw = Array.isArray(json) ? json : (json.data ?? json.klines ?? [])
-
-    const data: Kline[] = raw.map((k: Record<string, unknown>) => ({
-      time: Number(k.t ?? k.time ?? k.timestamp ?? 0),
-      open: Number(k.o ?? k.open ?? 0),
-      high: Number(k.h ?? k.high ?? 0),
-      low: Number(k.l ?? k.low ?? 0),
-      close: Number(k.c ?? k.close ?? 0),
-      volume: Number(k.v ?? k.volume ?? 0),
-    }))
-
-    const result: KlinesResponse = { success: true, data }
-    klinesCache.set(cacheKey, { data: result, ts: Date.now() })
-    return result
-  } catch (error) {
-    console.error("Klines fetch error:", error)
-    const stale = klinesCache.get(cacheKey)
-    if (stale) return stale.data
-    return { success: false, data: [], error: "Failed to fetch kline data" }
+    if (res.ok) {
+      const json = await res.json()
+      const raw = Array.isArray(json) ? json : (json.data ?? json.klines ?? [])
+      const data: Kline[] = raw.map((k: Record<string, unknown>) => ({
+        time: Number(k.t ?? k.time ?? k.timestamp ?? 0),
+        open: Number(k.o ?? k.open ?? 0),
+        high: Number(k.h ?? k.high ?? 0),
+        low: Number(k.l ?? k.low ?? 0),
+        close: Number(k.c ?? k.close ?? 0),
+        volume: Number(k.v ?? k.volume ?? 0),
+      }))
+      if (data.length > 0) {
+        const result: KlinesResponse = { success: true, data }
+        klinesCache.set(cacheKey, { data: result, ts: Date.now() })
+        return result
+      }
+    }
+  } catch {
+    // fall through to Hyperliquid direct
   }
+
+  // Direct Hyperliquid fallback
+  try {
+    const data = await fetchHyperliquidCandles(perpSymbol, mappedInterval)
+    if (data && data.length > 0) {
+      const result: KlinesResponse = { success: true, data }
+      klinesCache.set(cacheKey, { data: result, ts: Date.now() })
+      return result
+    }
+  } catch (error) {
+    console.error("Hyperliquid candle fetch error:", error)
+  }
+
+  const stale = klinesCache.get(cacheKey)
+  if (stale) return stale.data
+  return { success: false, data: [], error: "Failed to fetch kline data" }
 }

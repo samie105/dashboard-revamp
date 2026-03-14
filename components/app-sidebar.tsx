@@ -21,6 +21,7 @@ import {
   UserIcon,
   UserGroup02Icon,
   Wallet01Icon,
+  Copy01Icon,
 } from "@hugeicons/core-free-icons"
 
 import {
@@ -53,6 +54,7 @@ const navigation = {
     { name: "Spot Trading", description: "Orderbook execution", url: "/spot", icon: Activity01Icon },
     { name: "Futures", description: "Perpetual contracts", url: "/futures", icon: Chart01Icon },
     { name: "Swap", description: "One-tap conversion", url: "/swap", icon: RepeatIcon, badge: "New" },
+    { name: "Copy Trading", description: "Mirror top traders", url: "/copy-trading", icon: Copy01Icon },
   ],
   account: [
     { name: "Profile", description: "Personal details", url: "/profile", icon: UserIcon },

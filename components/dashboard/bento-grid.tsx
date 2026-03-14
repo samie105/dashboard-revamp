@@ -15,6 +15,9 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { CoinData, TradeResult } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
+import { fetchProfile } from "@/lib/profile-actions"
+
+const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
 
 /* ========== Markets Table ========== */
 const MARKET_TABS = ["Favorites", "Hot", "New", "Gainers", "Losers", "Turnover", "Spot"] as const
@@ -59,7 +62,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
   const hasMore = visibleCount < filtered.length
 
   return (
-    <div className="flex h-full flex-col rounded-2xl bg-card">
+    <div data-onboarding="dash-markets" className="flex h-full flex-col rounded-2xl bg-card">
       {/* Header */}
       <div className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
@@ -121,11 +124,20 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                 <tr key={coin.symbol} className="transition-colors hover:bg-accent/30">
                   <td className="px-3 sm:px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                      {coin.image ? (
-                        <img src={coin.image} alt={coin.symbol} className="h-5 w-5 rounded-full" />
-                      ) : (
-                        <span className="text-xs font-bold text-primary">{coin.symbol}</span>
-                      )}
+                      <div className="flex items-center shrink-0">
+                        {coin.image ? (
+                          <img src={coin.image} alt="" className="h-5 w-5 rounded-full ring-1 ring-card" />
+                        ) : (
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary ring-1 ring-card">
+                            {coin.symbol.slice(0, 2)}
+                          </span>
+                        )}
+                        <img
+                          src={USDT_IMAGE}
+                          alt=""
+                          className="h-4 w-4 rounded-full ring-1 ring-card -ml-1.5"
+                        />
+                      </div>
                       <span className="font-medium">{coin.symbol}/USDT</span>
                     </div>
                   </td>
@@ -174,8 +186,17 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
 }
 
 /* ========== Recent Trades ========== */
-function RecentTrades({ trades, error }: { trades: TradeResult[]; error?: string }) {
-  const items = trades.slice(0, 8)
+const TRADE_PAIRS = ["BTC", "ETH", "SOL"] as const
+type TradePair = (typeof TRADE_PAIRS)[number]
+
+function RecentTrades({ coins, tradesByPair, error }: { coins: CoinData[]; tradesByPair: Record<string, TradeResult[]>; error?: string }) {
+  const [activePair, setActivePair] = React.useState<TradePair>("BTC")
+  const trades = (tradesByPair[activePair] ?? []).slice(0, 8)
+  const hasAnyTrades = Object.values(tradesByPair).some((t) => t.length > 0)
+  const pairCoin = React.useMemo(
+    () => coins.find((c) => c.symbol === activePair),
+    [coins, activePair],
+  )
 
   function formatTime(ts: number) {
     const diff = Date.now() - ts
@@ -186,28 +207,40 @@ function RecentTrades({ trades, error }: { trades: TradeResult[]; error?: string
   }
 
   return (
-    <div className="flex h-full flex-col rounded-2xl bg-card">
+    <div data-onboarding="dash-trades" className="flex h-full flex-col rounded-2xl bg-card">
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-2">
           <HugeiconsIcon icon={Activity01Icon} className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-semibold">Recent Trades</h3>
         </div>
-        <a href="/transactions" className="text-xs font-medium text-primary hover:underline">
-          View all
-        </a>
+        <div className="flex items-center gap-0.5">
+          {TRADE_PAIRS.map((pair) => (
+            <button
+              key={pair}
+              onClick={() => setActivePair(pair)}
+              className={`rounded-lg px-2 py-1 text-[11px] font-medium transition-colors ${
+                activePair === pair
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+            >
+              {pair}
+            </button>
+          ))}
+        </div>
       </div>
-      {error && items.length === 0 ? (
+      {error && !hasAnyTrades ? (
         <ErrorState message={error} />
-      ) : items.length === 0 ? (
+      ) : trades.length === 0 ? (
         <EmptyState
           icon={Exchange01Icon}
           title="No recent trades"
-          description="Your latest trades will appear here"
+          description="Market trades for this pair will appear here"
           cta={{ label: "Start trading", href: "/spot" }}
         />
       ) : (
         <div className="flex flex-1 flex-col divide-y divide-border/30">
-          {items.map((trade) => (
+          {trades.map((trade) => (
             <div key={trade.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/30">
               <span
                 className={`text-xs font-bold ${
@@ -217,8 +250,26 @@ function RecentTrades({ trades, error }: { trades: TradeResult[]; error?: string
                 {trade.side === "buy" ? "B" : "S"}
               </span>
               <div className="flex flex-1 flex-col">
-                <span className="text-sm font-medium">BTC/USDT</span>
-                <span className="text-xs text-muted-foreground tabular-nums">{parseFloat(trade.amount).toFixed(6)} BTC</span>
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <span className="flex items-center shrink-0">
+                    {pairCoin?.image ? (
+                      <img src={pairCoin.image} alt="" className="h-4.5 w-4.5 rounded-full ring-1 ring-card" />
+                    ) : (
+                      <span className="inline-flex h-4.5 w-4.5 items-center justify-center rounded-full bg-primary/10 text-[8px] font-bold text-primary ring-1 ring-card">
+                        {activePair.slice(0, 2)}
+                      </span>
+                    )}
+                    <img
+                      src={USDT_IMAGE}
+                      alt=""
+                      className="h-3.5 w-3.5 rounded-full ring-1 ring-card -ml-1.5"
+                    />
+                  </span>
+                  {activePair}/USDT
+                </span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {parseFloat(trade.amount).toFixed(activePair === "BTC" ? 5 : 4)} {activePair}
+                </span>
               </div>
               <div className="flex flex-col items-end">
                 <span className="text-sm font-semibold tabular-nums">
@@ -239,11 +290,29 @@ function RecentTrades({ trades, error }: { trades: TradeResult[]; error?: string
 
 /* ========== Watchlist ========== */
 function Watchlist({ coins, error }: { coins: CoinData[]; error?: string }) {
-  const items = coins.slice(0, 10)
+  const [watchlistSymbols, setWatchlistSymbols] = React.useState<string[] | null>(null)
+
+  React.useEffect(() => {
+    fetchProfile()
+      .then((result) => {
+        if (result.success && result.profile) {
+          setWatchlistSymbols(result.profile.watchlist ?? [])
+        } else {
+          setWatchlistSymbols([])
+        }
+      })
+      .catch(() => setWatchlistSymbols([]))
+  }, [])
+
+  const items = React.useMemo(() => {
+    if (watchlistSymbols === null) return null
+    if (watchlistSymbols.length === 0) return []
+    return coins.filter((c) => watchlistSymbols.includes(c.symbol)).slice(0, 10)
+  }, [coins, watchlistSymbols])
 
   return (
-    <div className="flex h-full flex-col rounded-2xl bg-card">
-        <div className="flex items-center justify-between px-3 py-2.5">
+    <div data-onboarding="dash-watchlist" className="flex h-full flex-col rounded-2xl bg-card">
+      <div className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-2">
           <HugeiconsIcon icon={StarIcon} className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-semibold">Watchlist</h3>
@@ -252,13 +321,29 @@ function Watchlist({ coins, error }: { coins: CoinData[]; error?: string }) {
           View all
         </a>
       </div>
-      {error && items.length === 0 ? (
+      {items === null ? (
+        <div className="flex flex-1 flex-col divide-y divide-border/30">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-3 py-1.5">
+              <div className="h-5 w-5 rounded-full bg-muted animate-pulse" />
+              <div className="flex flex-1 flex-col gap-1">
+                <div className="h-3 w-14 rounded bg-muted animate-pulse" />
+                <div className="h-2.5 w-10 rounded bg-muted animate-pulse" />
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <div className="h-3 w-14 rounded bg-muted animate-pulse" />
+                <div className="h-2.5 w-10 rounded bg-muted animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : error && items.length === 0 ? (
         <ErrorState message={error} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={StarIcon}
           title="No favorites yet"
-          description="Star assets to add them to your watchlist"
+          description="Star assets on the Spot page to build your watchlist"
           cta={{ label: "Browse markets", href: "/spot" }}
         />
       ) : (
@@ -278,17 +363,19 @@ function Watchlist({ coins, error }: { coins: CoinData[]; error?: string }) {
                 <span className="text-sm font-semibold tabular-nums">
                   ${coin.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </span>
-                <span
-                  className={`inline-flex items-center gap-0.5 text-xs font-medium tabular-nums ${
-                    coin.change24h >= 0 ? "text-emerald-500" : "text-red-500"
-                  }`}
-                >
-                  <HugeiconsIcon
-                    icon={coin.change24h >= 0 ? ArrowUp01Icon : ArrowDown01Icon}
-                    className="h-3 w-3"
-                  />
-                  {coin.change24h >= 0 ? "+" : ""}{coin.change24h.toFixed(2)}%
-                </span>
+                {coin.change24h !== 0 && (
+                  <span
+                    className={`inline-flex items-center gap-0.5 text-xs font-medium tabular-nums ${
+                      coin.change24h >= 0 ? "text-emerald-500" : "text-red-500"
+                    }`}
+                  >
+                    <HugeiconsIcon
+                      icon={coin.change24h >= 0 ? ArrowUp01Icon : ArrowDown01Icon}
+                      className="h-3 w-3"
+                    />
+                    {coin.change24h >= 0 ? "+" : ""}{coin.change24h.toFixed(2)}%
+                  </span>
+                )}
               </div>
             </div>
           ))}
@@ -333,17 +420,17 @@ function EmptyState({
 /* ========== Dashboard Grid ========== */
 interface DashboardGridProps {
   coins: CoinData[]
-  trades: TradeResult[]
+  tradesByPair: Record<string, TradeResult[]>
   error?: string
 }
 
-export function DashboardGrid({ coins, trades, error }: DashboardGridProps) {
+export function DashboardGrid({ coins, tradesByPair, error }: DashboardGridProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-5">
       {/* Column 1: Markets + Recent Trades stacked */}
       <div className="flex flex-col gap-4 lg:col-span-3">
         <MarketsTable coins={coins} error={error} />
-        <RecentTrades trades={trades} error={error} />
+        <RecentTrades coins={coins} tradesByPair={tradesByPair} error={error} />
       </div>
 
       {/* Column 2: Watchlist */}

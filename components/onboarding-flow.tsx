@@ -100,7 +100,8 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
 
     // Animate tooltip position
     if (tooltipRef.current) {
-      const pos = getTooltipPosition(rect, steps[current]?.placement ?? "bottom")
+      const measuredH = tooltipRef.current.offsetHeight || 180
+      const pos = getTooltipPosition(rect, steps[current]?.placement ?? "bottom", measuredH)
       tl.to(tooltipRef.current, {
         x: pos.x,
         y: pos.y,
@@ -260,7 +261,7 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
         onClick={(e) => e.stopPropagation()}
         className="absolute z-10 w-[300px] rounded-2xl border border-border/40 bg-card p-4 shadow-2xl"
         style={{
-          ...getTooltipPosition(rect, step?.placement ?? "bottom"),
+          ...getTooltipPosition(rect, step?.placement ?? "bottom", tooltipRef.current?.offsetHeight || 180),
           opacity: 0,
           transform: "scale(0.95)",
         }}
@@ -345,18 +346,53 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
 function getTooltipPosition(
   rect: DOMRect,
   placement: "top" | "bottom" | "left" | "right",
+  measuredHeight?: number,
 ): { x: number; y: number } {
   const gap = 16
   const tooltipW = 300
+  const tooltipH = measuredHeight || 180
+
+  let x: number
+  let y: number
 
   switch (placement) {
     case "top":
-      return { x: rect.left + rect.width / 2 - tooltipW / 2, y: rect.top - gap - 160 }
+      x = rect.left + rect.width / 2 - tooltipW / 2
+      y = rect.top - gap - tooltipH
+      break
     case "bottom":
-      return { x: rect.left + rect.width / 2 - tooltipW / 2, y: rect.bottom + gap }
+      x = rect.left + rect.width / 2 - tooltipW / 2
+      y = rect.bottom + gap
+      break
     case "left":
-      return { x: rect.left - tooltipW - gap, y: rect.top + rect.height / 2 - 80 }
+      x = rect.left - tooltipW - gap
+      y = rect.top + rect.height / 2 - tooltipH / 2
+      break
     case "right":
-      return { x: rect.right + gap, y: rect.top + rect.height / 2 - 80 }
+      x = rect.right + gap
+      y = rect.top + rect.height / 2 - tooltipH / 2
+      break
   }
+
+  // Clamp to viewport so the card never goes off-screen
+  if (typeof window !== "undefined") {
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const margin = 12
+    x = Math.max(margin, Math.min(x, vw - tooltipW - margin))
+    y = Math.max(margin, Math.min(y, vh - tooltipH - margin))
+
+    // If placement was top but clamped y pushes it below rect, flip to bottom
+    if (placement === "top" && y > rect.top - tooltipH) {
+      y = rect.bottom + gap
+      y = Math.min(y, vh - tooltipH - margin)
+    }
+    // If placement was bottom but card would go off bottom, flip to top
+    if (placement === "bottom" && y + tooltipH > vh - margin) {
+      y = rect.top - gap - tooltipH
+      y = Math.max(margin, y)
+    }
+  }
+
+  return { x, y }
 }

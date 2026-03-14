@@ -11,6 +11,51 @@ import { OrderPanel } from "./order-panel"
 import { AnimatedOrderBook } from "./animated-order-book"
 import { OpenOrdersPanel } from "./open-orders-panel"
 import { TokenSearchModal } from "./token-search-modal"
+import { RecentTrades } from "./recent-trades"
+import { useProfile } from "@/components/profile-provider"
+import { markOnboardingComplete } from "@/lib/profile-actions"
+import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
+
+// ── Spot Onboarding Steps ────────────────────────────────────────────────
+
+const ONBOARDING_STEPS: OnboardingStep[] = [
+  {
+    target: '[data-onboarding="spot-topbar"]',
+    title: "Market Info",
+    description: "See the current price, 24h change, volume, and market stats for the selected trading pair.",
+    placement: "bottom",
+  },
+  {
+    target: '[data-onboarding="spot-markets"]',
+    title: "Markets List",
+    description: "Browse and search all available spot pairs. Click any coin to switch your trading pair.",
+    placement: "right",
+  },
+  {
+    target: '[data-onboarding="spot-chart"]',
+    title: "Price Chart",
+    description: "Interactive candlestick chart with multiple timeframes, chart types, and technical indicators like MA, EMA, Bollinger Bands, and VWAP.",
+    placement: "bottom",
+  },
+  {
+    target: '[data-onboarding="spot-orderbook"]',
+    title: "Order Book & Trades",
+    description: "Real-time order book showing bid and ask depth. Switch to Recent Trades to see the latest executed trades.",
+    placement: "left",
+  },
+  {
+    target: '[data-onboarding="spot-order"]',
+    title: "Place Orders",
+    description: "Buy or sell with market or limit orders. Set your amount and review details before executing.",
+    placement: "top",
+  },
+  {
+    target: '[data-onboarding="spot-orders"]',
+    title: "Open Orders",
+    description: "Track your pending orders and trade history. Cancel or manage orders in real-time.",
+    placement: "top",
+  },
+]
 
 export function SpotClient({
   coins,
@@ -18,12 +63,15 @@ export function SpotClient({
   initialTrades,
   initialOrderBook,
 }: SpotClientProps) {
+  const { profile } = useProfile()
   const [selectedPair, setSelectedPair] = React.useState("BTC")
   const [watchlist, setWatchlist] = React.useState<Set<string>>(
     new Set(["BTC", "ETH", "SOL"]),
   )
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("chart")
   const [showSearch, setShowSearch] = React.useState(false)
+  const [rightTab, setRightTab] = React.useState<"book" | "trades">("book")
+  const isOnboardingDone = profile?.onboardingCompleted?.includes("spot")
 
   const [orderBookAsks, setOrderBookAsks] = React.useState<OrderBookLevel[]>(
     initialOrderBook?.asks ?? [],
@@ -115,17 +163,19 @@ export function SpotClient({
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       {/* ── TOP BAR ── */}
-      <SpotTopBar
-        coin={selectedCoin}
-        onOpenSearch={() => setShowSearch(true)}
-      />
+      <div data-onboarding="spot-topbar">
+        <SpotTopBar
+          coin={selectedCoin}
+          onOpenSearch={() => setShowSearch(true)}
+        />
+      </div>
 
       {/* ═══ DESKTOP: 3-column main + standalone bottom orders ═══ */}
       <div className="hidden lg:flex flex-1 flex-col overflow-hidden p-1 gap-1">
         {/* MAIN ROW */}
         <div className="flex-1 min-h-0 grid grid-cols-[220px_1fr_280px] gap-1 overflow-hidden">
           {/* LEFT — Market/Pair List */}
-          <div className="overflow-hidden">
+          <div data-onboarding="spot-markets" className="overflow-hidden">
             <MarketSelect
               coins={coins}
               selected={selectedPair}
@@ -144,7 +194,7 @@ export function SpotClient({
                 change24h={selectedCoin.change24h}
               />
             </div>
-            <div className="shrink-0 overflow-hidden">
+            <div data-onboarding="spot-order" className="shrink-0 overflow-hidden">
               <div className="grid grid-cols-2 gap-1">
                 <OrderPanel
                   side="buy"
@@ -160,18 +210,45 @@ export function SpotClient({
             </div>
           </div>
 
-          {/* RIGHT — Order Book */}
-          <div className="overflow-hidden">
-            <AnimatedOrderBook
-              currentPrice={currentPrice}
-              asks={orderBookAsks}
-              bids={orderBookBids}
-            />
+          {/* RIGHT — Order Book / Recent Trades (tab toggle) */}
+          <div data-onboarding="spot-orderbook" className="flex flex-col overflow-hidden rounded-xl bg-card">
+            <div className="flex items-center gap-1 border-b border-border/20 px-2 py-1.5 shrink-0">
+              <button
+                onClick={() => setRightTab("book")}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  rightTab === "book" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Order Book
+              </button>
+              <button
+                onClick={() => setRightTab("trades")}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  rightTab === "trades" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Recent Trades
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {rightTab === "book" ? (
+                <AnimatedOrderBook
+                  currentPrice={currentPrice}
+                  asks={orderBookAsks}
+                  bids={orderBookBids}
+                />
+              ) : (
+                <RecentTrades
+                  trades={liveTrades[`${selectedPair}USDT`] ?? []}
+                  currentPrice={currentPrice}
+                />
+              )}
+            </div>
           </div>
         </div>
 
         {/* BOTTOM ROW — Open Orders (standalone) */}
-        <div className="shrink-0 min-h-[120px] max-h-[30vh]">
+        <div data-onboarding="spot-orders" className="shrink-0 min-h-[120px] max-h-[30vh]">
           <OpenOrdersPanel />
         </div>
       </div>
@@ -242,6 +319,14 @@ export function SpotClient({
         onClose={() => setShowSearch(false)}
         coins={coins}
         onSelect={handlePairSelect}
+      />
+
+      {/* Onboarding */}
+      <OnboardingFlow
+        steps={ONBOARDING_STEPS}
+        storageKey="spot"
+        completed={isOnboardingDone}
+        onComplete={() => markOnboardingComplete("spot")}
       />
     </div>
   )

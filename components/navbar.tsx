@@ -2,15 +2,16 @@
 
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { 
-  Search01Icon as Search, 
-  UserIcon as User, 
-  Settings01Icon as Settings, 
+import {
+  Search01Icon as Search,
+  UserIcon as User,
+  Settings01Icon as Settings,
   Logout01Icon as LogOut,
   Wallet01Icon as Wallet,
   ArrowRight01Icon as ArrowRight,
   Activity01Icon,
-  Wallet01Icon
+  Wallet01Icon,
+  Exchange01Icon,
 } from "@hugeicons/core-free-icons"
 
 import {
@@ -55,7 +56,10 @@ export function Navbar() {
       </div>
       <div className="grid grid-cols-2 gap-2">
         <a href="/deposit" className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90">
-          <HugeiconsIcon icon={Wallet} className="h-3.5 w-3.5" />
+          <HugeiconsIcon
+            icon={Exchange01Icon}
+            className="h-3.5 w-3.5 text-white [&_path]:stroke-current [&_path]:fill-none [&_path]:opacity-100"
+          />
           Deposit
         </a>
         <a href="/withdraw" className="flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/50">
@@ -164,6 +168,10 @@ export function Navbar() {
           href="/deposit" 
           className="hidden md:inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground font-semibold text-xs px-3.5 h-7 rounded-lg transition-colors hover:bg-primary/90 active:scale-[0.97] mr-1"
         >
+          <HugeiconsIcon
+            icon={Exchange01Icon}
+            className="h-3.5 w-3.5 text-primary-foreground [&_path]:stroke-current [&_path]:fill-none [&_path]:opacity-100"
+          />
           Deposit
         </a>
 

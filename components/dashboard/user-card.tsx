@@ -30,16 +30,27 @@ interface WalletCardProps {
   error?: string
 }
 
+const WALLET_VIEWS = [
+  { key: "total",   label: "Total",   icon: Coins01Icon,         sub: "All accounts" },
+  { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "USDT balance" },
+  { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot trading" },
+  { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Futures wallet" },
+] as const
+
+type WalletView = (typeof WALLET_VIEWS)[number]["key"]
+
 export function WalletCard({ error }: WalletCardProps) {
   const { user, isLoaded } = useAuth()
   const { addresses } = useWallet()
   const [isCopied, setIsCopied] = React.useState(false)
+  const [activeView, setActiveView] = React.useState<WalletView>("total")
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
     : "Trader"
 
   const solAddress = addresses?.solana ?? ""
+  const currentView = WALLET_VIEWS.find((v) => v.key === activeView)!
 
   const handleCopy = () => {
     if (solAddress) {
@@ -54,7 +65,7 @@ export function WalletCard({ error }: WalletCardProps) {
   return (
     <div className="rounded-2xl bg-card">
       {/* ── Top: Greeting + Deposit / Withdraw ── */}
-      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div data-onboarding="dash-greeting" className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           {isLoaded ? (
             <Avatar className="h-10 w-10">
@@ -76,7 +87,7 @@ export function WalletCard({ error }: WalletCardProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div data-onboarding="dash-actions" className="flex items-center gap-2">
           <a
             href="/deposit"
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90"
@@ -97,24 +108,30 @@ export function WalletCard({ error }: WalletCardProps) {
       {/* ── Separator ── */}
       <div className="h-px bg-border/30" />
 
-      {/* ── Stats grid ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 divide-x divide-border/30 divide-y sm:divide-y-0 lg:divide-y-0">
-        {/* Main Wallet */}
-        <div className="flex flex-col gap-1.5 p-4">
-          <div className="flex items-center gap-1.5">
-            <HugeiconsIcon icon={Wallet01Icon} className="h-3 w-3 text-primary" />
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Main Wallet
-            </span>
-          </div>
-          <span className="text-lg font-bold tabular-nums tracking-tight">$0.00</span>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-muted-foreground">USDT Balance</span>
-          </div>
-          {solAddress && (
+      {/* ── Balance selector ── */}
+      <div data-onboarding="dash-balance" className="flex flex-col gap-2 p-4 border-b border-border/30">
+        <div className="flex items-center gap-0.5">
+          {WALLET_VIEWS.map((view) => (
+            <button
+              key={view.key}
+              onClick={() => setActiveView(view.key)}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                activeView === view.key
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              }`}
+            >
+              <HugeiconsIcon icon={view.icon} className="h-3 w-3" />
+              {view.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-end gap-3">
+          <span className="text-2xl font-bold tabular-nums tracking-tight">$0.00</span>
+          {activeView === "main" && solAddress && (
             <button
               onClick={handleCopy}
-              className="mt-0.5 inline-flex w-fit items-center gap-1 rounded bg-accent/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground transition-colors hover:bg-accent"
+              className="mb-0.5 inline-flex items-center gap-1 rounded bg-accent/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground transition-colors hover:bg-accent"
             >
               {truncAddr(solAddress)}
               <HugeiconsIcon
@@ -124,43 +141,11 @@ export function WalletCard({ error }: WalletCardProps) {
             </button>
           )}
         </div>
+        <span className="text-[10px] text-muted-foreground">{currentView.sub}</span>
+      </div>
 
-        {/* Spot Trading */}
-        <div className="flex flex-col gap-1.5 p-4">
-          <div className="flex items-center gap-1.5">
-            <HugeiconsIcon icon={Chart01Icon} className="h-3 w-3 text-primary" />
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Spot Trading
-            </span>
-          </div>
-          <span className="text-lg font-bold tabular-nums tracking-tight">$0.00</span>
-          <span className="text-[10px] text-muted-foreground">Open Positions</span>
-        </div>
-
-        {/* Futures Trading */}
-        <div className="flex flex-col gap-1.5 p-4">
-          <div className="flex items-center gap-1.5">
-            <HugeiconsIcon icon={ChartLineData01Icon} className="h-3 w-3 text-primary" />
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Futures Trading
-            </span>
-          </div>
-          <span className="text-lg font-bold tabular-nums tracking-tight">$0.00</span>
-          <span className="text-[10px] text-muted-foreground">Wallet Balance</span>
-        </div>
-
-        {/* Total Balance */}
-        <div className="flex flex-col gap-1.5 p-4">
-          <div className="flex items-center gap-1.5">
-            <HugeiconsIcon icon={Coins01Icon} className="h-3 w-3 text-primary" />
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Total Balance
-            </span>
-          </div>
-          <span className="text-lg font-bold tabular-nums tracking-tight">$0.00</span>
-          <span className="text-[10px] text-muted-foreground">Live prices</span>
-        </div>
-
+      {/* ── Stats row ── */}
+      <div data-onboarding="dash-stats" className="grid grid-cols-3 divide-x divide-border/30">
         {/* Today's P&L */}
         <div className="flex flex-col gap-1.5 p-4">
           <div className="flex items-center gap-1.5">
@@ -194,7 +179,7 @@ export function WalletCard({ error }: WalletCardProps) {
             </span>
           </div>
           <span className="text-lg font-bold tabular-nums tracking-tight">6</span>
-          <span className="text-[10px] text-muted-foreground">SOL, ETH, ARB, SUI, TON, TRX</span>
+          <span className="text-[10px] text-muted-foreground">SOL · ETH · ARB · SUI · TON · TRX</span>
         </div>
       </div>
     </div>

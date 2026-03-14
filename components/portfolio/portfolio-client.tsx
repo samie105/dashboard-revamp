@@ -28,7 +28,8 @@ import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import type { CoinData } from "@/lib/actions"
+import { getUserBalances } from "@/lib/actions"
+import type { CoinData, UserBalance } from "@/lib/actions"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -196,11 +197,11 @@ function QuickActions() {
 function Watchlist({
   coins,
   watchlistSymbols,
-  setWatchlistSymbols,
+  onWatchlistChange,
 }: {
   coins: CoinData[]
   watchlistSymbols: string[]
-  setWatchlistSymbols: React.Dispatch<React.SetStateAction<string[]>>
+  onWatchlistChange: (list: string[]) => void
 }) {
   const [starred, setStarred] = React.useState<string[]>(["BTC", "ETH", "SOL"])
   const [showAdd, setShowAdd] = React.useState(false)
@@ -240,19 +241,19 @@ function Watchlist({
             <HugeiconsIcon icon={Add01Icon} className="h-3 w-3" /> Add
           </button>
           {showAdd && (
-            <div className="absolute right-0 top-9 z-50 w-56 rounded-xl border border-border/40 bg-card shadow-xl">
-              <div className="border-b border-border/30 p-2">
-                <div className="flex items-center gap-2 rounded-lg bg-accent/30 px-2.5 py-1.5">
+            <div className="absolute right-0 top-9 z-50 w-64 rounded-xl border-0 bg-popover/90 backdrop-blur-2xl ring-1 ring-white/10 shadow-xl shadow-black/8 overflow-hidden">
+              <div className="border-b border-white/10 p-2">
+                <div className="flex items-center gap-2 rounded-lg bg-accent/40 px-2.5 py-1.5">
                   <HugeiconsIcon icon={Search01Icon} className="h-3 w-3 text-muted-foreground shrink-0" />
                   <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="bg-transparent text-xs outline-none w-full placeholder:text-muted-foreground/50" />
                 </div>
               </div>
-              <ScrollArea className="max-h-48">
+              <div className="max-h-52 overflow-y-auto slim-scroll">
                 <div className="p-1">
                   {addable.length === 0 ? (
                     <p className="text-[11px] text-muted-foreground text-center py-4">No coins found</p>
                   ) : addable.map((c) => (
-                    <button key={c.id} onClick={() => { setWatchlistSymbols((p) => [...p, c.symbol]); setShowAdd(false); setSearch("") }} className="flex w-full items-center gap-2 rounded-lg p-2 hover:bg-accent/30 transition-colors">
+                    <button key={c.id} onClick={() => { onWatchlistChange([...watchlistSymbols, c.symbol]); setShowAdd(false); setSearch("") }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 hover:bg-accent/30 transition-colors">
                       {c.image ? <img src={c.image} alt="" className="h-4 w-4 rounded-full" /> : <span className="text-[10px] font-bold">{c.symbol}</span>}
                       <span className="text-xs font-medium">{c.symbol}</span>
                       <span className="text-[10px] text-muted-foreground">{c.name}</span>
@@ -260,7 +261,7 @@ function Watchlist({
                     </button>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </div>
           )}
         </div>
@@ -292,7 +293,7 @@ function Watchlist({
                     </p>
                   </div>
                   <div className="hidden sm:block"><Sparkline change24h={coin.change24h} /></div>
-                  <button onClick={() => setWatchlistSymbols((p) => p.filter((s) => s !== coin.symbol))} className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-red-500/10 transition-all">
+                  <button onClick={() => onWatchlistChange(watchlistSymbols.filter((s) => s !== coin.symbol))} className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-red-500/10 transition-all">
                     <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3 text-muted-foreground hover:text-red-500 transition-colors" />
                   </button>
                 </div>
@@ -310,18 +311,52 @@ function Watchlist({
 export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
   const { user } = useAuth()
   const { addresses, tradingWallet, walletsGenerated, isLoading: walletsLoading, refreshWallets } = useWallet()
-  const { profile } = useProfile()
+  const { profile, updateProfile } = useProfile()
 
   const [activeTab, setActiveTab] = React.useState<Tab>("overview")
   const [transferAmount, setTransferAmount] = React.useState("")
   const [copiedAddr, setCopiedAddr] = React.useState<string | null>(null)
-  const [watchlistSymbols, setWatchlistSymbols] = React.useState<string[]>(INITIAL_WATCHLIST)
+  const [watchlistSymbols, setWatchlistSymbols] = React.useState<string[]>(
+    profile?.watchlist?.length ? profile.watchlist : INITIAL_WATCHLIST,
+  )
+
+  // Sync watchlist when profile loads
+  React.useEffect(() => {
+    if (profile?.watchlist !== undefined) {
+      setWatchlistSymbols(profile.watchlist.length ? profile.watchlist : INITIAL_WATCHLIST)
+    }
+  }, [profile?.watchlist])
+
+  // Wrapper that persists to MongoDB via updateProfile
+  const handleWatchlistChange = React.useCallback(
+    (newList: string[]) => {
+      setWatchlistSymbols(newList)
+      updateProfile({ watchlist: newList }).catch(() => {})
+    },
+    [updateProfile],
+  )
+
+  // Balance state from backend
+  const [accountBalances, setAccountBalances] = React.useState<UserBalance[]>([])
+  const [accountTotal, setAccountTotal] = React.useState(0)
+
+  React.useEffect(() => {
+    const uid = user?.userId
+    if (!uid) return
+    getUserBalances(uid).then((r) => {
+      if (r.success) {
+        setAccountBalances(r.balances)
+        setAccountTotal(r.totalUsd)
+      }
+    })
+  }, [user?.userId])
 
   const isOnboardingDone = profile?.onboardingCompleted?.includes("portfolio")
-  const totalNetWorth = 0
-  const tradingValue = 0
-  const availableUsdc = 0
-  const inOrders = 0
+  const usdcBal = accountBalances.find((b) => b.asset === "USDC" || b.asset === "USDT")
+  const tradingValue = accountTotal
+  const availableUsdc = usdcBal ? usdcBal.available : 0
+  const inOrders = accountBalances.reduce((sum, b) => sum + b.locked, 0)
+  const totalNetWorth = accountTotal
 
   const copyAddr = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -453,8 +488,19 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                                   </div>
                                 </td>
                                 <td className="px-3 py-2.5 text-muted-foreground">{chain.label}</td>
-                                <td className="px-3 py-2.5 text-right font-medium tabular-nums">0.0000</td>
-                                <td className="px-3 py-2.5 text-right text-muted-foreground tabular-nums">{formatUSD(0)}</td>
+                                <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                                  {(() => {
+                                    const b = accountBalances.find((x) => x.asset.toUpperCase() === chain.symbol.toUpperCase() || x.chain === chain.key)
+                                    return (b ? b.available + b.locked : 0).toFixed(4)
+                                  })()}
+                                </td>
+                                <td className="px-3 py-2.5 text-right text-muted-foreground tabular-nums">
+                                  {(() => {
+                                    const b = accountBalances.find((x) => x.asset.toUpperCase() === chain.symbol.toUpperCase() || x.chain === chain.key)
+                                    const amt = b ? b.available + b.locked : 0
+                                    return formatUSD(amt * (prices[chain.symbol] ?? 0))
+                                  })()}
+                                </td>
                               </tr>
                             ))
                           )}
@@ -662,7 +708,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
         {/* ════ RIGHT — Info panels ════ */}
         <div data-onboarding="portfolio-sidebar" className="flex flex-col gap-4">
           <QuickActions />
-          <Watchlist coins={coins} watchlistSymbols={watchlistSymbols} setWatchlistSymbols={setWatchlistSymbols} />
+          <Watchlist coins={coins} watchlistSymbols={watchlistSymbols} onWatchlistChange={handleWatchlistChange} />
           <HowItWorks />
         </div>
       </div>

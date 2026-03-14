@@ -127,11 +127,14 @@ export function SpotTopBar({
       {/* Right: actions */}
       <div className="flex items-center gap-1 md:gap-2 ml-auto">
         {totalBalance !== null && (
-          <div className="hidden md:flex flex-col items-end mr-2">
-            <span className="text-[9px] text-muted-foreground">Total Balance</span>
-            <span className="text-xs font-bold tabular-nums text-foreground">
-              ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
+          <div className="flex items-center gap-1.5 rounded-lg bg-accent/50 px-2.5 py-1 mr-1 md:mr-2">
+            <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0 md:hidden" />
+            <div className="flex flex-col items-end">
+              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Balance</span>
+              <span className="text-xs font-bold tabular-nums text-foreground">
+                ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
           </div>
         )}
         <a

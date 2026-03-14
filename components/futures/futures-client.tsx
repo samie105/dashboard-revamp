@@ -25,11 +25,6 @@ import { executeTrade } from "@/lib/actions"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { FuturesChart } from "./futures-chart"
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -532,50 +527,33 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
         </div>
       </div>
 
-      {/* ═══ DESKTOP: Resizable 3-column layout ═══ */}
+      {/* ═══ DESKTOP: 3-column grid layout ═══ */}
       <div className="hidden lg:flex flex-1 flex-col overflow-hidden p-1 gap-1">
-        {/* MAIN ROW — resizable */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <ResizablePanelGroup direction="horizontal">
-            {/* LEFT — Market list */}
-            <ResizablePanel defaultSize={15} minSize={10} maxSize={25}>
-              <div data-onboarding="futures-markets" className="h-full overflow-hidden">
-                <MarketList markets={liveMarkets} selected={selected} onSelect={setSelected} />
-              </div>
-            </ResizablePanel>
+        {/* MAIN ROW */}
+        <div className="flex-1 min-h-0 grid grid-cols-[200px_1fr_280px] gap-1 overflow-hidden">
+          {/* LEFT — Market list */}
+          <div data-onboarding="futures-markets" className="overflow-hidden">
+            <MarketList markets={liveMarkets} selected={selected} onSelect={setSelected} />
+          </div>
 
-            <ResizableHandle />
+          {/* CENTER — Chart + Order Form */}
+          <div className="flex flex-col gap-1 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <FuturesChart
+                symbol={selected}
+                markPrice={market.markPrice}
+                change24h={market.change24h}
+              />
+            </div>
+            <div data-onboarding="futures-order" className="shrink-0 overflow-hidden">
+              <FuturesOrderForm market={market} />
+            </div>
+          </div>
 
-            {/* CENTER — Chart + Order Form */}
-            <ResizablePanel defaultSize={60} minSize={35}>
-              <ResizablePanelGroup direction="vertical">
-                <ResizablePanel defaultSize={70} minSize={40}>
-                  <div className="h-full overflow-hidden">
-                    <FuturesChart
-                      symbol={selected}
-                      markPrice={market.markPrice}
-                      change24h={market.change24h}
-                    />
-                  </div>
-                </ResizablePanel>
-                <ResizableHandle />
-                <ResizablePanel defaultSize={30} minSize={15}>
-                  <div data-onboarding="futures-order" className="h-full overflow-hidden">
-                    <FuturesOrderForm market={market} />
-                  </div>
-                </ResizablePanel>
-              </ResizablePanelGroup>
-            </ResizablePanel>
-
-            <ResizableHandle />
-
-            {/* RIGHT — Order Book */}
-            <ResizablePanel defaultSize={25} minSize={15} maxSize={35}>
-              <div data-onboarding="futures-orderbook" className="h-full overflow-hidden">
-                <FuturesOrderBook asks={orderBookAsks} bids={orderBookBids} markPrice={market.markPrice} />
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          {/* RIGHT — Order Book */}
+          <div data-onboarding="futures-orderbook" className="overflow-hidden">
+            <FuturesOrderBook asks={orderBookAsks} bids={orderBookBids} markPrice={market.markPrice} />
+          </div>
         </div>
 
         {/* BOTTOM ROW — Positions (standalone) */}

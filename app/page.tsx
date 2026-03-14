@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import { WalletCard } from "@/components/dashboard/user-card"
 import { DashboardGrid } from "@/components/dashboard/bento-grid"
 import { WalletCardSkeleton, DashboardGridSkeleton } from "@/components/dashboard/skeletons"
+import { DashboardOnboarding } from "@/components/dashboard/dashboard-onboarding"
 import { getPrices, getTrades } from "@/lib/actions"
 
 async function WalletCardLoader() {
@@ -16,14 +17,20 @@ async function WalletCardLoader() {
 }
 
 async function DashboardGridLoader() {
-  const [pricesData, tradesData] = await Promise.all([
+  const [pricesData, btcTrades, ethTrades, solTrades] = await Promise.all([
     getPrices(),
-    getTrades("BTCUSDT", 10),
+    getTrades("BTCUSDT", 8),
+    getTrades("ETHUSDT", 8),
+    getTrades("SOLUSDT", 8),
   ])
   return (
     <DashboardGrid
       coins={pricesData.coins}
-      trades={tradesData.data}
+      tradesByPair={{
+        BTC: btcTrades.data,
+        ETH: ethTrades.data,
+        SOL: solTrades.data,
+      }}
       error={pricesData.error || (pricesData.coins.length === 0 ? "No market data available" : undefined)}
     />
   )
@@ -38,6 +45,7 @@ export default function Page() {
       <Suspense fallback={<DashboardGridSkeleton />}>
         <DashboardGridLoader />
       </Suspense>
+      <DashboardOnboarding />
     </div>
   )
 }
