@@ -20,6 +20,7 @@ import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flo
 import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { useTradeSelector } from "@/components/trade-selector"
+import { useWalletBalances, type TokenBalance } from "@/hooks/useWalletBalances"
 
 // ── Onboarding steps ─────────────────────────────────────────────────────
 
@@ -242,6 +243,7 @@ function AddTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
 export default function AssetsClient() {
   const { addresses, walletsGenerated, isLoading, error, refreshWallets, setupStatus } = useWallet()
   const { profile } = useProfile()
+  const { balances: onChainBalances, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances()
   const [selectedChain, setSelectedChain] = React.useState<string>(CHAINS[0].key)
   const [chainDropdownOpen, setChainDropdownOpen] = React.useState(false)
   const chainDropdownRef = React.useRef<HTMLDivElement>(null)
@@ -251,6 +253,34 @@ export default function AssetsClient() {
   const [chainTab, setChainTab] = React.useState<ChainTab>("All")
   const [search, setSearch] = React.useState("")
 
+  // Build a lookup map: "chain:symbol:contractAddress" → balance
+  const balanceMap = React.useMemo(() => {
+    const map = new Map<string, number>()
+    for (const b of onChainBalances) {
+      const key = `${b.chain}:${b.symbol}:${b.contractAddress ?? "native"}`
+      map.set(key, (map.get(key) ?? 0) + b.balance)
+    }
+    return map
+  }, [onChainBalances])
+
+  function getTokenBalance(token: TokenInfo): number {
+    const key = `${token.chain}:${token.symbol}:${token.contractAddress ?? "native"}`
+    return balanceMap.get(key) ?? 0
+  }
+
+  // Compute total balance (simple sum — no USD conversion for native tokens yet)
+  const totalBalance = React.useMemo(() => {
+    let total = 0
+    for (const token of ALL_TOKENS) {
+      const bal = getTokenBalance(token)
+      // Stablecoins are ~$1 each, native tokens we display raw for now
+      if (["USDT", "USDC"].includes(token.symbol)) total += bal
+      // For native tokens we'd need price data; skip for now
+    }
+    return total
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balanceMap])
+
   const copy = React.useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text)
     setCopied(label)
@@ -259,8 +289,8 @@ export default function AssetsClient() {
 
   const refresh = React.useCallback(async () => {
     setIsRefreshing(true)
-    try { await refreshWallets() } finally { setIsRefreshing(false) }
-  }, [refreshWallets])
+    try { await Promise.all([refreshWallets(), refetchBalances()]) } finally { setIsRefreshing(false) }
+  }, [refreshWallets, refetchBalances])
 
   // Filtered tokens
   const filteredTokens = React.useMemo(() => {
@@ -360,7 +390,9 @@ export default function AssetsClient() {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1">Total Balance</p>
-            <span className="text-3xl font-bold tracking-tight tabular-nums">$0.00</span>
+            <span className="text-3xl font-bold tracking-tight tabular-nums">
+              {balancesLoading && onChainBalances.length === 0 ? "Loading…" : `$${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </span>
           </div>
           <button onClick={refresh} disabled={isRefreshing}
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50">
@@ -518,8 +550,21 @@ export default function AssetsClient() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-right font-medium tabular-nums">0.00</td>
-                      <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">$0.00</td>
+                      <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                        {(() => {
+                          const bal = getTokenBalance(token)
+                          return bal > 0 ? bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }) : "0.00"
+                        })()}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                        {(() => {
+                          const bal = getTokenBalance(token)
+                          if (["USDT", "USDC"].includes(token.symbol)) {
+                            return `$${bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          }
+                          return bal > 0 ? `${bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${token.symbol}` : "$0.00"
+                        })()}
+                      </td>
                       <td className="px-4 py-2.5 text-right">
                         <AssetTradeButton symbol={token.symbol} />
                       </td>
