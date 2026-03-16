@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch candles from Hyperliquid
-    const endTime = Date.now()
+    const endTime = Number(searchParams.get("endTime")) || Date.now()
     const candles = await info.candleSnapshot({
       coin: coinName,
       interval: interval as Parameters<typeof info.candleSnapshot>[0]["interval"],

@@ -32,12 +32,23 @@ import { useAuth } from "@/components/auth-provider"
 import { NotificationBell } from "@/components/notifications"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { TopNav } from "@/components/top-nav"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
 
 export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   const isMobile = useIsMobile()
   const [profileOpen, setProfileOpen] = React.useState(false)
   const [walletOpen, setWalletOpen] = React.useState(false)
   const { user, signOut } = useAuth()
+  const { balances: onChainBalances } = useWalletBalances(60_000)
+
+  // Sum stablecoin balances for estimated value
+  const estValue = React.useMemo(() => {
+    let total = 0
+    for (const b of onChainBalances) {
+      if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
+    }
+    return total
+  }, [onChainBalances])
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
@@ -51,7 +62,7 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
       <div className="flex items-baseline justify-between px-1">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Est. Value</p>
-          <p className="text-xl font-bold tabular-nums tracking-tight mt-0.5">$0.00 <span className="text-xs font-normal text-muted-foreground">USD</span></p>
+          <p className="text-xl font-bold tabular-nums tracking-tight mt-0.5">${estValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-normal text-muted-foreground">USD</span></p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">

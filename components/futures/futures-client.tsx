@@ -9,6 +9,7 @@ import {
   Search01Icon,
   Chart01Icon,
   ArrowLeft01Icon,
+  ArrowRight01Icon,
 } from "@hugeicons/core-free-icons"
 import type {
   FuturesMarket,
@@ -26,6 +27,7 @@ import { markOnboardingComplete } from "@/lib/profile-actions"
 import { Navbar } from "@/components/navbar"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { FuturesChart } from "./futures-chart"
+import { usePanelLayout } from "@/hooks/usePanelLayout"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -466,6 +468,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
 
   const market = liveMarkets.find((m) => m.symbol === selected) ?? liveMarkets[0]
   const isOnboardingDone = profile?.onboardingCompleted?.includes("futures")
+  const { collapsed, toggle } = usePanelLayout()
 
   // Poll futures markets every 10s
   React.useEffect(() => {
@@ -533,14 +536,32 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
       {/* ═══ DESKTOP: 3-column grid layout ═══ */}
       <div className="hidden lg:flex flex-1 flex-col overflow-hidden p-1 gap-1">
         {/* MAIN ROW */}
-        <div className="flex-1 min-h-0 grid grid-cols-[330px_1fr_330px] gap-1 overflow-hidden">
+        <div className="flex-1 min-h-0 flex gap-1 overflow-hidden">
           {/* LEFT — Market list */}
-          <div data-onboarding="futures-markets" className="overflow-hidden">
-            <MarketList markets={liveMarkets} selected={selected} onSelect={setSelected} />
-          </div>
+          {collapsed.left ? (
+            <button
+              onClick={() => toggle("left")}
+              className="shrink-0 w-6 flex flex-col items-center justify-center rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+              title="Expand markets"
+            >
+              <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
+              <span className="text-[9px] text-muted-foreground [writing-mode:vertical-lr] mt-1">Markets</span>
+            </button>
+          ) : (
+            <div data-onboarding="futures-markets" className="shrink-0 w-[260px] xl:w-[300px] overflow-hidden relative">
+              <button
+                onClick={() => toggle("left")}
+                className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+                title="Collapse markets"
+              >
+                <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3 w-3 text-muted-foreground" />
+              </button>
+              <MarketList markets={liveMarkets} selected={selected} onSelect={setSelected} />
+            </div>
+          )}
 
           {/* CENTER — Chart + Order Form */}
-          <div className="flex flex-col gap-1 overflow-hidden">
+          <div className="flex-1 min-w-0 flex flex-col gap-1 overflow-hidden">
             <div className="flex-1 min-h-0 overflow-hidden">
               <FuturesChart
                 symbol={selected}
@@ -554,15 +575,51 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
           </div>
 
           {/* RIGHT — Order Book */}
-          <div data-onboarding="futures-orderbook" className="overflow-hidden">
-            <FuturesOrderBook asks={orderBookAsks} bids={orderBookBids} markPrice={market.markPrice} />
-          </div>
+          {collapsed.right ? (
+            <button
+              onClick={() => toggle("right")}
+              className="shrink-0 w-6 flex flex-col items-center justify-center rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+              title="Expand order book"
+            >
+              <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
+              <span className="text-[9px] text-muted-foreground [writing-mode:vertical-lr] mt-1">Book</span>
+            </button>
+          ) : (
+            <div data-onboarding="futures-orderbook" className="shrink-0 w-[260px] xl:w-[300px] overflow-hidden relative">
+              <button
+                onClick={() => toggle("right")}
+                className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+                title="Collapse order book"
+              >
+                <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 text-muted-foreground" />
+              </button>
+              <FuturesOrderBook asks={orderBookAsks} bids={orderBookBids} markPrice={market.markPrice} />
+            </div>
+          )}
         </div>
 
         {/* BOTTOM ROW — Positions (standalone) */}
-        <div className="shrink-0 h-[260px]">
-          <PositionsPanel />
-        </div>
+        {collapsed.bottom ? (
+          <button
+            onClick={() => toggle("bottom")}
+            className="shrink-0 h-6 flex items-center justify-center gap-1.5 rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+            title="Expand positions"
+          >
+            <HugeiconsIcon icon={ArrowUp01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
+            <span className="text-[9px] text-muted-foreground">Positions</span>
+          </button>
+        ) : (
+          <div className="shrink-0 h-[200px] relative">
+            <button
+              onClick={() => toggle("bottom")}
+              className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+              title="Collapse positions"
+            >
+              <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground" />
+            </button>
+            <PositionsPanel />
+          </div>
+        )}
       </div>
 
       {/* ═══ MOBILE layout ═══ */}

@@ -24,9 +24,12 @@ import {
   Cancel01Icon,
   Target02Icon,
   AlertDiamondIcon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
 } from "@hugeicons/core-free-icons"
 import { TradingHeader } from "@/components/trading-header"
 import { cn } from "@/lib/utils"
+import { usePanelLayout } from "@/hooks/usePanelLayout"
 
 // ── Pair Image Maps ────────────────────────────────────────────────────────
 
@@ -714,6 +717,7 @@ export function BinaryClient() {
   const [trades, setTrades] = React.useState<BinaryTrade[]>([])
   const [isDark, setIsDark] = React.useState(true)
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("chart")
+  const { collapsed, toggle } = usePanelLayout()
 
   React.useEffect(() => {
     const update = () => setIsDark(document.documentElement.classList.contains("dark"))
@@ -753,18 +757,36 @@ export function BinaryClient() {
       {/* ═══ DESKTOP: 3-column main + standalone bottom ═══ */}
       <div className="hidden lg:flex flex-1 flex-col overflow-hidden p-1 gap-1">
         {/* MAIN ROW */}
-        <div className="flex-1 min-h-0 grid grid-cols-[330px_1fr_330px] gap-1 overflow-hidden">
+        <div className="flex-1 min-h-0 flex gap-1 overflow-hidden">
           {/* LEFT — Asset List */}
-          <div className="overflow-hidden">
-            <AssetList
-              assets={BINARY_ASSETS}
-              selected={selectedAsset.symbol}
-              onSelect={setSelectedAsset}
-            />
-          </div>
+          {collapsed.left ? (
+            <button
+              onClick={() => toggle("left")}
+              className="shrink-0 w-6 flex flex-col items-center justify-center rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+              title="Expand assets"
+            >
+              <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
+              <span className="text-[9px] text-muted-foreground [writing-mode:vertical-lr] mt-1">Assets</span>
+            </button>
+          ) : (
+            <div className="shrink-0 w-[260px] xl:w-[300px] overflow-hidden relative">
+              <button
+                onClick={() => toggle("left")}
+                className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+                title="Collapse assets"
+              >
+                <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3 w-3 text-muted-foreground" />
+              </button>
+              <AssetList
+                assets={BINARY_ASSETS}
+                selected={selectedAsset.symbol}
+                onSelect={setSelectedAsset}
+              />
+            </div>
+          )}
 
           {/* CENTER — Chart + Order Panel */}
-          <div className="flex flex-col gap-1 overflow-hidden">
+          <div className="flex-1 min-w-0 flex flex-col gap-1 overflow-hidden">
             <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-border/50 bg-card">
               <BinaryChart asset={selectedAsset} isDark={isDark} />
             </div>
@@ -774,11 +796,29 @@ export function BinaryClient() {
           </div>
 
           {/* RIGHT — Active Trades */}
-          <div className="flex flex-col overflow-hidden">
-            <div className="flex-1 min-h-0">
-              <ActiveTrades trades={trades} />
+          {collapsed.right ? (
+            <button
+              onClick={() => toggle("right")}
+              className="shrink-0 w-6 flex flex-col items-center justify-center rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+              title="Expand trades"
+            >
+              <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
+              <span className="text-[9px] text-muted-foreground [writing-mode:vertical-lr] mt-1">Trades</span>
+            </button>
+          ) : (
+            <div className="shrink-0 w-[260px] xl:w-[300px] flex flex-col overflow-hidden relative">
+              <button
+                onClick={() => toggle("right")}
+                className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+                title="Collapse trades"
+              >
+                <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 text-muted-foreground" />
+              </button>
+              <div className="flex-1 min-h-0">
+                <ActiveTrades trades={trades} />
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
 

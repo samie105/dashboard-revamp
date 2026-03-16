@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons"
 import type { OrderBookLevel, TradeResult } from "@/lib/actions"
 import { getOrderBook, getTrades } from "@/lib/actions"
 import type { SpotClientProps, MobileTab } from "./spot-types"
@@ -17,6 +19,7 @@ import { SpotWithdrawModal } from "./spot-withdraw-modal"
 import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
+import { usePanelLayout } from "@/hooks/usePanelLayout"
 
 // ── Spot Onboarding Steps ────────────────────────────────────────────────
 
@@ -76,6 +79,7 @@ export function SpotClient({
   const [showWithdraw, setShowWithdraw] = React.useState(false)
   const [rightTab, setRightTab] = React.useState<"book" | "trades">("book")
   const isOnboardingDone = profile?.onboardingCompleted?.includes("spot")
+  const { collapsed, toggle } = usePanelLayout()
 
   const [orderBookAsks, setOrderBookAsks] = React.useState<OrderBookLevel[]>(
     initialOrderBook?.asks ?? [],
@@ -179,20 +183,38 @@ export function SpotClient({
       {/* ═══ DESKTOP: 3-column main + standalone bottom orders ═══ */}
       <div className="hidden lg:flex flex-1 flex-col overflow-hidden p-1 gap-1">
         {/* MAIN ROW */}
-        <div className="flex-1 min-h-0 grid grid-cols-[330px_1fr_330px] gap-1 overflow-hidden">
+        <div className="flex-1 min-h-0 flex gap-1 overflow-hidden">
           {/* LEFT — Market/Pair List */}
-          <div data-onboarding="spot-markets" className="overflow-hidden">
-            <MarketSelect
-              coins={coins}
-              selected={selectedPair}
-              onSelect={handlePairSelect}
-              watchlist={watchlist}
-              onToggleWatch={toggleWatch}
-            />
-          </div>
+          {collapsed.left ? (
+            <button
+              onClick={() => toggle("left")}
+              className="shrink-0 w-6 flex flex-col items-center justify-center rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+              title="Expand markets"
+            >
+              <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
+              <span className="text-[9px] text-muted-foreground [writing-mode:vertical-lr] mt-1">Markets</span>
+            </button>
+          ) : (
+            <div data-onboarding="spot-markets" className="shrink-0 w-[260px] xl:w-[300px] overflow-hidden relative">
+              <button
+                onClick={() => toggle("left")}
+                className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+                title="Collapse markets"
+              >
+                <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3 w-3 text-muted-foreground" />
+              </button>
+              <MarketSelect
+                coins={coins}
+                selected={selectedPair}
+                onSelect={handlePairSelect}
+                watchlist={watchlist}
+                onToggleWatch={toggleWatch}
+              />
+            </div>
+          )}
 
           {/* CENTER — Chart + Buy/Sell stacked */}
-          <div className="flex flex-col gap-1 overflow-hidden">
+          <div className="flex-1 min-w-0 flex flex-col gap-1 overflow-hidden">
             <div className="flex-1 min-h-0 overflow-hidden">
               <ChartArea
                 symbol={selectedPair}
@@ -217,46 +239,82 @@ export function SpotClient({
           </div>
 
           {/* RIGHT — Order Book / Recent Trades (tab toggle) */}
-          <div data-onboarding="spot-orderbook" className="flex flex-col overflow-hidden rounded-xl bg-card">
-            <div className="flex items-center gap-1 border-b border-border/20 px-2 py-1.5 shrink-0">
+          {collapsed.right ? (
+            <button
+              onClick={() => toggle("right")}
+              className="shrink-0 w-6 flex flex-col items-center justify-center rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+              title="Expand order book"
+            >
+              <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
+              <span className="text-[9px] text-muted-foreground [writing-mode:vertical-lr] mt-1">Book</span>
+            </button>
+          ) : (
+            <div data-onboarding="spot-orderbook" className="shrink-0 w-[260px] xl:w-[300px] flex flex-col overflow-hidden rounded-xl bg-card relative">
               <button
-                onClick={() => setRightTab("book")}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  rightTab === "book" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
+                onClick={() => toggle("right")}
+                className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+                title="Collapse order book"
               >
-                Order Book
+                <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 text-muted-foreground" />
               </button>
-              <button
-                onClick={() => setRightTab("trades")}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  rightTab === "trades" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Recent Trades
-              </button>
+              <div className="flex items-center gap-1 border-b border-border/20 px-2 py-1.5 shrink-0">
+                <button
+                  onClick={() => setRightTab("book")}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    rightTab === "book" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Order Book
+                </button>
+                <button
+                  onClick={() => setRightTab("trades")}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    rightTab === "trades" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Recent Trades
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {rightTab === "book" ? (
+                  <AnimatedOrderBook
+                    currentPrice={currentPrice}
+                    asks={orderBookAsks}
+                    bids={orderBookBids}
+                  />
+                ) : (
+                  <RecentTrades
+                    trades={liveTrades[`${selectedPair}USDT`] ?? []}
+                    currentPrice={currentPrice}
+                  />
+                )}
+              </div>
             </div>
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {rightTab === "book" ? (
-                <AnimatedOrderBook
-                  currentPrice={currentPrice}
-                  asks={orderBookAsks}
-                  bids={orderBookBids}
-                />
-              ) : (
-                <RecentTrades
-                  trades={liveTrades[`${selectedPair}USDT`] ?? []}
-                  currentPrice={currentPrice}
-                />
-              )}
-            </div>
-          </div>
+          )}
         </div>
 
         {/* BOTTOM ROW — Open Orders (standalone) */}
-        <div data-onboarding="spot-orders" className="shrink-0 h-[260px]">
-          <OpenOrdersPanel />
-        </div>
+        {collapsed.bottom ? (
+          <button
+            onClick={() => toggle("bottom")}
+            className="shrink-0 h-6 flex items-center justify-center gap-1.5 rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+            title="Expand orders"
+          >
+            <HugeiconsIcon icon={ArrowUp01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
+            <span className="text-[9px] text-muted-foreground">Open Orders</span>
+          </button>
+        ) : (
+          <div data-onboarding="spot-orders" className="shrink-0 h-[200px] relative">
+            <button
+              onClick={() => toggle("bottom")}
+              className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+              title="Collapse orders"
+            >
+              <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground" />
+            </button>
+            <OpenOrdersPanel />
+          </div>
+        )}
       </div>
 
       {/* ═══ MOBILE layout ═══ */}

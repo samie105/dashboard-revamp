@@ -16,6 +16,7 @@ import {
   ArrowUpRight01Icon,
 } from "@hugeicons/core-free-icons"
 import { useWallet } from "@/components/wallet-provider"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
 import {
   fetchBridgeQuote,
   executeBridgeTransaction,
@@ -329,12 +330,21 @@ function SupportedChains() {
 export function BridgeClient() {
   const { addresses } = useWallet()
   const { profile } = useProfile()
+  const { balances } = useWalletBalances()
 
   // State
   const [fromChain, setFromChain] = React.useState<Chain>(BRIDGE_CHAINS[0])
   const [toChain, setToChain] = React.useState<Chain>(BRIDGE_CHAINS[1])
   const [fromToken, setFromToken] = React.useState<Token>(BRIDGE_TOKENS[0])
   const [toToken, setToToken] = React.useState<Token>(BRIDGE_TOKENS[0])
+
+  // Look up on-chain balance for the selected "from" token on Ethereum
+  const fromTokenBalance = React.useMemo(() => {
+    const match = balances.find(
+      (b) => b.symbol.toUpperCase() === fromToken.symbol.toUpperCase() && b.chain.toLowerCase() === "ethereum"
+    )
+    return match?.balance ?? 0
+  }, [balances, fromToken.symbol])
   const [amount, setAmount] = React.useState("")
   const [quote, setQuote] = React.useState<BridgeQuote | null>(null)
   const [isLoadingQuote, setIsLoadingQuote] = React.useState(false)
@@ -515,7 +525,7 @@ export function BridgeClient() {
               <div data-onboarding="from-section" className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[11px] font-medium text-muted-foreground">You send</span>
-                  <span className="text-[11px] text-muted-foreground">Balance: 0.00</span>
+                  <span className="text-[11px] text-muted-foreground">Balance: {fromTokenBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
                 </div>
 
                 {/* Chain + Token row */}

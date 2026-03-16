@@ -633,8 +633,11 @@ export function ChartArea({
   const indicatorSeriesRef = React.useRef<Map<string, ISeriesApi<any>>>(new Map())
   const klinesRef = React.useRef<Kline[]>([])
   const chartTypeRef = React.useRef<ChartType>("candles")
+  const isLoadingHistoryRef = React.useRef(false)
+  const historyExhaustedRef = React.useRef(false)
 
   const [interval, setInterval] = React.useState("1H")
+  const intervalRef = React.useRef("1H")
   const [loading, setLoading] = React.useState(true)
   const [intervalLoading, setIntervalLoading] = React.useState(false)
   const [hasData, setHasData] = React.useState(false)
@@ -656,6 +659,53 @@ export function ChartArea({
 
   // Keep ref in sync
   chartTypeRef.current = chartType
+  intervalRef.current = interval
+
+  // Map chart-area intervals to Hyperliquid API format
+  const hlIntervalMap: Record<string, string> = {
+    "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+    "1H": "1h", "2H": "2h", "4H": "4h", "12H": "12h",
+    "1D": "1d", "1W": "1w", "3M": "1d", "6M": "1d", "1Y": "1w",
+  }
+
+  // Load older candles when user scrolls to the left edge
+  const loadOlderHistory = React.useCallback(async () => {
+    if (isLoadingHistoryRef.current || historyExhaustedRef.current) return
+    const existing = klinesRef.current
+    if (existing.length === 0) return
+
+    isLoadingHistoryRef.current = true
+    try {
+      const oldestTime = existing[0].time // ms
+      const hlInterval = hlIntervalMap[intervalRef.current] || "1h"
+      const base = symbol.replace(/[\/\-_]/g, "").replace(/(USDC|USDT|USD|USDH)$/i, "").toUpperCase()
+      const res = await fetch(
+        `/api/hyperliquid/candles?coin=${encodeURIComponent(base)}&interval=${hlInterval}&limit=500&endTime=${oldestTime}`
+      )
+      const json = await res.json()
+      if (!json.success || !json.data?.length) {
+        historyExhaustedRef.current = true
+        return
+      }
+      // Convert to Kline format (API returns time in seconds, our Klines use ms)
+      const older: Kline[] = json.data
+        .filter((c: { time: number }) => c.time * 1000 < oldestTime)
+        .map((c: { time: number; open: number; high: number; low: number; close: number; volume: number }) => ({
+          time: c.time * 1000, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume,
+        }))
+      if (older.length === 0) {
+        historyExhaustedRef.current = true
+        return
+      }
+      klinesRef.current = [...older, ...existing]
+      setKlinesVersion((v) => v + 1)
+      applyAllData(klinesRef.current)
+    } catch {
+      // ignore history load errors
+    } finally {
+      isLoadingHistoryRef.current = false
+    }
+  }, [symbol])
 
   // Reactive dark mode detection
   const [isDark, setIsDark] = React.useState(() => {
@@ -709,7 +759,10 @@ export function ChartArea({
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } })
     volumeSeriesRef.current = vol
 
-    const onRangeChange = () => setDrawTick((t) => t + 1)
+    const onRangeChange = (range: { from: number; to: number } | null) => {
+      setDrawTick((t) => t + 1)
+      if (range && range.from < 10) loadOlderHistory()
+    }
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
 
     return () => {
@@ -880,6 +933,9 @@ export function ChartArea({
   // ── Data fetching ──
   React.useEffect(() => {
     let cancelled = false
+    // Reset history state on symbol/interval change
+    historyExhaustedRef.current = false
+    isLoadingHistoryRef.current = false
 
     async function fetchKlines() {
       if (hasData) setIntervalLoading(true)

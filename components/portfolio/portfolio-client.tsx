@@ -31,6 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { getUserBalances } from "@/lib/actions"
 import type { CoinData, UserBalance } from "@/lib/actions"
 import { useTradeSelector } from "@/components/trade-selector"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -324,6 +325,14 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
   const { user } = useAuth()
   const { addresses, tradingWallet, walletsGenerated, isLoading: walletsLoading, refreshWallets } = useWallet()
   const { profile, updateProfile } = useProfile()
+  const { balances: walletBalances } = useWalletBalances()
+
+  // Sum USDC/USDT on-chain balance across all chains
+  const usdcWalletBalance = React.useMemo(() => {
+    return walletBalances
+      .filter((b) => b.symbol === "USDC" || b.symbol === "USDT")
+      .reduce((sum, b) => sum + b.balance, 0)
+  }, [walletBalances])
 
   const [activeTab, setActiveTab] = React.useState<Tab>("overview")
   const [transferAmount, setTransferAmount] = React.useState("")
@@ -637,7 +646,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                   <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
                     <div className="flex items-center justify-between mb-2.5">
                       <span className="text-[11px] font-medium text-muted-foreground">Source Asset</span>
-                      <span className="text-[11px] text-muted-foreground">Balance: 0.00</span>
+                      <span className="text-[11px] text-muted-foreground">Balance: {usdcWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-card border border-border/40 px-2.5 py-1.5">
@@ -673,7 +682,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                   <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[11px] font-medium text-muted-foreground">Amount (USDC)</span>
-                      <span className="text-[11px] text-muted-foreground">Available: 0.00</span>
+                      <span className="text-[11px] text-muted-foreground">Available: {usdcWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <input

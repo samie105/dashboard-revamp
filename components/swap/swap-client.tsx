@@ -16,6 +16,7 @@ import {
 import type { CoinData } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
 
 /* ── Token Select Modal ── */
 function TokenSelectModal({
@@ -331,6 +332,7 @@ interface SwapClientProps {
 
 export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const available = coins.filter((c) => c.price > 0)
+  const { balances } = useWalletBalances()
 
   // URL params
   const [searchParams, setSearchParams] = React.useState<URLSearchParams | null>(null)
@@ -373,6 +375,13 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const numericFrom = parseFloat(fromAmount) || 0
   const estimatedTo = toPrice > 0 ? (numericFrom * fromPrice) / toPrice : 0
   const usdValue = numericFrom * fromPrice
+
+  // Look up on-chain balance for the "from" coin
+  const fromCoinBalance = React.useMemo(() => {
+    if (!fromCoin) return 0
+    const match = balances.find((b) => b.symbol.toUpperCase() === fromCoin.symbol.toUpperCase())
+    return match?.balance ?? 0
+  }, [balances, fromCoin])
 
   // Simulate quote loading on amount change
   React.useEffect(() => {
@@ -427,7 +436,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
               <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[11px] font-medium text-muted-foreground">You pay</span>
-                  <span className="text-[11px] text-muted-foreground">Balance: 0.00</span>
+                  <span className="text-[11px] text-muted-foreground">Balance: {fromCoinBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <input

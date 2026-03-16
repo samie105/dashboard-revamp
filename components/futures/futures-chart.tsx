@@ -671,8 +671,11 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
   const indicatorSeriesRef = React.useRef<Map<string, ISeriesApi<any>>>(new Map())
   const klinesRef = React.useRef<Kline[]>([])
   const chartTypeRef = React.useRef<ChartType>("candles")
+  const isLoadingHistoryRef = React.useRef(false)
+  const historyExhaustedRef = React.useRef(false)
 
   const [interval, setInterval] = React.useState("1h")
+  const intervalRef = React.useRef("1h")
   const [loading, setLoading] = React.useState(true)
   const [intervalLoading, setIntervalLoading] = React.useState(false)
   const [hasData, setHasData] = React.useState(false)
@@ -693,6 +696,44 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
   const svgRef = React.useRef<SVGSVGElement>(null)
 
   chartTypeRef.current = chartType
+  intervalRef.current = interval
+
+  // Load older candles when user scrolls to left edge
+  const loadOlderHistory = React.useCallback(async () => {
+    if (isLoadingHistoryRef.current || historyExhaustedRef.current) return
+    const existing = klinesRef.current
+    if (existing.length === 0) return
+
+    isLoadingHistoryRef.current = true
+    try {
+      const oldestTime = existing[0].time // ms
+      const base = symbol.replace(/-PERP$/i, "").replace(/[\/_-]/g, "").toUpperCase()
+      const res = await fetch(
+        `/api/hyperliquid/candles?coin=${encodeURIComponent(base)}&interval=${intervalRef.current}&limit=500&endTime=${oldestTime}`
+      )
+      const json = await res.json()
+      if (!json.success || !json.data?.length) {
+        historyExhaustedRef.current = true
+        return
+      }
+      const older: Kline[] = json.data
+        .filter((c: { time: number }) => c.time * 1000 < oldestTime)
+        .map((c: { time: number; open: number; high: number; low: number; close: number; volume: number }) => ({
+          time: c.time * 1000, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume,
+        }))
+      if (older.length === 0) {
+        historyExhaustedRef.current = true
+        return
+      }
+      klinesRef.current = [...older, ...existing]
+      setKlinesVersion((v) => v + 1)
+      applyAllData(klinesRef.current)
+    } catch {
+      // ignore history load errors
+    } finally {
+      isLoadingHistoryRef.current = false
+    }
+  }, [symbol])
 
   // Reactive dark mode detection
   const [isDark, setIsDark] = React.useState(() => {
@@ -745,8 +786,11 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } })
     volumeSeriesRef.current = vol
 
-    // Redraw SVG overlays on pan/zoom
-    const onRangeChange = () => setDrawTick((t) => t + 1)
+    // Redraw SVG overlays on pan/zoom + load history on scroll-back
+    const onRangeChange = (range: { from: number; to: number } | null) => {
+      setDrawTick((t) => t + 1)
+      if (range && range.from < 10) loadOlderHistory()
+    }
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
 
     return () => {
@@ -915,6 +959,9 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
   // ── Data fetching ──
   React.useEffect(() => {
     let cancelled = false
+    // Reset history state on symbol/interval change
+    historyExhaustedRef.current = false
+    isLoadingHistoryRef.current = false
 
     async function fetchKlines() {
       if (hasData) setIntervalLoading(true)

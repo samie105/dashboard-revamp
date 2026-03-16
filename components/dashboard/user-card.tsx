@@ -18,6 +18,7 @@ import { useAuth } from "@/components/auth-provider"
 import { useWallet } from "@/components/wallet-provider"
 import { ErrorState } from "@/components/error-state"
 import type { CoinData } from "@/lib/actions"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
 
 function truncAddr(addr: string) {
   if (!addr || addr.length < 14) return addr
@@ -42,8 +43,23 @@ type WalletView = (typeof WALLET_VIEWS)[number]["key"]
 export function WalletCard({ error }: WalletCardProps) {
   const { user, isLoaded } = useAuth()
   const { addresses } = useWallet()
+  const { balances: onChainBalances } = useWalletBalances()
   const [isCopied, setIsCopied] = React.useState(false)
   const [activeView, setActiveView] = React.useState<WalletView>("total")
+
+  // Compute total stablecoin value from on-chain balances
+  const totalValue = React.useMemo(() => {
+    let total = 0
+    for (const b of onChainBalances) {
+      if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
+    }
+    return total
+  }, [onChainBalances])
+
+  const activeAssetCount = React.useMemo(
+    () => onChainBalances.filter((b) => b.balance > 0).length,
+    [onChainBalances],
+  )
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
@@ -127,7 +143,7 @@ export function WalletCard({ error }: WalletCardProps) {
           ))}
         </div>
         <div className="flex items-end gap-3">
-          <span className="text-2xl font-bold tabular-nums tracking-tight">$0.00</span>
+          <span className="text-2xl font-bold tabular-nums tracking-tight">${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           {activeView === "main" && solAddress && (
             <button
               onClick={handleCopy}
@@ -166,7 +182,7 @@ export function WalletCard({ error }: WalletCardProps) {
               Assets
             </span>
           </div>
-          <span className="text-lg font-bold tabular-nums tracking-tight">0</span>
+          <span className="text-lg font-bold tabular-nums tracking-tight">{activeAssetCount}</span>
           <span className="text-[10px] text-muted-foreground">Active tokens</span>
         </div>
 
