@@ -136,12 +136,12 @@ export function OrderPanel({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2.5 p-3">
+      <div className="flex flex-col gap-1.5 p-2">
         {/* Price inputs */}
         {orderType === "limit" || orderType === "stop-limit" ? (
           <>
-            <div className="rounded-xl border border-border/30 bg-accent/20 p-3">
-              <div className="flex items-center justify-between mb-1.5">
+            <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
+              <div className="flex items-center justify-between mb-0.5">
                 <span className="text-[10px] font-medium text-muted-foreground">Price</span>
                 <span className="text-[10px] text-muted-foreground">USD</span>
               </div>
@@ -154,12 +154,12 @@ export function OrderPanel({
                     setLimitPrice(e.target.value)
                 }}
                 placeholder={price.toFixed(2)}
-                className="w-full bg-transparent text-lg font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
+                className="w-full bg-transparent text-sm font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
               />
             </div>
             {orderType === "stop-limit" && (
-              <div className="rounded-xl border border-border/30 bg-accent/20 p-3">
-                <div className="flex items-center justify-between mb-1.5">
+              <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
+                <div className="flex items-center justify-between mb-0.5">
                   <span className="text-[10px] font-medium text-muted-foreground">Stop Price</span>
                   <span className="text-[10px] text-muted-foreground">USD</span>
                 </div>
@@ -172,17 +172,17 @@ export function OrderPanel({
                       setStopPrice(e.target.value)
                   }}
                   placeholder={price.toFixed(2)}
-                  className="w-full bg-transparent text-lg font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
+                  className="w-full bg-transparent text-sm font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
                 />
               </div>
             )}
           </>
         ) : (
-          <div className="rounded-xl border border-border/30 bg-accent/20 p-3">
-            <div className="flex items-center justify-between mb-1.5">
+          <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
+            <div className="flex items-center justify-between mb-0.5">
               <span className="text-[10px] font-medium text-muted-foreground">Market Price</span>
             </div>
-            <span className="text-lg font-semibold tabular-nums">
+            <span className="text-sm font-semibold tabular-nums">
               $
               {price.toLocaleString(undefined, {
                 maximumFractionDigits: 2,
@@ -192,8 +192,8 @@ export function OrderPanel({
         )}
 
         {/* Amount input */}
-        <div className="rounded-xl border border-border/30 bg-accent/20 p-3">
-          <div className="flex items-center justify-between mb-1.5">
+        <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
+          <div className="flex items-center justify-between mb-0.5">
             <span className="text-[10px] font-medium text-muted-foreground">Amount</span>
             <span className="text-[10px] text-muted-foreground">{symbol}</span>
           </div>
@@ -206,77 +206,38 @@ export function OrderPanel({
                 setAmount(e.target.value)
             }}
             placeholder="0.00"
-            className="w-full bg-transparent text-lg font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
+            className="w-full bg-transparent text-sm font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
           />
         </div>
 
-        {/* Percentage slider */}
-        <div className="px-1">
-          <div className="relative h-1.5 rounded-full bg-border/30">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full transition-all duration-150"
-              style={{
-                width: `${pct}%`,
-                backgroundColor: isBuy ? "#10b981" : "#ef4444",
-              }}
-            />
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={pct}
-              onChange={(e) => handlePct(Number(e.target.value))}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-            {/* Dots */}
-            {[0, 25, 50, 75, 100].map((mark) => (
-              <button
-                key={mark}
-                onClick={() => handlePct(mark)}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
-                style={{ left: `${mark}%` }}
-              >
-                <div className={`h-2.5 w-2.5 rounded-full border-2 transition-colors ${
-                  pct >= mark
-                    ? isBuy
-                      ? "border-emerald-500 bg-emerald-500"
-                      : "border-red-500 bg-red-500"
-                    : "border-border/50 bg-card"
-                }`} />
-              </button>
-            ))}
-          </div>
-          <div className="flex justify-between mt-2">
-            {[0, 25, 50, 75, 100].map((mark) => (
-              <button
-                key={mark}
-                onClick={() => handlePct(mark)}
-                className={`text-[9px] font-medium transition-colors ${
-                  pct === mark
-                    ? isBuy
-                      ? "text-emerald-500"
-                      : "text-red-500"
-                    : "text-muted-foreground/50 hover:text-muted-foreground"
-                }`}
-              >
-                {mark}%
-              </button>
-            ))}
-          </div>
+        {/* Percentage quick-select */}
+        <div className="flex gap-1">
+          {[25, 50, 75, 100].map((mark) => (
+            <button
+              key={mark}
+              onClick={() => handlePct(mark)}
+              className={`flex-1 rounded-md py-1 text-[10px] font-medium transition-colors ${
+                pct === mark
+                  ? isBuy
+                    ? "bg-emerald-500/15 text-emerald-500"
+                    : "bg-red-500/15 text-red-500"
+                  : "bg-accent/30 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {mark}%
+            </button>
+          ))}
         </div>
 
         {/* Total */}
-        <div className="rounded-xl border border-border/30 bg-accent/20 p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium text-muted-foreground">Total</span>
-            <span className="text-sm font-semibold tabular-nums">
-              $
-              {total > 0
-                ? total.toLocaleString(undefined, { maximumFractionDigits: 2 })
-                : "0.00"}
-            </span>
-          </div>
+        <div className="flex items-center justify-between rounded-lg bg-accent/20 px-2.5 py-1.5">
+          <span className="text-[10px] font-medium text-muted-foreground">Total</span>
+          <span className="text-xs font-semibold tabular-nums">
+            $
+            {total > 0
+              ? total.toLocaleString(undefined, { maximumFractionDigits: 2 })
+              : "0.00"}
+          </span>
         </div>
 
         {/* Feedback */}
@@ -300,7 +261,7 @@ export function OrderPanel({
         <button
           disabled={!canTrade}
           onClick={handleExecute}
-          className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+          className={`flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
             isBuy
               ? "bg-emerald-500 hover:bg-emerald-600 hover:shadow-md"
               : "bg-red-500 hover:bg-red-600 hover:shadow-md"

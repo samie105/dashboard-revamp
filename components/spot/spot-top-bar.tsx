@@ -14,7 +14,7 @@ import {
   Upload04Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData } from "@/lib/actions"
-import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { NotificationBell } from "@/components/notifications"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -40,7 +40,15 @@ export function SpotTopBar({
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const { accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.userId, !!user)
+  const { balances: onChainBalances, isLoading: balanceLoading } = useWalletBalances()
+
+  const walletValue = React.useMemo(() => {
+    let total = 0
+    for (const b of onChainBalances) {
+      if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
+    }
+    return total
+  }, [onChainBalances])
 
   const showBalance = !balanceLoading
 
@@ -131,12 +139,12 @@ export function SpotTopBar({
       {/* Right: actions */}
       <div className="flex items-center gap-1.5 md:gap-2 ml-auto">
         {showBalance && (
-          <div className="flex items-center gap-2 rounded-xl border border-border/30 bg-accent/20 px-3 py-1.5 mr-0.5">
+          <div className="flex items-center gap-2 rounded-xl bg-transparent px-2.5 py-1.5 mr-0.5">
             <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
             <div className="flex flex-col items-end">
-              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Account Value</span>
+              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Balance</span>
               <span className="text-xs font-bold tabular-nums text-foreground">
-                ${accountValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${walletValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </div>
@@ -144,7 +152,7 @@ export function SpotTopBar({
         {onOpenDeposit && (
           <button
             onClick={onOpenDeposit}
-            className="flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-500 transition-all hover:bg-emerald-500/10 hover:border-emerald-500/30"
+            className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold text-emerald-500 transition-colors hover:bg-emerald-500/10"
           >
             <HugeiconsIcon icon={Download04Icon} className="h-3 w-3" />
             <span className="hidden sm:inline">Deposit</span>
@@ -153,7 +161,7 @@ export function SpotTopBar({
         {onOpenWithdraw && (
           <button
             onClick={onOpenWithdraw}
-            className="flex items-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/5 px-2.5 py-1.5 text-[11px] font-semibold text-orange-500 transition-all hover:bg-orange-500/10 hover:border-orange-500/30"
+            className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold text-orange-500 transition-colors hover:bg-orange-500/10"
           >
             <HugeiconsIcon icon={Upload04Icon} className="h-3 w-3" />
             <span className="hidden sm:inline">Withdraw</span>

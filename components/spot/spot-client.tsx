@@ -222,20 +222,38 @@ export function SpotClient({
                 change24h={selectedCoin.change24h}
               />
             </div>
-            <div data-onboarding="spot-order" className="shrink-0 overflow-hidden">
-              <div className="grid grid-cols-2 gap-1">
-                <OrderPanel
-                  side="buy"
-                  symbol={selectedPair}
-                  price={currentPrice}
-                />
-                <OrderPanel
-                  side="sell"
-                  symbol={selectedPair}
-                  price={currentPrice}
-                />
+            {collapsed.order ? (
+              <button
+                onClick={() => toggle("order")}
+                className="shrink-0 h-6 flex items-center justify-center gap-1.5 rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+                title="Expand order panels"
+              >
+                <HugeiconsIcon icon={ArrowUp01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
+                <span className="text-[9px] text-muted-foreground">Buy / Sell</span>
+              </button>
+            ) : (
+              <div data-onboarding="spot-order" className="shrink-0 overflow-hidden relative">
+                <button
+                  onClick={() => toggle("order")}
+                  className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+                  title="Collapse order panels"
+                >
+                  <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground" />
+                </button>
+                <div className="grid grid-cols-2 gap-1">
+                  <OrderPanel
+                    side="buy"
+                    symbol={selectedPair}
+                    price={currentPrice}
+                  />
+                  <OrderPanel
+                    side="sell"
+                    symbol={selectedPair}
+                    price={currentPrice}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* RIGHT — Order Book / Recent Trades (tab toggle) */}

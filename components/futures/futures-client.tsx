@@ -28,7 +28,7 @@ import { Navbar } from "@/components/navbar"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { FuturesChart } from "./futures-chart"
 import { usePanelLayout } from "@/hooks/usePanelLayout"
-import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { Wallet01Icon } from "@hugeicons/core-free-icons"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -250,12 +250,12 @@ function FuturesOrderForm({
       <div className="border-b border-border/20 px-3 py-2">
         <span className="text-[11px] font-semibold">Place Order</span>
       </div>
-      <div className="flex flex-col gap-2 p-3 text-[11px]">
+      <div className="flex flex-col gap-1.5 p-2 text-[11px]">
         {/* Long / Short toggle */}
         <div className="grid grid-cols-2 gap-1 rounded-lg bg-accent/30 p-0.5">
           <button
             onClick={() => setSide("long")}
-            className={`rounded-md py-1.5 text-xs font-bold transition-colors ${
+            className={`rounded-md py-1 text-xs font-bold transition-colors ${
               side === "long" ? "bg-emerald-500 text-white" : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -263,7 +263,7 @@ function FuturesOrderForm({
           </button>
           <button
             onClick={() => setSide("short")}
-            className={`rounded-md py-1.5 text-xs font-bold transition-colors ${
+            className={`rounded-md py-1 text-xs font-bold transition-colors ${
               side === "short" ? "bg-red-500 text-white" : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -348,7 +348,7 @@ function FuturesOrderForm({
         </div>
 
         {/* Summary */}
-        <div className="space-y-1 rounded-lg bg-accent/20 px-2.5 py-2">
+        <div className="space-y-0.5 rounded-lg bg-accent/20 px-2 py-1.5">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Margin</span>
             <span className="tabular-nums">${margin > 0 ? margin.toFixed(2) : "—"}</span>
@@ -374,7 +374,7 @@ function FuturesOrderForm({
         <button
           disabled={!canTrade}
           onClick={handleExecute}
-          className={`w-full rounded-lg py-2.5 text-xs font-bold text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+          className={`w-full rounded-lg py-2 text-xs font-bold text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
             side === "long" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"
           }`}
         >
@@ -472,7 +472,15 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
   const market = liveMarkets.find((m) => m.symbol === selected) ?? liveMarkets[0]
   const isOnboardingDone = profile?.onboardingCompleted?.includes("futures")
   const { collapsed, toggle } = usePanelLayout()
-  const { accountValue: hlAccountValue, loading: hlBalanceLoading } = useHyperliquidBalance(user?.userId, !!user)
+  const { balances: onChainBalances, isLoading: hlBalanceLoading } = useWalletBalances()
+
+  const hlAccountValue = React.useMemo(() => {
+    let total = 0
+    for (const b of onChainBalances) {
+      if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
+    }
+    return total
+  }, [onChainBalances])
 
   // Poll futures markets every 10s
   React.useEffect(() => {
@@ -539,7 +547,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
           <div className="flex items-center gap-1.5 rounded-lg bg-accent/50 px-2.5 py-1 ml-2">
             <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
             <div className="flex flex-col items-end">
-              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Account Value</span>
+              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Balance</span>
               <span className="text-xs font-bold tabular-nums text-foreground">
                 ${hlAccountValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
@@ -584,9 +592,27 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
                 change24h={market.change24h}
               />
             </div>
-            <div data-onboarding="futures-order" className="shrink-0 overflow-hidden">
-              <FuturesOrderForm market={market} />
-            </div>
+            {collapsed.order ? (
+              <button
+                onClick={() => toggle("order")}
+                className="shrink-0 h-6 flex items-center justify-center gap-1.5 rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+                title="Expand order form"
+              >
+                <HugeiconsIcon icon={ArrowUp01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
+                <span className="text-[9px] text-muted-foreground">Place Order</span>
+              </button>
+            ) : (
+              <div data-onboarding="futures-order" className="shrink-0 overflow-hidden relative">
+                <button
+                  onClick={() => toggle("order")}
+                  className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+                  title="Collapse order form"
+                >
+                  <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground" />
+                </button>
+                <FuturesOrderForm market={market} />
+              </div>
+            )}
           </div>
 
           {/* RIGHT — Order Book */}
