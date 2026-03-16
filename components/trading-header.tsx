@@ -10,7 +10,7 @@ import {
   Settings01Icon,
   Logout01Icon,
 } from "@hugeicons/core-free-icons"
-import { getUserBalances } from "@/lib/actions"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { NotificationBell } from "@/components/notifications"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -30,18 +30,8 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const [totalBalance, setTotalBalance] = React.useState<number | null>(null)
-
-  React.useEffect(() => {
-    if (!user?.userId) return
-    let cancelled = false
-    getUserBalances(user.userId).then((res) => {
-      if (!cancelled && res.success) setTotalBalance(res.totalUsd)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [user?.userId])
+  const { accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.userId, !!user)
+  const showBalance = !balanceLoading
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
@@ -83,7 +73,7 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
 
       {/* Right-side actions */}
       <div className="flex items-center gap-1 md:gap-2 ml-auto">
-        {totalBalance !== null && (
+        {showBalance && (
           <div className="flex items-center gap-1.5 rounded-lg bg-accent/50 px-2.5 py-1 mr-1 md:mr-2">
             <HugeiconsIcon
               icon={Wallet01Icon}
@@ -95,7 +85,7 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
               </span>
               <span className="text-xs font-bold tabular-nums text-foreground">
                 $
-                {totalBalance.toLocaleString(undefined, {
+                {accountValue.toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}

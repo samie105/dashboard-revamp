@@ -42,7 +42,7 @@ export function SpotTopBar({
   const [profileOpen, setProfileOpen] = React.useState(false)
   const { accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.userId, !!user)
 
-  const totalBalance = balanceLoading ? null : accountValue
+  const showBalance = !balanceLoading
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
@@ -130,13 +130,13 @@ export function SpotTopBar({
 
       {/* Right: actions */}
       <div className="flex items-center gap-1.5 md:gap-2 ml-auto">
-        {totalBalance !== null && (
+        {showBalance && (
           <div className="flex items-center gap-2 rounded-xl border border-border/30 bg-accent/20 px-3 py-1.5 mr-0.5">
             <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
             <div className="flex flex-col items-end">
               <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Account Value</span>
               <span className="text-xs font-bold tabular-nums text-foreground">
-                ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${accountValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </div>

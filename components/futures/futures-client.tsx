@@ -28,6 +28,8 @@ import { Navbar } from "@/components/navbar"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { FuturesChart } from "./futures-chart"
 import { usePanelLayout } from "@/hooks/usePanelLayout"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { Wallet01Icon } from "@hugeicons/core-free-icons"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -458,6 +460,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
 
 export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClientProps) {
   const router = useRouter()
+  const { user } = useAuth()
   const { profile } = useProfile()
   const [selected, setSelected] = React.useState(markets[0]?.symbol ?? "BTC")
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("chart")
@@ -469,6 +472,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
   const market = liveMarkets.find((m) => m.symbol === selected) ?? liveMarkets[0]
   const isOnboardingDone = profile?.onboardingCompleted?.includes("futures")
   const { collapsed, toggle } = usePanelLayout()
+  const { accountValue: hlAccountValue, loading: hlBalanceLoading } = useHyperliquidBalance(user?.userId, !!user)
 
   // Poll futures markets every 10s
   React.useEffect(() => {
@@ -531,6 +535,17 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
           <span>Funding <span className="text-foreground font-medium">{fmtFunding(market.fundingRate)}</span></span>
           <span>Max <span className="text-foreground font-medium">{market.maxLeverage}x</span></span>
         </div>
+        {!hlBalanceLoading && (
+          <div className="flex items-center gap-1.5 rounded-lg bg-accent/50 px-2.5 py-1 ml-2">
+            <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
+            <div className="flex flex-col items-end">
+              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Account Value</span>
+              <span className="text-xs font-bold tabular-nums text-foreground">
+                ${hlAccountValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ═══ DESKTOP: 3-column grid layout ═══ */}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useWallet } from "@/components/wallet-provider"
 
 interface HyperliquidBalance {
@@ -41,8 +41,9 @@ export function useHyperliquidBalance(
   })
   const [accountValue, setAccountValue] = useState(0)
   const [withdrawable, setWithdrawable] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const hasFetched = useRef(false)
 
   const fetchBalance = useCallback(async () => {
     if (
@@ -58,7 +59,8 @@ export function useHyperliquidBalance(
     }
 
     try {
-      setLoading(true)
+      // Only show loading spinner for the first fetch, not refreshes
+      if (!hasFetched.current) setLoading(true)
       setError(null)
 
       const response = await fetch(`/api/hyperliquid/balance`)
@@ -78,6 +80,7 @@ export function useHyperliquidBalance(
       setUsdcBalance(data.data.usdcBalance)
       setAccountValue(data.data.accountValue)
       setWithdrawable(data.data.withdrawable)
+      hasFetched.current = true
     } catch (err: any) {
       console.error("Failed to fetch Hyperliquid balance:", err)
       setError(err.message || "Failed to fetch balance")
@@ -97,7 +100,7 @@ export function useHyperliquidBalance(
     usdcBalance,
     accountValue,
     withdrawable,
-    loading: loading || walletsLoading,
+    loading: !hasFetched.current && (loading || walletsLoading),
     error,
     refetch: fetchBalance,
   }

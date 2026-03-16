@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import * as ReactDOM from "react-dom"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Loading03Icon } from "@hugeicons/core-free-icons"
 import { getSpotKlines, type Kline } from "@/lib/actions"
@@ -560,25 +560,41 @@ function PopoverToolGroup({
 }) {
   const hasActive = group.tools.some((t) => t.tool === activeTool)
   const [open, setOpen] = React.useState(false)
-  const ref = React.useRef<HTMLDivElement>(null)
+  const btnRef = React.useRef<HTMLButtonElement>(null)
+  const menuRef = React.useRef<HTMLDivElement>(null)
+  const [pos, setPos] = React.useState({ top: 0, left: 0 })
 
   // close on outside click
   React.useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (
+        btnRef.current?.contains(e.target as Node) ||
+        menuRef.current?.contains(e.target as Node)
+      ) return
+      setOpen(false)
     }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [open])
 
+  // compute position when opening
+  const handleToggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({ top: rect.top, left: rect.right + 4 })
+    }
+    setOpen((v) => !v)
+  }
+
   // show the active tool's icon if one from this group is active, else the first tool icon
   const displayTool = group.tools.find((t) => t.tool === activeTool) ?? group.tools[0]
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative">
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={btnRef}
+        onClick={handleToggle}
         className={`relative rounded-lg p-1.5 transition-all ${
           hasActive ? "bg-primary/10 text-primary shadow-sm" : "text-muted-foreground/60 hover:text-muted-foreground hover:bg-accent/30"
         }`}
@@ -593,8 +609,12 @@ function PopoverToolGroup({
           <path d="M7 10l5 5 5-5z" />
         </svg>
       </button>
-      {open && (
-        <div className="absolute left-full top-0 ml-1 z-50 flex flex-col gap-0.5 rounded-lg border border-border/40 bg-card/95 backdrop-blur-md p-1 shadow-xl min-w-[140px]">
+      {open && ReactDOM.createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-[9999] flex flex-col gap-0.5 rounded-lg border border-border/40 bg-card/95 backdrop-blur-md p-1 shadow-xl min-w-[140px]"
+          style={{ top: pos.top, left: pos.left }}
+        >
           <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">{group.label}</span>
           {group.tools.map(({ tool, title, icon }) => (
             <button
@@ -611,7 +631,8 @@ function PopoverToolGroup({
               <span className="whitespace-nowrap">{title}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -644,6 +665,7 @@ export function ChartArea({
   const [chartType, setChartType] = React.useState<ChartType>("candles")
   const [activeIndicators, setActiveIndicators] = React.useState<Set<IndicatorKey>>(new Set())
   const [showIndicatorMenu, setShowIndicatorMenu] = React.useState(false)
+  const [showDrawTools, setShowDrawTools] = React.useState(false)
   const [crosshairMode, setCrosshairMode] = React.useState<"normal" | "magnet">("normal")
   const [klinesVersion, setKlinesVersion] = React.useState(0)
 
@@ -1231,61 +1253,29 @@ export function ChartArea({
     <div data-onboarding="spot-chart" className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
       {/* ── TOP BAR: Indicators + Chart type + Tools + Price ── */}
       <div className="flex items-center gap-0.5 border-b border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
-        {/* Indicators */}
-        <Popover open={showIndicatorMenu} onOpenChange={setShowIndicatorMenu}>
-          <PopoverTrigger
-            className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
-              activeIndicators.size > 0 || showIndicatorMenu
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Indicators{activeIndicators.size > 0 && ` (${activeIndicators.size})`}
-          </PopoverTrigger>
-          <PopoverContent
-            side="bottom"
-            align="start"
-            sideOffset={4}
-            data-indicator-menu
-            className="w-56 max-h-[70vh] overflow-y-auto rounded-xl border border-border/20 bg-popover shadow-2xl p-1.5 slim-scroll"
-          >
-                {Object.entries(indicatorGroups).map(([group, items]) => (
-                  <div key={group}>
-                    <div className="px-2 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                      {group}
-                    </div>
-                    {items.map((ind) => (
-                      <button
-                        key={ind.key}
-                        onClick={() => toggleIndicator(ind.key)}
-                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-colors ${
-                          activeIndicators.has(ind.key)
-                            ? "bg-accent/60 text-foreground"
-                            : "text-muted-foreground hover:bg-accent/30 hover:text-foreground"
-                        }`}
-                      >
-                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: ind.color }} />
-                        {ind.label}
-                        {activeIndicators.has(ind.key) && (
-                          <svg className="ml-auto h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-                {activeIndicators.size > 0 && (
-                  <>
-                    <div className="my-1 h-px bg-border/20" />
-                    <button
-                      onClick={() => setActiveIndicators(new Set())}
-                      className="flex w-full items-center rounded-md px-2 py-1.5 text-[11px] text-red-400 hover:bg-red-500/10"
-                    >
-                      Clear all
-                    </button>
-                  </>
-                )}
-          </PopoverContent>
-        </Popover>
+        {/* Indicators toggle */}
+        <button
+          onClick={() => setShowIndicatorMenu((v) => !v)}
+          className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
+            activeIndicators.size > 0 || showIndicatorMenu
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Indicators{activeIndicators.size > 0 && ` (${activeIndicators.size})`}
+        </button>
+
+        {/* Draw tools toggle */}
+        <button
+          onClick={() => setShowDrawTools((v) => !v)}
+          className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
+            showDrawTools
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Draw
+        </button>
 
         <div className="mx-1 h-4 w-px bg-border/30 shrink-0" />
 
@@ -1342,10 +1332,10 @@ export function ChartArea({
         </div>
       </div>
 
-      {/* ── MIDDLE: Drawing sidebar (left) + Chart ── */}
+      {/* ── MIDDLE: Drawing sidebar (left) + Chart + Indicators panel (right) ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left drawing toolbar — vertical, collapsible groups */}
-        <div className="flex flex-col gap-px border-r border-border/20 px-1 py-1.5 shrink-0 overflow-y-auto w-10 slim-scroll">
+        {showDrawTools && <div className="flex flex-col gap-px border-r border-border/20 px-1 py-1.5 shrink-0 overflow-y-auto w-10 slim-scroll">
           {/* Select tool */}
           <button
             title="Select / Move"
@@ -1410,7 +1400,50 @@ export function ChartArea({
               </span>
             )}
           </div>
-        </div>
+        </div>}
+
+        {/* Indicators side panel */}
+        {showIndicatorMenu && (
+          <div className="shrink-0 w-44 flex flex-col border-r border-border/20 bg-card overflow-hidden">
+            <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/20 shrink-0">
+              <span className="text-[10px] font-semibold text-foreground">Indicators</span>
+              {activeIndicators.size > 0 && (
+                <button
+                  onClick={() => setActiveIndicators(new Set())}
+                  className="text-[9px] text-red-400 hover:text-red-500 transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto slim-scroll py-1">
+              {Object.entries(indicatorGroups).map(([group, items]) => (
+                <div key={group}>
+                  <div className="px-2 pt-2 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                    {group}
+                  </div>
+                  {items.map((ind) => (
+                    <button
+                      key={ind.key}
+                      onClick={() => toggleIndicator(ind.key)}
+                      className={`flex w-full items-center gap-1.5 px-2 py-1 text-[10px] transition-colors ${
+                        activeIndicators.has(ind.key)
+                          ? "bg-accent/60 text-foreground"
+                          : "text-muted-foreground hover:bg-accent/30 hover:text-foreground"
+                      }`}
+                    >
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: ind.color }} />
+                      {ind.label}
+                      {activeIndicators.has(ind.key) && (
+                        <svg className="ml-auto h-2.5 w-2.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Chart container — hide TradingView watermark */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden [&_div[class*='apply-common-tooltip']]:hidden! [&_a[href*='tradingview']]:hidden! [&_table[class*='tv-attr-logo']]:hidden!">
