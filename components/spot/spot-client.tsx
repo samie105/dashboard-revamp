@@ -84,6 +84,8 @@ export function SpotClient({
   const [showSearch, setShowSearch] = React.useState(false)
   const [showDeposit, setShowDeposit] = React.useState(false)
   const [showWithdraw, setShowWithdraw] = React.useState(false)
+  const [balanceRefreshKey, setBalanceRefreshKey] = React.useState(0)
+  const triggerBalanceRefresh = React.useCallback(() => setBalanceRefreshKey((k) => k + 1), [])
   const [showMarkets, setShowMarkets] = React.useState(false)
   const [mobileOrderOpen, setMobileOrderOpen] = React.useState(false)
   const [rightTab, setRightTab] = React.useState<"book" | "trades">("book")
@@ -187,6 +189,7 @@ export function SpotClient({
           onOpenSearch={() => setShowSearch(true)}
           onOpenDeposit={() => setShowDeposit(true)}
           onOpenWithdraw={() => setShowWithdraw(true)}
+          refreshTrigger={balanceRefreshKey}
         />
       </div>
 
@@ -490,10 +493,12 @@ export function SpotClient({
       <SpotDepositModal
         isOpen={showDeposit}
         onClose={() => setShowDeposit(false)}
+        onDepositComplete={triggerBalanceRefresh}
       />
       <SpotWithdrawModal
         isOpen={showWithdraw}
         onClose={() => setShowWithdraw(false)}
+        onWithdrawComplete={triggerBalanceRefresh}
       />
     </div>
   )

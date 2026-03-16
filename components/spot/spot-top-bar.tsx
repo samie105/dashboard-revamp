@@ -31,16 +31,25 @@ export function SpotTopBar({
   onOpenSearch,
   onOpenDeposit,
   onOpenWithdraw,
+  refreshTrigger,
 }: {
   coin: CoinData
   onOpenSearch: () => void
   onOpenDeposit?: () => void
   onOpenWithdraw?: () => void
+  refreshTrigger?: number
 }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
   const { usdcBalance, accountValue, balances, loading: balanceLoading, refetch } = useHyperliquidBalance(user?.userId, !!user)
+
+  // Fire refetch whenever parent signals a deposit/withdraw completed
+  const isFirstRender = React.useRef(true)
+  React.useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    if (refreshTrigger !== undefined) refetch()
+  }, [refreshTrigger])
 
   const spotBalance = usdcBalance.available
   const totalValue = spotBalance + accountValue
