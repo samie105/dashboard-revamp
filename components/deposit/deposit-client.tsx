@@ -312,6 +312,7 @@ export function DepositClient() {
 
   if (!walletsGenerated) {
     return (
+      <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
       <div className="flex flex-col items-center justify-center gap-3 py-20">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50">
           <HugeiconsIcon icon={Wallet01Icon} className="h-5 w-5 text-muted-foreground/40" />
@@ -321,6 +322,7 @@ export function DepositClient() {
         <a href="/assets" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
           Go to Assets <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3" />
         </a>
+      </div>
       </div>
     )
   }
@@ -336,6 +338,7 @@ export function DepositClient() {
         onComplete={() => markOnboardingComplete("onboarding-deposit")}
       />
 
+      <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex flex-col gap-0.5">
@@ -633,6 +636,7 @@ export function DepositClient() {
           <RecentDeposits />
           <HowItWorks />
         </div>
+      </div>
       </div>
     </>
   )

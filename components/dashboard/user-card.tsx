@@ -19,10 +19,43 @@ import { useWallet } from "@/components/wallet-provider"
 import { ErrorState } from "@/components/error-state"
 import type { CoinData } from "@/lib/actions"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 
 function truncAddr(addr: string) {
   if (!addr || addr.length < 14) return addr
   return `${addr.slice(0, 8)}…${addr.slice(-6)}`
+}
+
+function formatUSD(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+
+function getPrice(prices: Record<string, number>, symbol: string): number {
+  return prices[symbol] ?? 0
+}
+
+function calculateDailyPnL(
+  holdings: Record<string, number>,
+  prices: Record<string, number>,
+  coins: CoinData[],
+): number {
+  let pnl = 0
+  for (const [symbol, amount] of Object.entries(holdings)) {
+    const price = prices[symbol] ?? 0
+    const coin = coins.find((c) => c.symbol === symbol)
+    const change = coin?.change24h ?? 0
+    if (price && amount) {
+      const currentValue = amount * price
+      const previousValue = currentValue / (1 + change / 100)
+      pnl += currentValue - previousValue
+    }
+  }
+  return pnl
 }
 
 interface WalletCardProps {
@@ -33,33 +66,70 @@ interface WalletCardProps {
 
 const WALLET_VIEWS = [
   { key: "total",   label: "Total",   icon: Coins01Icon,         sub: "All accounts" },
-  { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "USDT balance" },
+  { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain balance" },
   { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot trading" },
   { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Futures wallet" },
 ] as const
 
 type WalletView = (typeof WALLET_VIEWS)[number]["key"]
 
-export function WalletCard({ error }: WalletCardProps) {
+export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const { user, isLoaded } = useAuth()
-  const { addresses } = useWallet()
+  const { addresses, walletsGenerated } = useWallet()
   const { balances: onChainBalances } = useWalletBalances()
+  const { usdcBalance, accountValue, balances: hlBalances } = useHyperliquidBalance(user?.userId, !!user)
   const [isCopied, setIsCopied] = React.useState(false)
   const [activeView, setActiveView] = React.useState<WalletView>("total")
 
-  // Compute total stablecoin value from on-chain balances
-  const totalValue = React.useMemo(() => {
+  // On-chain balance: sum of all on-chain tokens valued in USD
+  const onChainTotal = React.useMemo(() => {
+    if (!walletsGenerated) return 0
     let total = 0
     for (const b of onChainBalances) {
-      if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
+      const p = getPrice(prices, b.symbol)
+      total += b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
     }
     return total
-  }, [onChainBalances])
+  }, [onChainBalances, prices, walletsGenerated])
 
-  const activeAssetCount = React.useMemo(
-    () => onChainBalances.filter((b) => b.balance > 0).length,
-    [onChainBalances],
+  // Spot trading balance (Hyperliquid spot USDC)
+  const spotBalance = usdcBalance.available
+
+  // Futures balance (Hyperliquid perps account value)
+  const futuresBalance = accountValue
+
+  // Holdings map for P&L calculation
+  const holdings = React.useMemo(() => {
+    if (!walletsGenerated) return {}
+    const h: Record<string, number> = {}
+    for (const b of onChainBalances) {
+      h[b.symbol] = (h[b.symbol] || 0) + b.balance
+    }
+    return h
+  }, [onChainBalances, walletsGenerated])
+
+  const dailyPnL = React.useMemo(
+    () => calculateDailyPnL(holdings, prices, coins),
+    [holdings, prices, coins],
   )
+
+  // Per-view balance
+  const displayedBalance = React.useMemo(() => {
+    switch (activeView) {
+      case "main":    return onChainTotal
+      case "spot":    return spotBalance
+      case "futures": return futuresBalance
+      case "total":
+      default:        return onChainTotal + spotBalance + futuresBalance
+    }
+  }, [activeView, onChainTotal, spotBalance, futuresBalance])
+
+  // Count active assets across on-chain + Hyperliquid spot
+  const activeAssetCount = React.useMemo(() => {
+    const onChainCount = onChainBalances.filter((b) => b.balance > 0).length
+    const hlCount = hlBalances.filter((b) => b.total > 0 && b.coin !== "USDC").length
+    return onChainCount + hlCount
+  }, [onChainBalances, hlBalances])
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
@@ -143,7 +213,7 @@ export function WalletCard({ error }: WalletCardProps) {
           ))}
         </div>
         <div className="flex items-end gap-3">
-          <span className="text-2xl font-bold tabular-nums tracking-tight">${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span className="text-2xl font-bold tabular-nums tracking-tight">{formatUSD(displayedBalance)}</span>
           {activeView === "main" && solAddress && (
             <button
               onClick={handleCopy}
@@ -165,12 +235,14 @@ export function WalletCard({ error }: WalletCardProps) {
         {/* Today's P&L */}
         <div className="flex flex-col gap-1.5 p-4">
           <div className="flex items-center gap-1.5">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <div className={`h-1.5 w-1.5 rounded-full ${dailyPnL >= 0 ? "bg-emerald-500" : "bg-red-500"}`} />
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Today&apos;s P&amp;L
             </span>
           </div>
-          <span className="text-lg font-bold tabular-nums tracking-tight text-emerald-500">+$0.00</span>
+          <span className={`text-lg font-bold tabular-nums tracking-tight ${dailyPnL >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+            {dailyPnL >= 0 ? "+" : ""}{formatUSD(dailyPnL)}
+          </span>
           <span className="text-[10px] text-muted-foreground">24h change</span>
         </div>
 

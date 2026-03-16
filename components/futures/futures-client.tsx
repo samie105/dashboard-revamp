@@ -196,6 +196,7 @@ function FuturesOrderForm({
 }) {
   const { user, isSignedIn } = useAuth()
   const { walletsGenerated } = useWallet()
+  const { accountValue, withdrawable } = useHyperliquidBalance(user?.userId, !!user)
 
   const [side, setSide] = React.useState<Side>("long")
   const [orderType, setOrderType] = React.useState<FuturesOrderType>("market")
@@ -347,6 +348,14 @@ function FuturesOrderForm({
           ))}
         </div>
 
+        {/* Available balance */}
+        <div className="flex items-center justify-between rounded-lg px-1 text-[10px] text-muted-foreground">
+          <span>Available</span>
+          <span className="tabular-nums font-medium">
+            ${withdrawable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+
         {/* Summary */}
         <div className="space-y-0.5 rounded-lg bg-accent/20 px-2 py-1.5">
           <div className="flex justify-between">
@@ -472,7 +481,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
   const market = liveMarkets.find((m) => m.symbol === selected) ?? liveMarkets[0]
   const isOnboardingDone = profile?.onboardingCompleted?.includes("futures")
   const { collapsed, toggle } = usePanelLayout()
-  const { accountValue: hlAccountValue, loading: hlBalanceLoading } = useHyperliquidBalance(user?.id, !!user)
+  const { accountValue: hlAccountValue, withdrawable: hlWithdrawable, usdcBalance: hlUsdcBalance, loading: hlBalanceLoading } = useHyperliquidBalance(user?.userId, !!user)
 
   // Poll futures markets every 10s
   React.useEffect(() => {
@@ -536,12 +545,26 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
           <span>Max <span className="text-foreground font-medium">{market.maxLeverage}x</span></span>
         </div>
         {!hlBalanceLoading && (
-          <div className="flex items-center gap-1.5 rounded-lg bg-accent/50 px-2.5 py-1 ml-2">
-            <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
-            <div className="flex flex-col items-end">
-              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Balance</span>
+          <div className="flex items-center gap-3 rounded-lg bg-accent/50 px-2.5 py-1 ml-2">
+            <div className="flex items-center gap-1.5">
+              <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
+              <div className="flex flex-col items-end">
+                <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Account Value</span>
+                <span className="text-xs font-bold tabular-nums text-foreground">
+                  ${hlAccountValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+            <div className="hidden lg:flex flex-col items-end">
+              <span className="text-[9px] text-muted-foreground leading-none">Available</span>
               <span className="text-xs font-bold tabular-nums text-foreground">
-                ${hlAccountValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${hlWithdrawable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="hidden lg:flex flex-col items-end">
+              <span className="text-[9px] text-muted-foreground leading-none">Spot USDC</span>
+              <span className="text-xs font-bold tabular-nums text-foreground">
+                ${hlUsdcBalance.available.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </div>

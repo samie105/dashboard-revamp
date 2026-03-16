@@ -111,9 +111,9 @@ export function OrderPanel({
   }
 
   return (
-    <div className="flex flex-col bg-card overflow-hidden">
+    <div className="flex flex-col bg-card">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/20 px-3 py-2">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/40 bg-card px-3 py-2">
         <span
           className={`text-xs font-bold ${isBuy ? "text-emerald-500" : "text-red-500"}`}
         >
@@ -281,18 +281,20 @@ export function OrderPanel({
           )}
         </button>
 
-        {/* Balance line */}
-        <div className="flex items-center justify-between rounded-lg px-1 text-[10px] text-muted-foreground">
-          <span>{isBuy ? "USDC Available" : `${symbol} Available`}</span>
-          <span className="tabular-nums font-medium">
-            {!isSignedIn
-              ? "—"
-              : !walletsGenerated
-                ? "Loading…"
-                : isBuy
-                  ? `${(quoteBalance ?? 0).toFixed(2)} USDC`
-                  : `${(baseBalance ?? 0).toFixed(6)} ${symbol}`}
-          </span>
+        {/* Balance info */}
+        <div className="flex flex-col gap-0.5 rounded-lg bg-accent/10 px-2 py-1.5">
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+            <span>{symbol} Balance</span>
+            <span className="tabular-nums font-medium">
+              {!isSignedIn ? "—" : !walletsGenerated ? "Loading…" : `${(baseBalance ?? 0).toFixed(6)} ${symbol}`}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+            <span>USDC Balance</span>
+            <span className="tabular-nums font-medium">
+              {!isSignedIn ? "—" : !walletsGenerated ? "Loading…" : `${(quoteBalance ?? 0).toFixed(2)} USDC`}
+            </span>
+          </div>
         </div>
       </div>
     </div>

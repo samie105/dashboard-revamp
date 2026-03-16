@@ -30,7 +30,7 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const { usdcBalance, accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.id, !!user)
+  const { usdcBalance, accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.userId, !!user)
 
   const totalValue = usdcBalance.available + accountValue
   const showBalance = !balanceLoading

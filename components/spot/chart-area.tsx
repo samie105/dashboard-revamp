@@ -3,7 +3,7 @@
 import * as React from "react"
 import * as ReactDOM from "react-dom"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Loading03Icon } from "@hugeicons/core-free-icons"
+import { Loading03Icon, Menu01Icon } from "@hugeicons/core-free-icons"
 import { getSpotKlines, type Kline } from "@/lib/actions"
 import {
   createChart,
@@ -642,10 +642,12 @@ export function ChartArea({
   symbol,
   price,
   change24h,
+  onMarketsClick,
 }: {
   symbol: string
   price: number
   change24h: number
+  onMarketsClick?: () => void
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<IChartApi | null>(null)
@@ -1310,6 +1312,17 @@ export function ChartArea({
     <div data-onboarding="spot-chart" className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
       {/* ── TOP BAR: Indicators + Chart type + Tools + Price ── */}
       <div className="flex items-center gap-0.5 border-b border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
+        {/* Markets trigger */}
+        {onMarketsClick && (
+          <button
+            onClick={onMarketsClick}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors mr-0.5"
+          >
+            <HugeiconsIcon icon={Menu01Icon} className="h-3 w-3" />
+            <span>Markets</span>
+          </button>
+        )}
+        <div className="h-4 w-px bg-border/30 shrink-0 mr-0.5" />
         {/* Indicators toggle */}
         <button
           onClick={() => setShowIndicatorMenu((v) => !v)}

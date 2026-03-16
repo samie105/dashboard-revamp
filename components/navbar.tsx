@@ -33,6 +33,7 @@ import { NotificationBell } from "@/components/notifications"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { TopNav } from "@/components/top-nav"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 
 export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   const isMobile = useIsMobile()
@@ -40,15 +41,17 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   const [walletOpen, setWalletOpen] = React.useState(false)
   const { user, signOut } = useAuth()
   const { balances: onChainBalances } = useWalletBalances(60_000)
+  const { usdcBalance: hlUsdc, accountValue: hlAccountValue } = useHyperliquidBalance(user?.userId, !!user)
 
-  // Sum stablecoin balances for estimated value
+  // Sum stablecoin on-chain balances + Hyperliquid account
   const estValue = React.useMemo(() => {
     let total = 0
     for (const b of onChainBalances) {
       if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
     }
+    total += hlUsdc.available + hlAccountValue
     return total
-  }, [onChainBalances])
+  }, [onChainBalances, hlUsdc.available, hlAccountValue])
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"

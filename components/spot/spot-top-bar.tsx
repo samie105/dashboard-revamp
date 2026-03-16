@@ -40,10 +40,12 @@ export function SpotTopBar({
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const { usdcBalance, accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.id, !!user)
+  const { usdcBalance, accountValue, balances, loading: balanceLoading, refetch } = useHyperliquidBalance(user?.userId, !!user)
 
   const spotBalance = usdcBalance.available
   const totalValue = spotBalance + accountValue
+  const inOrders = usdcBalance.hold
+  const otherAssetsCount = balances.length > 1 ? balances.length - 1 : 0
   const showBalance = !balanceLoading
 
   const displayName = user
@@ -149,6 +151,17 @@ export function SpotTopBar({
                 ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
+            {inOrders > 0 && (
+              <div className="hidden lg:flex flex-col items-end">
+                <span className="text-[9px] text-muted-foreground leading-none">In Orders</span>
+                <span className="text-xs font-bold tabular-nums text-amber-500">
+                  ${inOrders.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            {otherAssetsCount > 0 && (
+              <span className="hidden lg:inline text-[10px] text-muted-foreground">+{otherAssetsCount} assets</span>
+            )}
           </div>
         )}
         {onOpenDeposit && (
