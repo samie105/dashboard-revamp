@@ -22,13 +22,23 @@ import { LayoutShell } from "@/components/layout-shell"
 import { VividVoiceProvider } from "@/components/vivid-provider"
 import { TradeSelectorProvider } from "@/components/trade-selector"
 
+const isProduction = process.env.NODE_ENV === "production"
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      {...(isProduction
+        ? {
+            domain: "worldstreetgold.com",
+            isSatellite: true,
+            signInUrl: "https://www.worldstreetgold.com/login",
+          }
+        : {})}
+    >
       <html
         lang="en"
         suppressHydrationWarning

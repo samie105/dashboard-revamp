@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Popover } from "@base-ui/react/popover"
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Loading03Icon } from "@hugeicons/core-free-icons"
 import { getSpotKlines, type Kline } from "@/lib/actions"
@@ -1176,8 +1176,8 @@ export function ChartArea({
       {/* ── TOP BAR: Indicators + Chart type + Tools + Price ── */}
       <div className="flex items-center gap-0.5 border-b border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
         {/* Indicators */}
-        <Popover.Root open={showIndicatorMenu} onOpenChange={setShowIndicatorMenu}>
-          <Popover.Trigger
+        <Popover open={showIndicatorMenu} onOpenChange={setShowIndicatorMenu}>
+          <PopoverTrigger
             className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
               activeIndicators.size > 0 || showIndicatorMenu
                 ? "bg-primary/10 text-primary"
@@ -1185,13 +1185,14 @@ export function ChartArea({
             }`}
           >
             Indicators{activeIndicators.size > 0 && ` (${activeIndicators.size})`}
-          </Popover.Trigger>
-          <Popover.Portal>
-            <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-9999">
-              <Popover.Popup
-                data-indicator-menu
-                className="w-56 max-h-[70vh] overflow-y-auto rounded-xl border border-border/20 bg-popover shadow-2xl p-1.5 slim-scroll"
-              >
+          </PopoverTrigger>
+          <PopoverContent
+            side="bottom"
+            align="start"
+            sideOffset={4}
+            data-indicator-menu
+            className="w-56 max-h-[70vh] overflow-y-auto rounded-xl border border-border/20 bg-popover shadow-2xl p-1.5 slim-scroll"
+          >
                 {Object.entries(indicatorGroups).map(([group, items]) => (
                   <div key={group}>
                     <div className="px-2 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
@@ -1227,10 +1228,8 @@ export function ChartArea({
                     </button>
                   </>
                 )}
-              </Popover.Popup>
-            </Popover.Positioner>
-          </Popover.Portal>
-        </Popover.Root>
+          </PopoverContent>
+        </Popover>
 
         <div className="mx-1 h-4 w-px bg-border/30 shrink-0" />
 

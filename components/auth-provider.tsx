@@ -63,7 +63,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [isLoaded, isSignedIn, user?.id, fetchProfile])
 
   const signOut = React.useCallback(async () => {
-    await clerkSignOut()
+    // Clear any cached data from localStorage
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("worldstreet_temp_pin")
+    }
+    await clerkSignOut({ redirectUrl: "https://www.worldstreetgold.com/login" })
   }, [clerkSignOut])
 
   const value = React.useMemo(
