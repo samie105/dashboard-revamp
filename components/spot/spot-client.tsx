@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons"
+import { ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, ArrowDown01Icon, Menu01Icon } from "@hugeicons/core-free-icons"
 import type { OrderBookLevel, TradeResult } from "@/lib/actions"
 import { getOrderBook, getTrades } from "@/lib/actions"
 import type { SpotClientProps, MobileTab } from "./spot-types"
@@ -20,6 +20,13 @@ import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { usePanelLayout } from "@/hooks/usePanelLayout"
+import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 
 // ── Spot Onboarding Steps ────────────────────────────────────────────────
 
@@ -31,10 +38,10 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     placement: "bottom",
   },
   {
-    target: '[data-onboarding="spot-markets"]',
-    title: "Markets List",
-    description: "Browse and search all available spot pairs. Click any coin to switch your trading pair.",
-    placement: "right",
+    target: '[data-onboarding="spot-markets-trigger"]',
+    title: "Switch Pairs",
+    description: "Tap here to open the markets sheet and browse all available spot pairs. Search by name or symbol to find your pair quickly.",
+    placement: "bottom",
   },
   {
     target: '[data-onboarding="spot-chart"]',
@@ -51,13 +58,13 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     target: '[data-onboarding="spot-order"]',
     title: "Place Orders",
-    description: "Buy or sell with market or limit orders. Set your amount and review details before executing.",
-    placement: "top",
+    description: "Buy or sell with market or limit orders. The buy and sell panels are stacked to the right of the order book for quick access.",
+    placement: "left",
   },
   {
     target: '[data-onboarding="spot-orders"]',
     title: "Open Orders",
-    description: "Track your pending orders and trade history. Cancel or manage orders in real-time.",
+    description: "Track your pending orders and trade history. Cancel or manage orders in real-time. This panel is always visible — use the collapse arrow to hide it.",
     placement: "top",
   },
 ]
@@ -77,6 +84,8 @@ export function SpotClient({
   const [showSearch, setShowSearch] = React.useState(false)
   const [showDeposit, setShowDeposit] = React.useState(false)
   const [showWithdraw, setShowWithdraw] = React.useState(false)
+  const [showMarkets, setShowMarkets] = React.useState(false)
+  const [mobileOrderOpen, setMobileOrderOpen] = React.useState(false)
   const [rightTab, setRightTab] = React.useState<"book" | "trades">("book")
   const isOnboardingDone = profile?.onboardingCompleted?.includes("spot")
   const { collapsed, toggle } = usePanelLayout()
@@ -180,41 +189,45 @@ export function SpotClient({
         />
       </div>
 
-      {/* ═══ DESKTOP: 3-column main + standalone bottom orders ═══ */}
+      {/* ═══ DESKTOP LAYOUT ═══ */}
       <div className="hidden lg:flex flex-1 flex-col overflow-hidden p-1 gap-1">
-        {/* MAIN ROW */}
+        {/* MAIN ROW: Chart | OrderBook + Buy/Sell */}
         <div className="flex-1 min-h-0 flex gap-1 overflow-hidden">
-          {/* LEFT — Market/Pair List */}
-          {collapsed.left ? (
-            <button
-              onClick={() => toggle("left")}
-              className="shrink-0 w-6 flex flex-col items-center justify-center rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
-              title="Expand markets"
-            >
-              <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
-              <span className="text-[9px] text-muted-foreground [writing-mode:vertical-lr] mt-1">Markets</span>
-            </button>
-          ) : (
-            <div data-onboarding="spot-markets" className="shrink-0 w-[260px] xl:w-[300px] overflow-hidden relative">
-              <button
-                onClick={() => toggle("left")}
-                className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
-                title="Collapse markets"
-              >
-                <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3 w-3 text-muted-foreground" />
-              </button>
-              <MarketSelect
-                coins={coins}
-                selected={selectedPair}
-                onSelect={handlePairSelect}
-                watchlist={watchlist}
-                onToggleWatch={toggleWatch}
-              />
-            </div>
-          )}
 
-          {/* CENTER — Chart + Buy/Sell stacked */}
-          <div className="flex-1 min-w-0 flex flex-col gap-1 overflow-hidden">
+          {/* LEFT — Full-height Chart */}
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+            {/* Markets sheet trigger row — sits above the chart toolbar */}
+            <div className="flex items-center gap-1 px-1 py-0.5 shrink-0">
+              <Sheet open={showMarkets} onOpenChange={setShowMarkets}>
+                <SheetTrigger
+                  data-onboarding="spot-markets-trigger"
+                  render={
+                    <button className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors" />
+                  }
+                >
+                  <HugeiconsIcon icon={Menu01Icon} className="h-3.5 w-3.5" />
+                  <span>Markets</span>
+                </SheetTrigger>
+                <SheetContent
+                  side="left"
+                  className="w-[320px] sm:max-w-[320px] p-0 bg-background/95 backdrop-blur-xl border-border/20"
+                  showCloseButton={false}
+                >
+                  <SheetHeader className="px-3 pt-3 pb-0">
+                    <SheetTitle className="text-sm">Markets</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <MarketSelect
+                      coins={coins}
+                      selected={selectedPair}
+                      onSelect={(s) => { handlePairSelect(s); setShowMarkets(false) }}
+                      watchlist={watchlist}
+                      onToggleWatch={toggleWatch}
+                    />
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               <ChartArea
                 symbol={selectedPair}
@@ -222,96 +235,92 @@ export function SpotClient({
                 change24h={selectedCoin.change24h}
               />
             </div>
+          </div>
+
+          {/* RIGHT — Order Book + Buy/Sell stacked */}
+          <div className="shrink-0 w-[280px] xl:w-[320px] flex flex-col gap-1 overflow-hidden">
+            {/* Order Book / Recent Trades */}
+            {collapsed.right ? (
+              <button
+                onClick={() => toggle("right")}
+                className="shrink-0 h-6 flex items-center justify-center gap-1.5 rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
+                title="Expand order book"
+              >
+                <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
+                <span className="text-[9px] text-muted-foreground">Order Book</span>
+              </button>
+            ) : (
+              <div data-onboarding="spot-orderbook" className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-xl bg-card relative">
+                <button
+                  onClick={() => toggle("right")}
+                  className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
+                  title="Collapse order book"
+                >
+                  <HugeiconsIcon icon={ArrowUp01Icon} className="h-3 w-3 text-muted-foreground" />
+                </button>
+                <div className="flex items-center gap-1 border-b border-border/20 px-2 py-1.5 shrink-0">
+                  <button
+                    onClick={() => setRightTab("book")}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      rightTab === "book" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Order Book
+                  </button>
+                  <button
+                    onClick={() => setRightTab("trades")}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      rightTab === "trades" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Recent Trades
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  {rightTab === "book" ? (
+                    <AnimatedOrderBook
+                      currentPrice={currentPrice}
+                      asks={orderBookAsks}
+                      bids={orderBookBids}
+                    />
+                  ) : (
+                    <RecentTrades
+                      trades={liveTrades[`${selectedPair}USDT`] ?? []}
+                      currentPrice={currentPrice}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Buy / Sell — stacked, border-separated */}
             {collapsed.order ? (
               <button
                 onClick={() => toggle("order")}
                 className="shrink-0 h-6 flex items-center justify-center gap-1.5 rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
                 title="Expand order panels"
               >
-                <HugeiconsIcon icon={ArrowUp01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
+                <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
                 <span className="text-[9px] text-muted-foreground">Buy / Sell</span>
               </button>
             ) : (
-              <div data-onboarding="spot-order" className="shrink-0 overflow-hidden relative">
+              <div data-onboarding="spot-order" className="shrink-0 max-h-[45%] overflow-y-auto rounded-xl bg-card relative slim-scroll">
                 <button
                   onClick={() => toggle("order")}
                   className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
                   title="Collapse order panels"
                 >
-                  <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground" />
+                  <HugeiconsIcon icon={ArrowUp01Icon} className="h-3 w-3 text-muted-foreground" />
                 </button>
-                <div className="grid grid-cols-2 gap-1">
-                  <OrderPanel
-                    side="buy"
-                    symbol={selectedPair}
-                    price={currentPrice}
-                  />
-                  <OrderPanel
-                    side="sell"
-                    symbol={selectedPair}
-                    price={currentPrice}
-                  />
-                </div>
+                <OrderPanel side="buy" symbol={selectedPair} price={currentPrice} />
+                <div className="border-t border-border/20" />
+                <OrderPanel side="sell" symbol={selectedPair} price={currentPrice} />
               </div>
             )}
           </div>
-
-          {/* RIGHT — Order Book / Recent Trades (tab toggle) */}
-          {collapsed.right ? (
-            <button
-              onClick={() => toggle("right")}
-              className="shrink-0 w-6 flex flex-col items-center justify-center rounded-xl bg-card border border-border/20 hover:bg-accent/50 transition-colors group"
-              title="Expand order book"
-            >
-              <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
-              <span className="text-[9px] text-muted-foreground [writing-mode:vertical-lr] mt-1">Book</span>
-            </button>
-          ) : (
-            <div data-onboarding="spot-orderbook" className="shrink-0 w-[260px] xl:w-[300px] flex flex-col overflow-hidden rounded-xl bg-card relative">
-              <button
-                onClick={() => toggle("right")}
-                className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"
-                title="Collapse order book"
-              >
-                <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 text-muted-foreground" />
-              </button>
-              <div className="flex items-center gap-1 border-b border-border/20 px-2 py-1.5 shrink-0">
-                <button
-                  onClick={() => setRightTab("book")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    rightTab === "book" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Order Book
-                </button>
-                <button
-                  onClick={() => setRightTab("trades")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    rightTab === "trades" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Recent Trades
-                </button>
-              </div>
-              <div className="flex-1 min-h-0 overflow-hidden">
-                {rightTab === "book" ? (
-                  <AnimatedOrderBook
-                    currentPrice={currentPrice}
-                    asks={orderBookAsks}
-                    bids={orderBookBids}
-                  />
-                ) : (
-                  <RecentTrades
-                    trades={liveTrades[`${selectedPair}USDT`] ?? []}
-                    currentPrice={currentPrice}
-                  />
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* BOTTOM ROW — Open Orders (standalone) */}
+        {/* BOTTOM ROW — Open Orders (visible by default) */}
         {collapsed.bottom ? (
           <button
             onClick={() => toggle("bottom")}
@@ -335,14 +344,15 @@ export function SpotClient({
         )}
       </div>
 
-      {/* ═══ MOBILE layout ═══ */}
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto slim-scroll px-2 pt-2 pb-4 lg:hidden">
-        <div className="flex items-center gap-1 rounded-xl bg-accent/30 p-0.5 shrink-0">
+      {/* ═══ MOBILE LAYOUT ═══ */}
+      <div className="flex flex-1 flex-col overflow-hidden lg:hidden">
+        {/* Tab selector */}
+        <div className="flex items-center gap-1 rounded-xl bg-accent/30 p-0.5 mx-2 mt-2 shrink-0">
           {mobileTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setMobileTab(tab.id)}
-              className={`flex-1 rounded-lg py-2 text-xs font-medium transition-colors ${
+              className={`flex-1 rounded-lg py-1.5 text-[11px] font-medium transition-colors ${
                 mobileTab === tab.id
                   ? "bg-card shadow-sm"
                   : "text-muted-foreground"
@@ -353,46 +363,66 @@ export function SpotClient({
           ))}
         </div>
 
-        <div className="min-h-[360px]">
+        {/* Tab content */}
+        <div className="flex-1 min-h-0 overflow-y-auto slim-scroll px-2 pt-2 pb-2">
           {mobileTab === "chart" && (
-            <ChartArea
-              symbol={selectedPair}
-              price={currentPrice}
-              change24h={selectedCoin.change24h}
-            />
+            <div className="h-[340px] rounded-xl overflow-hidden">
+              <ChartArea
+                symbol={selectedPair}
+                price={currentPrice}
+                change24h={selectedCoin.change24h}
+              />
+            </div>
           )}
           {mobileTab === "book" && (
-            <AnimatedOrderBook
-              currentPrice={currentPrice}
-              asks={orderBookAsks}
-              bids={orderBookBids}
-            />
+            <div className="h-[400px]">
+              <AnimatedOrderBook
+                currentPrice={currentPrice}
+                asks={orderBookAsks}
+                bids={orderBookBids}
+              />
+            </div>
           )}
           {mobileTab === "market" && (
-            <MarketSelect
-              coins={coins}
-              selected={selectedPair}
-              onSelect={handlePairSelect}
-              watchlist={watchlist}
-              onToggleWatch={toggleWatch}
-            />
+            <div className="h-[400px]">
+              <MarketSelect
+                coins={coins}
+                selected={selectedPair}
+                onSelect={handlePairSelect}
+                watchlist={watchlist}
+                onToggleWatch={toggleWatch}
+              />
+            </div>
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2 shrink-0">
-          <OrderPanel
-            side="buy"
-            symbol={selectedPair}
-            price={currentPrice}
-          />
-          <OrderPanel
-            side="sell"
-            symbol={selectedPair}
-            price={currentPrice}
-          />
+        {/* Sticky trade button → opens bottom sheet */}
+        <div className="shrink-0 border-t border-border/10 bg-background/95 backdrop-blur-xl px-3 py-2">
+          <Sheet open={mobileOrderOpen} onOpenChange={setMobileOrderOpen}>
+            <SheetTrigger
+              render={
+                <button className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90" />
+              }
+            >
+              Trade {selectedPair}
+            </SheetTrigger>
+            <SheetContent
+              side="bottom"
+              className="max-h-[85vh] rounded-t-2xl bg-background/95 backdrop-blur-xl border-border/20 p-0"
+              showCloseButton={false}
+            >
+              <div className="flex justify-center py-2">
+                <div className="h-1 w-8 rounded-full bg-border/50" />
+              </div>
+              <div className="overflow-y-auto slim-scroll px-3 pb-4 max-h-[75vh]">
+                <div className="grid grid-cols-2 gap-2">
+                  <OrderPanel side="buy" symbol={selectedPair} price={currentPrice} />
+                  <OrderPanel side="sell" symbol={selectedPair} price={currentPrice} />
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
-
-        <OpenOrdersPanel />
       </div>
 
       {/* Search modal */}

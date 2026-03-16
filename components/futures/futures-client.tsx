@@ -28,7 +28,7 @@ import { Navbar } from "@/components/navbar"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { FuturesChart } from "./futures-chart"
 import { usePanelLayout } from "@/hooks/usePanelLayout"
-import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { Wallet01Icon } from "@hugeicons/core-free-icons"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -472,15 +472,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
   const market = liveMarkets.find((m) => m.symbol === selected) ?? liveMarkets[0]
   const isOnboardingDone = profile?.onboardingCompleted?.includes("futures")
   const { collapsed, toggle } = usePanelLayout()
-  const { balances: onChainBalances, isLoading: hlBalanceLoading } = useWalletBalances()
-
-  const hlAccountValue = React.useMemo(() => {
-    let total = 0
-    for (const b of onChainBalances) {
-      if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
-    }
-    return total
-  }, [onChainBalances])
+  const { accountValue: hlAccountValue, loading: hlBalanceLoading } = useHyperliquidBalance(user?.id, !!user)
 
   // Poll futures markets every 10s
   React.useEffect(() => {

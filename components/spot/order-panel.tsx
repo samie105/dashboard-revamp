@@ -111,7 +111,7 @@ export function OrderPanel({
   }
 
   return (
-    <div className="flex flex-col rounded-xl bg-card overflow-hidden h-full">
+    <div className="flex flex-col bg-card overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/20 px-3 py-2">
         <span

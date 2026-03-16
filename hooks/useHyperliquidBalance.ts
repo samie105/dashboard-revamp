@@ -33,6 +33,7 @@ export function useHyperliquidBalance(
   enabled = true,
 ): UseHyperliquidBalanceResult {
   const { walletsGenerated, addresses, isLoading: walletsLoading } = useWallet()
+  const ethAddress = addresses?.ethereum
   const [balances, setBalances] = useState<HyperliquidBalance[]>([])
   const [usdcBalance, setUsdcBalance] = useState({
     total: 0,
@@ -41,17 +42,12 @@ export function useHyperliquidBalance(
   })
   const [accountValue, setAccountValue] = useState(0)
   const [withdrawable, setWithdrawable] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const hasFetched = useRef(false)
+  const hasFetchedOnce = useRef(false)
 
-  const fetchBalance = useCallback(async () => {
-    if (
-      !enabled ||
-      !userId ||
-      !walletsGenerated ||
-      !addresses?.ethereum
-    ) {
+  const fetchBalance = useCallback(async (isPolling = false) => {
+    if (!enabled || !userId || !walletsGenerated || !ethAddress) {
       if (!userId || !enabled) {
         setLoading(false)
       }
@@ -59,14 +55,15 @@ export function useHyperliquidBalance(
     }
 
     try {
-      // Only show loading spinner for the first fetch, not refreshes
-      if (!hasFetched.current) setLoading(true)
+      if (!isPolling) {
+        setLoading(true)
+      }
       setError(null)
 
       const response = await fetch(`/api/hyperliquid/balance`)
 
       if (response.status === 404) {
-        setLoading(false)
+        if (!isPolling) setLoading(false)
         return
       }
 
@@ -80,18 +77,24 @@ export function useHyperliquidBalance(
       setUsdcBalance(data.data.usdcBalance)
       setAccountValue(data.data.accountValue)
       setWithdrawable(data.data.withdrawable)
-      hasFetched.current = true
+      hasFetchedOnce.current = true
     } catch (err: any) {
       console.error("Failed to fetch Hyperliquid balance:", err)
-      setError(err.message || "Failed to fetch balance")
+      if (!isPolling) {
+        setError(err.message || "Failed to fetch balance")
+      }
     } finally {
-      setLoading(false)
+      if (!isPolling) {
+        setLoading(false)
+      }
     }
-  }, [userId, enabled, walletsGenerated, addresses])
+  }, [userId, enabled, walletsGenerated, ethAddress])
 
   useEffect(() => {
-    fetchBalance()
-    const interval = setInterval(fetchBalance, 15_000)
+    hasFetchedOnce.current = false
+    fetchBalance(false)
+
+    const interval = setInterval(() => fetchBalance(true), 15_000)
     return () => clearInterval(interval)
   }, [fetchBalance])
 
@@ -100,7 +103,7 @@ export function useHyperliquidBalance(
     usdcBalance,
     accountValue,
     withdrawable,
-    loading: !hasFetched.current && (loading || walletsLoading),
+    loading: (loading && !hasFetchedOnce.current) || walletsLoading,
     error,
     refetch: fetchBalance,
   }

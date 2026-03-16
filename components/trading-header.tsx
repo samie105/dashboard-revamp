@@ -10,7 +10,7 @@ import {
   Settings01Icon,
   Logout01Icon,
 } from "@hugeicons/core-free-icons"
-import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { NotificationBell } from "@/components/notifications"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -30,16 +30,9 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const { balances: onChainBalances, isLoading: balanceLoading } = useWalletBalances()
+  const { usdcBalance, accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.id, !!user)
 
-  const walletValue = React.useMemo(() => {
-    let total = 0
-    for (const b of onChainBalances) {
-      if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
-    }
-    return total
-  }, [onChainBalances])
-
+  const totalValue = usdcBalance.available + accountValue
   const showBalance = !balanceLoading
 
   const displayName = user
@@ -94,7 +87,7 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
               </span>
               <span className="text-xs font-bold tabular-nums text-foreground">
                 $
-                {walletValue.toLocaleString(undefined, {
+                {totalValue.toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}

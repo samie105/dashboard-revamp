@@ -14,7 +14,7 @@ import {
   Upload04Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData } from "@/lib/actions"
-import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { NotificationBell } from "@/components/notifications"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -40,16 +40,10 @@ export function SpotTopBar({
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const { balances: onChainBalances, isLoading: balanceLoading } = useWalletBalances()
+  const { usdcBalance, accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.id, !!user)
 
-  const walletValue = React.useMemo(() => {
-    let total = 0
-    for (const b of onChainBalances) {
-      if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
-    }
-    return total
-  }, [onChainBalances])
-
+  const spotBalance = usdcBalance.available
+  const totalValue = spotBalance + accountValue
   const showBalance = !balanceLoading
 
   const displayName = user
@@ -139,12 +133,20 @@ export function SpotTopBar({
       {/* Right: actions */}
       <div className="flex items-center gap-1.5 md:gap-2 ml-auto">
         {showBalance && (
-          <div className="flex items-center gap-2 rounded-xl bg-transparent px-2.5 py-1.5 mr-0.5">
-            <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
-            <div className="flex flex-col items-end">
-              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Balance</span>
+          <div className="flex items-center gap-3 rounded-xl bg-transparent px-2.5 py-1.5 mr-0.5">
+            <div className="flex items-center gap-1.5">
+              <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
+              <div className="flex flex-col items-end">
+                <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Spot Balance</span>
+                <span className="text-xs font-bold tabular-nums text-foreground">
+                  ${spotBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+            <div className="hidden md:flex flex-col items-end">
+              <span className="text-[9px] text-muted-foreground leading-none">Total Value</span>
               <span className="text-xs font-bold tabular-nums text-foreground">
-                ${walletValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </div>
