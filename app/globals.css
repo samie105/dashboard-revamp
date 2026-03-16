@@ -127,6 +127,17 @@
     }
 }
 
+/* ── Card styling: light mode gets borders, no shadows ────────────────── */
+:root .rounded-2xl[class*="bg-card"],
+:root .rounded-xl[class*="bg-card"] {
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.dark .rounded-2xl[class*="bg-card"],
+.dark .rounded-xl[class*="bg-card"] {
+  border-color: transparent;
+}
+
 /* Global two-tone icon treatment: inner paths get primary accent */
 svg[viewBox="0 0 24 24"] > path:not(:first-child) {
   stroke: var(--color-primary);

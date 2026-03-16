@@ -14,5 +14,5 @@ export interface SpotClientProps {
   error?: string
 }
 
-export type OrderType = "market" | "limit"
+export type OrderType = "market" | "limit" | "stop-limit"
 export type MobileTab = "chart" | "book" | "market"

@@ -17,6 +17,7 @@ import type { CoinData, TradeResult } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
+import { useTradeSelector } from "@/components/trade-selector"
 
 const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
 
@@ -27,6 +28,7 @@ type MarketTab = (typeof MARKET_TABS)[number]
 function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
   const [tab, setTab] = React.useState<MarketTab>("Hot")
   const [search, setSearch] = React.useState("")
+  const { openTradeSelector } = useTradeSelector()
   const [visibleCount, setVisibleCount] = React.useState(8)
 
   const filtered = React.useMemo(() => {
@@ -155,13 +157,13 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                     </span>
                   </td>
                   <td className="hidden sm:table-cell px-4 py-2.5 text-right">
-                    <a
-                      href={`/spot?pair=${coin.symbol}USDT`}
+                    <button
+                      onClick={() => openTradeSelector(coin.symbol)}
                       className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
                       Trade
                       <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-                    </a>
+                    </button>
                   </td>
                 </tr>
               ))}

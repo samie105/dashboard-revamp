@@ -12,6 +12,7 @@ import {
   ChartCandlestickIcon,
   Menu01Icon,
 } from "@hugeicons/core-free-icons"
+import { useTradeSelector } from "@/components/trade-selector"
 import {
   Sheet,
   SheetTrigger,
@@ -33,7 +34,7 @@ import {
 
 const NAV_ITEMS = [
   { label: "Home", href: "/", icon: DashboardSquare01Icon, center: false },
-  { label: "Trade", href: "/spot", icon: ChartCandlestickIcon, center: false },
+  { label: "Trade", href: "__trade_selector__", icon: ChartCandlestickIcon, center: false },
   { label: "Swap", href: "/swap", icon: Exchange01Icon, center: true },
   { label: "Portfolio", href: "/portfolio", icon: Chart01Icon, center: false },
 ] as const
@@ -57,12 +58,31 @@ function isActive(pathname: string, href: string) {
 export function MobileBottomNav() {
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = React.useState(false)
+  const { openTradeSelector } = useTradeSelector()
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 flex md:hidden border-t border-border/10 bg-background/80 backdrop-blur-2xl safe-area-bottom">
       <div className="flex w-full items-end justify-around px-1 pt-1.5 pb-1">
         {NAV_ITEMS.map((item) => {
           const active = isActive(pathname, item.href)
+          const isTradeSelector = item.href === "__trade_selector__"
+
+          if (isTradeSelector) {
+            return (
+              <button
+                key={item.label}
+                onClick={() => openTradeSelector()}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors min-w-0",
+                  "text-muted-foreground"
+                )}
+              >
+                <HugeiconsIcon icon={item.icon} className="h-5 w-5" />
+                <span className="text-[10px] font-medium leading-none">{item.label}</span>
+              </button>
+            )
+          }
+
           return (
             <Link
               key={item.label}

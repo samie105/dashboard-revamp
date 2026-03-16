@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import * as ReactDOM from "react-dom"
+import { Popover } from "@base-ui/react/popover"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Loading03Icon } from "@hugeicons/core-free-icons"
 import { getFuturesKlines, type Kline } from "@/lib/actions"
@@ -584,12 +584,8 @@ function computeCCI(klines: Kline[], period: number): (number | null)[] {
   return r
 }
 
-function getCSSColor(varName: string, fallback: string): string {
-  if (typeof window === "undefined") return fallback
-  const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
-  if (!v) return fallback
-  if (v.startsWith("oklch")) return v
-  return v
+function getCSSColor(_varName: string, fallback: string): string {
+  return fallback
 }
 
 // ── Popover tool group for drawing sidebar ──────────────────────────────
@@ -685,7 +681,6 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
   const [showIndicatorMenu, setShowIndicatorMenu] = React.useState(false)
   const [crosshairMode, setCrosshairMode] = React.useState<"normal" | "magnet">("normal")
   const [klinesVersion, setKlinesVersion] = React.useState(0)
-  const indicatorBtnRef = React.useRef<HTMLButtonElement>(null)
 
   // Drawing tools state
   const [activeTool, setActiveTool] = React.useState<DrawTool>("select")
@@ -713,31 +708,21 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     return () => ob.disconnect()
   }, [])
 
-  React.useEffect(() => {
-    if (!showIndicatorMenu) return
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      if (target.closest("[data-indicator-menu]")) return
-      setShowIndicatorMenu(false)
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [showIndicatorMenu])
+
 
   // ── Chart instance ──
   React.useEffect(() => {
     if (!containerRef.current) return
 
-    const el = document.documentElement
-    const cs = getComputedStyle(el)
-    const rawBg = cs.getPropertyValue("--card").trim()
-    const chartBg = rawBg || (isDark ? "#111113" : "#ffffff")
+    // Use safe hex colors — oklch from CSS vars may not be supported by canvas libs
+    const chartBg = isDark ? "#1c1917" : "#ffffff"
     const text = isDark ? "#71717a" : "#a1a1aa"
     const grid = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.05)"
     const border = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)"
     const labelBg = isDark ? "#27272a" : "#e4e4e7"
 
     const chart = createChart(containerRef.current, {
+      autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: chartBg },
         textColor: text,
@@ -760,18 +745,11 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } })
     volumeSeriesRef.current = vol
 
-    const ro = new ResizeObserver(([e]) => {
-      const { width, height } = e.contentRect
-      if (width > 0 && height > 0) chart.resize(width, height)
-    })
-    ro.observe(containerRef.current)
-
     // Redraw SVG overlays on pan/zoom
     const onRangeChange = () => setDrawTick((t) => t + 1)
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
 
     return () => {
-      ro.disconnect()
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange)
       indicatorSeriesRef.current.clear()
       mainSeriesRef.current = null
@@ -1367,14 +1345,6 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     })
   }
 
-  // Indicator menu position for portal
-  const [menuPos, setMenuPos] = React.useState<{ top: number; left: number } | null>(null)
-  React.useEffect(() => {
-    if (!showIndicatorMenu || !indicatorBtnRef.current) { setMenuPos(null); return }
-    const r = indicatorBtnRef.current.getBoundingClientRect()
-    setMenuPos({ top: r.bottom + 4, left: r.left })
-  }, [showIndicatorMenu])
-
   const indicatorGroups = React.useMemo(() => {
     const groups: Record<string, IndicatorDef[]> = {}
     for (const ind of INDICATORS) {
@@ -1389,17 +1359,61 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
       {/* ── TOP BAR: Indicators + Chart type + Tools + Price ── */}
       <div className="flex items-center gap-0.5 border-b border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
         {/* Indicators */}
-        <button
-          ref={indicatorBtnRef}
-          onClick={() => setShowIndicatorMenu((p) => !p)}
-          className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
-            activeIndicators.size > 0 || showIndicatorMenu
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Indicators{activeIndicators.size > 0 && ` (${activeIndicators.size})`}
-        </button>
+        <Popover.Root open={showIndicatorMenu} onOpenChange={setShowIndicatorMenu}>
+          <Popover.Trigger
+            className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
+              activeIndicators.size > 0 || showIndicatorMenu
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Indicators{activeIndicators.size > 0 && ` (${activeIndicators.size})`}
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-9999">
+              <Popover.Popup
+                data-indicator-menu
+                className="w-56 max-h-[70vh] overflow-y-auto rounded-xl border border-border/20 bg-popover shadow-2xl p-1.5 slim-scroll"
+              >
+                {Object.entries(indicatorGroups).map(([group, items]) => (
+                  <div key={group}>
+                    <div className="px-2 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                      {group}
+                    </div>
+                    {items.map((ind) => (
+                      <button
+                        key={ind.key}
+                        onClick={() => toggleIndicator(ind.key)}
+                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-colors ${
+                          activeIndicators.has(ind.key)
+                            ? "bg-accent/60 text-foreground"
+                            : "text-muted-foreground hover:bg-accent/30 hover:text-foreground"
+                        }`}
+                      >
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: ind.color }} />
+                        {ind.label}
+                        {activeIndicators.has(ind.key) && (
+                          <svg className="ml-auto h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+                {activeIndicators.size > 0 && (
+                  <>
+                    <div className="my-1 h-px bg-border/20" />
+                    <button
+                      onClick={() => setActiveIndicators(new Set())}
+                      className="flex w-full items-center rounded-md px-2 py-1.5 text-[11px] text-red-400 hover:bg-red-500/10"
+                    >
+                      Clear all
+                    </button>
+                  </>
+                )}
+              </Popover.Popup>
+            </Popover.Positioner>
+          </Popover.Portal>
+        </Popover.Root>
 
         <div className="mx-1 h-4 w-px bg-border/30 shrink-0" />
 
@@ -1532,7 +1546,7 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
 
         {/* Chart container */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          <div ref={containerRef} className="flex-1 min-h-0 relative [&_div[class*='apply-common-tooltip']]:!hidden [&_a[href*='tradingview']]:!hidden [&_div[class*='tv-']]:!hidden">
+          <div ref={containerRef} className="flex-1 min-h-0 relative [&_div[class*='apply-common-tooltip']]:hidden! [&_a[href*='tradingview']]:hidden! [&_table[class*='tv-attr-logo']]:hidden!">
             {!hasData && (
               <div className="absolute inset-0 flex items-center justify-center z-10 bg-card">
                 {loading ? (
@@ -1586,52 +1600,6 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
         ))}
         {(loading || intervalLoading) && <HugeiconsIcon icon={Loading03Icon} className="ml-auto h-3 w-3 animate-spin text-muted-foreground" />}
       </div>
-
-      {/* Indicator menu portal */}
-      {showIndicatorMenu && menuPos && ReactDOM.createPortal(
-        <div
-          data-indicator-menu
-          className="fixed z-[9999] w-56 max-h-[70vh] overflow-y-auto rounded-xl border border-border/20 bg-popover shadow-2xl p-1.5 slim-scroll"
-          style={{ top: menuPos.top, left: menuPos.left }}
-        >
-          {Object.entries(indicatorGroups).map(([group, items]) => (
-            <div key={group}>
-              <div className="px-2 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                {group}
-              </div>
-              {items.map((ind) => (
-                <button
-                  key={ind.key}
-                  onClick={() => toggleIndicator(ind.key)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-colors ${
-                    activeIndicators.has(ind.key)
-                      ? "bg-accent/60 text-foreground"
-                      : "text-muted-foreground hover:bg-accent/30 hover:text-foreground"
-                  }`}
-                >
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: ind.color }} />
-                  {ind.label}
-                  {activeIndicators.has(ind.key) && (
-                    <svg className="ml-auto h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-          {activeIndicators.size > 0 && (
-            <>
-              <div className="my-1 h-px bg-border/20" />
-              <button
-                onClick={() => setActiveIndicators(new Set())}
-                className="flex w-full items-center rounded-md px-2 py-1.5 text-[11px] text-red-400 hover:bg-red-500/10"
-              >
-                Clear all
-              </button>
-            </>
-          )}
-        </div>,
-        document.body,
-      )}
     </div>
   )
 }

@@ -14,6 +14,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { CoinData } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
+import { useTradeSelector } from "@/components/trade-selector"
 
 // ── Sparkline generator (deterministic from coin data) ───────────────────
 
@@ -60,6 +61,19 @@ function Sparkline({ coin, width = 80, height = 32 }: { coin: CoinData; width?: 
 }
 
 // ── Formatters ───────────────────────────────────────────────────────────
+
+function TradeButton({ symbol }: { symbol: string }) {
+  const { openTradeSelector } = useTradeSelector()
+  return (
+    <button
+      onClick={() => openTradeSelector(symbol)}
+      className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
+    >
+      Trade
+      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+    </button>
+  )
+}
 
 function fmtPrice(n: number): string {
   if (n >= 10000) return n.toLocaleString("en-US", { maximumFractionDigits: 0 })
@@ -287,7 +301,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
               <div className="relative">
                 <HugeiconsIcon
                   icon={Search01Icon}
-                  className="absolute left-2 top-[7px] h-3.5 w-3.5 text-muted-foreground"
+                  className="absolute left-2 top-1.75 h-3.5 w-3.5 text-muted-foreground"
                 />
                 <input
                   type="search"
@@ -413,13 +427,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/spot?pair=${coin.symbol}`}
-                          className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
-                        >
-                          Trade
-                          <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-                        </Link>
+                        <TradeButton symbol={coin.symbol} />
                       </td>
                     </tr>
                   )

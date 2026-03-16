@@ -30,6 +30,7 @@ import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flo
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { getUserBalances } from "@/lib/actions"
 import type { CoinData, UserBalance } from "@/lib/actions"
+import { useTradeSelector } from "@/components/trade-selector"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -306,6 +307,17 @@ function Watchlist({
   )
 }
 
+// ── Trade Button ──────────────────────────────────────────────────────
+
+function PortfolioTradeButton() {
+  const { openTradeSelector } = useTradeSelector()
+  return (
+    <button onClick={() => openTradeSelector()} className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">
+      Trade <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3" />
+    </button>
+  )
+}
+
 // ── Main Component ───────────────────────────────────────────────────────
 
 export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
@@ -435,9 +447,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                         <HugeiconsIcon icon={Chart01Icon} className="h-3.5 w-3.5 text-primary" />
                         <span className="text-[11px] font-medium text-muted-foreground">Trading Account</span>
                       </div>
-                      <Link href="/spot" className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">
-                        Trade <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3" />
-                      </Link>
+                      <PortfolioTradeButton />
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                       <div>

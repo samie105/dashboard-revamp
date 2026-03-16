@@ -12,6 +12,8 @@ import { AnimatedOrderBook } from "./animated-order-book"
 import { OpenOrdersPanel } from "./open-orders-panel"
 import { TokenSearchModal } from "./token-search-modal"
 import { RecentTrades } from "./recent-trades"
+import { SpotDepositModal } from "./spot-deposit-modal"
+import { SpotWithdrawModal } from "./spot-withdraw-modal"
 import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
@@ -70,6 +72,8 @@ export function SpotClient({
   )
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("chart")
   const [showSearch, setShowSearch] = React.useState(false)
+  const [showDeposit, setShowDeposit] = React.useState(false)
+  const [showWithdraw, setShowWithdraw] = React.useState(false)
   const [rightTab, setRightTab] = React.useState<"book" | "trades">("book")
   const isOnboardingDone = profile?.onboardingCompleted?.includes("spot")
 
@@ -167,6 +171,8 @@ export function SpotClient({
         <SpotTopBar
           coin={selectedCoin}
           onOpenSearch={() => setShowSearch(true)}
+          onOpenDeposit={() => setShowDeposit(true)}
+          onOpenWithdraw={() => setShowWithdraw(true)}
         />
       </div>
 
@@ -327,6 +333,16 @@ export function SpotClient({
         storageKey="spot"
         completed={isOnboardingDone}
         onComplete={() => markOnboardingComplete("spot")}
+      />
+
+      {/* Deposit / Withdraw modals */}
+      <SpotDepositModal
+        isOpen={showDeposit}
+        onClose={() => setShowDeposit(false)}
+      />
+      <SpotWithdrawModal
+        isOpen={showWithdraw}
+        onClose={() => setShowWithdraw(false)}
       />
     </div>
   )

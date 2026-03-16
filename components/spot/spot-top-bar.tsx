@@ -10,9 +10,11 @@ import {
   UserIcon,
   Settings01Icon,
   Logout01Icon,
+  Download04Icon,
+  Upload04Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData } from "@/lib/actions"
-import { getUserBalances } from "@/lib/actions"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { NotificationBell } from "@/components/notifications"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -27,24 +29,20 @@ import { TopNav } from "@/components/top-nav"
 export function SpotTopBar({
   coin,
   onOpenSearch,
+  onOpenDeposit,
+  onOpenWithdraw,
 }: {
   coin: CoinData
   onOpenSearch: () => void
+  onOpenDeposit?: () => void
+  onOpenWithdraw?: () => void
 }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const [totalBalance, setTotalBalance] = React.useState<number | null>(null)
+  const { accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.userId, !!user)
 
-  // Fetch balance once on mount
-  React.useEffect(() => {
-    if (!user?.userId) return
-    let cancelled = false
-    getUserBalances(user.userId).then((res) => {
-      if (!cancelled && res.success) setTotalBalance(res.totalUsd)
-    })
-    return () => { cancelled = true }
-  }, [user?.userId])
+  const totalBalance = balanceLoading ? null : accountValue
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
@@ -131,25 +129,36 @@ export function SpotTopBar({
       </div>
 
       {/* Right: actions */}
-      <div className="flex items-center gap-1 md:gap-2 ml-auto">
+      <div className="flex items-center gap-1.5 md:gap-2 ml-auto">
         {totalBalance !== null && (
-          <div className="flex items-center gap-1.5 rounded-lg bg-accent/50 px-2.5 py-1 mr-1 md:mr-2">
-            <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0 md:hidden" />
+          <div className="flex items-center gap-2 rounded-xl border border-border/30 bg-accent/20 px-3 py-1.5 mr-0.5">
+            <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
             <div className="flex flex-col items-end">
-              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Balance</span>
+              <span className="hidden md:block text-[9px] text-muted-foreground leading-none">Account Value</span>
               <span className="text-xs font-bold tabular-nums text-foreground">
                 ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </div>
         )}
-        <a
-          href="/deposit"
-          className="hidden md:flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary/90"
-        >
-          <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5" />
-          Deposit
-        </a>
+        {onOpenDeposit && (
+          <button
+            onClick={onOpenDeposit}
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-500 transition-all hover:bg-emerald-500/10 hover:border-emerald-500/30"
+          >
+            <HugeiconsIcon icon={Download04Icon} className="h-3 w-3" />
+            <span className="hidden sm:inline">Deposit</span>
+          </button>
+        )}
+        {onOpenWithdraw && (
+          <button
+            onClick={onOpenWithdraw}
+            className="flex items-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/5 px-2.5 py-1.5 text-[11px] font-semibold text-orange-500 transition-all hover:bg-orange-500/10 hover:border-orange-500/30"
+          >
+            <HugeiconsIcon icon={Upload04Icon} className="h-3 w-3" />
+            <span className="hidden sm:inline">Withdraw</span>
+          </button>
+        )}
         <NotificationBell />
         <ThemeToggle />
         <Popover open={profileOpen} onOpenChange={setProfileOpen}>

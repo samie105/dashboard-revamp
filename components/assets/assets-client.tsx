@@ -19,6 +19,7 @@ import { WalletSetupLoader } from "@/components/wallet-setup-loader"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
+import { useTradeSelector } from "@/components/trade-selector"
 
 // ── Onboarding steps ─────────────────────────────────────────────────────
 
@@ -103,6 +104,21 @@ const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Solana: "sol
 function truncAddr(addr: string) {
   if (!addr || addr.length < 14) return addr
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`
+}
+
+/* ========== Asset Trade Button ========== */
+
+function AssetTradeButton({ symbol }: { symbol: string }) {
+  const { openTradeSelector } = useTradeSelector()
+  return (
+    <button
+      onClick={() => openTradeSelector(symbol)}
+      className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      Trade
+      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+    </button>
+  )
 }
 
 /* ========== Add Token Modal ========== */
@@ -505,13 +521,7 @@ export default function AssetsClient() {
                       <td className="px-4 py-2.5 text-right font-medium tabular-nums">0.00</td>
                       <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">$0.00</td>
                       <td className="px-4 py-2.5 text-right">
-                        <a
-                          href={`/swap?from=${token.symbol}`}
-                          className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                        >
-                          Trade
-                          <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-                        </a>
+                        <AssetTradeButton symbol={token.symbol} />
                       </td>
                     </tr>
                   )

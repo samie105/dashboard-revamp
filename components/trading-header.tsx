@@ -103,13 +103,6 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
             </div>
           </div>
         )}
-        <a
-          href="/deposit"
-          className="hidden md:flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary/90"
-        >
-          <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5" />
-          Deposit
-        </a>
         <NotificationBell />
         <ThemeToggle />
         <Popover open={profileOpen} onOpenChange={setProfileOpen}>
