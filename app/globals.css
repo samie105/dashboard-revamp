@@ -214,3 +214,11 @@ input[type="range"]::-moz-range-thumb {
 .animate-indeterminate {
   animation: indeterminate 2.5s infinite linear;
 }
+
+/* Hide scrollbar while preserving scroll functionality */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

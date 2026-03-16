@@ -3,6 +3,7 @@ import { WalletCard } from "@/components/dashboard/user-card"
 import { DashboardGrid } from "@/components/dashboard/bento-grid"
 import { WalletCardSkeleton, DashboardGridSkeleton } from "@/components/dashboard/skeletons"
 import { DashboardOnboarding } from "@/components/dashboard/dashboard-onboarding"
+import { PendingDeposit } from "@/components/dashboard/pending-deposit"
 import { getPrices, getTrades } from "@/lib/actions"
 
 async function WalletCardLoader() {
@@ -40,6 +41,9 @@ async function DashboardGridLoader() {
 export default function Page() {
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
+      {/* Pending deposit banner (client component) */}
+      <PendingDeposit />
+
       <Suspense fallback={<WalletCardSkeleton />}>
         <WalletCardLoader />
       </Suspense>
