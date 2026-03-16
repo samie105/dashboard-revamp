@@ -704,7 +704,7 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
   const [showIndicatorMenu, setShowIndicatorMenu] = React.useState(false)
   const [showDrawTools, setShowDrawTools] = React.useState(false)
   const [crosshairMode, setCrosshairMode] = React.useState<"normal" | "magnet">("normal")
-  const [klinesVersion, setKlinesVersion] = React.useState(0)
+  const refreshIndicatorsRef = React.useRef<() => void>(() => {})
 
   // Drawing tools state
   const [activeTool, setActiveTool] = React.useState<DrawTool>("select")
@@ -747,8 +747,9 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
         return
       }
       klinesRef.current = [...older, ...existing]
-      setKlinesVersion((v) => v + 1)
-      applyAllData(klinesRef.current)
+      applyMainData(klinesRef.current)
+      applyVolumeData(klinesRef.current)
+      refreshIndicatorsRef.current()
     } catch {
       // ignore history load errors
     } finally {
@@ -975,7 +976,60 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     if (activeIndicators.has("atr")) addOscillator("atr", computeATR(klines, 14), "#f43f5e", "atr")
     if (activeIndicators.has("obv")) addOscillator("obv", computeOBV(klines), "#84cc16", "obv")
     if (activeIndicators.has("cmf")) addOscillator("cmf", computeCMF(klines, 20), "#fb923c", "cmf")
-  }, [activeIndicators, isDark, klinesVersion])
+
+    // Store a refresh fn for in-place data updates (no series add/remove)
+    refreshIndicatorsRef.current = () => {
+      const kl = klinesRef.current
+      if (!kl.length) return
+      const c = kl.map((k) => k.close)
+      const t = kl.map((k) => (k.time / 1000) as Time)
+      function updateSeries(key: string, values: (number | null)[]) {
+        const s = indicatorSeriesRef.current.get(key)
+        if (!s) return
+        const d: LineData<Time>[] = []
+        for (let i = 0; i < values.length; i++) { if (values[i] !== null) d.push({ time: t[i], value: values[i]! }) }
+        s.setData(d)
+      }
+      if (activeIndicators.has("ma9")) updateSeries("ma9", computeSMA(c, 9))
+      if (activeIndicators.has("ma20")) updateSeries("ma20", computeSMA(c, 20))
+      if (activeIndicators.has("ma50")) updateSeries("ma50", computeSMA(c, 50))
+      if (activeIndicators.has("ma100")) updateSeries("ma100", computeSMA(c, 100))
+      if (activeIndicators.has("ma200")) updateSeries("ma200", computeSMA(c, 200))
+      if (activeIndicators.has("ema9")) updateSeries("ema9", computeEMA(c, 9))
+      if (activeIndicators.has("ema21")) updateSeries("ema21", computeEMA(c, 21))
+      if (activeIndicators.has("ema50")) updateSeries("ema50", computeEMA(c, 50))
+      if (activeIndicators.has("ema100")) updateSeries("ema100", computeEMA(c, 100))
+      if (activeIndicators.has("ema200")) updateSeries("ema200", computeEMA(c, 200))
+      if (activeIndicators.has("dema9")) updateSeries("dema9", computeDEMA(c, 9))
+      if (activeIndicators.has("dema21")) updateSeries("dema21", computeDEMA(c, 21))
+      if (activeIndicators.has("tema9")) updateSeries("tema9", computeTEMA(c, 9))
+      if (activeIndicators.has("tema21")) updateSeries("tema21", computeTEMA(c, 21))
+      if (activeIndicators.has("wma20")) updateSeries("wma20", computeWMA(c, 20))
+      if (activeIndicators.has("wma50")) updateSeries("wma50", computeWMA(c, 50))
+      if (activeIndicators.has("hma9")) updateSeries("hma9", computeHMA(c, 9))
+      if (activeIndicators.has("hma21")) updateSeries("hma21", computeHMA(c, 21))
+      if (activeIndicators.has("bb")) { const bb = computeBB(c, 20, 2); updateSeries("bb-u", bb.upper); updateSeries("bb-m", bb.middle); updateSeries("bb-l", bb.lower) }
+      if (activeIndicators.has("vwap")) updateSeries("vwap", computeVWAP(kl))
+      if (activeIndicators.has("ichimoku")) { const ich = computeIchimoku(kl); updateSeries("ich-tenkan", ich.tenkan); updateSeries("ich-kijun", ich.kijun); updateSeries("ich-senkouA", ich.senkouA); updateSeries("ich-senkouB", ich.senkouB); updateSeries("ich-chikou", ich.chikou) }
+      if (activeIndicators.has("sar")) updateSeries("sar", computeParabolicSAR(kl))
+      if (activeIndicators.has("donchian")) { const dc = computeDonchian(kl, 20); updateSeries("dc-u", dc.upper); updateSeries("dc-m", dc.middle); updateSeries("dc-l", dc.lower) }
+      if (activeIndicators.has("keltner")) { const kc = computeKeltner(kl, 20, 10, 1.5); updateSeries("kc-u", kc.upper); updateSeries("kc-m", kc.middle); updateSeries("kc-l", kc.lower) }
+      if (activeIndicators.has("supertrend")) { const stR = computeSupertrend(kl, 10, 3); updateSeries("st-bull", stR.values.map((v, i) => stR.direction[i] === 1 ? v : null)); updateSeries("st-bear", stR.values.map((v, i) => stR.direction[i] === -1 ? v : null)) }
+      if (activeIndicators.has("rsi")) updateSeries("rsi", computeRSI(c, 14))
+      if (activeIndicators.has("macd")) { const m = computeMACD(c); updateSeries("macd-line", m.macd); updateSeries("macd-signal", m.signal) }
+      if (activeIndicators.has("stochastic")) { const st = computeStochastic(kl, 14, 3); updateSeries("stoch-k", st.k); updateSeries("stoch-d", st.d) }
+      if (activeIndicators.has("williamsR")) updateSeries("williamsR", computeWilliamsR(kl, 14))
+      if (activeIndicators.has("cci")) updateSeries("cci", computeCCI(kl, 20))
+      if (activeIndicators.has("adx")) { const dx = computeADX(kl, 14); updateSeries("adx", dx.adx); updateSeries("adx-pdi", dx.pdi); updateSeries("adx-ndi", dx.ndi) }
+      if (activeIndicators.has("mfi")) updateSeries("mfi", computeMFI(kl, 14))
+      if (activeIndicators.has("roc")) updateSeries("roc", computeROC(c, 12))
+      if (activeIndicators.has("momentum")) updateSeries("momentum", computeMomentum(c, 10))
+      if (activeIndicators.has("trix")) updateSeries("trix", computeTRIX(c, 15))
+      if (activeIndicators.has("atr")) updateSeries("atr", computeATR(kl, 14))
+      if (activeIndicators.has("obv")) updateSeries("obv", computeOBV(kl))
+      if (activeIndicators.has("cmf")) updateSeries("cmf", computeCMF(kl, 20))
+    }
+  }, [activeIndicators, isDark])
 
   // ── Data fetching ──
   React.useEffect(() => {
@@ -992,8 +1046,16 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
         if (cancelled) return
         if (res.success && res.data.length > 0) {
           klinesRef.current = res.data
-          setKlinesVersion((v) => v + 1)
-          applyAllData(res.data)
+          applyMainData(res.data)
+          applyVolumeData(res.data)
+          refreshIndicatorsRef.current()
+          // Set initial viewport only on first load or interval change
+          if (chartRef.current && res.data.length > 80) {
+            chartRef.current.timeScale().setVisibleLogicalRange({
+              from: res.data.length - 80,
+              to: res.data.length + 5,
+            })
+          }
           setHasData(true)
         }
       } catch {
@@ -1009,8 +1071,9 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
         if (cancelled) return
         if (res.success && res.data.length > 0) {
           klinesRef.current = res.data
-          setKlinesVersion((v) => v + 1)
-          applyAllData(res.data)
+          applyMainData(res.data)
+          applyVolumeData(res.data)
+          refreshIndicatorsRef.current()
         }
       } catch {}
     }
@@ -1049,12 +1112,6 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
   function applyAllData(klines: Kline[]) {
     applyMainData(klines)
     applyVolumeData(klines)
-    if (chartRef.current && klines.length > 80) {
-      chartRef.current.timeScale().setVisibleLogicalRange({
-        from: klines.length - 80,
-        to: klines.length + 5,
-      })
-    }
   }
 
   // ── Handlers ──
