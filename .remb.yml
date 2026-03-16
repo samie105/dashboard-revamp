@@ -3,3 +3,4 @@
 
 project: worldstreet-dashboard-revamp
 api_url: https://remb.vercel.app
+ide: vscode

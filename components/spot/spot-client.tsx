@@ -304,7 +304,7 @@ export function SpotClient({
             <span className="text-[9px] text-muted-foreground">Open Orders</span>
           </button>
         ) : (
-          <div data-onboarding="spot-orders" className="shrink-0 h-[200px] relative">
+          <div data-onboarding="spot-orders" className="shrink-0 h-[160px] relative">
             <button
               onClick={() => toggle("bottom")}
               className="absolute top-1 right-1 z-10 rounded-md p-0.5 bg-card/80 border border-border/20 hover:bg-accent transition-colors"

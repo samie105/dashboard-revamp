@@ -8,7 +8,7 @@ export function usePanelLayout() {
   const [collapsed, setCollapsed] = useState<Record<PanelKey, boolean>>({
     left: false,
     right: false,
-    bottom: false,
+    bottom: true,
   })
 
   const toggle = useCallback((key: PanelKey) => {
