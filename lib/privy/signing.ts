@@ -1,5 +1,4 @@
 import { privyClient } from "./client"
-import { createAuthorizationContext } from "./authorization"
 
 /**
  * Sign an arbitrary message with Ethereum wallet
@@ -9,13 +8,20 @@ export async function signEthereumMessage(
   message: string,
   clerkJwt: string,
 ) {
-  const authContext = await createAuthorizationContext(clerkJwt)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await (privyClient.wallets() as any).rpc(walletId, {
+    method: "personal_sign",
+    chain_type: "ethereum",
+    params: {
+      encoding: "utf-8",
+      message,
+    },
+    authorization_context: {
+      user_jwts: [clerkJwt],
+    },
+  })
 
-  const signature = await (privyClient.wallets as unknown as Record<string, Function>)
-    .ethereum(walletId)
-    .signMessage({ message }, { authorizationContext: authContext })
-
-  return signature
+  return result.data?.signature
 }
 
 /**
@@ -26,13 +32,22 @@ export async function signSolanaMessage(
   message: string,
   clerkJwt: string,
 ) {
-  const authContext = await createAuthorizationContext(clerkJwt)
+  const base64Message = Buffer.from(message).toString("base64")
 
-  const signature = await (privyClient.wallets as unknown as Record<string, Function>)
-    .solana(walletId)
-    .signMessage({ message }, { authorizationContext: authContext })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await (privyClient.wallets() as any).rpc(walletId, {
+    method: "signMessage",
+    chain_type: "solana",
+    params: {
+      encoding: "base64",
+      message: base64Message,
+    },
+    authorization_context: {
+      user_jwts: [clerkJwt],
+    },
+  })
 
-  return signature
+  return result.data?.signature
 }
 
 /**
@@ -43,11 +58,17 @@ export async function signTypedData(
   typedData: Record<string, unknown>,
   clerkJwt: string,
 ) {
-  const authContext = await createAuthorizationContext(clerkJwt)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await (privyClient.wallets() as any).rpc(walletId, {
+    method: "eth_signTypedData_v4",
+    chain_type: "ethereum",
+    params: {
+      typed_data: typedData,
+    },
+    authorization_context: {
+      user_jwts: [clerkJwt],
+    },
+  })
 
-  const signature = await (privyClient.wallets as unknown as Record<string, Function>)
-    .ethereum(walletId)
-    .signTypedData(typedData, { authorizationContext: authContext })
-
-  return signature
+  return result.data?.signature
 }

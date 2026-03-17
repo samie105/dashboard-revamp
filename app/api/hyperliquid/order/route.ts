@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       orderType,
       stopPrice,
       isSpot: requestIsSpot,
+      reduceOnly,
     } = await request.json()
 
     if (!asset || !side || !amount || !orderType) {
@@ -161,6 +162,7 @@ export async function POST(request: NextRequest) {
 
     let finalPrice = price
     let finalTif: any = { limit: { tif: "Gtc" } }
+    let wouldFillImmediately = false
 
     if (orderType === "market") {
       try {
@@ -233,6 +235,23 @@ export async function POST(request: NextRequest) {
           tpsl: isAbove ? "tp" : "sl",
         },
       }
+    } else if (orderType === "limit") {
+      // Check if limit order would fill immediately (crosses the spread)
+      try {
+        const bookName = isSpot ? spotCoinName : asset
+        const l2 = await info.l2Book({ coin: bookName })
+        if (l2?.levels?.[0]?.[0] && l2?.levels?.[1]?.[0]) {
+          const bestBid = parseFloat(l2.levels[0][0].px)
+          const bestAsk = parseFloat(l2.levels[1][0].px)
+          if (side === "buy" && Number(price) >= bestAsk) {
+            wouldFillImmediately = true
+          } else if (side === "sell" && Number(price) <= bestBid) {
+            wouldFillImmediately = true
+          }
+        }
+      } catch (e) {
+        console.warn("[Hyperliquid Order] Failed to check limit price vs book:", e)
+      }
     }
 
     const roundedPrice = toHlPrice(Number(finalPrice))
@@ -256,7 +275,7 @@ export async function POST(request: NextRequest) {
           b: side === "buy",
           p: roundedPrice,
           s: roundedSize,
-          r: false,
+          r: reduceOnly === true,
           t: finalTif,
         },
       ],
@@ -280,6 +299,7 @@ export async function POST(request: NextRequest) {
       orderType,
       side,
       asset,
+      wouldFillImmediately,
     })
   } catch (error: any) {
     console.error("[Hyperliquid Order API] Error:", error)

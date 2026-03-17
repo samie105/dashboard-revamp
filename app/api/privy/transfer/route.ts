@@ -194,18 +194,21 @@ export async function POST(request: NextRequest) {
       `[Hyperliquid Deposit] Initiating sponsored transaction via Privy Server SDK...`,
     )
 
-    const result = await (privyClient.wallets as any)
-      .ethereum()
-      .sendTransaction(mainWalletId, {
-        sponsor: true,
-        caip2: "eip155:42161",
-        params: {
-          transaction: txParams,
-        },
-        authorization_context: authContext,
-      })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (privyClient.wallets() as any).rpc(mainWalletId, {
+      method: "eth_sendTransaction",
+      caip2: "eip155:42161",
+      chain_type: "ethereum",
+      sponsor: true,
+      params: {
+        transaction: txParams,
+      },
+      authorization_context: {
+        user_jwts: [clerkJwt],
+      },
+    })
 
-    const txHash = result.hash
+    const txHash = result.data?.hash
     console.log(
       `[Hyperliquid Deposit] Transaction successful! Hash: ${txHash}`,
     )

@@ -3,7 +3,6 @@ import { auth } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
 import { UserWallet } from "@/models/UserWallet"
 import { privyClient } from "@/lib/privy/client"
-import { createAuthorizationContext } from "@/lib/privy/authorization"
 import { Connection, PublicKey, Transaction } from "@solana/web3.js"
 import {
   getAssociatedTokenAddress,
@@ -113,17 +112,21 @@ export async function POST(request: NextRequest) {
       .serialize({ requireAllSignatures: false })
       .toString("base64")
 
-    const authContext = await createAuthorizationContext(clerkJwt)
-
-    const result = await (privyClient.wallets as any)
-      .solana()
-      .signAndSendTransaction(walletId, {
-        caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (privyClient.wallets() as any).rpc(walletId, {
+      method: "signAndSendTransaction",
+      caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      chain_type: "solana",
+      params: {
+        encoding: "base64",
         transaction: serialized,
-        authorization_context: authContext,
-      })
+      },
+      authorization_context: {
+        user_jwts: [clerkJwt],
+      },
+    })
 
-    const signature = result.signature || result.hash
+    const signature = result.data?.hash
 
     return NextResponse.json({ success: true, signature })
   } catch (error: any) {

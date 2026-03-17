@@ -71,18 +71,19 @@ export async function bridgeToHyperliquid({
     value: "0x0",
   }
 
-  const result = await (privyClient.wallets() as any)
-    .ethereum()
-    .sendTransaction(walletId, {
-      sponsor: true,
-      caip2: "eip155:42161",
-      params: { transaction: txParams },
-      authorization_context: authorizationContext,
-    })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await (privyClient.wallets() as any).rpc(walletId, {
+    method: "eth_sendTransaction",
+    caip2: "eip155:42161",
+    chain_type: "ethereum",
+    sponsor: true,
+    params: { transaction: txParams },
+    authorization_context: authorizationContext,
+  })
 
   return {
     success: true,
-    txHash: result.hash,
+    txHash: result.data?.hash,
   }
 }
 

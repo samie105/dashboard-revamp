@@ -38,6 +38,11 @@ export function OrderPanel({
     type: "success" | "error"
     message: string
   } | null>(null)
+  const [bestBid, setBestBid] = React.useState(0)
+  const [bestAsk, setBestAsk] = React.useState(0)
+  const [showTPSL, setShowTPSL] = React.useState(false)
+  const [takeProfitPrice, setTakeProfitPrice] = React.useState("")
+  const [stopLossPrice, setStopLossPrice] = React.useState("")
 
   const { baseBalance, quoteBalance, refetch: refetchBalances } = useSpotBalances(symbol, "USDC")
 
@@ -46,6 +51,31 @@ export function OrderPanel({
     orderType === "market" ? price : parseFloat(limitPrice) || price
   const numericAmount = parseFloat(amount) || 0
   const total = numericAmount * effectivePrice
+
+  // Fetch best bid/ask for limit order reference and warnings
+  React.useEffect(() => {
+    const fetchBidAsk = async () => {
+      try {
+        const res = await fetch(
+          `/api/hyperliquid/slippage-estimate?coin=${symbol}&side=buy&amount=1`
+        )
+        const data = await res.json()
+        if (data.success && data.data) {
+          if (data.data.bestBid) setBestBid(data.data.bestBid)
+          if (data.data.bestAsk) setBestAsk(data.data.bestAsk)
+        }
+      } catch { /* ignore */ }
+    }
+    fetchBidAsk()
+    const interval = setInterval(fetchBidAsk, 5000)
+    return () => clearInterval(interval)
+  }, [symbol])
+
+  // Check if limit order would fill immediately
+  const wouldFillImmediately = orderType === "limit" && limitPrice && (
+    (isBuy && bestAsk > 0 && parseFloat(limitPrice) >= bestAsk) ||
+    (!isBuy && bestBid > 0 && parseFloat(limitPrice) <= bestBid)
+  )
 
   // Sync total display when amount changes (unless user is typing in total)
   React.useEffect(() => {
@@ -139,6 +169,28 @@ export function OrderPanel({
   async function handleExecute() {
     if (!canTrade || !user?.userId) return
 
+    // Validate TP/SL prices
+    if (takeProfitPrice && parseFloat(takeProfitPrice) > 0) {
+      if (isBuy && parseFloat(takeProfitPrice) <= price) {
+        setFeedback({ type: "error", message: "Take Profit must be above current price for buy orders" })
+        return
+      }
+      if (!isBuy && parseFloat(takeProfitPrice) >= price) {
+        setFeedback({ type: "error", message: "Take Profit must be below current price for sell orders" })
+        return
+      }
+    }
+    if (stopLossPrice && parseFloat(stopLossPrice) > 0) {
+      if (isBuy && parseFloat(stopLossPrice) >= price) {
+        setFeedback({ type: "error", message: "Stop Loss must be below current price for buy orders" })
+        return
+      }
+      if (!isBuy && parseFloat(stopLossPrice) <= price) {
+        setFeedback({ type: "error", message: "Stop Loss must be above current price for sell orders" })
+        return
+      }
+    }
+
     setIsExecuting(true)
     setFeedback(null)
 
@@ -176,10 +228,63 @@ export function OrderPanel({
           msg = `Limit order resting (ID: ${firstStatus.resting.oid})`
         }
 
+        // Place TP/SL orders if set and main order filled immediately
+        if (firstStatus?.filled && (takeProfitPrice || stopLossPrice)) {
+          const fillSize = parseFloat(firstStatus.filled.totalSz)
+          const oppositeSide = isBuy ? "sell" : "buy"
+          const tpslParts: string[] = []
+
+          if (takeProfitPrice && parseFloat(takeProfitPrice) > 0) {
+            try {
+              const tpRes = await fetch("/api/hyperliquid/order", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  asset: symbol,
+                  side: oppositeSide,
+                  amount: fillSize,
+                  price: parseFloat(takeProfitPrice),
+                  orderType: "stop-limit",
+                  isSpot: true,
+                  stopPrice: parseFloat(takeProfitPrice),
+                  reduceOnly: true,
+                }),
+              })
+              const tpResult = await tpRes.json()
+              tpslParts.push(tpResult.success ? `TP set at $${takeProfitPrice}` : `TP failed: ${tpResult.error}`)
+            } catch { tpslParts.push("TP placement failed") }
+          }
+
+          if (stopLossPrice && parseFloat(stopLossPrice) > 0) {
+            try {
+              const slRes = await fetch("/api/hyperliquid/order", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  asset: symbol,
+                  side: oppositeSide,
+                  amount: fillSize,
+                  price: parseFloat(stopLossPrice),
+                  orderType: "stop-limit",
+                  isSpot: true,
+                  stopPrice: parseFloat(stopLossPrice),
+                  reduceOnly: true,
+                }),
+              })
+              const slResult = await slRes.json()
+              tpslParts.push(slResult.success ? `SL set at $${stopLossPrice}` : `SL failed: ${slResult.error}`)
+            } catch { tpslParts.push("SL placement failed") }
+          }
+
+          if (tpslParts.length > 0) msg += ` | ${tpslParts.join(" | ")}`
+        }
+
         setFeedback({ type: "success", message: msg })
         setAmount("")
         setTotalInput("")
         setPct(0)
+        setTakeProfitPrice("")
+        setStopLossPrice("")
 
         // Immediately refetch balances so UI updates
         refetchBalances()
@@ -277,6 +382,34 @@ export function OrderPanel({
           </div>
         )}
 
+        {/* Best Bid/Ask Reference (for limit orders) */}
+        {orderType === "limit" && bestAsk > 0 && (
+          <div className="flex justify-between text-[10px] -mt-0.5">
+            <button
+              type="button"
+              onClick={() => setLimitPrice(bestBid.toFixed(6))}
+              className="text-emerald-500 hover:underline cursor-pointer"
+            >
+              Bid: ${bestBid.toFixed(4)}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLimitPrice(bestAsk.toFixed(6))}
+              className="text-red-500 hover:underline cursor-pointer"
+            >
+              Ask: ${bestAsk.toFixed(4)}
+            </button>
+          </div>
+        )}
+
+        {/* Immediate Fill Warning */}
+        {wouldFillImmediately && (
+          <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-medium border border-amber-500/20 bg-amber-500/5 text-amber-500">
+            <HugeiconsIcon icon={Alert02Icon} className="h-3 w-3 shrink-0" />
+            This price is at or {isBuy ? "above" : "below"} market — order will fill immediately like a market order.
+          </div>
+        )}
+
         {/* Amount input */}
         <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
           <div className="flex items-center justify-between mb-0.5">
@@ -352,6 +485,61 @@ export function OrderPanel({
             />
           </div>
         </div>
+
+        {/* TP/SL Section */}
+        {orderType !== "stop-limit" && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowTPSL(!showTPSL)}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full"
+            >
+              <span className={`transition-transform ${showTPSL ? "rotate-90" : ""}`}>▸</span>
+              <span>Take Profit / Stop Loss</span>
+              {(takeProfitPrice || stopLossPrice) && (
+                <span className="ml-auto text-[10px] text-emerald-500">Active</span>
+              )}
+            </button>
+            {showTPSL && (
+              <div className="mt-1.5 space-y-1.5">
+                <div className="rounded-lg border border-emerald-500/20 bg-accent/20 px-2.5 py-1.5">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[10px] font-medium text-emerald-500">Take Profit</span>
+                    <span className="text-[10px] text-muted-foreground">USDC</span>
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={takeProfitPrice}
+                    onChange={(e) => {
+                      if (/^[0-9]*\.?[0-9]*$/.test(e.target.value))
+                        setTakeProfitPrice(e.target.value)
+                    }}
+                    placeholder="TP price"
+                    className="w-full bg-transparent text-sm font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
+                  />
+                </div>
+                <div className="rounded-lg border border-red-500/20 bg-accent/20 px-2.5 py-1.5">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[10px] font-medium text-red-500">Stop Loss</span>
+                    <span className="text-[10px] text-muted-foreground">USDC</span>
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={stopLossPrice}
+                    onChange={(e) => {
+                      if (/^[0-9]*\.?[0-9]*$/.test(e.target.value))
+                        setStopLossPrice(e.target.value)
+                    }}
+                    placeholder="SL price"
+                    className="w-full bg-transparent text-sm font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Validation warnings */}
         {minOrderError && (

@@ -53,21 +53,22 @@ async function sendUsdtEthereum(
     ],
   })
 
-  const result = await (privyClient.wallets() as any)
-    .ethereum()
-    .sendTransaction(walletId, {
-      caip2: "eip155:1",
-      params: {
-        transaction: {
-          to: ETH_USDT_ADDRESS,
-          data,
-          value: "0x0",
-        },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await (privyClient.wallets() as any).rpc(walletId, {
+    method: "eth_sendTransaction",
+    caip2: "eip155:1",
+    chain_type: "ethereum",
+    params: {
+      transaction: {
+        to: ETH_USDT_ADDRESS,
+        data,
+        value: "0x0",
       },
-      authorization_context: authorizationContext,
-    })
+    },
+    authorization_context: authorizationContext,
+  })
 
-  return { txHash: result.hash }
+  return { txHash: result.data?.hash }
 }
 
 async function sendUsdtSolana(
@@ -126,15 +127,19 @@ async function sendUsdtSolana(
     .serialize({ requireAllSignatures: false })
     .toString("base64")
 
-  const result = await (privyClient.wallets() as any)
-    .solana()
-    .signAndSendTransaction(walletId, {
-      caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await (privyClient.wallets() as any).rpc(walletId, {
+    method: "signAndSendTransaction",
+    caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    chain_type: "solana",
+    params: {
+      encoding: "base64",
       transaction: serialized,
-      authorization_context: authorizationContext,
-    })
+    },
+    authorization_context: authorizationContext,
+  })
 
-  return { txHash: result.signature || result.hash }
+  return { txHash: result.data?.hash }
 }
 
 export async function POST(request: NextRequest) {

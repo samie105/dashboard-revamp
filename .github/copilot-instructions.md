@@ -2,7 +2,7 @@
 # Remb — AI Context Management Rules
 
 ## Project: `worldstreet-dashboard-revamp`
-## API: `https://remb.vercel.app`
+## API: `http://localhost:3000`
 
 ## MANDATORY — Conversation Tracking
 

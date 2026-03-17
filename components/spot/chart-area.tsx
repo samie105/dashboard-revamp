@@ -638,16 +638,28 @@ function PopoverToolGroup({
   )
 }
 
+export interface OpenOrderForChart {
+  coin: string
+  side: "B" | "A"
+  limitPx: string
+  sz: string
+  oid: number
+  orderType?: string
+  tif?: string
+}
+
 export function ChartArea({
   symbol,
   price,
   change24h,
   onMarketsClick,
+  openOrders = [],
 }: {
   symbol: string
   price: number
   change24h: number
   onMarketsClick?: () => void
+  openOrders?: OpenOrderForChart[]
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<IChartApi | null>(null)
@@ -658,6 +670,7 @@ export function ChartArea({
   const chartTypeRef = React.useRef<ChartType>("candles")
   const isLoadingHistoryRef = React.useRef(false)
   const historyExhaustedRef = React.useRef(false)
+  const priceLinesRef = React.useRef<Map<number, any>>(new Map())
 
   const [interval, setInterval] = React.useState("1H")
   const intervalRef = React.useRef("1H")
@@ -1127,6 +1140,46 @@ export function ChartArea({
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [selectedId])
+
+  // ── Open orders price lines ──────────────────────────────────────────
+  React.useEffect(() => {
+    const series = mainSeriesRef.current
+    if (!series) return
+
+    // Remove old lines
+    for (const [, line] of priceLinesRef.current) {
+      try { series.removePriceLine(line) } catch { /* already removed */ }
+    }
+    priceLinesRef.current.clear()
+
+    // Filter for current symbol
+    const sym = symbol.replace("-", "").replace("/", "").toUpperCase()
+    const relevant = openOrders.filter(
+      (o) => o.coin.toUpperCase().replace("-", "").replace("/", "") === sym
+    )
+
+    for (const order of relevant) {
+      const px = parseFloat(order.limitPx)
+      if (!px || isNaN(px)) continue
+
+      const isBuy = order.side === "B"
+      const isStopOrder = order.orderType === "Stop Limit" || order.orderType === "Stop Market"
+      const color = isStopOrder ? "#f59e0b" : isBuy ? "#10b981" : "#ef4444"
+      const label = isStopOrder
+        ? `⚡ ${isBuy ? "Buy" : "Sell"} Stop ${order.sz} @ ${px}`
+        : `${isBuy ? "Buy" : "Sell"} ${order.sz} @ ${px}`
+
+      const line = series.createPriceLine({
+        price: px,
+        color,
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: label,
+      })
+      priceLinesRef.current.set(order.oid, line)
+    }
+  }, [openOrders, symbol])
 
   function handleSvgMouseDown(e: React.MouseEvent<SVGSVGElement>) {
     if (activeTool === "select") { setSelectedId(null); return }

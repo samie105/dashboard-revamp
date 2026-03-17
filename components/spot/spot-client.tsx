@@ -25,6 +25,7 @@ import { RecentTrades } from "./recent-trades"
 import { SpotDepositModal } from "./spot-deposit-modal"
 import { SpotWithdrawModal } from "./spot-withdraw-modal"
 import { useProfile } from "@/components/profile-provider"
+import { useOpenOrders } from "@/hooks/useOpenOrders"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { usePanelLayout } from "@/hooks/usePanelLayout"
@@ -84,6 +85,7 @@ export function SpotClient({
   initialOrderBook,
 }: SpotClientProps) {
   const { profile } = useProfile()
+  const { orders: openOrders } = useOpenOrders()
   const [selectedPair, setSelectedPair] = React.useState("BTC")
   const [watchlist, setWatchlist] = React.useState<Set<string>>(
     new Set(["BTC", "ETH", "SOL"]),
@@ -213,6 +215,7 @@ export function SpotClient({
               price={currentPrice}
               change24h={selectedCoin.change24h}
               onMarketsClick={() => setShowMarkets(true)}
+              openOrders={openOrders}
             />
           </div>
 
@@ -415,6 +418,7 @@ export function SpotClient({
               symbol={selectedPair}
               price={currentPrice}
               change24h={selectedCoin.change24h}
+              openOrders={openOrders}
             />
           </div>
 

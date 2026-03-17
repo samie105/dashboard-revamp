@@ -37,3 +37,8 @@ next-env.d.ts
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# Remb dynamic context (auto-generated, do not commit)
+.github/instructions/remb-context.instructions.md
+.cursor/rules/remb-context.mdc
+.windsurf/rules/remb-context.md
