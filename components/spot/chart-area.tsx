@@ -40,6 +40,13 @@ const INTERVALS = [
   { label: "1Y", value: "1Y" },
 ]
 
+// Map chart interval labels → Hyperliquid WS candle subscription intervals
+const HL_WS_INTERVAL: Record<string, string> = {
+  "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+  "1H": "1h", "2H": "2h", "4H": "4h", "12H": "12h",
+  "1D": "1d", "1W": "1w", "3M": "1M", "6M": "1M", "1Y": "1M",
+}
+
 // ── Drawing Tools ────────────────────────────────────────────────────────
 
 type DrawingType =
@@ -671,6 +678,7 @@ export function ChartArea({
   const isLoadingHistoryRef = React.useRef(false)
   const historyExhaustedRef = React.useRef(false)
   const priceLinesRef = React.useRef<Map<number, any>>(new Map())
+  const wsRef = React.useRef<WebSocket | null>(null)
 
   const [interval, setInterval] = React.useState("1H")
   const intervalRef = React.useRef("1H")
@@ -1055,24 +1063,104 @@ export function ChartArea({
       }
     }
 
-    async function poll() {
-      try {
-        const res = await getSpotKlines(symbol, interval)
-        if (cancelled) return
-        if (res.success && res.data.length > 0) {
-          klinesRef.current = res.data
-          applyMainData(res.data)
-          applyVolumeData(res.data)
-          refreshIndicatorsRef.current()
-        }
-      } catch {
-        // ignore
-      }
-    }
+    fetchKlines().then(() => {
+      if (cancelled) return
+      // Open Hyperliquid WebSocket for real-time candle updates
+      const wsInterval = HL_WS_INTERVAL[interval]
+      if (!wsInterval) return
 
-    fetchKlines()
-    const id = window.setInterval(poll, 30_000)
-    return () => { cancelled = true; clearInterval(id) }
+      // Derive the coin name HL expects (strip suffixes)
+      const hlCoin = symbol
+        .replace(/[\-\/_ ]/g, "")
+        .replace(/(USDC|USDT|USD|USDH)$/i, "")
+        .toUpperCase()
+
+      const ws = new WebSocket("wss://api.hyperliquid.xyz/ws")
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        ws.send(
+          JSON.stringify({
+            method: "subscribe",
+            subscription: { type: "candle", coin: hlCoin, interval: wsInterval },
+          })
+        )
+      }
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data)
+          if (msg.channel !== "candle" || !msg.data) return
+
+          const c = msg.data
+          const time = Math.floor(c.t / 1000) as Time
+          const open = Number(c.o)
+          const high = Number(c.h)
+          const low = Number(c.l)
+          const close = Number(c.c)
+          const volume = Number(c.v)
+          const isUp = close >= open
+
+          // Incremental update on chart series
+          if (chartTypeRef.current === "candles") {
+            mainSeriesRef.current?.update({ time, open, high, low, close })
+          } else {
+            mainSeriesRef.current?.update({ time, value: close })
+          }
+          volumeSeriesRef.current?.update({
+            time,
+            value: volume,
+            color: isUp ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)",
+          })
+
+          // Keep klinesRef in sync for indicators & history
+          const klines = klinesRef.current
+          const klineEntry: Kline = { time: c.t, open, high, low, close, volume }
+          if (klines.length > 0 && Math.floor(klines[klines.length - 1].time / 1000) === Math.floor(c.t / 1000)) {
+            klines[klines.length - 1] = klineEntry
+          } else {
+            klines.push(klineEntry)
+          }
+          // Refresh indicators with updated data
+          refreshIndicatorsRef.current()
+        } catch {
+          // ignore malformed messages
+        }
+      }
+
+      ws.onerror = () => {
+        console.warn("[ChartArea] WS error, falling back to polling")
+      }
+
+      // If WS closes unexpectedly, fall back to 30s poll until next reconnect
+      ws.onclose = () => {
+        if (cancelled) return
+        const fallbackId = window.setInterval(async () => {
+          try {
+            const res = await getSpotKlines(symbol, interval)
+            if (cancelled) return
+            if (res.success && res.data.length > 0) {
+              klinesRef.current = res.data
+              applyMainData(res.data)
+              applyVolumeData(res.data)
+              refreshIndicatorsRef.current()
+            }
+          } catch { /* ignore */ }
+        }, 30_000)
+        // Store fallback ID on the ref so cleanup can clear it
+        ;(wsRef as any).__fallbackId = fallbackId
+      }
+    })
+
+    return () => {
+      cancelled = true
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+      const fallbackId = (wsRef as any).__fallbackId
+      if (fallbackId) clearInterval(fallbackId)
+    }
   }, [symbol, interval])
 
   // ── Data helpers ──
