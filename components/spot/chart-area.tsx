@@ -645,7 +645,7 @@ export interface OpenOrderForChart {
   sz: string
   oid: number
   orderType?: string
-  tif?: string
+  tif?: string | null
 }
 
 export function ChartArea({
