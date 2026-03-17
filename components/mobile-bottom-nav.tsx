@@ -215,12 +215,10 @@ export function MobileBottomNav() {
                 <button
                   key={item.label}
                   onClick={() => openTradeSelector()}
-                  className="flex flex-col items-center gap-1 py-1 min-w-14"
+                  className="flex flex-col items-center gap-1 py-1 min-w-14 text-muted-foreground"
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-                    <HugeiconsIcon icon={item.icon} className="h-4.5 w-4.5 text-primary" />
-                  </div>
-                  <span className="text-[11px] font-medium text-primary">{item.label}</span>
+                  <HugeiconsIcon icon={item.icon} className="h-5.5 w-5.5" />
+                  <span className="text-[11px] font-medium">{item.label}</span>
                 </button>
               )
             }

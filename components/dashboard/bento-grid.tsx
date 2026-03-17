@@ -65,7 +65,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
   const hasMore = visibleCount < filtered.length
 
   return (
-    <div data-onboarding="dash-markets" className="flex h-full flex-col rounded-2xl bg-card">
+    <div data-onboarding="dash-markets" className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card">
       {/* Header */}
       <div className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
@@ -430,15 +430,15 @@ interface DashboardGridProps {
 
 export function DashboardGrid({ coins, tradesByPair, prices, error }: DashboardGridProps) {
   return (
-    <div className="grid gap-4 lg:grid-cols-5">
+    <div className="grid w-full gap-4 lg:grid-cols-5">
       {/* Column 1: Markets + Recent Trades stacked */}
-      <div className="flex flex-col gap-4 lg:col-span-3">
+      <div className="flex min-w-0 flex-col gap-4 lg:col-span-3">
         <MarketsTable coins={coins} error={error} />
         <RecentTrades coins={coins} tradesByPair={tradesByPair} error={error} />
       </div>
 
       {/* Column 2: Swap + Watchlist */}
-      <div className="flex flex-col gap-4 lg:col-span-2">
+      <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
         <SwapClient coins={coins} prices={prices} error={error} compact />
         <Watchlist coins={coins} error={error} />
       </div>
