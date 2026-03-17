@@ -15,6 +15,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import { useSpotDeposit, type DepositInfo } from "@/hooks/useSpotDeposit"
 import { useWallet } from "@/components/wallet-provider"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
 
 interface SpotDepositModalProps {
   isOpen: boolean
@@ -66,6 +67,7 @@ const STAGE_GROUPS = [
 export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDepositModalProps) {
   const { deposit, loading, error, initiate, resumePolling, reset, cancel } = useSpotDeposit()
   const { addresses, isLoading: walletsLoading } = useWallet()
+  const { balances: onChainBalances, isLoading: balancesLoading } = useWalletBalances()
 
   const [chain, setChain] = React.useState<"ethereum" | "solana">("ethereum")
   const [amount, setAmount] = React.useState("")
@@ -75,6 +77,25 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
     if (!addresses) return ""
     return chain === "ethereum" ? addresses.ethereum : addresses.solana
   }, [chain, addresses])
+
+  // Derive USDT balance for the selected chain from on-chain balances
+  const usdtBalance = React.useMemo(() => {
+    const ETH_USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    if (chain === "solana") {
+      const t = onChainBalances.find(
+        (b) => b.chain === "solana" && b.symbol === "USDT",
+      )
+      return t?.balance ?? 0
+    }
+    // Ethereum: match by contract address or symbol
+    const t = onChainBalances.find(
+      (b) =>
+        b.chain === "ethereum" &&
+        (b.contractAddress?.toLowerCase() === ETH_USDT.toLowerCase() ||
+          b.symbol === "USDT"),
+    )
+    return t?.balance ?? 0
+  }, [chain, onChainBalances])
 
   React.useEffect(() => {
     if (isOpen) resumePolling()
@@ -191,7 +212,17 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
               <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[11px] font-medium text-muted-foreground">Amount</span>
-                  <span className="text-[11px] text-muted-foreground">Min 5 USDT</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">Min 5 USDT</span>
+                    {usdtBalance > 0 && (
+                      <button
+                        onClick={() => setAmount(usdtBalance.toFixed(2))}
+                        className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                      >
+                        Max
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <input
@@ -236,17 +267,29 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
                     <span className="text-[11px] text-muted-foreground">Loading wallet…</span>
                   </div>
                 ) : fromAddress ? (
-                  <div className="flex items-center justify-between rounded-xl border border-border/30 bg-accent/20 px-3.5 py-3">
-                    <code className="text-[11px] text-foreground/80 font-mono truncate mr-3">{fromAddress}</code>
-                    <button
-                      onClick={() => handleCopy(fromAddress)}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-card transition-colors"
-                    >
-                      <HugeiconsIcon
-                        icon={copied ? Tick02Icon : Copy01Icon}
-                        className={`h-3 w-3 ${copied ? "text-emerald-500" : "text-muted-foreground"}`}
-                      />
-                    </button>
+                  <div className="rounded-xl border border-border/30 bg-accent/20 px-3.5 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <code className="text-[11px] text-foreground/80 font-mono truncate mr-3">{fromAddress}</code>
+                      <button
+                        onClick={() => handleCopy(fromAddress)}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-card transition-colors"
+                      >
+                        <HugeiconsIcon
+                          icon={copied ? Tick02Icon : Copy01Icon}
+                          className={`h-3 w-3 ${copied ? "text-emerald-500" : "text-muted-foreground"}`}
+                        />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between pt-1.5 border-t border-border/20">
+                      <span className="text-[10px] text-muted-foreground">USDT Balance</span>
+                      <span className="text-[11px] font-semibold tabular-nums">
+                        {balancesLoading ? (
+                          <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin text-muted-foreground" />
+                        ) : (
+                          `${usdtBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`
+                        )}
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/5 px-3.5 py-3">
