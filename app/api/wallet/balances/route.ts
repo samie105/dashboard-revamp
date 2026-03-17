@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server"
 import { Connection, PublicKey } from "@solana/web3.js"
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token"
 import { createPublicClient, http, parseAbi, formatUnits, formatEther } from "viem"
-import { mainnet } from "viem/chains"
+import { mainnet, arbitrum } from "viem/chains"
 import { connectDB } from "@/lib/mongodb"
 import { UserWallet } from "@/models/UserWallet"
 
@@ -17,6 +17,9 @@ const SOL_RPC =
 const ETH_RPC =
   process.env.NEXT_PUBLIC_ETH_RPC || "https://cloudflare-eth.com"
 
+const ARB_RPC =
+  process.env.NEXT_PUBLIC_ARB_RPC || "https://arb1.arbitrum.io/rpc"
+
 const SUI_RPC =
   process.env.NEXT_PUBLIC_SUI_RPC_URL || "https://fullnode.mainnet.sui.io:443"
 
@@ -29,6 +32,10 @@ const SOL_USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
 const SOL_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 const ETH_USDT_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7" as const
 const ETH_USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" as const
+
+const ARB_USDT_ADDRESS = "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9" as const
+const ARB_USDC_ADDRESS = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" as const
+const ARB_USDC_BRIDGED_ADDRESS = "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8" as const
 
 const ERC20_ABI = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
@@ -172,6 +179,92 @@ async function fetchEthereumBalances(address: string): Promise<TokenBalance[]> {
   return results
 }
 
+async function fetchArbitrumBalances(address: string): Promise<TokenBalance[]> {
+  const results: TokenBalance[] = []
+  try {
+    const client = createPublicClient({
+      chain: arbitrum,
+      transport: http(ARB_RPC),
+    })
+
+    // Native ETH on Arbitrum
+    const ethBalance = await client.getBalance({ address: address as `0x${string}` })
+    results.push({
+      symbol: "ETH",
+      name: "Ethereum",
+      chain: "arbitrum",
+      balance: parseFloat(formatEther(ethBalance)),
+      isNative: true,
+    })
+
+    // USDT on Arbitrum
+    try {
+      const usdtBal = await client.readContract({
+        address: ARB_USDT_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [address as `0x${string}`],
+      })
+      results.push({
+        symbol: "USDT",
+        name: "Tether",
+        chain: "arbitrum",
+        balance: parseFloat(formatUnits(usdtBal, 6)),
+        contractAddress: ARB_USDT_ADDRESS,
+        isNative: false,
+      })
+    } catch (e) {
+      console.error("[wallet/balances] ARB USDT error:", e)
+    }
+
+    // Native USDC on Arbitrum
+    try {
+      const usdcBal = await client.readContract({
+        address: ARB_USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [address as `0x${string}`],
+      })
+      results.push({
+        symbol: "USDC",
+        name: "USD Coin",
+        chain: "arbitrum",
+        balance: parseFloat(formatUnits(usdcBal, 6)),
+        contractAddress: ARB_USDC_ADDRESS,
+        isNative: false,
+      })
+    } catch (e) {
+      console.error("[wallet/balances] ARB USDC error:", e)
+    }
+
+    // Bridged USDC.e on Arbitrum
+    try {
+      const usdceBal = await client.readContract({
+        address: ARB_USDC_BRIDGED_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [address as `0x${string}`],
+      })
+      const bal = parseFloat(formatUnits(usdceBal, 6))
+      if (bal > 0) {
+        results.push({
+          symbol: "USDC.e",
+          name: "Bridged USDC",
+          chain: "arbitrum",
+          balance: bal,
+          contractAddress: ARB_USDC_BRIDGED_ADDRESS,
+          isNative: false,
+        })
+      }
+    } catch (e) {
+      console.error("[wallet/balances] ARB USDC.e error:", e)
+    }
+  } catch (err) {
+    console.error("[wallet/balances] Arbitrum fetch error:", err)
+  }
+  return results
+}
+
 async function fetchSuiBalance(address: string): Promise<TokenBalance[]> {
   const results: TokenBalance[] = []
   try {
@@ -281,12 +374,15 @@ export async function GET(_request: NextRequest) {
     const wallets = (userWallet as Record<string, any>).wallets || {}
 
     // Fetch all chains in parallel
-    const [solana, ethereum, sui, ton, tron] = await Promise.all([
+    const [solana, ethereum, arbBalances, sui, ton, tron] = await Promise.all([
       wallets.solana?.address
         ? fetchSolanaBalances(wallets.solana.address)
         : Promise.resolve([]),
       wallets.ethereum?.address
         ? fetchEthereumBalances(wallets.ethereum.address)
+        : Promise.resolve([]),
+      wallets.ethereum?.address
+        ? fetchArbitrumBalances(wallets.ethereum.address)
         : Promise.resolve([]),
       wallets.sui?.address
         ? fetchSuiBalance(wallets.sui.address)
@@ -299,7 +395,7 @@ export async function GET(_request: NextRequest) {
         : Promise.resolve([]),
     ])
 
-    const balances = [...solana, ...ethereum, ...sui, ...ton, ...tron]
+    const balances = [...solana, ...ethereum, ...arbBalances, ...sui, ...ton, ...tron]
 
     return NextResponse.json({ balances })
   } catch (error) {

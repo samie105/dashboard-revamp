@@ -68,6 +68,7 @@ function formatPrice(price: number) {
 
 const CHAINS = [
   { key: "ethereum", label: "Ethereum",  symbol: "ETH", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
+  { key: "arbitrum", label: "Arbitrum",  symbol: "ETH", icon: "https://coin-images.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg" },
   { key: "solana",   label: "Solana",    symbol: "SOL", icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
   { key: "sui",      label: "Sui",       symbol: "SUI", icon: "https://coin-images.coingecko.com/coins/images/26375/small/sui-ocean-square.png" },
   { key: "ton",      label: "TON",       symbol: "TON", icon: "https://coin-images.coingecko.com/coins/images/17980/small/ton_symbol.png" },
@@ -597,7 +598,8 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                         </div>
                         <div className="rounded-xl border border-border/30 overflow-hidden divide-y divide-border/20">
                           {CHAINS.map((chain) => {
-                            const addr = addresses?.[chain.key as keyof typeof addresses] ?? ""
+                            const addrKey = chain.key === "arbitrum" ? "ethereum" : chain.key
+                            const addr = addresses?.[addrKey as keyof typeof addresses] ?? ""
                             return (
                               <div key={chain.key} className="flex items-center justify-between px-3.5 py-3 hover:bg-accent/20 transition-colors">
                                 <div className="flex items-center gap-2.5">
