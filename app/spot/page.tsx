@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { getPrices, getTrades, getOrderBook } from "@/lib/actions"
+import { getSpotMarkets, getTrades, getOrderBook } from "@/lib/actions"
 import { SpotClient } from "@/components/spot/spot-client"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -9,9 +9,9 @@ import {
 } from "@/components/dashboard/skeletons"
 
 async function SpotLoader() {
-  const [pricesData, btcTrades, ethTrades, solTrades, btcOrderBook] =
+  const [spotData, btcTrades, ethTrades, solTrades, btcOrderBook] =
     await Promise.all([
-      getPrices(),
+      getSpotMarkets(),
       getTrades("BTCUSDT"),
       getTrades("ETHUSDT"),
       getTrades("SOLUSDT"),
@@ -20,9 +20,8 @@ async function SpotLoader() {
 
   return (
     <SpotClient
-      coins={pricesData.coins}
-      prices={pricesData.prices}
-      globalStats={pricesData.globalStats}
+      coins={spotData.markets}
+      prices={spotData.prices}
       initialTrades={{
         BTCUSDT: btcTrades.success ? btcTrades.data : [],
         ETHUSDT: ethTrades.success ? ethTrades.data : [],
@@ -33,7 +32,7 @@ async function SpotLoader() {
           ? { asks: btcOrderBook.asks, bids: btcOrderBook.bids }
           : undefined
       }
-      error={pricesData.error || (pricesData.coins.length === 0 ? "No market data available" : undefined)}
+      error={spotData.error || (spotData.markets.length === 0 ? "No market data available" : undefined)}
     />
   )
 }

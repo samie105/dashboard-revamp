@@ -321,7 +321,7 @@ function AssetList({
   const categories = ["all", "crypto", "forex", "commodities"] as const
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl bg-card">
+    <div className="flex h-full flex-col overflow-hidden bg-card">
       <div className="border-b border-border/20 px-2 py-2 space-y-2">
         <div className="relative">
           <HugeiconsIcon icon={Search01Icon} className="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -458,7 +458,7 @@ function BinaryOrderPanel({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border/50 bg-card p-4">
+    <div className="flex flex-col gap-3 border border-border/50 bg-card p-4">
       {/* Direction */}
       <div className="grid grid-cols-2 gap-1 rounded-xl bg-accent/30 p-1">
         <button
@@ -633,7 +633,7 @@ function ActiveTrades({ trades }: { trades: BinaryTrade[] }) {
   const recentTrades = trades.filter((t) => t.status !== "active").slice(0, 10)
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-border/50 bg-card">
+    <div className="flex flex-col overflow-hidden border border-border/50 bg-card">
       <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
         <HugeiconsIcon icon={Clock01Icon} className="h-3.5 w-3.5 text-primary" />
         <span className="text-xs font-semibold">Trades</span>
@@ -787,7 +787,7 @@ export function BinaryClient() {
 
           {/* CENTER — Chart + Order Panel */}
           <div className="flex-1 min-w-0 flex flex-col gap-1 overflow-hidden">
-            <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-border/50 bg-card">
+            <div className="flex-1 min-h-0 overflow-hidden border border-border/50 bg-card">
               <BinaryChart asset={selectedAsset} isDark={isDark} />
             </div>
             <div className="shrink-0 overflow-hidden">
@@ -825,15 +825,16 @@ export function BinaryClient() {
       </div>
 
       {/* ═══ MOBILE layout ═══ */}
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto slim-scroll px-2 pt-2 pb-4 lg:hidden">
-        <div className="flex items-center gap-1 rounded-xl bg-accent/30 p-0.5 shrink-0">
+      <div className="flex flex-1 flex-col overflow-y-auto slim-scroll lg:hidden">
+        {/* Flat tabs */}
+        <div className="flex items-center border-b border-border/30 bg-card shrink-0">
           {(["chart", "assets", "history"] as MobileTab[]).map((t) => (
             <button
               key={t}
               onClick={() => setMobileTab(t)}
               className={cn(
-                "flex-1 rounded-lg py-2 text-xs font-medium transition-colors",
-                mobileTab === t ? "bg-card shadow-sm" : "text-muted-foreground",
+                "flex-1 py-2.5 text-xs font-medium transition-colors",
+                mobileTab === t ? "bg-card text-foreground border-b-2 border-primary" : "text-muted-foreground",
               )}
             >
               {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -843,7 +844,7 @@ export function BinaryClient() {
 
         <div className="min-h-[360px]">
           {mobileTab === "chart" && (
-            <div className="h-full overflow-hidden rounded-xl border border-border/50 bg-card">
+            <div className="h-[360px] bg-card">
               <BinaryChart asset={selectedAsset} isDark={isDark} />
             </div>
           )}

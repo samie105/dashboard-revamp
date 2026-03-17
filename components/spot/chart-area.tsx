@@ -1309,7 +1309,7 @@ export function ChartArea({
   }, [])
 
   return (
-    <div data-onboarding="spot-chart" className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
+    <div data-onboarding="spot-chart" className="flex h-full flex-col bg-card overflow-hidden">
       {/* ── TOP BAR: Indicators + Chart type + Tools + Price ── */}
       <div className="flex items-center gap-0.5 border-b border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
         {/* Markets trigger */}

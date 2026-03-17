@@ -215,7 +215,7 @@ function PairSelect({
   }, [pairs, search])
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border/50 bg-card">
+    <div className="flex h-full flex-col overflow-hidden border border-border/50 bg-card">
       <div className="flex flex-col gap-2 border-b border-border/50 p-3">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Forex Pairs</span>
         <div className="relative">
@@ -386,7 +386,7 @@ function PriceDepth({ pair }: { pair: ForexPair }) {
   const maxCum = Math.max(cumAsk, cumBid)
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border/50 bg-card">
+    <div className="flex h-full flex-col overflow-hidden border border-border/50 bg-card">
       <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
         <HugeiconsIcon icon={Activity01Icon} className="h-3.5 w-3.5 text-primary" />
         <span className="text-xs font-semibold">Order Book</span>
@@ -473,7 +473,7 @@ function ForexOrderPanel({ pair, defaultSide = "buy" }: { pair: ForexPair; defau
     : pair.rate - (pair.spread * 0.00001)
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card p-3">
+    <div className="border border-border/50 bg-card p-3">
       {/* Side header */}
       <div className={cn(
         "mb-3 rounded-lg py-1.5 text-center text-xs font-bold text-white",
@@ -606,7 +606,7 @@ function ForexOrderPanel({ pair, defaultSide = "buy" }: { pair: ForexPair; defau
 
 function OpenPositions({ pair }: { pair: ForexPair }) {
   return (
-    <div className="rounded-xl border border-border/50 bg-card">
+    <div className="border border-border/50 bg-card">
       <div className="flex items-center gap-2 border-b border-border/50 px-4 py-3">
         <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-primary" />
         <span className="text-xs font-semibold">Open Positions</span>
@@ -700,7 +700,7 @@ export function ForexClient({ initialPairs, error }: ForexClientProps) {
 
           {/* CENTER — Chart + Buy/Sell stacked */}
           <div className="flex-1 min-w-0 flex flex-col gap-1 overflow-hidden">
-            <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-border/50 bg-card">
+            <div className="flex-1 min-h-0 overflow-hidden border border-border/50 bg-card">
               <ForexChart pair={selectedPair} isDark={isDark} />
             </div>
             <div className="shrink-0 overflow-hidden">
@@ -762,15 +762,16 @@ export function ForexClient({ initialPairs, error }: ForexClientProps) {
       </div>
 
       {/* ═══ MOBILE layout ═══ */}
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto slim-scroll px-2 pt-2 pb-4 lg:hidden">
-        <div className="flex items-center gap-1 rounded-xl bg-accent/30 p-0.5 shrink-0">
+      <div className="flex flex-1 flex-col overflow-y-auto slim-scroll lg:hidden">
+        {/* Flat tabs */}
+        <div className="flex items-center border-b border-border/30 bg-card shrink-0">
           {(["chart", "pairs", "depth"] as MobileTab[]).map((t) => (
             <button
               key={t}
               onClick={() => setMobileTab(t)}
               className={cn(
-                "flex-1 rounded-lg py-2 text-xs font-medium transition-colors",
-                mobileTab === t ? "bg-card shadow-sm" : "text-muted-foreground",
+                "flex-1 py-2.5 text-xs font-medium transition-colors",
+                mobileTab === t ? "bg-card text-foreground border-b-2 border-primary" : "text-muted-foreground",
               )}
             >
               {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -780,7 +781,7 @@ export function ForexClient({ initialPairs, error }: ForexClientProps) {
 
         <div className="min-h-[360px]">
           {mobileTab === "chart" && (
-            <div className="h-full overflow-hidden rounded-xl border border-border/50 bg-card">
+            <div className="h-[360px] bg-card">
               <ForexChart pair={selectedPair} isDark={isDark} />
             </div>
           )}
@@ -792,7 +793,7 @@ export function ForexClient({ initialPairs, error }: ForexClientProps) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2 shrink-0">
+        <div className="grid grid-cols-2 shrink-0">
           <ForexOrderPanel pair={selectedPair} defaultSide="buy" />
           <ForexOrderPanel pair={selectedPair} defaultSide="sell" />
         </div>

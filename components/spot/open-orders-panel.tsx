@@ -39,7 +39,7 @@ export function OpenOrdersPanel() {
   ]
 
   return (
-    <div className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
+    <div className="flex h-full flex-col bg-card overflow-hidden">
       {/* Tab bar */}
       <div className="flex items-center border-b border-border/20 px-1">
         <div className="flex items-center">
@@ -49,7 +49,7 @@ export function OpenOrdersPanel() {
               onClick={() => setTab(t.id)}
               className={`relative flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-medium transition-colors ${
                 tab === t.id
-                  ? "text-foreground"
+                  ? "text-foreground bg-card"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -153,11 +153,12 @@ function OpenOrdersTable({
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold">{o.coin}</span>
                 <span className={`rounded-md px-1.5 py-px text-[9px] font-medium ${
-                  o.orderType === "Limit" ? "bg-amber-500/10 text-amber-500"
-                    : o.orderType === "Stop Limit" ? "bg-blue-500/10 text-blue-500"
+                  (o.tif === "Ioc" ? "Market" : o.orderType) === "Limit" ? "bg-amber-500/10 text-amber-500"
+                    : (o.tif === "Ioc" ? "Market" : o.orderType) === "Stop Limit" ? "bg-blue-500/10 text-blue-500"
+                    : (o.tif === "Ioc" ? "Market" : o.orderType) === "Market" ? "bg-primary/10 text-primary"
                     : "bg-accent text-muted-foreground"
                 }`}>
-                  {o.orderType}
+                  {o.tif === "Ioc" ? "Market" : o.orderType}
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">

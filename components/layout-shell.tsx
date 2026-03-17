@@ -17,8 +17,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   if (isFullBleed) {
     return (
       <div className="flex h-screen flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">{children}</main>
-        <MobileBottomNav />
+        <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     )
   }

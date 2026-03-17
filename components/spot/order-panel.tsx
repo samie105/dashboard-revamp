@@ -73,11 +73,11 @@ export function OrderPanel({
 
   const minOrderError = React.useMemo(() => {
     if (numericAmount <= 0 || effectivePrice <= 0) return null
-    if (total < MIN_ORDER_VALUE) {
+    if (isBuy && total < MIN_ORDER_VALUE) {
       return `Min order $${MIN_ORDER_VALUE}. Yours: $${total.toFixed(2)}`
     }
     return null
-  }, [numericAmount, effectivePrice, total])
+  }, [numericAmount, effectivePrice, total, isBuy])
 
   const canTrade =
     isSignedIn &&

@@ -40,7 +40,7 @@ export function RecentTrades({
   }, [trades])
 
   return (
-    <div className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
+    <div className="flex h-full flex-col bg-card overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/20 px-3 py-2 shrink-0">
         <span className="text-xs font-semibold">Recent Trades</span>

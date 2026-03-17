@@ -82,7 +82,7 @@ function MarketList({
   }, [markets, search])
 
   return (
-    <div className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
+    <div className="flex h-full flex-col bg-card overflow-hidden">
       <div className="border-b border-border/20 px-2 py-2">
         <div className="relative">
           <HugeiconsIcon icon={Search01Icon} className="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -142,7 +142,7 @@ function FuturesOrderBook({
   const maxBidTotal = topBids.length > 0 ? Math.max(...topBids.map((b) => b.total)) : 1
 
   return (
-    <div className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
+    <div className="flex h-full flex-col bg-card overflow-hidden">
       <div className="flex items-center justify-between border-b border-border/20 px-3 py-2">
         <span className="text-[11px] font-semibold">Order Book</span>
       </div>
@@ -247,7 +247,7 @@ function FuturesOrderForm({
   }
 
   return (
-    <div className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
+    <div className="flex h-full flex-col bg-card overflow-hidden">
       <div className="border-b border-border/20 px-3 py-2">
         <span className="text-[11px] font-semibold">Place Order</span>
       </div>
@@ -404,7 +404,7 @@ function FuturesOrderForm({
 
 function PositionsPanel() {
   return (
-    <div data-onboarding="futures-positions" className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
+    <div data-onboarding="futures-positions" className="flex h-full flex-col bg-card overflow-hidden">
       <div className="flex items-center gap-4 border-b border-border/20 px-3 py-2">
         <span className="text-xs font-semibold text-foreground">Positions</span>
         <span className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
@@ -679,22 +679,22 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
       </div>
 
       {/* ═══ MOBILE layout ═══ */}
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-2 pt-2 pb-4 lg:hidden">
+      <div className="flex flex-1 flex-col overflow-y-auto lg:hidden">
         {/* Mobile stats bar */}
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-3 px-3 py-1.5 text-[10px] text-muted-foreground border-b border-border/10">
           <span>Vol <span className="text-foreground">{fmtVol(market.volume24h)}</span></span>
           <span>OI <span className="text-foreground">{fmtVol(market.openInterest)}</span></span>
           <span>Fund <span className="text-foreground">{fmtFunding(market.fundingRate)}</span></span>
         </div>
 
         {/* Tab selector */}
-        <div className="flex items-center gap-1 rounded-xl bg-accent/30 p-0.5 shrink-0">
+        <div className="flex items-center border-b border-border/10 px-2 py-1.5 shrink-0">
           {mobileTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setMobileTab(tab.id)}
-              className={`flex-1 rounded-lg py-2 text-xs font-medium transition-colors ${
-                mobileTab === tab.id ? "bg-card shadow-sm" : "text-muted-foreground"
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                mobileTab === tab.id ? "text-foreground bg-card" : "text-muted-foreground"
               }`}
             >
               {tab.label}
@@ -704,7 +704,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
 
         <div className="min-h-[360px]">
           {mobileTab === "chart" && (
-            <div className="h-[360px] rounded-xl bg-card overflow-hidden">
+            <div className="h-[360px] bg-card overflow-hidden">
               <FuturesChart
                 symbol={selected}
                 markPrice={market.markPrice}

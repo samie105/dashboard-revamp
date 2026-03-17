@@ -11,6 +11,12 @@ export interface CoinData {
   marketCap: number
   volume24h: number
   image: string
+  /** Quote asset for spot markets (e.g. "USDC") */
+  quoteAsset?: string
+  /** Hyperliquid size decimals */
+  szDecimals?: number
+  /** Internal Hyperliquid spot coin name (e.g. "PURR/USDC", "@107") */
+  hlName?: string
 }
 
 export interface PricesResponse {
@@ -283,6 +289,54 @@ const COIN_IMAGES: Record<string, string> = {
 }
 
 // ── In-memory cache (server-side only, lives per worker) ───────────────────
+
+// Reverse lookup: symbol → image (built from existing maps + HL-native tokens)
+const SYMBOL_IMAGE: Record<string, string> = (() => {
+  const map: Record<string, string> = {}
+  for (const [coinId, sym] of Object.entries(ID_TO_SYMBOL)) {
+    if (COIN_IMAGES[coinId]) map[sym] = COIN_IMAGES[coinId]
+  }
+  // HL-native spot tokens not in CoinGecko map
+  map["PURR"] = "https://coin-images.coingecko.com/coins/images/36839/small/purr.jpg"
+  map["HFUN"] = "https://app.hyperliquid.xyz/icons/HFUN.svg"
+  map["JEFF"] = "https://app.hyperliquid.xyz/icons/JEFF.svg"
+  map["FARM"] = "https://app.hyperliquid.xyz/icons/FARM.svg"
+  map["ANIME"] = "https://coin-images.coingecko.com/coins/images/53407/small/anime.png"
+  map["PIP"] = "https://app.hyperliquid.xyz/icons/PIP.svg"
+  map["HYPE"] = "https://coin-images.coingecko.com/coins/images/40428/small/hype.png"
+  map["LQNA"] = "https://app.hyperliquid.xyz/icons/LQNA.svg"
+  map["GOD"] = "https://app.hyperliquid.xyz/icons/GOD.svg"
+  map["BUDDY"] = "https://app.hyperliquid.xyz/icons/BUDDY.svg"
+  map["CATBAL"] = "https://app.hyperliquid.xyz/icons/CATBAL.svg"
+  map["BEAR"] = "https://app.hyperliquid.xyz/icons/BEAR.svg"
+  map["RAGE"] = "https://app.hyperliquid.xyz/icons/RAGE.svg"
+  map["SOLV"] = "https://coin-images.coingecko.com/coins/images/38082/small/solv.png"
+  map["USDT0"] = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
+  map["STBT"] = "https://app.hyperliquid.xyz/icons/STBT.svg"
+  return map
+})()
+
+// Reverse lookup: symbol → name
+const SYMBOL_NAME: Record<string, string> = (() => {
+  const map: Record<string, string> = {}
+  for (const [coinId, sym] of Object.entries(ID_TO_SYMBOL)) {
+    if (COIN_NAMES[coinId]) map[sym] = COIN_NAMES[coinId]
+  }
+  map["PURR"] = "Purr"
+  map["HFUN"] = "HyperFun"
+  map["JEFF"] = "Jeff"
+  map["FARM"] = "Farm"
+  map["ANIME"] = "Anime"
+  map["PIP"] = "Pip"
+  map["HYPE"] = "Hyperliquid"
+  map["LQNA"] = "Liqna"
+  map["GOD"] = "God"
+  map["BUDDY"] = "Buddy"
+  map["CATBAL"] = "Catbal"
+  map["BEAR"] = "Bear"
+  map["USDT0"] = "USDT0"
+  return map
+})()
 
 /** Ensure plain JSON for server action serialization (avoids DATA_CLONE_ERR) */
 function sanitize<T>(data: T): T {
@@ -694,6 +748,127 @@ export async function getPrices(): Promise<PricesResponse> {
       error: "Failed to fetch market data. Please check your connection and try again.",
     }
   }
+}
+
+// ── getSpotMarkets (Hyperliquid spotMeta) ──────────────────────────────────
+
+let spotMarketCache: CoinData[] | null = null
+let spotMarketCacheTs = 0
+const SPOT_MARKET_TTL = 30_000
+
+async function fetchHyperliquidSpotMarkets(): Promise<CoinData[] | null> {
+  try {
+    const [spotMeta, mids] = await Promise.all([
+      hlPost({ type: "spotMeta" }),
+      hlPost({ type: "allMids" }),
+    ])
+
+    if (!spotMeta?.universe || !spotMeta?.tokens || !mids) return null
+
+    const markets: CoinData[] = []
+
+    for (const entry of spotMeta.universe) {
+      const baseTokenIdx = entry.tokens[0]
+      const quoteTokenIdx = entry.tokens[1]
+      const baseToken = spotMeta.tokens[baseTokenIdx]
+      const quoteToken = spotMeta.tokens[quoteTokenIdx]
+
+      if (!baseToken) continue
+
+      const coinName = entry.name as string
+      const price = parseFloat(mids[coinName] ?? "0")
+      if (price <= 0) continue
+
+      const baseName: string = baseToken.name ?? "UNKNOWN"
+      const quoteName: string = quoteToken?.name ?? "USDC"
+
+      const coinId =
+        Object.entries(ID_TO_SYMBOL).find(([, s]) => s === baseName)?.[0] ||
+        baseName.toLowerCase()
+
+      markets.push({
+        id: coinId,
+        symbol: baseName,
+        name: SYMBOL_NAME[baseName] || COIN_NAMES[coinId] || baseName,
+        price,
+        change24h: 0,
+        marketCap: 0,
+        volume24h: 0,
+        image: SYMBOL_IMAGE[baseName] || COIN_IMAGES[coinId] || "",
+        quoteAsset: quoteName,
+        szDecimals: baseToken.szDecimals ?? 8,
+        hlName: coinName,
+      })
+    }
+
+    return markets.length > 0 ? markets : null
+  } catch (error) {
+    console.error("[SpotMarkets] fetch error:", error)
+    return null
+  }
+}
+
+export async function getSpotMarkets(): Promise<{
+  markets: CoinData[]
+  prices: Record<string, number>
+  error?: string
+}> {
+  const now = Date.now()
+
+  if (spotMarketCache && now - spotMarketCacheTs < SPOT_MARKET_TTL) {
+    const prices: Record<string, number> = { USDT: 1, USDC: 1 }
+    for (const m of spotMarketCache) prices[m.symbol] = m.price
+    return sanitize({ markets: spotMarketCache, prices })
+  }
+
+  const markets = await fetchHyperliquidSpotMarkets()
+  if (!markets || markets.length === 0) {
+    if (spotMarketCache) {
+      const prices: Record<string, number> = { USDT: 1, USDC: 1 }
+      for (const m of spotMarketCache) prices[m.symbol] = m.price
+      return sanitize({ markets: spotMarketCache, prices })
+    }
+    return { markets: [], prices: {}, error: "Failed to fetch spot markets" }
+  }
+
+  // Enrich with KuCoin 24h change + volume
+  try {
+    const kcRes = await fetch("https://api.kucoin.com/api/v1/market/allTickers", {
+      signal: AbortSignal.timeout(5_000),
+    })
+    if (kcRes.ok) {
+      const kcJson = await kcRes.json()
+      if (kcJson.code === "200000" && kcJson.data?.ticker) {
+        const kcMap = new Map<string, { change: number; volume: number }>()
+        for (const ticker of kcJson.data.ticker) {
+          const sym = ticker.symbol.replace(/-USDT$/, "").replace(/-USDC$/, "")
+          kcMap.set(sym, {
+            change: (parseFloat(ticker.changeRate) || 0) * 100,
+            volume: parseFloat(ticker.volValue) || 0,
+          })
+        }
+        for (const m of markets) {
+          const kc = kcMap.get(m.symbol)
+          if (kc) {
+            m.change24h = kc.change
+            m.volume24h = kc.volume
+          }
+        }
+      }
+    }
+  } catch {
+    // KuCoin enrichment is optional
+  }
+
+  markets.sort((a, b) => b.volume24h - a.volume24h)
+
+  spotMarketCache = markets
+  spotMarketCacheTs = now
+
+  const prices: Record<string, number> = { USDT: 1, USDC: 1 }
+  for (const m of markets) prices[m.symbol] = m.price
+
+  return sanitize({ markets, prices })
 }
 
 // ── getTrades ──────────────────────────────────────────────────────────────

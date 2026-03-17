@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
     const roundedSize = toHlSize(Number(amount), szDecimals)
 
     const orderValue = Number(roundedSize) * Number(roundedPrice)
-    if (orderValue < MIN_ORDER_VALUE) {
+    if (side === "buy" && orderValue < MIN_ORDER_VALUE) {
       return NextResponse.json(
         {
           success: false,

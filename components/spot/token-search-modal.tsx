@@ -4,8 +4,7 @@ import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Search01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import type { CoinData } from "@/lib/actions"
-
-const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
+import { PairAvatar } from "./coin-avatar"
 
 export function TokenSearchModal({
   open,
@@ -76,6 +75,7 @@ export function TokenSearchModal({
           <div className="max-h-72 overflow-y-auto slim-scroll">
             {filtered.map((coin) => {
               const pos = coin.change24h >= 0
+              const quote = coin.quoteAsset || "USDC"
               return (
                 <button
                   key={coin.symbol}
@@ -85,23 +85,10 @@ export function TokenSearchModal({
                   }}
                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent/50"
                 >
-                  <div className="flex items-center shrink-0">
-                    {coin.image && (
-                      <img
-                        src={coin.image}
-                        alt=""
-                        className="h-7 w-7 rounded-full ring-2 ring-card"
-                      />
-                    )}
-                    <img
-                      src={USDT_IMAGE}
-                      alt=""
-                      className="h-5 w-5 rounded-full ring-2 ring-card -ml-2"
-                    />
-                  </div>
+                  <PairAvatar baseImage={coin.image} baseSymbol={coin.symbol} baseSize={28} quoteSize={18} />
                   <div className="flex flex-1 flex-col">
                     <span className="text-sm font-medium">
-                      {coin.symbol}/USDT
+                      {coin.symbol}/{quote}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {coin.name}

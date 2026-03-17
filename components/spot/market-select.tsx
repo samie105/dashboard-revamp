@@ -4,9 +4,8 @@ import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Search01Icon, StarIcon } from "@hugeicons/core-free-icons"
 import type { CoinData } from "@/lib/actions"
-import { getPrices } from "@/lib/actions"
-
-const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
+import { getSpotMarkets } from "@/lib/actions"
+import { PairAvatar } from "./coin-avatar"
 
 export function MarketSelect({
   coins,
@@ -25,14 +24,19 @@ export function MarketSelect({
   const [tab, setTab] = React.useState<"all" | "watchlist">("all")
   const [liveCoins, setLiveCoins] = React.useState<CoinData[]>(coins)
 
-  // Poll prices every 10s for real-time updates
+  // Keep live coins in sync with fresh props
+  React.useEffect(() => {
+    if (coins.length) setLiveCoins(coins)
+  }, [coins])
+
+  // Poll spot markets every 10s for real-time updates
   React.useEffect(() => {
     let cancelled = false
     async function poll() {
       try {
-        const res = await getPrices()
+        const res = await getSpotMarkets()
         if (cancelled) return
-        if (res.coins?.length) setLiveCoins(res.coins)
+        if (res.markets?.length) setLiveCoins(res.markets)
       } catch { /* ignore */ }
     }
     const id = window.setInterval(poll, 10_000)
@@ -55,7 +59,7 @@ export function MarketSelect({
   }, [liveCoins, search, tab, watchlist])
 
   return (
-    <div className="flex h-full flex-col rounded-xl bg-card overflow-hidden">
+    <div className="flex h-full flex-col bg-card overflow-hidden">
       {/* Search */}
       <div className="p-2.5 border-b border-border/20">
         <div className="relative">
@@ -105,6 +109,7 @@ export function MarketSelect({
           list.map((coin) => {
             const pos = coin.change24h >= 0
             const active = coin.symbol === selected
+            const quote = coin.quoteAsset || "USDC"
             return (
               <button
                 key={coin.symbol}
@@ -126,22 +131,10 @@ export function MarketSelect({
                       className={`h-3 w-3 ${watchlist.has(coin.symbol) ? "text-amber-400 fill-amber-400" : ""}`}
                     />
                   </button>
-                  <div className="flex items-center shrink-0">
-                    {coin.image && (
-                      <img
-                        src={coin.image}
-                        alt=""
-                        className="h-5 w-5 rounded-full ring-1 ring-card"
-                      />
-                    )}
-                    <img
-                      src={USDT_IMAGE}
-                      alt=""
-                      className="h-4 w-4 rounded-full ring-1 ring-card -ml-1.5"
-                    />
-                  </div>
+                  <PairAvatar baseImage={coin.image} baseSymbol={coin.symbol} baseSize={20} quoteSize={14} />
                   <span className="truncate text-sm font-semibold">
                     {coin.symbol}
+                    <span className="text-xs text-muted-foreground font-normal">/{quote}</span>
                   </span>
                 </div>
                 <span className="w-20 text-right text-xs font-medium tabular-nums">
