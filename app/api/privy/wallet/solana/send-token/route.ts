@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
 
     const authContext = await createAuthorizationContext(clerkJwt)
 
-    const result = await (privyClient.wallets() as any)
+    const result = await (privyClient.wallets as any)
       .solana()
       .signAndSendTransaction(walletId, {
         caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",

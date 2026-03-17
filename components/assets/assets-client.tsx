@@ -27,6 +27,7 @@ import { useTradeSelector } from "@/components/trade-selector"
 import { useWalletBalances, type TokenBalance } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useAuth } from "@/components/auth-provider"
+import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
 
 // ── Onboarding steps ─────────────────────────────────────────────────────
 
@@ -277,6 +278,7 @@ export default function AssetsClient() {
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [chainTab, setChainTab] = React.useState<ChainTab>("All")
   const [search, setSearch] = React.useState("")
+  const [sendModal, setSendModal] = React.useState<{ open: boolean; asset?: SendableAsset }>({ open: false })
 
   // Fetch prices for crypto→USD conversion
   React.useEffect(() => {
@@ -659,7 +661,30 @@ export default function AssetsClient() {
                         })()}
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        <AssetTradeButton symbol={token.symbol} />
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              const bal = getTokenBalance(token)
+                              setSendModal({
+                                open: true,
+                                asset: {
+                                  symbol: token.symbol,
+                                  name: token.name,
+                                  balance: bal,
+                                  chain: token.chain as SendableAsset["chain"],
+                                  icon: token.icon,
+                                  contractAddress: token.contractAddress,
+                                  decimals: token.isNative ? undefined : 18,
+                                },
+                              })
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          >
+                            Send
+                            <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                          </button>
+                          <AssetTradeButton symbol={token.symbol} />
+                        </div>
                       </td>
                     </tr>
                   )
@@ -671,6 +696,7 @@ export default function AssetsClient() {
       </div>
 
       <AddTokenModal open={showAddToken} onClose={() => setShowAddToken(false)} />
+      <SendModal open={sendModal.open} onClose={() => setSendModal({ open: false })} asset={sendModal.asset} />
     </div>
   )
 }

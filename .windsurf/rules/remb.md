@@ -1,6 +1,3 @@
----
-applyTo: "**"
----
 <!-- remb-instructions:v2 -->
 # Remb — AI Context Management
 

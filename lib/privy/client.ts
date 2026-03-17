@@ -9,6 +9,6 @@ if (!process.env.PRIVY_APP_SECRET) {
 }
 
 export const privyClient = new PrivyClient({
-  appId: process.env.PRIVY_APP_ID,
-  appSecret: process.env.PRIVY_APP_SECRET,
+  appId: process.env.PRIVY_APP_ID!,
+  appSecret: process.env.PRIVY_APP_SECRET!,
 })
