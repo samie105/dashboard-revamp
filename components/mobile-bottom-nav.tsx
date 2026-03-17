@@ -24,6 +24,7 @@ import {
   ArrowDown01Icon,
   ArrowUp01Icon,
   Wallet01Icon,
+  CreditCardIcon,
   File01Icon,
   Activity01Icon,
   GlobeIcon,
@@ -117,7 +118,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
 ]
 
 function isActivePath(pathname: string, href: string) {
-  if (href === "/") return pathname === "/"
+  if (href === "/") return pathname === "/" || pathname === "/dashboard"
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
@@ -288,6 +289,33 @@ export function MobileBottomNav() {
                   >
                     <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
                   </button>
+                </div>
+
+                {/* Quick actions */}
+                <div className="px-4 py-3 border-b border-border/20">
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { label: "Deposit", href: "/deposit", icon: Exchange01Icon, accent: true },
+                      { label: "Withdraw", href: "/withdraw", icon: CreditCardIcon },
+                      { label: "Swap", href: "/swap", icon: RepeatIcon },
+                      { label: "Transfer", href: "/transactions", icon: ArrowDown01Icon },
+                    ].map((action) => (
+                      <Link
+                        key={action.label}
+                        href={action.href}
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          "flex flex-col items-center gap-1.5 rounded-xl py-2.5 text-center transition-colors",
+                          action.accent
+                            ? "bg-primary/10 text-primary"
+                            : "bg-accent/40 text-foreground/70 hover:bg-accent hover:text-foreground",
+                        )}
+                      >
+                        <HugeiconsIcon icon={action.icon} className="h-4.5 w-4.5" />
+                        <span className="text-[10px] font-medium leading-none">{action.label}</span>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Navigation groups — collapsible */}
