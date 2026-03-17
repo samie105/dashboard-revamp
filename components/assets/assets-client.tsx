@@ -21,6 +21,8 @@ import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { useTradeSelector } from "@/components/trade-selector"
 import { useWalletBalances, type TokenBalance } from "@/hooks/useWalletBalances"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { useAuth } from "@/components/auth-provider"
 
 // ── Onboarding steps ─────────────────────────────────────────────────────
 
@@ -243,7 +245,9 @@ function AddTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
 export default function AssetsClient() {
   const { addresses, walletsGenerated, isLoading, error, refreshWallets, setupStatus } = useWallet()
   const { profile } = useProfile()
+  const { user } = useAuth()
   const { balances: onChainBalances, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances()
+  const { balances: hlBalances, accountValue: hlAccountValue, loading: hlLoading } = useHyperliquidBalance(user?.userId, !!user)
   const [selectedChain, setSelectedChain] = React.useState<string>(CHAINS[0].key)
   const [chainDropdownOpen, setChainDropdownOpen] = React.useState(false)
   const chainDropdownRef = React.useRef<HTMLDivElement>(null)
@@ -268,18 +272,20 @@ export default function AssetsClient() {
     return balanceMap.get(key) ?? 0
   }
 
-  // Compute total balance (simple sum — no USD conversion for native tokens yet)
+  // Total balance = on-chain stablecoins + Hyperliquid spot holdings + futures equity
   const totalBalance = React.useMemo(() => {
     let total = 0
     for (const token of ALL_TOKENS) {
       const bal = getTokenBalance(token)
-      // Stablecoins are ~$1 each, native tokens we display raw for now
       if (["USDT", "USDC"].includes(token.symbol)) total += bal
-      // For native tokens we'd need price data; skip for now
     }
+    // Hyperliquid spot holdings (USDC + all tokens at current prices)
+    total += hlBalances.reduce((sum, b) => sum + (b.currentValue || 0), 0)
+    // Hyperliquid futures equity
+    total += hlAccountValue
     return total
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [balanceMap])
+  }, [balanceMap, hlBalances, hlAccountValue])
 
   const copy = React.useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text)
