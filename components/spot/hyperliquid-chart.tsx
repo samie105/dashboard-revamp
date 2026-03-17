@@ -247,7 +247,7 @@ const HyperliquidChart = ({ symbol }: HyperliquidChartProps) => {
 
     try {
       const res = await fetch(
-        `/api/hyperliquid/candles?coin=${encodeURIComponent(baseCoin)}&interval=${interval}&limit=500`
+        `/api/hyperliquid/candles?coin=${encodeURIComponent(baseCoin)}&interval=${interval}&limit=1000`
       )
       const json = await res.json()
 
@@ -308,8 +308,22 @@ const HyperliquidChart = ({ symbol }: HyperliquidChartProps) => {
       const priceColor = last.close >= last.open ? "#0ecb81" : "#f6465d"
       candleSeriesRef.current.applyOptions({ priceLineColor: priceColor })
 
-      // WebSocket for live updates
-      const hlCoinName = json.coinName || baseCoin
+      // WebSocket for live updates from Hyperliquid
+      // If candles came from Gate.io, resolve HL coin name for WS
+      let hlCoinName = json.coinName || baseCoin
+      if (json.source === "gateio") {
+        try {
+          const metaRes = await fetch(
+            `/api/hyperliquid/orderbook?coin=${encodeURIComponent(baseCoin)}`
+          )
+          const metaJson = await metaRes.json()
+          if (metaJson.success && metaJson.coin) {
+            hlCoinName = metaJson.coin
+          }
+        } catch {
+          // use baseCoin as fallback
+        }
+      }
       const ws = new WebSocket("wss://api.hyperliquid.xyz/ws")
       wsRef.current = ws
 
