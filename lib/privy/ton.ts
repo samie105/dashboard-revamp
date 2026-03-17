@@ -10,35 +10,52 @@ export interface TonTransactionParams {
  * Get TON wallet balance using TON API
  */
 export async function getTonBalance(address: string) {
-  try {
-    const response = await fetch(
-      `https://go.getblock.io/8a928018fe2741ed90779091f68c571d/getAddressInformation?address=${encodeURIComponent(address)}`,
-    )
+  const endpoints = [
+    `https://go.getblock.io/8a928018fe2741ed90779091f68c571d/getAddressInformation?address=${encodeURIComponent(address)}`,
+    `https://toncenter.com/api/v2/getAddressInformation?address=${encodeURIComponent(address)}`,
+  ]
 
-    if (!response.ok) {
-      throw new Error(`TON API request failed: ${response.status}`)
+  let lastError: Error | null = null
+
+  for (const url of endpoints) {
+    try {
+      const response = await fetch(url)
+
+      if (!response.ok) {
+        console.warn(`[TON Balance] Endpoint returned ${response.status}, trying next`)
+        continue
+      }
+
+      const text = await response.text()
+      let data: Record<string, unknown>
+      try {
+        data = JSON.parse(text)
+      } catch {
+        console.warn("[TON Balance] Non-JSON response:", text.slice(0, 120))
+        continue
+      }
+
+      if (!data.ok) {
+        console.warn("[TON Balance] API returned ok=false:", data.error)
+        continue
+      }
+
+      const balanceInNanoTon = (data.result as Record<string, string>)?.balance || "0"
+      const balanceInTon = parseFloat(balanceInNanoTon) / 1e9
+
+      return {
+        balance: balanceInTon,
+        balanceInNanoTon: balanceInNanoTon,
+        address,
+      }
+    } catch (error: unknown) {
+      lastError = error as Error
+      console.warn("[TON Balance] Endpoint error:", (error as Error).message)
     }
-
-    const data = await response.json()
-
-    if (!data.ok) {
-      throw new Error(
-        data.error || "Failed to fetch balance from GetBlock TON API",
-      )
-    }
-
-    const balanceInNanoTon = data.result?.balance || "0"
-    const balanceInTon = parseFloat(balanceInNanoTon) / 1e9
-
-    return {
-      balance: balanceInTon,
-      balanceInNanoTon: balanceInNanoTon,
-      address,
-    }
-  } catch (error: unknown) {
-    console.error("[TON Balance] Error:", error)
-    throw new Error((error as Error).message || "Failed to fetch TON balance")
   }
+
+  console.error("[TON Balance] All endpoints failed for", address)
+  throw new Error(lastError?.message || "Failed to fetch TON balance")
 }
 
 /**

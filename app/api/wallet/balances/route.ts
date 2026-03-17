@@ -295,23 +295,48 @@ async function fetchSuiBalance(address: string): Promise<TokenBalance[]> {
 
 async function fetchTonBalance(address: string): Promise<TokenBalance[]> {
   const results: TokenBalance[] = []
-  try {
-    const res = await fetch(
-      `https://go.getblock.io/8a928018fe2741ed90779091f68c571d/getAddressInformation?address=${encodeURIComponent(address)}`,
-    )
-    const data = await res.json()
-    if (data.ok) {
-      const nanoTon = data.result?.balance || "0"
-      results.push({
-        symbol: "TON",
-        name: "TON",
-        chain: "ton",
-        balance: parseFloat(nanoTon) / 1e9,
-        isNative: true,
-      })
+
+  const endpoints = [
+    `https://go.getblock.io/8a928018fe2741ed90779091f68c571d/getAddressInformation?address=${encodeURIComponent(address)}`,
+    `https://toncenter.com/api/v2/getAddressInformation?address=${encodeURIComponent(address)}`,
+  ]
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url)
+
+      if (!res.ok) {
+        console.warn(`[wallet/balances] TON endpoint returned ${res.status}, trying next`)
+        continue
+      }
+
+      const text = await res.text()
+      let data: Record<string, unknown>
+      try {
+        data = JSON.parse(text)
+      } catch {
+        console.warn("[wallet/balances] TON non-JSON response:", text.slice(0, 120))
+        continue
+      }
+
+      if (data.ok) {
+        const nanoTon = (data.result as Record<string, string>)?.balance || "0"
+        results.push({
+          symbol: "TON",
+          name: "TON",
+          chain: "ton",
+          balance: parseFloat(nanoTon) / 1e9,
+          isNative: true,
+        })
+        return results
+      }
+    } catch (err) {
+      console.warn("[wallet/balances] TON endpoint error:", err)
     }
-  } catch (err) {
-    console.error("[wallet/balances] TON fetch error:", err)
+  }
+
+  if (results.length === 0) {
+    console.error("[wallet/balances] All TON endpoints failed for", address)
   }
   return results
 }
