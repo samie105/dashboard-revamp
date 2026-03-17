@@ -78,16 +78,15 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
     return chain === "ethereum" ? addresses.ethereum : addresses.solana
   }, [chain, addresses])
 
-  // Derive USDT balance for the selected chain from on-chain balances
-  const usdtBalance = React.useMemo(() => {
-    const ETH_USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-    if (chain === "solana") {
-      const t = onChainBalances.find(
-        (b) => b.chain === "solana" && b.symbol === "USDT",
-      )
-      return t?.balance ?? 0
-    }
-    // Ethereum: match by contract address or symbol
+  // Compute USDT balances for both chains
+  const ETH_USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+  const solUsdtBalance = React.useMemo(() => {
+    const t = onChainBalances.find(
+      (b) => b.chain === "solana" && b.symbol === "USDT",
+    )
+    return t?.balance ?? 0
+  }, [onChainBalances])
+  const ethUsdtBalance = React.useMemo(() => {
     const t = onChainBalances.find(
       (b) =>
         b.chain === "ethereum" &&
@@ -95,7 +94,10 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
           b.symbol === "USDT"),
     )
     return t?.balance ?? 0
-  }, [chain, onChainBalances])
+  }, [onChainBalances])
+
+  // Active chain balance (used for max button & validation)
+  const usdtBalance = chain === "solana" ? solUsdtBalance : ethUsdtBalance
 
   React.useEffect(() => {
     if (isOpen) resumePolling()
@@ -280,13 +282,30 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
                         />
                       </button>
                     </div>
+                    {/* Both chain balances */}
                     <div className="flex items-center justify-between pt-1.5 border-t border-border/20">
-                      <span className="text-[10px] text-muted-foreground">USDT Balance</span>
-                      <span className="text-[11px] font-semibold tabular-nums">
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <img src="https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" alt="ETH" className="h-3 w-3 rounded-full" />
+                        Ethereum USDT
+                      </span>
+                      <span className={`text-[11px] font-semibold tabular-nums ${chain === "ethereum" ? "text-foreground" : "text-muted-foreground"}`}>
                         {balancesLoading ? (
                           <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin text-muted-foreground" />
                         ) : (
-                          `${usdtBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`
+                          `${ethUsdtBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <img src="https://coin-images.coingecko.com/coins/images/4128/small/solana.png" alt="SOL" className="h-3 w-3 rounded-full" />
+                        Solana USDT
+                      </span>
+                      <span className={`text-[11px] font-semibold tabular-nums ${chain === "solana" ? "text-foreground" : "text-muted-foreground"}`}>
+                        {balancesLoading ? (
+                          <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin text-muted-foreground" />
+                        ) : (
+                          `${solUsdtBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`
                         )}
                       </span>
                     </div>
