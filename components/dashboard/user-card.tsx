@@ -92,8 +92,8 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     return total
   }, [onChainBalances, prices, walletsGenerated])
 
-  // Spot trading balance (Hyperliquid spot USDC)
-  const spotBalance = usdcBalance.available
+  // Spot trading balance = sum of all spot holdings (USDC + tokens at current prices)
+  const spotBalance = hlBalances.reduce((sum, b) => sum + (b.currentValue || 0), 0)
 
   // Futures balance (Hyperliquid perps account value)
   const futuresBalance = accountValue

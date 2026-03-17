@@ -41,17 +41,20 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   const [walletOpen, setWalletOpen] = React.useState(false)
   const { user, signOut } = useAuth()
   const { balances: onChainBalances } = useWalletBalances(60_000)
-  const { usdcBalance: hlUsdc, accountValue: hlAccountValue } = useHyperliquidBalance(user?.userId, !!user)
+  const { usdcBalance: hlUsdc, accountValue: hlAccountValue, balances: hlBalances } = useHyperliquidBalance(user?.userId, !!user)
 
-  // Sum stablecoin on-chain balances + Hyperliquid account
+  // Sum stablecoin on-chain balances + all Hyperliquid spot holdings + futures
   const estValue = React.useMemo(() => {
     let total = 0
     for (const b of onChainBalances) {
       if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
     }
-    total += hlUsdc.available + hlAccountValue
+    // Spot holdings (USDC + all tokens at current prices)
+    total += hlBalances.reduce((sum, b) => sum + (b.currentValue || 0), 0)
+    // Futures equity
+    total += hlAccountValue
     return total
-  }, [onChainBalances, hlUsdc.available, hlAccountValue])
+  }, [onChainBalances, hlBalances, hlAccountValue])
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"

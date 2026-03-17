@@ -52,7 +52,8 @@ export function SpotTopBar({
   }, [refreshTrigger])
 
   const spotBalance = usdcBalance.available
-  const totalValue = spotBalance + accountValue
+  // Total value = sum of all spot holdings (USDC + tokens at current prices)
+  const totalValue = balances.reduce((sum, b) => sum + (b.currentValue || 0), 0)
   const inOrders = usdcBalance.hold
   const otherAssetsCount = balances.length > 1 ? balances.length - 1 : 0
   const showBalance = !balanceLoading

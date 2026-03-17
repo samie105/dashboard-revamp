@@ -30,9 +30,10 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const { usdcBalance, accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.userId, !!user)
+  const { usdcBalance, accountValue, balances, loading: balanceLoading } = useHyperliquidBalance(user?.userId, !!user)
 
-  const totalValue = usdcBalance.available + accountValue
+  // Total value = sum of all spot holdings (USDC + tokens at current prices)
+  const totalValue = balances.reduce((sum, b) => sum + (b.currentValue || 0), 0)
   const showBalance = !balanceLoading
 
   const displayName = user
