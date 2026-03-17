@@ -8,6 +8,7 @@ import {
   ArrowLeft01Icon,
   Cancel01Icon,
   CheckmarkCircle01Icon,
+  AlertCircleIcon,
 } from "@hugeicons/core-free-icons"
 
 // ── Step definitions ─────────────────────────────────────────────────────
@@ -37,6 +38,8 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
   const [active, setActive] = React.useState(false)
   const [current, setCurrent] = React.useState(0)
   const [rect, setRect] = React.useState<DOMRect | null>(null)
+  const [showConfirm, setShowConfirm] = React.useState(false)
+  const [neverShowAgain, setNeverShowAgain] = React.useState(true)
 
   const tooltipRef = React.useRef<HTMLDivElement>(null)
   const spotlightRef = React.useRef<SVGRectElement>(null)
@@ -54,6 +57,11 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
     const t = setTimeout(() => setActive(true), 800)
     return () => clearTimeout(t)
   }, [storageKey, completed])
+
+  // If profile marks completed after we've already activated, dismiss silently
+  React.useEffect(() => {
+    if (completed && active) setActive(false)
+  }, [completed, active])
 
   // Measure the target element when step changes
   React.useEffect(() => {
@@ -144,13 +152,12 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
   }, [active])
 
   function finish() {
+    // Persist immediately — don't wait for animation
+    try { localStorage.setItem(storageKey, "done") } catch {}
     // Exit animation then cleanup
     const tl = gsap.timeline({
       onComplete: () => {
         setActive(false)
-        try {
-          localStorage.setItem(storageKey, "done")
-        } catch {}
         onComplete?.()
       },
     })
@@ -160,6 +167,16 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
     if (tooltipRef.current) {
       tl.to(tooltipRef.current, { opacity: 0, scale: 0.95, duration: 0.25 }, 0)
     }
+  }
+
+  function confirmDismiss() {
+    setShowConfirm(false)
+    if (!neverShowAgain) {
+      // Don't persist — just hide for this session
+      setActive(false)
+      return
+    }
+    finish()
   }
 
   function next() {
@@ -279,7 +296,7 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
             ))}
           </div>
           <button
-            onClick={finish}
+            onClick={() => setShowConfirm(true)}
             className="rounded-lg p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground"
           >
             <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3" />
@@ -337,6 +354,67 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
           </button>
         </div>
       </div>
+
+      {/* ── Dismiss confirmation dialog ── */}
+      {showConfirm && (
+        <div
+          className="absolute inset-0 z-20 flex items-center justify-center"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* scrim */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
+
+          <div className="relative z-10 w-[320px] rounded-2xl border border-border/50 bg-card p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            {/* Icon + heading */}
+            <div className="flex items-start gap-3 mb-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10">
+                <HugeiconsIcon icon={AlertCircleIcon} className="h-4 w-4 text-amber-500" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold">Exit walkthrough?</h4>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  You can restart it anytime from your profile settings.
+                </p>
+              </div>
+            </div>
+
+            {/* Checkbox */}
+            <label className="flex items-center gap-2.5 cursor-pointer select-none mb-4 group">
+              <div
+                onClick={() => setNeverShowAgain((v) => !v)}
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                  neverShowAgain
+                    ? "border-primary bg-primary"
+                    : "border-border bg-transparent group-hover:border-primary/60"
+                }`}
+              >
+                {neverShowAgain && (
+                  <svg viewBox="0 0 10 8" className="h-2.5 w-2.5 text-white fill-none stroke-current stroke-2">
+                    <path d="M1 4l2.5 2.5L9 1" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-xs text-muted-foreground">Don&apos;t show the walkthrough again</span>
+            </label>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDismiss}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-destructive/90 text-white transition-colors hover:bg-destructive"
+              >
+                Exit walkthrough
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
