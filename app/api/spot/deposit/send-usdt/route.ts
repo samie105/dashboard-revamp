@@ -101,6 +101,21 @@ async function sendUsdtSolana(
   const fromAta = await getAssociatedTokenAddress(mintPubkey, fromPubkey)
   const toAta = await getAssociatedTokenAddress(mintPubkey, toPubkey)
 
+  // Pre-flight: verify source ATA has sufficient USDT balance
+  const tokenAmount = Math.round(amount * Math.pow(10, USDT_DECIMALS))
+  try {
+    const sourceAccount = await getAccount(connection, fromAta)
+    if (BigInt(tokenAmount) > sourceAccount.amount) {
+      const available = Number(sourceAccount.amount) / Math.pow(10, USDT_DECIMALS)
+      throw new Error(
+        `Insufficient USDT balance. Available: ${available} USDT, requested: ${amount} USDT.`,
+      )
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("Insufficient USDT")) throw e
+    throw new Error("USDT token account not found — no USDT balance in this wallet.")
+  }
+
   const tx = new SolTransaction()
   tx.feePayer = fromPubkey
   tx.recentBlockhash = (
@@ -120,7 +135,6 @@ async function sendUsdtSolana(
     )
   }
 
-  const tokenAmount = Math.round(amount * Math.pow(10, USDT_DECIMALS))
   tx.add(createTransferInstruction(fromAta, toAta, fromPubkey, tokenAmount))
 
   const serialized = tx

@@ -82,6 +82,26 @@ export async function POST(request: NextRequest) {
     const fromAta = await getAssociatedTokenAddress(mintPubkey, fromPubkey)
     const toAta = await getAssociatedTokenAddress(mintPubkey, toPubkey)
 
+    // Pre-flight: verify source ATA exists and has sufficient balance
+    const tokenAmount = Math.round(
+      Number(amount) * Math.pow(10, tokenDecimals),
+    )
+    try {
+      const sourceAccount = await getAccount(connection, fromAta)
+      if (BigInt(tokenAmount) > sourceAccount.amount) {
+        const available = Number(sourceAccount.amount) / Math.pow(10, tokenDecimals)
+        return NextResponse.json(
+          { error: `Insufficient token balance. Available: ${available}, requested: ${amount}` },
+          { status: 400 },
+        )
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "Source token account not found — no balance for this token" },
+        { status: 400 },
+      )
+    }
+
     const tx = new Transaction()
     tx.feePayer = fromPubkey
     tx.recentBlockhash = (
@@ -101,9 +121,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const tokenAmount = Math.round(
-      Number(amount) * Math.pow(10, tokenDecimals),
-    )
     tx.add(
       createTransferInstruction(fromAta, toAta, fromPubkey, tokenAmount),
     )
