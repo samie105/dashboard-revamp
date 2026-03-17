@@ -4,6 +4,7 @@ import { DashboardGrid } from "@/components/dashboard/bento-grid"
 import { WalletCardSkeleton, DashboardGridSkeleton } from "@/components/dashboard/skeletons"
 import { DashboardOnboarding } from "@/components/dashboard/dashboard-onboarding"
 import { PendingDeposit } from "@/components/dashboard/pending-deposit"
+import { WorldStreetSections } from "@/components/dashboard/worldstreet-sections"
 import { getPrices, getTrades } from "@/lib/actions"
 
 async function WalletCardLoader() {
@@ -47,6 +48,7 @@ export default function Page() {
       <Suspense fallback={<WalletCardSkeleton />}>
         <WalletCardLoader />
       </Suspense>
+      <WorldStreetSections />
       <Suspense fallback={<DashboardGridSkeleton />}>
         <DashboardGridLoader />
       </Suspense>

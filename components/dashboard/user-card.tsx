@@ -164,10 +164,10 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
           )}
           <div className="flex flex-col">
-            <h2 className="text-sm font-semibold tracking-tight">
+            <h2 className="text-base font-semibold tracking-tight">
               {isLoaded ? `Welcome back, ${displayName}!` : "Loading…"}
             </h2>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Here&apos;s what&apos;s happening with your portfolio today.
             </p>
           </div>
@@ -201,7 +201,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             <button
               key={view.key}
               onClick={() => setActiveView(view.key)}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
                 activeView === view.key
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
@@ -227,7 +227,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             </button>
           )}
         </div>
-        <span className="text-[10px] text-muted-foreground">{currentView.sub}</span>
+        <span className="text-xs text-muted-foreground">{currentView.sub}</span>
       </div>
 
       {/* ── Stats row ── */}
@@ -236,38 +236,38 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
         <div className="flex flex-col gap-1.5 p-4">
           <div className="flex items-center gap-1.5">
             <div className={`h-1.5 w-1.5 rounded-full ${dailyPnL >= 0 ? "bg-emerald-500" : "bg-red-500"}`} />
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Today&apos;s P&amp;L
             </span>
           </div>
-          <span className={`text-lg font-bold tabular-nums tracking-tight ${dailyPnL >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+          <span className={`text-xl font-bold tabular-nums tracking-tight ${dailyPnL >= 0 ? "text-emerald-500" : "text-red-500"}`}>
             {dailyPnL >= 0 ? "+" : ""}{formatUSD(dailyPnL)}
           </span>
-          <span className="text-[10px] text-muted-foreground">24h change</span>
+          <span className="text-xs text-muted-foreground">24h change</span>
         </div>
 
         {/* Assets */}
         <div className="flex flex-col gap-1.5 p-4">
           <div className="flex items-center gap-1.5">
             <HugeiconsIcon icon={Exchange01Icon} className="h-3 w-3 text-primary" />
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Assets
             </span>
           </div>
-          <span className="text-lg font-bold tabular-nums tracking-tight">{activeAssetCount}</span>
-          <span className="text-[10px] text-muted-foreground">Active tokens</span>
+          <span className="text-xl font-bold tabular-nums tracking-tight">{activeAssetCount}</span>
+          <span className="text-xs text-muted-foreground">Active tokens</span>
         </div>
 
         {/* Networks */}
         <div className="flex flex-col gap-1.5 p-4">
           <div className="flex items-center gap-1.5">
             <HugeiconsIcon icon={Globe02Icon} className="h-3 w-3 text-primary" />
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Networks
             </span>
           </div>
-          <span className="text-lg font-bold tabular-nums tracking-tight">6</span>
-          <span className="text-[10px] text-muted-foreground">SOL · ETH · ARB · SUI · TON · TRX</span>
+          <span className="text-xl font-bold tabular-nums tracking-tight">6</span>
+          <span className="text-xs text-muted-foreground">SOL · ETH · ARB · SUI · TON · TRX</span>
         </div>
       </div>
     </div>
