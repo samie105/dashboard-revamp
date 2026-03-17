@@ -310,6 +310,7 @@ export async function POST(request: NextRequest) {
             authorizationContext,
           ),
           keysCount:
+            authorizationContext.user_jwts?.length ??
             authorizationContext.authorization_private_keys?.length ?? 0,
         },
         debug: {

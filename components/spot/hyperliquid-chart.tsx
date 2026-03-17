@@ -498,7 +498,7 @@ const HyperliquidChart = ({ symbol }: HyperliquidChartProps) => {
           </div>
         )}
 
-        {error && !loading && (
+        {error && !loading && rawCandlesRef.current.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#0b0e11]/80 z-10">
             <div className="text-center">
               <p className="text-[#f6465d] text-sm mb-2">{error}</p>

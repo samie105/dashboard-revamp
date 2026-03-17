@@ -11,61 +11,20 @@ export interface AuthorizationContext {
 }
 
 /**
- * Call Privy's authenticate endpoint with a Clerk JWT to get
- * a per-session authorization key for wallet operations.
- */
-async function getUserAuthKey(clerkJwt: string): Promise<string> {
-  const appId = process.env.PRIVY_APP_ID
-  const appSecret = process.env.PRIVY_APP_SECRET
-
-  if (!appId || !appSecret) {
-    throw new Error("PRIVY_APP_ID or PRIVY_APP_SECRET is not set")
-  }
-
-  const authResponse = await fetch(
-    "https://api.privy.io/v1/wallets/authenticate",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${appId}:${appSecret}`).toString("base64")}`,
-        "Content-Type": "application/json",
-        "privy-app-id": appId,
-      },
-      body: JSON.stringify({
-        user_jwt: clerkJwt,
-      }),
-    },
-  )
-
-  if (!authResponse.ok) {
-    const authError = await authResponse.text()
-    console.error("[Privy Auth] Authentication failed:", authError)
-    throw new Error(
-      `Failed to authenticate with Privy: ${authResponse.status}`,
-    )
-  }
-
-  const authData = await authResponse.json()
-  const userKey = authData.authorization_key
-
-  if (!userKey) {
-    throw new Error(
-      "No authorization key returned from Privy authentication",
-    )
-  }
-
-  return userKey
-}
-
-/**
  * Create authorization context for Privy wallet operations.
+ *
+ * Uses the Clerk JWT directly via `user_jwts` — the same pattern used
+ * successfully in bridge-actions.ts and the chain-specific send functions.
  */
 export async function createAuthorizationContext(
   clerkJwt: string,
 ): Promise<AuthorizationContext> {
-  const userKey = await getUserAuthKey(clerkJwt)
+  if (!clerkJwt) {
+    throw new Error("Clerk JWT is required for Privy authorization")
+  }
+
   return {
-    authorization_private_keys: [userKey],
+    user_jwts: [clerkJwt],
   }
 }
 

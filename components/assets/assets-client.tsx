@@ -64,7 +64,7 @@ const ASSETS_ONBOARDING_STEPS: OnboardingStep[] = [
 // ── Chain config ─────────────────────────────────────────────────────────
 
 interface ChainInfo {
-  key: keyof WalletAddresses
+  key: keyof WalletAddresses | "arbitrum"
   name: string
   symbol: string
   icon: string
