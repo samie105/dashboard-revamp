@@ -9,6 +9,7 @@ import {
   createTransferInstruction,
   createAssociatedTokenAccountInstruction,
   getAccount,
+  getMint,
 } from "@solana/spl-token"
 
 export async function POST(request: NextRequest) {
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { to, amount, mint, decimals } = await request.json()
+    const { to, amount, mint } = await request.json()
 
     if (
       !to ||
@@ -51,8 +52,6 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
-    const tokenDecimals = typeof decimals === "number" ? decimals : 6
-
     await connectDB()
 
     const userWallet = await UserWallet.findOne({ clerkUserId: userId })
@@ -75,9 +74,15 @@ export async function POST(request: NextRequest) {
         "https://api.mainnet-beta.solana.com",
     )
 
+    const mintPubkey = new PublicKey(mint)
+
+    // Always read decimals from the chain — never trust the client
+    // (client may pass wrong value, e.g. 18 instead of 6 for USDT)
+    const mintInfo = await getMint(connection, mintPubkey)
+    const tokenDecimals = mintInfo.decimals
+
     const fromPubkey = new PublicKey(fromAddress)
     const toPubkey = new PublicKey(to)
-    const mintPubkey = new PublicKey(mint)
 
     const fromAta = await getAssociatedTokenAddress(mintPubkey, fromPubkey)
     const toAta = await getAssociatedTokenAddress(mintPubkey, toPubkey)
