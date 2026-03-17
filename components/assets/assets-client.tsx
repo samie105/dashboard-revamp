@@ -13,7 +13,11 @@ import {
   ArrowDown01Icon as ChevronDownIcon,
   Exchange01Icon,
   ArrowUpRight01Icon,
+  Chart01Icon,
+  ChartLineData01Icon,
+  Coins01Icon,
 } from "@hugeicons/core-free-icons"
+import { getPrices } from "@/lib/actions"
 import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
 import { WalletSetupLoader } from "@/components/wallet-setup-loader"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
@@ -101,6 +105,17 @@ const ALL_TOKENS: TokenInfo[] = [
 const CHAIN_TABS = ["All", "Solana", "Ethereum", "Sui", "TON", "Tron"] as const
 type ChainTab = (typeof CHAIN_TABS)[number]
 const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Solana: "solana", Ethereum: "ethereum", Sui: "sui", TON: "ton", Tron: "tron" }
+
+// ── Wallet view tabs ─────────────────────────────────────────────────────
+
+const WALLET_VIEWS = [
+  { key: "total",   label: "Total",   icon: Coins01Icon,         sub: "All accounts" },
+  { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain balance" },
+  { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot trading" },
+  { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Futures wallet" },
+] as const
+
+type WalletView = (typeof WALLET_VIEWS)[number]["key"]
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -248,6 +263,8 @@ export default function AssetsClient() {
   const { user } = useAuth()
   const { balances: onChainBalances, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances()
   const { balances: hlBalances, accountValue: hlAccountValue, loading: hlLoading } = useHyperliquidBalance(user?.userId, !!user)
+  const [prices, setPrices] = React.useState<Record<string, number>>({})
+  const [activeView, setActiveView] = React.useState<WalletView>("total")
   const [selectedChain, setSelectedChain] = React.useState<string>(CHAINS[0].key)
   const [chainDropdownOpen, setChainDropdownOpen] = React.useState(false)
   const chainDropdownRef = React.useRef<HTMLDivElement>(null)
@@ -256,6 +273,24 @@ export default function AssetsClient() {
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [chainTab, setChainTab] = React.useState<ChainTab>("All")
   const [search, setSearch] = React.useState("")
+
+  // Fetch prices for crypto→USD conversion
+  React.useEffect(() => {
+    let cancelled = false
+    getPrices().then((data) => {
+      if (!cancelled && data.prices) setPrices(data.prices)
+    })
+    const interval = setInterval(() => {
+      getPrices().then((data) => {
+        if (!cancelled && data.prices) setPrices(data.prices)
+      })
+    }, 60_000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [])
+
+  function getPrice(symbol: string): number {
+    return prices[symbol] ?? 0
+  }
 
   // Build a lookup map: "chain:symbol:contractAddress" → balance
   const balanceMap = React.useMemo(() => {
@@ -272,20 +307,42 @@ export default function AssetsClient() {
     return balanceMap.get(key) ?? 0
   }
 
-  // Total balance = on-chain stablecoins + Hyperliquid spot holdings + futures equity
-  const totalBalance = React.useMemo(() => {
+  // On-chain total: all tokens valued in USD
+  const onChainTotal = React.useMemo(() => {
     let total = 0
     for (const token of ALL_TOKENS) {
       const bal = getTokenBalance(token)
-      if (["USDT", "USDC"].includes(token.symbol)) total += bal
+      if (bal <= 0) continue
+      if (["USDT", "USDC"].includes(token.symbol)) {
+        total += bal
+      } else {
+        const p = getPrice(token.symbol)
+        total += bal * (p > 0 ? p : 0)
+      }
     }
-    // Hyperliquid spot holdings (USDC + all tokens at current prices)
-    total += hlBalances.reduce((sum, b) => sum + (b.currentValue || 0), 0)
-    // Hyperliquid futures equity
-    total += hlAccountValue
     return total
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [balanceMap, hlBalances, hlAccountValue])
+  }, [balanceMap, prices])
+
+  // Spot balance = sum of all Hyperliquid spot holdings at current prices
+  const spotBalance = React.useMemo(
+    () => hlBalances.reduce((sum, b) => sum + (b.currentValue || 0), 0),
+    [hlBalances],
+  )
+
+  // Futures balance = Hyperliquid perps account value
+  const futuresBalance = hlAccountValue
+
+  // Per-view displayed balance
+  const displayedBalance = React.useMemo(() => {
+    switch (activeView) {
+      case "main":    return onChainTotal
+      case "spot":    return spotBalance
+      case "futures": return futuresBalance
+      case "total":
+      default:        return onChainTotal + spotBalance + futuresBalance
+    }
+  }, [activeView, onChainTotal, spotBalance, futuresBalance])
 
   const copy = React.useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text)
@@ -392,19 +449,39 @@ export default function AssetsClient() {
 
       {/* ═══ Portfolio Header Card ═══ */}
       <div data-onboarding="portfolio-header" className="rounded-2xl bg-card p-5">
-        {/* Balance stacked */}
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-1">Total Balance</p>
-            <span className="text-3xl font-bold tracking-tight tabular-nums">
-              {balancesLoading && onChainBalances.length === 0 ? "Loading…" : `$${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-            </span>
+        {/* Wallet view tabs */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-0.5">
+            {WALLET_VIEWS.map((view) => (
+              <button
+                key={view.key}
+                onClick={() => setActiveView(view.key)}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  activeView === view.key
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                }`}
+              >
+                <HugeiconsIcon icon={view.icon} className="h-3 w-3" />
+                {view.label}
+              </button>
+            ))}
           </div>
           <button onClick={refresh} disabled={isRefreshing}
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50">
             <HugeiconsIcon icon={RefreshIcon} className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
             {isRefreshing ? "Syncing…" : "Refresh"}
           </button>
+        </div>
+
+        {/* Balance display */}
+        <div>
+          <span className="text-3xl font-bold tracking-tight tabular-nums">
+            {balancesLoading && onChainBalances.length === 0 ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          </span>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {WALLET_VIEWS.find((v) => v.key === activeView)?.sub}
+          </p>
         </div>
 
         {/* Divider */}
@@ -565,10 +642,15 @@ export default function AssetsClient() {
                       <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
                         {(() => {
                           const bal = getTokenBalance(token)
+                          if (bal <= 0) return "$0.00"
                           if (["USDT", "USDC"].includes(token.symbol)) {
                             return `$${bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           }
-                          return bal > 0 ? `${bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${token.symbol}` : "$0.00"
+                          const p = getPrice(token.symbol)
+                          const usdVal = bal * p
+                          return p > 0
+                            ? `$${usdVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : `${bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${token.symbol}`
                         })()}
                       </td>
                       <td className="px-4 py-2.5 text-right">
