@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Dialog } from "@base-ui/react/dialog"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -17,6 +18,7 @@ import {
   Store01Icon,
   BarChartIcon,
   Cancel01Icon,
+  AlertCircleIcon,
 } from "@hugeicons/core-free-icons"
 
 // ── Trading Routes ───────────────────────────────────────────────────────
@@ -48,11 +50,15 @@ interface TradeSelectorCtx {
   setOpen: (v: boolean) => void
   /** Optional: pre-set a pair to pass to the target route */
   pair?: string
+  /** Unsupported onchain token modal */
+  unsupportedToken?: { symbol: string; name?: string }
+  setUnsupportedToken: (v: { symbol: string; name?: string } | undefined) => void
 }
 
 const TradeSelectorContext = React.createContext<TradeSelectorCtx>({
   open: false,
   setOpen: () => {},
+  setUnsupportedToken: () => {},
 })
 
 export function useTradeSelectorContext() {
@@ -64,17 +70,24 @@ export function useTradeSelectorContext() {
 export function TradeSelectorProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false)
   const [pair, setPair] = React.useState<string | undefined>()
+  const [unsupportedToken, setUnsupportedToken] = React.useState<{ symbol: string; name?: string } | undefined>()
 
   const ctx = React.useMemo(() => ({
     open,
     setOpen: (v: boolean) => { setOpen(v); if (!v) setPair(undefined) },
     pair,
-  }), [open, pair])
+    unsupportedToken,
+    setUnsupportedToken,
+  }), [open, pair, unsupportedToken])
 
   return (
     <TradeSelectorContext.Provider value={ctx}>
       {children}
       <TradeSelectorModal open={open} onOpenChange={(v) => { setOpen(v); if (!v) setPair(undefined) }} pair={pair} />
+      <UnsupportedTokenModal
+        token={unsupportedToken}
+        onClose={() => setUnsupportedToken(undefined)}
+      />
     </TradeSelectorContext.Provider>
   )
 }
@@ -87,7 +100,93 @@ export function useTradeSelector() {
     openTradeSelector: (_pair?: string) => {
       ctx.setOpen(true)
     },
+    openUnsupportedToken: (symbol: string, name?: string) => {
+      ctx.setUnsupportedToken({ symbol, name })
+    },
   }
+}
+
+// ── Unsupported Token Modal ───────────────────────────────────────────────
+
+function UnsupportedTokenModal({
+  token,
+  onClose,
+}: {
+  token?: { symbol: string; name?: string }
+  onClose: () => void
+}) {
+  const router = useRouter()
+  const isMobile = useIsMobile()
+
+  if (!token) return null
+
+  function goTo(path: string) {
+    onClose()
+    router.push(path)
+  }
+
+  return (
+    <Dialog.Root open={!!token} onOpenChange={(v) => { if (!v) onClose() }}>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/30 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs" />
+        <Dialog.Popup
+          className={cn(
+            "fixed z-50 flex flex-col bg-background text-sm shadow-2xl transition duration-200 ease-in-out outline-none",
+            "data-ending-style:opacity-0 data-starting-style:opacity-0",
+            isMobile
+              ? "inset-x-0 bottom-0 max-h-[85vh] rounded-t-2xl border-t data-ending-style:translate-y-10 data-starting-style:translate-y-10"
+              : "top-1/2 left-1/2 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border data-ending-style:scale-95 data-starting-style:scale-95"
+          )}
+        >
+          {isMobile && (
+            <div className="absolute top-2 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-border/60" />
+          )}
+
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-border/30 px-5 py-4">
+            <Dialog.Title className="text-base font-semibold">Token Not Supported</Dialog.Title>
+            <Dialog.Close className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Dialog.Close>
+          </div>
+
+          {/* Body */}
+          <div className="flex flex-col items-center gap-4 px-5 py-6 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10">
+              <HugeiconsIcon icon={AlertCircleIcon} className="h-7 w-7 text-amber-500" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">
+                {token.name ? `${token.name} (${token.symbol})` : token.symbol} isn&apos;t available for trading on WorldStreet
+              </p>
+              <p className="text-xs text-muted-foreground">
+                This on-chain token is not supported as a trading pair. You can trade supported assets on Spot or Futures.
+              </p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 border-t border-border/30 px-5 py-4">
+            <button
+              onClick={() => goTo("/spot")}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4" />
+              Spot Trading
+            </button>
+            <button
+              onClick={() => goTo("/futures")}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border/40 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <HugeiconsIcon icon={ChartLineData02Icon} className="h-4 w-4" />
+              Futures
+            </button>
+          </div>
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
 }
 
 // ── Shared Route Grid Content ────────────────────────────────────────────

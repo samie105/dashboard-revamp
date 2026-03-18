@@ -13,6 +13,9 @@ import {
 const MIN_ORDER_VALUE = 10
 
 function formatOrderError(raw: string): string {
+  if (/insufficient funds for gas/i.test(raw)) {
+    return "Your trading wallet needs a small amount of ETH for gas. Please deposit ETH to your wallet and try again."
+  }
   if (/minimum value of \$?(\d+)/i.test(raw)) {
     const match = raw.match(/minimum value of \$?(\d+)/i)
     return `Minimum order value is $${match?.[1] ?? 10}. Please increase your order amount.`

@@ -254,13 +254,36 @@ export function SpotTopBar({
             </Popover>
           </div>
 
-          {/* Mobile "Transact" button — visible only < lg */}
-          <button
-            onClick={() => setMobileInfoOpen(true)}
-            className="lg:hidden rounded-lg border border-border/50 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent active:scale-95"
-          >
-            Transact
-          </button>
+          {/* Mobile: balance chip + DPT | WTH — visible only < lg */}
+          <div className="lg:hidden flex items-center gap-1.5">
+            {/* Tappable balance → opens full details sheet */}
+            <button
+              onClick={() => setMobileInfoOpen(true)}
+              className="flex flex-col items-end rounded-lg px-2 py-1 transition-colors hover:bg-accent active:scale-95"
+            >
+              <span className="text-[9px] text-muted-foreground leading-none">Balance</span>
+              <span className="text-xs font-bold tabular-nums text-foreground">
+                {balanceLoading
+                  ? "···"
+                  : `$${spotBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </span>
+            </button>
+            {/* DPT | WTH split pill */}
+            <div className="flex items-stretch divide-x divide-border/40 rounded-lg border border-border/40 overflow-hidden text-[11px] font-bold">
+              <button
+                onClick={() => onOpenDeposit?.()}
+                className="px-2.5 py-1.5 text-emerald-500 transition-colors hover:bg-emerald-500/10 active:scale-95"
+              >
+                DPT
+              </button>
+              <button
+                onClick={() => onOpenWithdraw?.()}
+                className="px-2.5 py-1.5 text-orange-500 transition-colors hover:bg-orange-500/10 active:scale-95"
+              >
+                WTH
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 

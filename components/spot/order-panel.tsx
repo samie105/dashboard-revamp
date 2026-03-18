@@ -58,7 +58,7 @@ export function OrderPanel({
   const [takeProfitPrice, setTakeProfitPrice] = React.useState("")
   const [stopLossPrice, setStopLossPrice] = React.useState("")
 
-  const { baseBalance, quoteBalance, refetch: refetchBalances } = useSpotBalances(symbol, "USDC")
+  const { baseBalance, quoteBalance, loading: balancesLoading, refetch: refetchBalances } = useSpotBalances(symbol, "USDC")
 
   const isBuy = side === "buy"
   const effectivePrice =
@@ -123,6 +123,8 @@ export function OrderPanel({
   // Validation helpers
   const balanceError = React.useMemo(() => {
     if (!isSignedIn || !walletsGenerated || numericAmount <= 0) return null
+    // Don't flag balance errors while still loading — balances start at 0
+    if (balancesLoading) return null
     if (isBuy) {
       if (total > (quoteBalance ?? 0)) {
         return `Insufficient USDC (need ~$${total.toFixed(2)})`
@@ -133,7 +135,7 @@ export function OrderPanel({
       }
     }
     return null
-  }, [isBuy, numericAmount, total, quoteBalance, baseBalance, symbol, isSignedIn, walletsGenerated])
+  }, [isBuy, numericAmount, total, quoteBalance, baseBalance, symbol, isSignedIn, walletsGenerated, balancesLoading])
 
   const minOrderError = React.useMemo(() => {
     if (numericAmount <= 0 || effectivePrice <= 0) return null
