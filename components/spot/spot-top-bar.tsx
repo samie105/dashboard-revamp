@@ -123,17 +123,32 @@ export function SpotTopBar({
         </button>
 
         <span
-          className={`text-sm font-bold tabular-nums ${isPositive ? "text-emerald-500" : "text-red-500"}`}
+          className={`hidden md:inline text-sm font-bold tabular-nums ${isPositive ? "text-emerald-500" : "text-red-500"}`}
         >
           ${fmtPrice}
         </span>
 
         <span
-          className={`text-xs font-medium tabular-nums ${isPositive ? "text-emerald-500" : "text-red-500"}`}
+          className={`hidden md:inline text-xs font-medium tabular-nums ${isPositive ? "text-emerald-500" : "text-red-500"}`}
         >
           {isPositive ? "+" : ""}
           {coin.change24h.toFixed(2)}%
         </span>
+
+        {/* Price + change — stacked on mobile */}
+        <div className="flex flex-col md:hidden leading-tight">
+          <span
+            className={`text-xs font-bold tabular-nums ${isPositive ? "text-emerald-500" : "text-red-500"}`}
+          >
+            ${fmtPrice}
+          </span>
+          <span
+            className={`text-[10px] font-medium tabular-nums ${isPositive ? "text-emerald-500" : "text-red-500"}`}
+          >
+            {isPositive ? "+" : ""}
+            {coin.change24h.toFixed(2)}%
+          </span>
+        </div>
 
         {/* Vol / Cap — hidden on mobile */}
         <div className="hidden md:flex items-center gap-4 text-[11px] text-muted-foreground ml-2">

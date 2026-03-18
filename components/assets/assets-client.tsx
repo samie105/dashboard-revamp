@@ -29,6 +29,7 @@ import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
+import { SpotFundingSwap, FundingHistory } from "@/components/wallet"
 import { useRouter } from "next/navigation"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
 
@@ -585,8 +586,9 @@ export default function AssetsClient() {
         )}
       </div>
 
-      {/* ═══ Assets Table ═══ */}
-      <div data-onboarding="assets-table" className="flex h-full flex-col rounded-2xl bg-card">
+      {/* ═══ Assets Table + Funding Sidebar ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div data-onboarding="assets-table" className="flex h-full flex-col rounded-2xl bg-card lg:col-span-8">
 
         {/* ═══ MAIN TAB: On-chain wallet balances ═══ */}
         {activeView === "main" && (
@@ -1076,6 +1078,13 @@ export default function AssetsClient() {
             )}
           </>
         )}
+      </div>
+
+        {/* ═══ Funding Sidebar ═══ */}
+        <div className="lg:col-span-4 space-y-4">
+          <SpotFundingSwap />
+          <FundingHistory />
+        </div>
       </div>
 
       <SendModal open={sendModal.open} onClose={() => setSendModal({ open: false })} asset={sendModal.asset} />
