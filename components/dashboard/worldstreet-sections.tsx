@@ -10,7 +10,7 @@ import {
   DollarCircleIcon,
   ArrowUpRight01Icon,
 } from "@hugeicons/core-free-icons"
-import { useVivid } from "@worldstreet/vivid-voice"
+import { useVividOptional } from "@worldstreet/vivid-voice"
 
 const EXTERNAL_SECTIONS = [
   { name: "Store", url: "https://shop.worldstreetgold.com", icon: Store01Icon },
@@ -30,7 +30,11 @@ const VIVID_DOT: Record<string, string> = {
 }
 
 export function WorldStreetSections() {
-  const { state, isConnected, startSession, endSession } = useVivid()
+  const _vivid = useVividOptional()
+  const state = _vivid?.state ?? "idle"
+  const isConnected = _vivid?.isConnected ?? false
+  const startSession = _vivid?.startSession ?? (async () => {})
+  const endSession = _vivid?.endSession ?? (() => {})
   const vividIsActive = state !== "idle" && state !== "error"
 
   return (

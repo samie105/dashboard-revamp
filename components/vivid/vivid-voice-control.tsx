@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback } from "react"
-import { useVivid } from "@worldstreet/vivid-voice"
+import { useVividOptional } from "@worldstreet/vivid-voice"
 import type { VividAgentState } from "@worldstreet/vivid-voice"
 import BlobOrb from "./blob-orb"
 
@@ -26,7 +26,12 @@ const STATE_DOT: Record<VividAgentState, string> = {
 }
 
 export default function VividVoiceControl() {
-  const { state, isConnected, startSession, endSession, getAudioLevels } = useVivid()
+  const _vivid = useVividOptional()
+  const state = _vivid?.state ?? "idle"
+  const isConnected = _vivid?.isConnected ?? false
+  const startSession = _vivid?.startSession ?? (async () => {})
+  const endSession = _vivid?.endSession ?? (() => {})
+  const getAudioLevels = _vivid?.getAudioLevels ?? (() => new Uint8Array(0))
 
   const isActive = state !== "idle" && state !== "error"
 

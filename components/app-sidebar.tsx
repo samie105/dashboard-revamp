@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { useVivid } from "@worldstreet/vivid-voice"
+import { useVividOptional } from "@worldstreet/vivid-voice"
 import gsap from "gsap"
 import { cn } from "@/lib/utils"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -305,7 +305,11 @@ export function AppSidebar() {
   const pathname = usePathname()
   const { state } = useSidebar()
   const isCollapsed = state === "collapsed"
-  const { state: vividState, isConnected, startSession, endSession } = useVivid()
+  const _vivid = useVividOptional()
+  const vividState = _vivid?.state ?? "idle"
+  const isConnected = _vivid?.isConnected ?? false
+  const startSession = _vivid?.startSession ?? (async () => {})
+  const endSession = _vivid?.endSession ?? (() => {})
   const vividIsActive = vividState !== "idle" && vividState !== "error"
 
   const VIVID_DOT: Record<string, string> = {
