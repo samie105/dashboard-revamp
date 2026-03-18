@@ -5,10 +5,14 @@ import { useUser, useAuth } from "@clerk/nextjs"
 import { usePathname } from "next/navigation"
 import VividVoiceControl from "@/components/vivid/vivid-voice-control"
 
+const HIDE_MIC_ROUTES = ["/spot", "/futures", "/forex", "/binary", "/vivid"]
+
 export function VividVoiceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser()
   const { isSignedIn } = useAuth()
   const pathname = usePathname()
+
+  const hideMic = HIDE_MIC_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
 
   return (
     <VividProvider
@@ -18,7 +22,7 @@ export function VividVoiceProvider({ children }: { children: React.ReactNode }) 
       requireAuth
     >
       {children}
-      <VividVoiceControl />
+      {!hideMic && <VividVoiceControl />}
     </VividProvider>
   )
 }

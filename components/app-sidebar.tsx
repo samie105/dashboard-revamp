@@ -112,7 +112,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Social", description: "Community hub", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon },
       { name: "Xstream", description: "Live streaming", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
       { name: "Forex Trading", description: "Currency pairs", url: "https://trader.worldstreetgold.com", icon: DollarCircleIcon },
-      { name: "Vivid AI", description: "AI-powered insights", url: "", icon: Brain01Icon },
+      { name: "Vivid AI", description: "AI-powered insights", url: "/vivid", icon: Brain01Icon },
     ],
   },
 ]
@@ -368,14 +368,16 @@ export function AppSidebar() {
                       const isActive = !ext && !isVivid && isActiveRoute(pathname, item.url)
 
                       if (isVivid) {
+                        const vividActive = !ext && isActiveRoute(pathname, item.url)
                         return (
                           <SidebarMenuItem key={item.name}>
                             <SidebarMenuButton
                               tooltip={vividIsActive ? `Vivid AI — ${vividState}` : "Vivid AI"}
-                              onClick={() => isConnected ? endSession() : startSession()}
+                              isActive={vividActive}
+                              render={<Link href={item.url} />}
                               className={cn(
-                                "min-h-10 py-2 px-2.5 text-sm transition-all rounded-md cursor-pointer",
-                                vividIsActive
+                                "min-h-10 py-2 px-2.5 text-sm transition-all rounded-md data-[active=true]:bg-transparent data-[active=true]:text-yellow-400",
+                                vividActive || vividIsActive
                                   ? "text-yellow-400 bg-yellow-400/5 hover:bg-yellow-400/10"
                                   : "text-foreground/70 hover:text-foreground hover:bg-accent/50",
                               )}
@@ -384,13 +386,13 @@ export function AppSidebar() {
                                 icon={item.icon}
                                 className={cn(
                                   "size-4 shrink-0",
-                                  vividIsActive ? "text-yellow-400" : "[&_path:not(:first-child)]:stroke-primary"
+                                  (vividActive || vividIsActive) ? "text-yellow-400" : "[&_path:not(:first-child)]:stroke-primary"
                                 )}
                               />
                               {!isCollapsed && (
                                 <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
                                   <div className="flex items-center gap-1.5">
-                                    <span className={cn("truncate text-foreground/80", vividIsActive && "text-yellow-400 font-semibold")}>{item.name}</span>
+                                    <span className={cn("truncate text-foreground/80", (vividActive || vividIsActive) && "text-yellow-400 font-semibold")}>{item.name}</span>
                                     {vividIsActive && (
                                       <span className={cn("inline-block h-1.5 w-1.5 rounded-full shrink-0", VIVID_DOT[vividState])} />
                                     )}

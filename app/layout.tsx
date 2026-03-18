@@ -20,6 +20,7 @@ const fontMono = Geist_Mono({
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { LayoutShell } from "@/components/layout-shell"
 import { TradeSelectorProvider } from "@/components/trade-selector"
+import { VividVoiceProvider } from "@/components/vivid-provider"
 
 const isProduction = process.env.NODE_ENV === "production"
 
@@ -50,9 +51,11 @@ export default function RootLayout({
                 <AuthGate>
                   <WalletProvider>
                     <TooltipProvider>
+                      <VividVoiceProvider>
                         <TradeSelectorProvider>
                           <LayoutShell>{children}</LayoutShell>
                         </TradeSelectorProvider>
+                      </VividVoiceProvider>
                     </TooltipProvider>
                   </WalletProvider>
                 </AuthGate>
