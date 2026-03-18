@@ -77,6 +77,16 @@ export function OpenOrdersPanel() {
                   {openOrders.length}
                 </span>
               )}
+              {t.id === "history" && (fills.length + orderHistory.length) > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold tabular-nums bg-primary/15 text-primary">
+                  {fills.length + orderHistory.length}
+                </span>
+              )}
+              {t.id === "holdings" && hlBalances.length > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold tabular-nums bg-primary/15 text-primary">
+                  {hlBalances.length}
+                </span>
+              )}
               {tab === t.id && (
                 <span className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full bg-primary" />
               )}
