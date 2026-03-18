@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Activity01Icon,
@@ -14,6 +15,7 @@ import {
   Exchange01Icon,
   ChartLineData01Icon,
   Wallet01Icon,
+  Cancel01Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData, TradeResult, FuturesMarket } from "@/lib/actions"
 import { getFuturesMarkets, getSpotMarkets } from "@/lib/actions"
@@ -28,7 +30,113 @@ import { getCoinImage, coinFallback } from "@/lib/coin-images"
 
 const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
 
-/* ========== Markets Table ========== */
+/* ========== Trade Confirm Dialog (mobile) ========== */
+type TradeConfirmItem =
+  | { type: "spot";    symbol: string; name: string; image: string; price: number; change24h: number }
+  | { type: "futures"; symbol: string; name: string; image: string; price: number; change24h: number; leverage: number }
+
+function TradeConfirmDialog({
+  item,
+  onClose,
+}: {
+  item: TradeConfirmItem | null
+  onClose: () => void
+}) {
+  const router = useRouter()
+  if (!item) return null
+
+  const isFutures = item.type === "futures"
+  const isUp = item.change24h >= 0
+  const href = isFutures ? `/futures?pair=${item.symbol}` : `/spot?pair=${item.symbol}`
+
+  function handleTrade() {
+    onClose()
+    router.push(href)
+  }
+
+  return (
+    // backdrop
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:hidden"
+      onClick={onClose}
+    >
+      {/* sheet */}
+      <div
+        className="w-full rounded-t-2xl bg-card px-6 pt-6 pb-28 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* coin header */}
+        <div className="mb-6 flex items-center gap-3">
+          {item.image ? (
+            <img
+              src={item.image}
+              alt={item.symbol}
+              className={`h-12 w-12 rounded-full object-contain ring-2 ${
+                isFutures ? "ring-amber-500/30" : "ring-primary/30"
+              }`}
+              onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(item.symbol) }}
+            />
+          ) : (
+            <div className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold ${
+              isFutures ? "bg-amber-500/10 text-amber-600" : "bg-primary/10 text-primary"
+            }`}>
+              {item.symbol.slice(0, 3)}
+            </div>
+          )}
+          <div className="flex flex-col">
+            <span className="text-base font-bold">
+              {item.symbol}{isFutures ? "-PERP" : "/USDT"}
+            </span>
+            <span className="text-xs text-muted-foreground">{item.name}</span>
+          </div>
+          <div className="ml-auto flex flex-col items-end">
+            <span className="text-base font-bold tabular-nums">
+              ${item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: item.price < 1 ? 4 : 2 })}
+            </span>
+            <span className={`text-xs font-medium tabular-nums ${
+              isUp ? "text-emerald-500" : "text-red-500"
+            }`}>
+              {isUp ? "+" : ""}{item.change24h.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+
+        {/* type badge */}
+        <div className="mb-5 flex items-center gap-2">
+          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+            isFutures
+              ? "bg-amber-500/10 text-amber-600"
+              : "bg-primary/10 text-primary"
+          }`}>
+            {isFutures ? `Perpetual · up to ${(item as Extract<TradeConfirmItem, {type:"futures"}>).leverage}× leverage` : "Spot Market"}
+          </span>
+        </div>
+
+        {/* CTAs */}
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border/50 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent"
+          >
+            <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
+            Cancel
+          </button>
+          <button
+            onClick={handleTrade}
+            className={`flex flex-[2] items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-colors ${
+              isFutures
+                ? "bg-amber-500 hover:bg-amber-600"
+                : "bg-primary hover:bg-primary/90"
+            }`}
+          >
+            Trade {item.symbol}
+            <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 const MARKET_TABS = ["Total", "Main", "Spot", "Futures"] as const
 type MarketTab = (typeof MARKET_TABS)[number]
 
@@ -43,6 +151,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
   const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
   const [spotLoading, setSpotLoading] = React.useState(false)
   const hasFetchedSpot = React.useRef(false)
+  const [tradeItem, setTradeItem] = React.useState<TradeConfirmItem | null>(null)
 
   // Fetch futures lazily when tab is selected
   React.useEffect(() => {
@@ -117,6 +226,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
 
   return (
     <div data-onboarding="dash-markets" className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card">
+      <TradeConfirmDialog item={tradeItem} onClose={() => setTradeItem(null)} />
       {/* Header */}
       <div className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
@@ -178,7 +288,19 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                 {displayedFutures.map((market) => {
                   const isUp = market.change24h >= 0
                   return (
-                    <tr key={market.symbol} className="transition-colors hover:bg-accent/30">
+                    <tr
+                      key={market.symbol}
+                      className="cursor-pointer transition-colors hover:bg-accent/30 sm:cursor-default"
+                      onClick={() => setTradeItem({
+                        type: "futures",
+                        symbol: market.symbol,
+                        name: market.baseAsset,
+                        image: market.image || getCoinImage(market.baseAsset) || "",
+                        price: market.markPrice,
+                        change24h: market.change24h,
+                        leverage: market.maxLeverage,
+                      })}
+                    >
                       <td className="px-3 sm:px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           {(market.image || getCoinImage(market.baseAsset)) ? (
@@ -210,6 +332,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                       <td className="hidden sm:table-cell px-4 py-2.5 text-right">
                         <a
                           href={`/futures?pair=${market.symbol}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                         >
                           Trade
@@ -263,7 +386,18 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
               </thead>
               <tbody className="divide-y divide-border/20">
                 {displayed.map((coin) => (
-                  <tr key={coin.symbol} className="transition-colors hover:bg-accent/30">
+                  <tr
+                    key={coin.symbol}
+                    className="cursor-pointer transition-colors hover:bg-accent/30 sm:cursor-default"
+                    onClick={() => setTradeItem({
+                      type: "spot",
+                      symbol: coin.symbol,
+                      name: coin.name,
+                      image: coin.image,
+                      price: coin.price,
+                      change24h: coin.change24h,
+                    })}
+                  >
                     <td className="px-3 sm:px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <div className="flex items-center shrink-0">
@@ -297,7 +431,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                     </td>
                     <td className="hidden sm:table-cell px-4 py-2.5 text-right">
                       <button
-                        onClick={() => openTradeSelector(coin.symbol)}
+                        onClick={(e) => { e.stopPropagation(); openTradeSelector(coin.symbol) }}
                         className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       >
                         Trade

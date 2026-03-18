@@ -744,6 +744,11 @@ export default function AssetsClient() {
                   </span>
                 )}
               </div>
+              <div className="relative">
+                <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-[7px] h-3.5 w-3.5 text-muted-foreground" />
+                <input type="search" value={spotSearch} onChange={(e) => setSpotSearch(e.target.value)}
+                  placeholder="Search assets..." className="w-36 rounded-lg bg-accent/50 pl-7 pr-2 py-1.5 text-xs outline-none focus:bg-accent" />
+              </div>
             </div>
 
             {hlLoading ? (
@@ -771,7 +776,7 @@ export default function AssetsClient() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/20">
-                    {hlBalances.map((b) => {
+                    {hlBalances.filter((b) => !spotSearch || b.coin.toLowerCase().includes(spotSearch.toLowerCase())).map((b) => {
                       const isProfit = b.unrealizedPnl >= 0
                       return (
                         <tr key={b.coin} className="transition-colors hover:bg-accent/30">
@@ -838,11 +843,6 @@ export default function AssetsClient() {
                 {spotMarkets.length > 0 && (
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{spotMarkets.length}</span>
                 )}
-              </div>
-              <div className="relative">
-                <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-[7px] h-3.5 w-3.5 text-muted-foreground" />
-                <input type="search" value={spotSearch} onChange={(e) => setSpotSearch(e.target.value)}
-                  placeholder="Search markets..." className="w-36 rounded-lg bg-accent/50 pl-7 pr-2 py-1.5 text-xs outline-none focus:bg-accent" />
               </div>
             </div>
             {spotMarketsLoading ? (
