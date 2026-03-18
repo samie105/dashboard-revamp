@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { UserIcon, AiChat01Icon, File01Icon } from "@hugeicons/core-free-icons"
+import { File01Icon } from "@hugeicons/core-free-icons"
 import type { Message } from "@/hooks/useChat"
 
 interface ChatBubbleProps {
@@ -26,35 +26,13 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
     })
   }, [message.createdAt])
 
-  return (
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"} group`}>
-      {/* Avatar */}
-      <div
-        className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-          isUser
-            ? "bg-primary/20 text-primary"
-            : "bg-linear-to-br from-violet-500 to-purple-600 text-white"
-        }`}
-      >
-        {isUser ? (
-          <HugeiconsIcon icon={UserIcon} className="h-4 w-4" />
-        ) : (
-          <HugeiconsIcon icon={AiChat01Icon} className="h-4 w-4" />
-        )}
-      </div>
-
-      {/* Content */}
-      <div className={`flex flex-col max-w-[75%] ${isUser ? "items-end" : "items-start"}`}>
-        <div
-          className={`px-4 py-2.5 rounded-2xl ${
-            isUser
-              ? "bg-primary text-primary-foreground rounded-br-md"
-              : "bg-accent/80 text-foreground rounded-bl-md"
-          }`}
-        >
+  if (isUser) {
+    return (
+      <div className="flex justify-end group">
+        <div className="max-w-[80%] md:max-w-[70%]">
           {/* Attachments */}
           {message.attachments && message.attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2">
+            <div className="flex flex-wrap gap-2 mb-2 justify-end">
               {message.attachments.map((att, i) => (
                 <div key={i}>
                   {att.type === "image" ? (
@@ -69,11 +47,7 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
                       href={att.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs ${
-                        isUser
-                          ? "bg-white/20 hover:bg-white/30"
-                          : "bg-background hover:bg-accent"
-                      } transition-colors`}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-white/20 hover:bg-white/30 transition-colors"
                     >
                       <HugeiconsIcon icon={File01Icon} className="h-4 w-4" />
                       <span className="truncate max-w-37.5">{att.filename}</span>
@@ -84,29 +58,70 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
             </div>
           )}
 
-          {/* Message content */}
-          {isUser ? (
+          <div className="bg-primary text-primary-foreground px-4 py-2.5 rounded-2xl rounded-br-sm">
             <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
-          ) : (
-            <div
-              className="text-sm prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none"
-              dangerouslySetInnerHTML={{ __html: formattedContent }}
-            />
-          )}
+          </div>
 
-          {/* Streaming cursor */}
-          {message.isStreaming && (
-            <span className="inline-block w-2 h-4 bg-current opacity-70 animate-pulse ml-0.5 align-text-bottom" />
+          {!message.isStreaming && (
+            <span className="text-[10px] text-muted-foreground mt-1 block text-right opacity-0 group-hover:opacity-100 transition-opacity">
+              {formattedTime}
+            </span>
           )}
         </div>
-
-        {/* Timestamp */}
-        {!message.isStreaming && (
-          <span className="text-[10px] text-muted-foreground mt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {formattedTime}
-          </span>
-        )}
       </div>
+    )
+  }
+
+  // AI message — full width, no bubble background
+  return (
+    <div className="group">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-medium text-muted-foreground">Vivid AI</span>
+      </div>
+
+      {/* Attachments */}
+      {message.attachments && message.attachments.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {message.attachments.map((att, i) => (
+            <div key={i}>
+              {att.type === "image" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={att.url}
+                  alt={att.filename}
+                  className="max-w-50 max-h-37.5 rounded-lg object-cover"
+                />
+              ) : (
+                <a
+                  href={att.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-accent hover:bg-accent/80 transition-colors"
+                >
+                  <HugeiconsIcon icon={File01Icon} className="h-4 w-4" />
+                  <span className="truncate max-w-37.5">{att.filename}</span>
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div
+        className="text-sm prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-headings:my-2.5 prose-pre:my-3 prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline"
+        dangerouslySetInnerHTML={{ __html: formattedContent }}
+      />
+
+      {/* Streaming cursor */}
+      {message.isStreaming && (
+        <span className="inline-block w-1.5 h-4 bg-foreground/60 animate-pulse ml-0.5 rounded-full align-text-bottom" />
+      )}
+
+      {!message.isStreaming && (
+        <span className="text-[10px] text-muted-foreground mt-2 block opacity-0 group-hover:opacity-100 transition-opacity">
+          {formattedTime}
+        </span>
+      )}
     </div>
   )
 }

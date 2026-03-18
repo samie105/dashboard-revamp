@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Store01Icon,
@@ -10,7 +11,6 @@ import {
   DollarCircleIcon,
   ArrowUpRight01Icon,
 } from "@hugeicons/core-free-icons"
-import { useVividOptional } from "@worldstreet/vivid-voice"
 
 const EXTERNAL_SECTIONS = [
   { name: "Store", url: "https://shop.worldstreetgold.com", icon: Store01Icon },
@@ -20,23 +20,7 @@ const EXTERNAL_SECTIONS = [
   { name: "Forex Trading", url: "https://trader.worldstreetgold.com", icon: DollarCircleIcon },
 ] as const
 
-const VIVID_DOT: Record<string, string> = {
-  connecting: "bg-yellow-400 animate-pulse",
-  ready: "bg-emerald-400",
-  listening: "bg-primary animate-pulse",
-  processing: "bg-primary animate-pulse",
-  speaking: "bg-emerald-400 animate-pulse",
-  error: "bg-red-400",
-}
-
 export function WorldStreetSections() {
-  const _vivid = useVividOptional()
-  const state = _vivid?.state ?? "idle"
-  const isConnected = _vivid?.isConnected ?? false
-  const startSession = _vivid?.startSession ?? (async () => {})
-  const endSession = _vivid?.endSession ?? (() => {})
-  const vividIsActive = state !== "idle" && state !== "error"
-
   return (
     <div className="rounded-2xl border border-border/30 bg-card overflow-hidden">
       <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-border/30">
@@ -56,24 +40,19 @@ export function WorldStreetSections() {
           </a>
         ))}
 
-        {/* Vivid AI — triggers voice session */}
-        <button
-          onClick={() => isConnected ? endSession() : startSession()}
+        {/* Vivid AI — links to /vivid */}
+        <Link
+          href="/vivid"
           className="group flex flex-col items-center gap-1.5 px-3 py-3.5 transition-colors hover:bg-accent/30 border-t border-border/30 sm:border-t-0"
         >
-          <div className="relative">
-            <HugeiconsIcon
-              icon={Brain01Icon}
-              className={`h-5 w-5 transition-colors ${vividIsActive ? "text-yellow-400" : "text-muted-foreground group-hover:text-foreground"}`}
-            />
-            {vividIsActive && (
-              <span className={`absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full ${VIVID_DOT[state]}`} />
-            )}
-          </div>
-          <span className={`text-xs font-medium text-center leading-tight ${vividIsActive ? "text-yellow-400" : "text-foreground/80"}`}>
+          <HugeiconsIcon
+            icon={Brain01Icon}
+            className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors"
+          />
+          <span className="text-xs font-medium text-center leading-tight text-foreground/80">
             Vivid AI
           </span>
-        </button>
+        </Link>
       </div>
     </div>
   )

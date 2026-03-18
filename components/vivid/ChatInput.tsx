@@ -20,7 +20,6 @@ export default function ChatInput({
   const [value, setValue] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-resize textarea
   useEffect(() => {
     const el = textareaRef.current
     if (!el) return
@@ -28,7 +27,6 @@ export default function ChatInput({
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`
   }, [value])
 
-  // Listen for suggestion clicks from the empty state
   useEffect(() => {
     const handler = (e: Event) => {
       const text = (e as CustomEvent).detail?.text
@@ -40,7 +38,6 @@ export default function ChatInput({
     return () => window.removeEventListener("vivid:suggestion", handler)
   }, [onSend])
 
-  // Focus the input on mount
   useEffect(() => {
     textareaRef.current?.focus()
   }, [])
@@ -63,9 +60,9 @@ export default function ChatInput({
   }
 
   return (
-    <div className="border-t border-border/40 bg-card px-4 md:px-8 py-3">
+    <div className="px-4 md:px-6 pb-4 pt-2">
       <div className="max-w-3xl mx-auto">
-        <div className="relative flex items-end gap-2 bg-accent/50 rounded-2xl border border-border/50 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all px-4 py-2">
+        <div className="relative flex items-end gap-2 rounded-2xl border border-border/50 bg-card shadow-sm focus-within:border-border focus-within:shadow-md transition-all px-4 py-3">
           <textarea
             ref={textareaRef}
             value={value}
@@ -74,31 +71,31 @@ export default function ChatInput({
             placeholder="Message Vivid AI..."
             rows={1}
             disabled={disabled}
-            className="flex-1 bg-transparent border-none outline-none resize-none text-sm text-foreground placeholder:text-muted-foreground py-1.5 max-h-40 scrollbar-thin"
+            className="flex-1 bg-transparent border-none outline-none resize-none text-sm text-foreground placeholder:text-muted-foreground/60 py-0.5 max-h-40 scrollbar-thin"
           />
 
           {isGenerating ? (
             <button
               onClick={onStop}
-              className="shrink-0 p-2 rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground transition-colors"
+              className="shrink-0 p-2 rounded-xl bg-foreground/10 hover:bg-foreground/15 text-foreground transition-colors"
               title="Stop generating"
             >
-              <HugeiconsIcon icon={StopIcon} className="h-4.5 w-4.5" />
+              <HugeiconsIcon icon={StopIcon} className="h-4 w-4" />
             </button>
           ) : (
             <button
               onClick={handleSubmit}
               disabled={!value.trim() || disabled}
-              className="shrink-0 p-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="shrink-0 p-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               title="Send message"
             >
-              <HugeiconsIcon icon={SentIcon} className="h-4.5 w-4.5" />
+              <HugeiconsIcon icon={SentIcon} className="h-4 w-4" />
             </button>
           )}
         </div>
 
-        <p className="text-[10px] text-muted-foreground text-center mt-2">
-          Vivid AI can make mistakes. Consider checking important information.
+        <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
+          Vivid AI can make mistakes. Verify important information.
         </p>
       </div>
     </div>

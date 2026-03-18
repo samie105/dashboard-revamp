@@ -3,11 +3,11 @@
 import React, { useRef, useEffect } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
-  AiChat01Icon,
   ChartLineData03Icon,
   IdeaIcon,
   ShieldKeyIcon,
   BalanceScaleIcon,
+  ArrowRight01Icon,
 } from "@hugeicons/core-free-icons"
 import type { Message } from "@/hooks/useChat"
 import ChatBubble from "./ChatBubble"
@@ -25,7 +25,6 @@ export default function ChatMessageList({
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when new messages arrive or during streaming
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
@@ -33,9 +32,10 @@ export default function ChatMessageList({
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/20 border-t-primary mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Loading messages...</p>
+        <div className="flex items-center gap-3">
+          <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+          <div className="h-2 w-2 rounded-full bg-primary animate-pulse [animation-delay:150ms]" />
+          <div className="h-2 w-2 rounded-full bg-primary animate-pulse [animation-delay:300ms]" />
         </div>
       </div>
     )
@@ -44,20 +44,21 @@ export default function ChatMessageList({
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center px-4">
-        <div className="text-center max-w-md">
-          <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-violet-500 to-purple-600 flex items-center justify-center mx-auto mb-5">
-            <HugeiconsIcon icon={AiChat01Icon} className="h-8 w-8 text-white" />
+        <div className="max-w-lg w-full">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl font-semibold text-foreground tracking-tight">
+              How can I help you today?
+            </h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              Ask about markets, strategies, portfolios, or anything trading-related.
+            </p>
           </div>
-          <h2 className="text-xl font-semibold text-foreground mb-2">Welcome to Vivid AI</h2>
-          <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-            Your AI-powered trading assistant. Ask about crypto markets, trading strategies,
-            portfolio analysis, or anything else.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SUGGESTIONS.map((s, i) => (
               <button
                 key={i}
-                className="text-left px-4 py-3 rounded-xl border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm text-muted-foreground group"
+                className="group text-left p-4 rounded-xl border border-border/40 hover:border-border hover:bg-accent/40 transition-all"
                 onClick={() => {
                   window.dispatchEvent(
                     new CustomEvent("vivid:suggestion", {
@@ -66,11 +67,26 @@ export default function ChatMessageList({
                   )
                 }}
               >
-                <HugeiconsIcon
-                  icon={s.icon}
-                  className="h-4.5 w-4.5 text-primary mb-1.5 group-hover:scale-110 transition-transform"
-                />
-                <span className="line-clamp-2">{s.label}</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <HugeiconsIcon
+                        icon={s.icon}
+                        className="h-4 w-4 text-muted-foreground shrink-0"
+                      />
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        {s.category}
+                      </span>
+                    </div>
+                    <p className="text-sm text-foreground leading-snug line-clamp-2">
+                      {s.label}
+                    </p>
+                  </div>
+                  <HugeiconsIcon
+                    icon={ArrowRight01Icon}
+                    className="h-4 w-4 text-muted-foreground/0 group-hover:text-muted-foreground transition-all shrink-0 mt-0.5"
+                  />
+                </div>
               </button>
             ))}
           </div>
@@ -80,8 +96,8 @@ export default function ChatMessageList({
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-6">
-      <div className="max-w-3xl mx-auto space-y-5">
+    <div ref={containerRef} className="flex-1 overflow-y-auto">
+      <div className="max-w-3xl mx-auto px-4 md:px-6 py-6 space-y-6">
         {messages
           .filter((m) => m.role !== "system")
           .map((msg, i) => (
@@ -98,22 +114,26 @@ export default function ChatMessageList({
 const SUGGESTIONS = [
   {
     icon: ChartLineData03Icon,
+    category: "Markets",
     label: "What's the current state of the crypto market?",
     prompt: "What's the current state of the crypto market?",
   },
   {
     icon: IdeaIcon,
-    label: "Explain DeFi yield farming to me",
+    category: "Learn",
+    label: "Explain DeFi yield farming in simple terms",
     prompt: "Explain DeFi yield farming to me in simple terms",
   },
   {
     icon: ShieldKeyIcon,
+    category: "Security",
     label: "Best practices for securing my crypto wallet",
     prompt: "What are the best practices for securing my crypto wallet?",
   },
   {
     icon: BalanceScaleIcon,
-    label: "Compare Bitcoin vs Ethereum as investments",
+    category: "Compare",
+    label: "Bitcoin vs Ethereum as investments",
     prompt: "Compare Bitcoin vs Ethereum as investments. What are the key differences?",
   },
 ]

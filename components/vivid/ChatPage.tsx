@@ -7,7 +7,6 @@ import {
   Menu01Icon,
   Add01Icon,
   ArrowLeft01Icon,
-  AiChat01Icon,
   Settings01Icon,
   Cancel01Icon,
   Alert02Icon,
@@ -42,12 +41,10 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [instructionsOpen, setInstructionsOpen] = useState(false)
 
-  // Load conversations on mount
   useEffect(() => {
     fetchConversations()
   }, [fetchConversations])
 
-  // Send message handler — auto-creates a conversation if needed
   const handleSend = useCallback(
     async (content: string) => {
       if (!activeConversation) {
@@ -89,7 +86,7 @@ export default function ChatPage() {
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -114,64 +111,52 @@ export default function ChatPage() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border/40 bg-card">
-          <div className="flex items-center gap-3">
+        {/* Header — minimal, clean */}
+        <div className="flex items-center justify-between px-4 md:px-6 h-13 border-b border-border/30">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors lg:hidden"
+              className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground transition-colors lg:hidden"
             >
-              <HugeiconsIcon icon={Menu01Icon} className="h-5 w-5" />
+              <HugeiconsIcon icon={Menu01Icon} className="h-4.5 w-4.5" />
             </button>
 
             <button
               onClick={() => router.push("/")}
-              className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
+              className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground transition-colors"
               title="Back to Dashboard"
             >
-              <HugeiconsIcon icon={ArrowLeft01Icon} className="h-5 w-5" />
+              <HugeiconsIcon icon={ArrowLeft01Icon} className="h-4.5 w-4.5" />
             </button>
 
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-linear-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-                <HugeiconsIcon icon={AiChat01Icon} className="h-3.5 w-3.5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-sm font-semibold text-foreground">
-                  {activeConversation?.title || "Vivid AI"}
-                </h1>
-                {activeConversation && (
-                  <p className="text-[10px] text-muted-foreground -mt-0.5">
-                    GPT-4o
-                  </p>
-                )}
-              </div>
-            </div>
+            <span className="text-sm font-medium text-foreground truncate max-w-60">
+              {activeConversation?.title || "Vivid AI"}
+            </span>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             {activeConversation && (
               <button
                 onClick={() => setInstructionsOpen(true)}
-                className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
+                className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground transition-colors"
                 title="Custom Instructions"
               >
-                <HugeiconsIcon icon={Settings01Icon} className="h-5 w-5" />
+                <HugeiconsIcon icon={Settings01Icon} className="h-4.5 w-4.5" />
               </button>
             )}
             <button
               onClick={handleNewChat}
-              className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
+              className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground transition-colors"
               title="New Chat"
             >
-              <HugeiconsIcon icon={Add01Icon} className="h-5 w-5" />
+              <HugeiconsIcon icon={Add01Icon} className="h-4.5 w-4.5" />
             </button>
           </div>
         </div>
 
         {/* Error Banner */}
         {error && (
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-destructive/10 border-b border-destructive/20">
+          <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 border-b border-destructive/20">
             <HugeiconsIcon icon={Alert02Icon} className="h-4 w-4 text-destructive shrink-0" />
             <p className="text-sm text-destructive flex-1">{error}</p>
             <button
