@@ -9,15 +9,17 @@ import {
   Exchange01Icon,
   Wallet01Icon,
   Clock01Icon,
+  BarChartIcon,
 } from "@hugeicons/core-free-icons"
 import { useAuth } from "@/components/auth-provider"
 import { useOpenOrders, type OpenOrder } from "@/hooks/useOpenOrders"
 import { useOrderHistory, type HistoricalOrder } from "@/hooks/useOrderHistory"
 import { useUserFills, type UserFill } from "@/hooks/useUserFills"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { useHyperliquidPositions, type HyperliquidPosition } from "@/hooks/useHyperliquidPositions"
 import { useSearchParams } from "next/navigation"
 
-type Tab = "orders" | "history" | "holdings"
+type Tab = "orders" | "history" | "holdings" | "positions"
 
 export function OpenOrdersPanel() {
   const { user, isSignedIn } = useAuth()
@@ -31,6 +33,7 @@ export function OpenOrdersPanel() {
   const { orders: orderHistory, loading: historyLoading } = useOrderHistory()
   const { fills, loading: fillsLoading } = useUserFills()
   const { balances: hlBalances, loading: balancesLoading } = useHyperliquidBalance(user?.userId, isSignedIn)
+  const { positions, loading: positionsLoading } = useHyperliquidPositions()
 
   // Filter orders/fills by current pair if toggle is on
   const filteredOrders = React.useMemo(
@@ -57,6 +60,12 @@ export function OpenOrdersPanel() {
       : hlBalances,
     [hlBalances, hideOtherPairs, currentPair],
   )
+  const filteredPositions = React.useMemo(
+    () => hideOtherPairs && currentPair
+      ? positions.filter((p) => p.coin.toUpperCase() === currentPair)
+      : positions,
+    [positions, hideOtherPairs, currentPair],
+  )
 
   // Flash badge when order count changes
   const prevCountRef = React.useRef(openOrders.length)
@@ -73,12 +82,14 @@ export function OpenOrdersPanel() {
   const loading =
     (tab === "orders" && ordersLoading) ||
     (tab === "history" && (historyLoading || fillsLoading)) ||
-    (tab === "holdings" && balancesLoading)
+    (tab === "holdings" && balancesLoading) ||
+    (tab === "positions" && positionsLoading)
 
   const tabs: { id: Tab; label: string; icon: typeof Menu01Icon }[] = [
     { id: "orders", label: "Open Orders", icon: Clock01Icon },
     { id: "history", label: "Trade History", icon: Exchange01Icon },
     { id: "holdings", label: "Holdings", icon: Wallet01Icon },
+    { id: "positions", label: "Positions", icon: BarChartIcon },
   ]
 
   return (
@@ -115,6 +126,11 @@ export function OpenOrdersPanel() {
               {t.id === "holdings" && filteredBalances.length > 0 && (
                 <span className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold tabular-nums bg-primary/15 text-primary">
                   {filteredBalances.length}
+                </span>
+              )}
+              {t.id === "positions" && filteredPositions.length > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold tabular-nums bg-amber-500/15 text-amber-500">
+                  {filteredPositions.length}
                 </span>
               )}
               {tab === t.id && (
@@ -169,10 +185,16 @@ export function OpenOrdersPanel() {
           ) : (
             <OrderHistoryTable orders={filteredHistory} fills={filteredFills} />
           )
-        ) : filteredBalances.length === 0 ? (
-          <EmptyState icon={Wallet01Icon} message="No holdings found" sub="Your spot balances will appear here" />
+        ) : tab === "holdings" ? (
+          filteredBalances.length === 0 ? (
+            <EmptyState icon={Wallet01Icon} message="No holdings found" sub="Your spot balances will appear here" />
+          ) : (
+            <HoldingsTable balances={filteredBalances} />
+          )
+        ) : filteredPositions.length === 0 ? (
+          <EmptyState icon={BarChartIcon} message="No open positions" sub="Your Hyperliquid perp positions will appear here" />
         ) : (
-          <HoldingsTable balances={filteredBalances} />
+          <PositionsTable positions={filteredPositions} />
         )}
       </div>
 
@@ -479,6 +501,74 @@ function HoldingsTable({ balances }: { balances: HyperliquidBalance[] }) {
               <p className={`text-[10px] font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
                 {isProfit ? "+" : ""}{b.unrealizedPnlPercent.toFixed(2)}%
               </p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function PositionsTable({ positions }: { positions: HyperliquidPosition[] }) {
+  return (
+    <div className="divide-y divide-border/10">
+      {positions.map((pos) => {
+        const size = Number(pos.szi)
+        const isLong = size > 0
+        const pnl = Number(pos.unrealizedPnl)
+        const isPnlUp = pnl >= 0
+        const roe = Number(pos.returnOnEquity) * 100
+        const entryPrice = Number(pos.entryPx)
+        const posValue = Number(pos.positionValue)
+        const liqPx = pos.liquidationPx ? Number(pos.liquidationPx) : null
+        const lev = pos.leverage?.value ?? null
+
+        return (
+          <div key={pos.coin} className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent/10 transition-colors">
+            {/* Direction badge */}
+            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[9px] font-bold text-white ${
+              isLong ? "bg-emerald-500" : "bg-red-500"
+            }`}>
+              {isLong ? "L" : "S"}
+            </div>
+
+            {/* Details */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold">{pos.coin}</span>
+                <span className="rounded-md bg-accent/60 px-1.5 py-px text-[9px] font-medium text-muted-foreground">
+                  PERP
+                </span>
+                {lev !== null && (
+                  <span className="rounded-md bg-amber-500/10 px-1.5 py-px text-[9px] font-medium text-amber-500">
+                    {lev}×
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+                <span className="tabular-nums">Qty: {Math.abs(size).toFixed(4)}</span>
+                <span className="text-border">·</span>
+                <span className="tabular-nums">Entry: ${entryPrice >= 1000
+                  ? entryPrice.toLocaleString("en-US", { maximumFractionDigits: 2 })
+                  : entryPrice.toFixed(4)}</span>
+              </div>
+            </div>
+
+            {/* PnL + Value */}
+            <div className="text-right shrink-0">
+              <p className={`text-xs font-bold tabular-nums ${isPnlUp ? "text-emerald-500" : "text-red-500"}`}>
+                {isPnlUp ? "+" : ""}{pnl.toFixed(2)} USDC
+              </p>
+              <p className={`text-[10px] tabular-nums ${isPnlUp ? "text-emerald-500/80" : "text-red-500/80"}`}>
+                {isPnlUp ? "+" : ""}{roe.toFixed(2)}% ROE
+              </p>
+              {liqPx !== null && (
+                <p className="text-[10px] text-muted-foreground/60 tabular-nums">
+                  Liq: ${liqPx >= 1000
+                    ? liqPx.toLocaleString("en-US", { maximumFractionDigits: 2 })
+                    : liqPx.toFixed(4)}
+                </p>
+              )}
             </div>
           </div>
         )

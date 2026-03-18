@@ -13,7 +13,8 @@ import {
   Search01Icon,
   Exchange01Icon,
 } from "@hugeicons/core-free-icons"
-import type { CoinData, TradeResult } from "@/lib/actions"
+import type { CoinData, TradeResult, FuturesMarket } from "@/lib/actions"
+import { getFuturesMarkets } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
@@ -22,7 +23,7 @@ import { useTradeSelector } from "@/components/trade-selector"
 const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
 
 /* ========== Markets Table ========== */
-const MARKET_TABS = ["Favorites", "Hot", "New", "Gainers", "Losers", "Turnover", "Spot"] as const
+const MARKET_TABS = ["Favorites", "Hot", "New", "Gainers", "Losers", "Turnover", "Spot", "Futures"] as const
 type MarketTab = (typeof MARKET_TABS)[number]
 
 function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
@@ -30,6 +31,22 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
   const [search, setSearch] = React.useState("")
   const { openTradeSelector } = useTradeSelector()
   const [visibleCount, setVisibleCount] = React.useState(8)
+  const [futuresMarkets, setFuturesMarkets] = React.useState<FuturesMarket[]>([])
+  const [futuresLoading, setFuturesLoading] = React.useState(false)
+  const hasFetchedFutures = React.useRef(false)
+
+  // Fetch futures lazily when tab is selected
+  React.useEffect(() => {
+    if (tab !== "Futures" || hasFetchedFutures.current) return
+    hasFetchedFutures.current = true
+    setFuturesLoading(true)
+    getFuturesMarkets()
+      .then((res) => {
+        if (res.success) setFuturesMarkets(res.markets)
+      })
+      .catch(() => {})
+      .finally(() => setFuturesLoading(false))
+  }, [tab])
 
   const filtered = React.useMemo(() => {
     let list = [...coins]
@@ -64,6 +81,20 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
   const displayed = filtered.slice(0, visibleCount)
   const hasMore = visibleCount < filtered.length
 
+  const filteredFutures = React.useMemo(() => {
+    let list = [...futuresMarkets]
+    if (search) {
+      const q = search.toLowerCase()
+      list = list.filter(
+        (m) => m.symbol.toLowerCase().includes(q) || m.baseAsset.toLowerCase().includes(q),
+      )
+    }
+    return list.sort((a, b) => b.openInterest - a.openInterest)
+  }, [futuresMarkets, search])
+
+  const displayedFutures = filteredFutures.slice(0, visibleCount)
+  const hasMoreFutures = visibleCount < filteredFutures.length
+
   return (
     <div data-onboarding="dash-markets" className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card">
       {/* Header */}
@@ -92,7 +123,9 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
               onClick={() => setTab(t)}
               className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
                 tab === t
-                  ? "bg-primary text-white"
+                  ? t === "Futures"
+                    ? "bg-amber-500 text-white"
+                    : "bg-primary text-white"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}
             >
@@ -102,87 +135,161 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
         </div>
       </div>
 
-      {/* Table */}
-      {error && filtered.length === 0 ? (
-        <ErrorState message={error} />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={Search01Icon}
-          title="No results found"
-          description="Try a different search term or tab"
-        />
-      ) : (
-        <div className="flex-1 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-t border-border/30 text-xs text-muted-foreground">
-                <th className="px-3 sm:px-4 py-2 text-left font-medium">Pair</th>
-                <th className="px-3 sm:px-4 py-2 text-right font-medium">Price</th>
-                <th className="px-3 sm:px-4 py-2 text-right font-medium">24h</th>
-                <th className="hidden sm:table-cell px-4 py-2 text-right font-medium">Trade</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/20">
-              {displayed.map((coin) => (
-                <tr key={coin.symbol} className="transition-colors hover:bg-accent/30">
-                  <td className="px-3 sm:px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center shrink-0">
-                        {coin.image ? (
-                          <img src={coin.image} alt="" className="h-5 w-5 rounded-full ring-1 ring-card" />
-                        ) : (
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary ring-1 ring-card">
-                            {coin.symbol.slice(0, 2)}
-                          </span>
-                        )}
-                        <img
-                          src={USDT_IMAGE}
-                          alt=""
-                          className="h-4 w-4 rounded-full ring-1 ring-card -ml-1.5"
-                        />
-                      </div>
-                      <span className="font-medium">{coin.symbol}/USDT</span>
-                    </div>
-                  </td>
-                  <td className="px-3 sm:px-4 py-2.5 text-right font-semibold tabular-nums">
-                    {coin.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: coin.price < 1 ? 4 : 2 })}
-                  </td>
-                  <td className="px-3 sm:px-4 py-2.5 text-right">
-                    <span
-                      className={`inline-flex items-center gap-0.5 font-medium tabular-nums ${
-                        coin.change24h >= 0 ? "text-emerald-500" : "text-red-500"
-                      }`}
-                    >
-                      {coin.change24h >= 0 ? "+" : ""}{coin.change24h.toFixed(2)}%
-                    </span>
-                  </td>
-                  <td className="hidden sm:table-cell px-4 py-2.5 text-right">
-                    <button
-                      onClick={() => openTradeSelector(coin.symbol)}
-                      className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    >
-                      Trade
-                      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-                    </button>
-                  </td>
+      {/* Table — Futures */}
+      {tab === "Futures" ? (
+        futuresLoading ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+          </div>
+        ) : filteredFutures.length === 0 ? (
+          <EmptyState icon={Search01Icon} title="No contracts found" description="Try a different search term" />
+        ) : (
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                  <th className="px-3 sm:px-4 py-2 text-left font-medium">Contract</th>
+                  <th className="px-3 sm:px-4 py-2 text-right font-medium">Mark Price</th>
+                  <th className="px-3 sm:px-4 py-2 text-right font-medium">24h</th>
+                  <th className="hidden sm:table-cell px-4 py-2 text-right font-medium">Trade</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border/20">
+                {displayedFutures.map((market) => {
+                  const isUp = market.change24h >= 0
+                  return (
+                    <tr key={market.symbol} className="transition-colors hover:bg-accent/30">
+                      <td className="px-3 sm:px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-[9px] font-bold text-amber-600 ring-1 ring-amber-500/20">
+                            {market.baseAsset.slice(0, 3)}
+                          </span>
+                          <div className="flex flex-col">
+                            <span className="font-medium leading-none">{market.symbol}</span>
+                            <span className="text-[10px] text-muted-foreground">Perp · {market.maxLeverage}×</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-4 py-2.5 text-right font-semibold tabular-nums">
+                        ${market.markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: market.markPrice < 1 ? 4 : 2 })}
+                      </td>
+                      <td className="px-3 sm:px-4 py-2.5 text-right">
+                        <span className={`inline-flex items-center gap-0.5 font-medium tabular-nums ${isUp ? "text-emerald-500" : "text-red-500"}`}>
+                          {isUp ? "+" : ""}{market.change24h.toFixed(2)}%
+                        </span>
+                      </td>
+                      <td className="hidden sm:table-cell px-4 py-2.5 text-right">
+                        <a
+                          href={`/futures?pair=${market.symbol}`}
+                          className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          Trade
+                          <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                        </a>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
 
-          {/* Load More */}
-          {hasMore && (
-            <div className="flex justify-center p-3">
-              <button
-                onClick={() => setVisibleCount((c) => c + 8)}
-                className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                Load More
-                <HugeiconsIcon icon={ArrowDown01Icon} className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
+            {/* Load More (Futures) */}
+            {hasMoreFutures && (
+              <div className="flex justify-center p-3">
+                <button
+                  onClick={() => setVisibleCount((c) => c + 8)}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  Load More
+                  <HugeiconsIcon icon={ArrowDown01Icon} className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        )
+      ) : (
+        /* Table — Spot */
+        error && filtered.length === 0 ? (
+          <ErrorState message={error} />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={Search01Icon}
+            title="No results found"
+            description="Try a different search term or tab"
+          />
+        ) : (
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                  <th className="px-3 sm:px-4 py-2 text-left font-medium">Pair</th>
+                  <th className="px-3 sm:px-4 py-2 text-right font-medium">Price</th>
+                  <th className="px-3 sm:px-4 py-2 text-right font-medium">24h</th>
+                  <th className="hidden sm:table-cell px-4 py-2 text-right font-medium">Trade</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/20">
+                {displayed.map((coin) => (
+                  <tr key={coin.symbol} className="transition-colors hover:bg-accent/30">
+                    <td className="px-3 sm:px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center shrink-0">
+                          {coin.image ? (
+                            <img src={coin.image} alt="" className="h-5 w-5 rounded-full ring-1 ring-card" />
+                          ) : (
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary ring-1 ring-card">
+                              {coin.symbol.slice(0, 2)}
+                            </span>
+                          )}
+                          <img
+                            src={USDT_IMAGE}
+                            alt=""
+                            className="h-4 w-4 rounded-full ring-1 ring-card -ml-1.5"
+                          />
+                        </div>
+                        <span className="font-medium">{coin.symbol}/USDT</span>
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 text-right font-semibold tabular-nums">
+                      {coin.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: coin.price < 1 ? 4 : 2 })}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 text-right">
+                      <span
+                        className={`inline-flex items-center gap-0.5 font-medium tabular-nums ${
+                          coin.change24h >= 0 ? "text-emerald-500" : "text-red-500"
+                        }`}
+                      >
+                        {coin.change24h >= 0 ? "+" : ""}{coin.change24h.toFixed(2)}%
+                      </span>
+                    </td>
+                    <td className="hidden sm:table-cell px-4 py-2.5 text-right">
+                      <button
+                        onClick={() => openTradeSelector(coin.symbol)}
+                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      >
+                        Trade
+                        <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Load More */}
+            {hasMore && (
+              <div className="flex justify-center p-3">
+                <button
+                  onClick={() => setVisibleCount((c) => c + 8)}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  Load More
+                  <HugeiconsIcon icon={ArrowDown01Icon} className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        )
       )}
     </div>
   )

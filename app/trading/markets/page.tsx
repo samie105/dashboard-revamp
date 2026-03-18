@@ -1,13 +1,14 @@
 import { Suspense } from "react"
-import { getPrices } from "@/lib/actions"
+import { getPrices, getFuturesMarkets } from "@/lib/actions"
 import { MarketsClient } from "@/components/trading/markets-client"
 
 async function MarketsLoader() {
-  const data = await getPrices()
+  const [data, futuresData] = await Promise.all([getPrices(), getFuturesMarkets()])
   return (
     <MarketsClient
       coins={data.coins}
       globalStats={data.globalStats}
+      futuresMarkets={futuresData.success ? futuresData.markets : []}
       error={data.error || (data.coins.length === 0 ? "No market data available" : undefined)}
     />
   )
