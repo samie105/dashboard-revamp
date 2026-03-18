@@ -56,7 +56,7 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
 
   const [chain, setChain] = React.useState<"ethereum" | "solana">("ethereum")
   const [amount, setAmount] = React.useState("")
-  const [spotBalance, setSpotBalance] = React.useState<number | null>(null)
+  const [spotBalance, setSpotBalance] = React.useState<number>(0)
   const [spotBalanceLoading, setSpotBalanceLoading] = React.useState(false)
 
   // Derive wallet address from the revamp's wallet provider
@@ -141,7 +141,7 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
       <div className="flex items-center justify-between px-5 py-4 border-b border-border/20">
         <div className="flex items-center gap-2">
           <HugeiconsIcon icon={ArrowDown01Icon} className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">Fund Spot Wallet</h3>
+          <h3 className="text-sm font-semibold">Transfer</h3>
         </div>
         {isActive && (
           <div className="flex items-center gap-1">
@@ -203,14 +203,14 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
               </div>
 
               {/* Amount input */}
-              <div className="flex items-center gap-2 rounded-lg bg-background px-3 py-2.5 border border-border/30 focus-within:border-primary transition-colors">
+              <div className="flex items-center gap-2 rounded-lg bg-card border border-border/60 px-3 py-2.5 focus-within:border-primary transition-colors">
                 <input
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
                   min={5}
-                  className="flex-1 bg-transparent text-lg font-medium placeholder:text-muted-foreground/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-medium placeholder:text-muted-foreground/50 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -244,18 +244,16 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
                   Spot Balance:{" "}
                   {spotBalanceLoading ? (
                     <HugeiconsIcon icon={Loading03Icon} className="h-2.5 w-2.5 animate-spin inline" />
-                  ) : spotBalance !== null ? (
+                  ) : (
                     <span className="text-foreground font-medium">
                       {spotBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
                     </span>
-                  ) : (
-                    <span className="text-muted-foreground/40">—</span>
                   )}
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 rounded-lg bg-background px-3 py-2.5 border border-border/30">
-                <span className="flex-1 text-lg font-medium">
+              <div className="flex items-center gap-2 rounded-lg bg-card border border-border/60 px-3 py-2.5">
+                <span className="min-w-0 flex-1 text-sm font-medium">
                   {amount && parseFloat(amount) >= 5
                     ? `≈ ${parseFloat(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                     : "0.00"}
@@ -263,7 +261,7 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
                 <span className="text-xs font-medium shrink-0">USDC</span>
               </div>
 
-              <p className="text-[10px] text-muted-foreground">Hyperliquid Spot Wallet</p>
+              <p className="text-[10px] text-muted-foreground">Spot Wallet (USDC)</p>
             </div>
 
             {/* Error */}
@@ -285,7 +283,7 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
               ) : isTerminal ? (
                 "New Transfer"
               ) : (
-                "Fund Spot Wallet"
+                "Transfer to Spot"
               )}
             </button>
           </>

@@ -167,20 +167,26 @@ function UnsupportedTokenModal({
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 border-t border-border/30 px-5 py-4">
+          <div className="grid grid-cols-2 gap-3 border-t border-border/30 px-5 py-4">
             <button
               onClick={() => goTo("/spot")}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="flex flex-col items-start gap-1.5 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-left transition-colors hover:bg-primary/20"
             >
-              <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4" />
-              Spot Trading
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold text-primary">Spot</span>
+              </div>
+              <span className="text-[11px] text-muted-foreground">Buy / Sell tab</span>
             </button>
             <button
               onClick={() => goTo("/futures")}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border/40 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
+              className="flex flex-col items-start gap-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-left transition-colors hover:bg-emerald-500/20"
             >
-              <HugeiconsIcon icon={ChartLineData02Icon} className="h-4 w-4" />
-              Futures
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={ChartLineData02Icon} className="h-4 w-4 text-emerald-500" />
+                <span className="text-sm font-semibold text-emerald-500">Futures</span>
+              </div>
+              <span className="text-[11px] text-muted-foreground">Long / Short tab</span>
             </button>
           </div>
         </Dialog.Popup>
