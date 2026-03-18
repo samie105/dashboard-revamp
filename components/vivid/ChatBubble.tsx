@@ -58,7 +58,7 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
               {message.attachments.map((att, i) => (
                 <div key={i}>
                   {att.type === "image" ? (
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={att.url}
                       alt={att.filename}
