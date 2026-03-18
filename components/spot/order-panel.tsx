@@ -151,17 +151,22 @@ export function OrderPanel({
     if (isBuy) {
       const maxSpend = quoteBalance ?? 0
       if (maxSpend > 0 && effectivePrice > 0) {
-        setAmount(((maxSpend * p) / 100 / effectivePrice).toFixed(6))
+        const rawAmount = (maxSpend * p) / 100 / effectivePrice
+        setAmount(rawAmount.toFixed(6))
+        setTotalInput(((maxSpend * p) / 100).toFixed(2))
       } else {
-        const notional = 1000
-        setAmount(((notional * p) / 100 / effectivePrice).toFixed(6))
+        setAmount("")
+        setTotalInput("")
       }
     } else {
       const maxSell = baseBalance ?? 0
       if (maxSell > 0) {
-        setAmount(((maxSell * p) / 100).toFixed(6))
+        const rawAmount = (maxSell * p) / 100
+        setAmount(rawAmount.toFixed(6))
+        setTotalInput((rawAmount * effectivePrice).toFixed(2))
       } else {
-        setAmount(((1 * p) / 100).toFixed(6))
+        setAmount("")
+        setTotalInput("")
       }
     }
   }
@@ -427,25 +432,8 @@ export function OrderPanel({
           />
         </div>
 
-        {/* Percentage quick-select buttons + slider */}
+        {/* Percentage slider — theme-aware, no percentage buttons */}
         <div className="flex flex-col gap-1">
-          <div className="flex gap-1">
-            {[25, 50, 75, 100].map((mark) => (
-              <button
-                key={mark}
-                onClick={() => handlePct(mark)}
-                className={`flex-1 rounded-md py-1 text-[10px] font-medium transition-colors ${
-                  pct === mark
-                    ? isBuy
-                      ? "bg-emerald-500/15 text-emerald-500"
-                      : "bg-red-500/15 text-red-500"
-                    : "bg-accent/30 text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {mark}%
-              </button>
-            ))}
-          </div>
           <div className="relative px-0.5">
             <input
               type="range"
@@ -454,15 +442,18 @@ export function OrderPanel({
               step={1}
               value={sliderPct}
               onChange={(e) => handlePct(Number(e.target.value))}
-              className="w-full appearance-none h-1 rounded-full outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-foreground/80 [&::-webkit-slider-thumb]:bg-card [&::-webkit-slider-thumb]:shadow-sm"
+              className="w-full appearance-none h-1.5 rounded-full outline-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, ${isBuy ? "rgb(16 185 129)" : "rgb(239 68 68)"} ${sliderPct}%, hsl(var(--accent) / 0.3) ${sliderPct}%)`,
+                background: `linear-gradient(to right, ${isBuy ? "rgb(16 185 129)" : "rgb(239 68 68)"} ${sliderPct}%, var(--color-accent, hsl(var(--accent))) ${sliderPct}%)`,
               }}
             />
-            <div className="flex justify-between mt-0.5">
-              <span className="text-[9px] text-muted-foreground/50">0%</span>
-              <span className="text-[9px] text-muted-foreground/50">100%</span>
-            </div>
+            {sliderPct > 0 && (
+              <div className="text-center mt-1">
+                <span className={`text-[10px] font-semibold tabular-nums ${isBuy ? "text-emerald-500" : "text-red-500"}`}>
+                  {sliderPct}%
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -591,6 +582,8 @@ export function OrderPanel({
             "Sign in to trade"
           ) : !walletsGenerated ? (
             "Setting up wallet…"
+          ) : numericAmount > 0 ? (
+            `${isBuy ? "Buy" : "Sell"} ${numericAmount.toFixed(4)} ${symbol}`
           ) : (
             `${isBuy ? "Buy" : "Sell"} ${symbol}`
           )}

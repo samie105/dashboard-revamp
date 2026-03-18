@@ -21,11 +21,24 @@ type Tab = "orders" | "history" | "holdings"
 export function OpenOrdersPanel() {
   const { user, isSignedIn } = useAuth()
   const [tab, setTab] = React.useState<Tab>("orders")
+  const [selectedOrder, setSelectedOrder] = React.useState<OpenOrder | null>(null)
 
   const { orders: openOrders, cancelOrder, cancelAll, loading: ordersLoading } = useOpenOrders()
   const { orders: orderHistory, loading: historyLoading } = useOrderHistory()
   const { fills, loading: fillsLoading } = useUserFills()
   const { balances: hlBalances, loading: balancesLoading } = useHyperliquidBalance(user?.userId, isSignedIn)
+
+  // Flash badge when order count changes
+  const prevCountRef = React.useRef(openOrders.length)
+  const [badgeFlash, setBadgeFlash] = React.useState(false)
+  React.useEffect(() => {
+    if (openOrders.length > prevCountRef.current) {
+      setBadgeFlash(true)
+      const t = setTimeout(() => setBadgeFlash(false), 2000)
+      return () => clearTimeout(t)
+    }
+    prevCountRef.current = openOrders.length
+  }, [openOrders.length])
 
   const loading =
     (tab === "orders" && ordersLoading) ||
@@ -56,7 +69,11 @@ export function OpenOrdersPanel() {
               <HugeiconsIcon icon={t.icon} className="h-3 w-3" />
               {t.label}
               {t.id === "orders" && openOrders.length > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[9px] font-semibold text-primary tabular-nums">
+                <span className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold tabular-nums transition-all ${
+                  badgeFlash
+                    ? "bg-primary text-white animate-pulse scale-110"
+                    : "bg-primary/15 text-primary"
+                }`}>
                   {openOrders.length}
                 </span>
               )}
@@ -90,7 +107,7 @@ export function OpenOrdersPanel() {
           openOrders.length === 0 ? (
             <EmptyState icon={Clock01Icon} message="No open orders" sub="Your active orders will appear here" />
           ) : (
-            <OpenOrdersTable orders={openOrders} onCancel={cancelOrder} />
+            <OpenOrdersTable orders={openOrders} onCancel={cancelOrder} onSelect={setSelectedOrder} />
           )
         ) : tab === "history" ? (
           fills.length === 0 && orderHistory.length === 0 ? (
@@ -104,6 +121,15 @@ export function OpenOrdersPanel() {
           <HoldingsTable balances={hlBalances} />
         )}
       </div>
+
+      {/* Order detail modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setSelectedOrder(null)}>
+          <div className="w-[340px] max-w-[90vw] rounded-xl border border-border/20 bg-card p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <OrderDetailContent order={selectedOrder} onCancel={cancelOrder} onClose={() => setSelectedOrder(null)} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -123,13 +149,16 @@ function EmptyState({ icon, message, sub }: { icon: typeof Menu01Icon; message: 
 function OpenOrdersTable({
   orders,
   onCancel,
+  onSelect,
 }: {
   orders: OpenOrder[]
   onCancel: (coin: string, orderId: number) => Promise<boolean>
+  onSelect: (order: OpenOrder) => void
 }) {
   const [cancellingId, setCancellingId] = React.useState<number | null>(null)
 
-  const handleCancel = async (coin: string, oid: number) => {
+  const handleCancel = async (e: React.MouseEvent, coin: string, oid: number) => {
+    e.stopPropagation()
     setCancellingId(oid)
     await onCancel(coin, oid)
     setCancellingId(null)
@@ -140,7 +169,11 @@ function OpenOrdersTable({
       {orders.map((o) => {
         const isBuy = o.side === "B"
         return (
-          <div key={o.oid} className="flex items-center gap-3 px-3 py-2 hover:bg-accent/10 transition-colors group">
+          <div
+            key={o.oid}
+            onClick={() => onSelect(o)}
+            className="flex items-center gap-3 px-3 py-2 hover:bg-accent/10 transition-colors group cursor-pointer"
+          >
             {/* Side indicator */}
             <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[9px] font-bold text-white ${
               isBuy ? "bg-emerald-500" : "bg-red-500"
@@ -170,7 +203,7 @@ function OpenOrdersTable({
 
             {/* Cancel button */}
             <button
-              onClick={() => handleCancel(o.coin, o.oid)}
+              onClick={(e) => handleCancel(e, o.coin, o.oid)}
               disabled={cancellingId === o.oid}
               className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-500/10 transition-all"
             >
@@ -183,6 +216,78 @@ function OpenOrdersTable({
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function OrderDetailContent({
+  order,
+  onCancel,
+  onClose,
+}: {
+  order: OpenOrder
+  onCancel: (coin: string, orderId: number) => Promise<boolean>
+  onClose: () => void
+}) {
+  const [cancelling, setCancelling] = React.useState(false)
+  const isBuy = order.side === "B"
+  const orderTypeName = order.tif === "Ioc" ? "Market" : order.orderType
+
+  const handleCancel = async () => {
+    setCancelling(true)
+    const ok = await onCancel(order.coin, order.oid)
+    setCancelling(false)
+    if (ok) onClose()
+  }
+
+  const rows = [
+    { label: "Pair", value: order.coin },
+    { label: "Side", value: isBuy ? "Buy" : "Sell", color: isBuy ? "text-emerald-500" : "text-red-500" },
+    { label: "Type", value: orderTypeName },
+    { label: "Price", value: `$${Number(order.limitPx).toLocaleString(undefined, { maximumFractionDigits: 6 })}` },
+    { label: "Size", value: Number(order.sz).toFixed(6) },
+    { label: "Notional", value: `$${(Number(order.limitPx) * Number(order.sz)).toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
+    ...(order.tif ? [{ label: "Time in Force", value: order.tif }] : []),
+    { label: "Order ID", value: String(order.oid) },
+  ]
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-[10px] font-bold text-white ${isBuy ? "bg-emerald-500" : "bg-red-500"}`}>
+            {isBuy ? "B" : "S"}
+          </div>
+          <div>
+            <p className="text-sm font-bold">{order.coin}</p>
+            <p className="text-[10px] text-muted-foreground">{orderTypeName} Order</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="rounded-md p-1 hover:bg-accent/50 transition-colors">
+          <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4 text-muted-foreground" />
+        </button>
+      </div>
+
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center justify-between text-[11px]">
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className={`font-medium tabular-nums ${r.color || "text-foreground"}`}>{r.value}</span>
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={handleCancel}
+        disabled={cancelling}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-500/10 py-2 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+      >
+        {cancelling ? (
+          <><HugeiconsIcon icon={Loading03Icon} className="h-3.5 w-3.5 animate-spin" /> Cancelling…</>
+        ) : (
+          <><HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" /> Cancel Order</>
+        )}
+      </button>
     </div>
   )
 }

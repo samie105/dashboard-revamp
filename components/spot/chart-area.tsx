@@ -47,6 +47,46 @@ const HL_WS_INTERVAL: Record<string, string> = {
   "1D": "1d", "1W": "1w", "3M": "1M", "6M": "1M", "1Y": "1M",
 }
 
+// Interval durations in seconds for countdown timer
+const INTERVAL_SECONDS: Record<string, number> = {
+  "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
+  "1H": 3600, "2H": 7200, "4H": 14400, "12H": 43200,
+  "1D": 86400, "1W": 604800,
+}
+
+function CandleCountdown({ interval }: { interval: string }) {
+  const [remaining, setRemaining] = React.useState("")
+
+  React.useEffect(() => {
+    const seconds = INTERVAL_SECONDS[interval]
+    if (!seconds) { setRemaining(""); return }
+
+    function update() {
+      const now = Math.floor(Date.now() / 1000)
+      const elapsed = now % seconds
+      const left = seconds - elapsed
+      const h = Math.floor(left / 3600)
+      const m = Math.floor((left % 3600) / 60)
+      const s = left % 60
+      if (h > 0) setRemaining(`${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`)
+      else if (m > 0) setRemaining(`${m}:${String(s).padStart(2, "0")}`)
+      else setRemaining(`${s}s`)
+    }
+
+    update()
+    const id = window.setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [interval])
+
+  if (!remaining) return null
+
+  return (
+    <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
+      {remaining}
+    </span>
+  )
+}
+
 // ── Drawing Tools ────────────────────────────────────────────────────────
 
 type DrawingType =
@@ -1047,12 +1087,9 @@ export function ChartArea({
           applyMainData(res.data)
           applyVolumeData(res.data)
           refreshIndicatorsRef.current()
-          // Set initial viewport only on first load or interval change
-          if (chartRef.current && res.data.length > 80) {
-            chartRef.current.timeScale().setVisibleLogicalRange({
-              from: res.data.length - 80,
-              to: res.data.length + 5,
-            })
+          // Show full chart data range
+          if (chartRef.current) {
+            chartRef.current.timeScale().fitContent()
           }
           setHasData(true)
         }
@@ -1252,22 +1289,45 @@ export function ChartArea({
 
       const isBuy = order.side === "B"
       const isStopOrder = order.orderType === "Stop Limit" || order.orderType === "Stop Market"
-      const color = isStopOrder ? "#f59e0b" : isBuy ? "#10b981" : "#ef4444"
-      const label = isStopOrder
-        ? `⚡ ${isBuy ? "Buy" : "Sell"} Stop ${order.sz} @ ${px}`
-        : `${isBuy ? "Buy" : "Sell"} ${order.sz} @ ${px}`
+
+      // Determine order color and label based on type
+      let color: string
+      let label: string
+      let lineStyle = 2 // dashed
+
+      if (isStopOrder) {
+        // TP/SL detection: stop order on opposite side = take profit or stop loss
+        // If it's a sell stop above entry (or buy stop below entry), likely a TP/SL
+        const isAbovePrice = px > price
+        if ((isBuy && !isAbovePrice) || (!isBuy && isAbovePrice)) {
+          // Take Profit — green dashed
+          color = "#10b981"
+          label = `🎯 TP ${order.sz} @ ${px}`
+          lineStyle = 2
+        } else {
+          // Stop Loss — red dashed
+          color = "#ef4444"
+          label = `🛑 SL ${order.sz} @ ${px}`
+          lineStyle = 2
+        }
+      } else {
+        // Regular limit order
+        color = isBuy ? "#10b981" : "#ef4444"
+        label = `${isBuy ? "▲ Buy" : "▼ Sell"} Limit ${order.sz} @ ${px}`
+        lineStyle = 0 // solid for limit orders
+      }
 
       const line = series.createPriceLine({
         price: px,
         color,
-        lineWidth: 1,
-        lineStyle: 2,
+        lineWidth: isStopOrder ? 1 : 2,
+        lineStyle,
         axisLabelVisible: true,
         title: label,
       })
       priceLinesRef.current.set(order.oid, line)
     }
-  }, [openOrders, symbol])
+  }, [openOrders, symbol, price])
 
   function handleSvgMouseDown(e: React.MouseEvent<SVGSVGElement>) {
     if (activeTool === "select") { setSelectedId(null); return }
@@ -1529,6 +1589,29 @@ export function ChartArea({
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
 
+        {/* Delete drawing(s) — visible when drawings exist */}
+        {drawings.length > 0 && (
+          <>
+            <div className="mx-1 h-4 w-px bg-border/30 shrink-0" />
+            {selectedId && (
+              <button
+                onClick={() => deleteDrawing(selectedId)}
+                title="Delete selected drawing"
+                className="rounded-md px-1.5 py-1 text-red-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+              </button>
+            )}
+            <button
+              onClick={() => { setDrawings([]); setSelectedId(null) }}
+              title="Clear all drawings"
+              className="rounded-md px-1.5 py-1 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M8 6V4h8v2M5 6l1 14h12l1-14"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2"/></svg>
+            </button>
+          </>
+        )}
+
         {/* Price */}
         <div className="ml-auto flex items-center gap-3 shrink-0">
           <div className="hidden sm:flex items-center gap-2 tabular-nums">
@@ -1710,7 +1793,10 @@ export function ChartArea({
             {iv.label}
           </button>
         ))}
-        {(loading || intervalLoading) && <HugeiconsIcon icon={Loading03Icon} className="ml-auto h-3 w-3 animate-spin text-muted-foreground" />}
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          <CandleCountdown interval={interval} />
+          {(loading || intervalLoading) && <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin text-muted-foreground" />}
+        </div>
       </div>
 
     </div>

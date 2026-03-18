@@ -122,48 +122,97 @@ export function SpotClient({
     if (pair && coins.find((c) => c.symbol === pair)) setSelectedPair(pair)
   }, [coins])
 
-  // Poll orderbook every 1s via server action for near-real-time updates
+  // WebSocket for real-time order book + trades
   React.useEffect(() => {
     let cancelled = false
-    async function poll() {
-      try {
-        const r = await getOrderBook(`${selectedPair}USDT`, 20)
-        if (!cancelled && r.success) {
-          setOrderBookAsks(r.asks)
-          setOrderBookBids(r.bids)
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    poll()
-    const id = window.setInterval(poll, 1_000)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [selectedPair])
+    const hlCoin = selectedPair.toUpperCase()
 
-  // Poll trades every 5s via server action
-  React.useEffect(() => {
-    let cancelled = false
-    async function poll() {
+    // Fetch initial data
+    const fetchInitial = async () => {
       try {
-        const r = await getTrades(`${selectedPair}USDT`, 50)
-        if (!cancelled && r.success)
-          setLiveTrades((p) => ({
-            ...p,
-            [`${selectedPair}USDT`]: r.data,
-          }))
-      } catch {
-        /* ignore */
-      }
+        const [obRes, trRes] = await Promise.all([
+          getOrderBook(`${selectedPair}USDT`, 20),
+          getTrades(`${selectedPair}USDT`, 50),
+        ])
+        if (cancelled) return
+        if (obRes.success) { setOrderBookAsks(obRes.asks); setOrderBookBids(obRes.bids) }
+        if (trRes.success) setLiveTrades((p) => ({ ...p, [`${selectedPair}USDT`]: trRes.data }))
+      } catch { /* ignore */ }
     }
-    if (!liveTrades[`${selectedPair}USDT`]?.length) poll()
-    const id = window.setInterval(poll, 5_000)
+    fetchInitial()
+
+    // Open Hyperliquid WebSocket for l2Book + trades
+    const ws = new WebSocket("wss://api.hyperliquid.xyz/ws")
+    let fallbackId: ReturnType<typeof setInterval> | null = null
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        method: "subscribe",
+        subscription: { type: "l2Book", coin: hlCoin },
+      }))
+      ws.send(JSON.stringify({
+        method: "subscribe",
+        subscription: { type: "trades", coin: hlCoin },
+      }))
+    }
+
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data)
+        if (cancelled) return
+
+        if (msg.channel === "l2Book" && msg.data?.levels) {
+          const [bidsRaw, asksRaw] = msg.data.levels
+          const bids = bidsRaw.slice(0, 20).map((l: { px: string; sz: string; n: number }, i: number, arr: { px: string; sz: string }[]) => {
+            const price = parseFloat(l.px)
+            const amount = parseFloat(l.sz)
+            const total = arr.slice(0, i + 1).reduce((s: number, x: { sz: string }) => s + parseFloat(x.sz), 0)
+            return { price, amount, total }
+          })
+          const asksSlice = asksRaw.slice(0, 20)
+          const asks = asksSlice.map((l: { px: string; sz: string; n: number }, i: number, arr: { px: string; sz: string }[]) => {
+            const price = parseFloat(l.px)
+            const amount = parseFloat(l.sz)
+            const total = arr.slice(0, i + 1).reduce((s: number, x: { sz: string }) => s + parseFloat(x.sz), 0)
+            return { price, amount, total }
+          })
+          setOrderBookAsks(asks)
+          setOrderBookBids(bids)
+        }
+
+        if (msg.channel === "trades" && Array.isArray(msg.data)) {
+          const newTrades = msg.data.map((t: { px: string; sz: string; side: string; time: number; tid: number }) => ({
+            price: parseFloat(t.px),
+            qty: parseFloat(t.sz),
+            isBuyerMaker: t.side === "B",
+            time: t.time,
+          }))
+          if (newTrades.length > 0) {
+            setLiveTrades((p) => {
+              const key = `${selectedPair}USDT`
+              const existing = p[key] ?? []
+              return { ...p, [key]: [...newTrades, ...existing].slice(0, 50) }
+            })
+          }
+        }
+      } catch { /* ignore malformed messages */ }
+    }
+
+    ws.onclose = () => {
+      if (cancelled) return
+      // Fall back to polling if WS disconnects
+      fallbackId = setInterval(async () => {
+        try {
+          const r = await getOrderBook(`${selectedPair}USDT`, 20)
+          if (!cancelled && r.success) { setOrderBookAsks(r.asks); setOrderBookBids(r.bids) }
+        } catch { /* ignore */ }
+      }, 1_000)
+    }
+
     return () => {
       cancelled = true
-      clearInterval(id)
+      ws.close()
+      if (fallbackId) clearInterval(fallbackId)
     }
   }, [selectedPair])
 
@@ -205,18 +254,44 @@ export function SpotClient({
 
       {/* ═══ DESKTOP LAYOUT ═══ */}
       <div className="hidden lg:flex flex-1 flex-col overflow-hidden">
-        {/* TOP ROW: Chart + Order Book */}
+        {/* TOP ROW: Chart + (Order Book + Buy/Sell) */}
         <div className="flex-1 min-h-0 flex overflow-hidden">
 
-          {/* Chart */}
+          {/* LEFT: Chart + Open Orders (below) */}
           <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-            <ChartArea
-              symbol={selectedPair}
-              price={currentPrice}
-              change24h={selectedCoin.change24h}
-              onMarketsClick={() => setShowMarkets(true)}
-              openOrders={openOrders}
-            />
+            {/* Chart */}
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <ChartArea
+                symbol={selectedPair}
+                price={currentPrice}
+                change24h={selectedCoin.change24h}
+                onMarketsClick={() => setShowMarkets(true)}
+                openOrders={openOrders}
+              />
+            </div>
+
+            {/* Open Orders — bottom of chart column */}
+            {collapsed.bottom ? (
+              <button
+                onClick={() => toggle("bottom")}
+                className="shrink-0 h-6 flex items-center justify-center gap-1.5 border-t border-border/40 hover:bg-accent/30 transition-colors group"
+                title="Expand orders"
+              >
+                <HugeiconsIcon icon={ArrowUp01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
+                <span className="text-[9px] text-muted-foreground">Orders</span>
+              </button>
+            ) : (
+              <div data-onboarding="spot-orders" className="shrink-0 h-[240px] border-t border-border/40 relative">
+                <button
+                  onClick={() => toggle("bottom")}
+                  className="absolute top-1 right-1 z-10 rounded-md p-0.5 hover:bg-accent/50 transition-colors"
+                  title="Collapse"
+                >
+                  <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground" />
+                </button>
+                <OpenOrdersPanel />
+              </div>
+            )}
           </div>
 
           {/* Markets overlay sheet (triggered from chart toolbar) */}
@@ -241,7 +316,7 @@ export function SpotClient({
             </SheetContent>
           </Sheet>
 
-          {/* RIGHT — Order Book (full height) */}
+          {/* RIGHT COLUMN — Order Book + Buy/Sell stacked */}
           {collapsed.right ? (
             <button
               onClick={() => toggle("right")}
@@ -256,23 +331,25 @@ export function SpotClient({
               <button
                 onClick={() => toggle("right")}
                 className="absolute top-1 right-1 z-10 rounded-md p-0.5 hover:bg-accent/50 transition-colors"
-                title="Collapse order book"
+                title="Collapse"
               >
                 <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 text-muted-foreground" />
               </button>
+
+              {/* Order Book / Trades tabs */}
               <div className="flex items-center gap-1 border-b border-border/40 px-2 py-1.5 shrink-0">
                 <button
                   onClick={() => setRightTab("book")}
                   className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    rightTab === "book" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                    rightTab === "book" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  Book
+                  Order Book
                 </button>
                 <button
                   onClick={() => setRightTab("trades")}
                   className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    rightTab === "trades" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                    rightTab === "trades" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Trades
@@ -292,46 +369,9 @@ export function SpotClient({
                   />
                 )}
               </div>
-            </div>
-          )}
-        </div>
 
-        {/* BOTTOM ROW — Open Orders | Buy/Sell */}
-        {collapsed.bottom ? (
-          <button
-            onClick={() => toggle("bottom")}
-            className="shrink-0 h-6 flex items-center justify-center gap-1.5 border-t border-border/40 hover:bg-accent/30 transition-colors group"
-            title="Expand bottom panels"
-          >
-            <HugeiconsIcon icon={ArrowUp01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
-            <span className="text-[9px] text-muted-foreground">Orders · Trade</span>
-          </button>
-        ) : (
-          <div data-onboarding="spot-orders" className="shrink-0 h-[300px] flex border-t border-border/40">
-            {/* Open Orders */}
-            <div className="flex-1 min-w-0 relative">
-              <button
-                onClick={() => toggle("bottom")}
-                className="absolute top-1 right-1 z-10 rounded-md p-0.5 hover:bg-accent/50 transition-colors"
-                title="Collapse"
-              >
-                <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground" />
-              </button>
-              <OpenOrdersPanel />
-            </div>
-
-            {/* Buy / Sell — tabbed */}
-            {collapsed.order ? (
-              <button
-                onClick={() => toggle("order")}
-                className="shrink-0 w-6 flex flex-col items-center justify-center gap-1.5 border-l border-border/40 hover:bg-accent/30 transition-colors group"
-                title="Expand order panel"
-              >
-                <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
-                <span className="text-[9px] text-muted-foreground [writing-mode:vertical-lr]">Buy / Sell</span>
-              </button>
-            ) : (
-              <div data-onboarding="spot-order" className="shrink-0 w-[280px] xl:w-[320px] border-l border-border/40 relative flex flex-col overflow-hidden">
+              {/* Buy/Sell — directly below order book */}
+              <div data-onboarding="spot-order" className="shrink-0 border-t border-border/40 flex flex-col overflow-hidden">
                 {/* Tab bar */}
                 <div className="flex items-center border-b border-border/40 shrink-0">
                   <button
@@ -360,21 +400,14 @@ export function SpotClient({
                       <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 rounded-full bg-red-500" />
                     )}
                   </button>
-                  <button
-                    onClick={() => toggle("order")}
-                    className="px-2 py-1.5 hover:bg-accent/50 transition-colors rounded-md"
-                    title="Collapse order panel"
-                  >
-                    <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 text-muted-foreground" />
-                  </button>
                 </div>
-                <div className="flex-1 min-h-0 overflow-y-auto slim-scroll">
+                <div className="max-h-[320px] overflow-y-auto slim-scroll">
                   <OrderPanel side={orderSide} symbol={selectedPair} price={currentPrice} />
                 </div>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ═══ MOBILE LAYOUT ═══ */}
