@@ -17,7 +17,7 @@ import {
   ChartLineData01Icon,
   Coins01Icon,
 } from "@hugeicons/core-free-icons"
-import { getPrices } from "@/lib/actions"
+import { getPrices, getSpotMarkets, type CoinData } from "@/lib/actions"
 import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
 import { WalletSetupLoader } from "@/components/wallet-setup-loader"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
@@ -28,6 +28,7 @@ import { useWalletBalances, type TokenBalance } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useAuth } from "@/components/auth-provider"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
+import { useRouter } from "next/navigation"
 
 // ── Onboarding steps ─────────────────────────────────────────────────────
 
@@ -279,6 +280,11 @@ export default function AssetsClient() {
   const [chainTab, setChainTab] = React.useState<ChainTab>("All")
   const [search, setSearch] = React.useState("")
   const [sendModal, setSendModal] = React.useState<{ open: boolean; asset?: SendableAsset }>({ open: false })
+  const [assetsView, setAssetsView] = React.useState<"my-assets" | "spot-markets">("my-assets")
+  const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
+  const [spotMarketsLoading, setSpotMarketsLoading] = React.useState(false)
+  const [spotSearch, setSpotSearch] = React.useState("")
+  const router = useRouter()
 
   // Fetch prices for crypto→USD conversion
   React.useEffect(() => {
@@ -293,6 +299,30 @@ export default function AssetsClient() {
     }, 60_000)
     return () => { cancelled = true; clearInterval(interval) }
   }, [])
+
+  // Fetch Hyperliquid spot markets for the "Spot Markets" tab
+  React.useEffect(() => {
+    if (assetsView !== "spot-markets" || spotMarkets.length > 0) return
+    let cancelled = false
+    setSpotMarketsLoading(true)
+    getSpotMarkets().then((data) => {
+      if (!cancelled) {
+        setSpotMarkets(data.markets)
+        setSpotMarketsLoading(false)
+      }
+    }).catch(() => {
+      if (!cancelled) setSpotMarketsLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [assetsView, spotMarkets.length])
+
+  const filteredSpotMarkets = React.useMemo(() => {
+    if (!spotSearch) return spotMarkets
+    const q = spotSearch.toLowerCase()
+    return spotMarkets.filter(
+      (m) => m.symbol.toLowerCase().includes(q) || m.name.toLowerCase().includes(q),
+    )
+  }, [spotMarkets, spotSearch])
 
   function getPrice(symbol: string): number {
     return prices[symbol] ?? 0
@@ -545,8 +575,42 @@ export default function AssetsClient() {
         </div>
       </div>
 
-      {/* ═══ Assets Table (mirrors MarketsTable) ═══ */}
+      {/* ═══ Assets Table — Tabbed: My Assets | Spot Markets ═══ */}
       <div data-onboarding="assets-table" className="flex h-full flex-col rounded-2xl bg-card">
+        {/* View toggle tabs */}
+        <div className="flex items-center gap-1 border-b border-border/20 px-4 pt-3 pb-0">
+          <button
+            onClick={() => setAssetsView("my-assets")}
+            className={`relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors ${
+              assetsView === "my-assets"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5" />
+            My Assets
+            {assetsView === "my-assets" && (
+              <span className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full bg-primary" />
+            )}
+          </button>
+          <button
+            onClick={() => setAssetsView("spot-markets")}
+            className={`relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors ${
+              assetsView === "spot-markets"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <HugeiconsIcon icon={Chart01Icon} className="h-3.5 w-3.5" />
+            Spot Markets
+            {assetsView === "spot-markets" && (
+              <span className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full bg-primary" />
+            )}
+          </button>
+        </div>
+
+        {assetsView === "my-assets" ? (
+          <>
         {/* Header */}
         <div className="flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between">
@@ -692,6 +756,107 @@ export default function AssetsClient() {
               </tbody>
             </table>
           </div>
+        )}
+          </>
+        ) : (
+          /* ═══ Spot Markets Tab ═══ */
+          <>
+            <div className="flex items-center justify-between p-4 pb-2">
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={Chart01Icon} className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Spot Trading Pairs</h3>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                  {spotMarkets.length}
+                </span>
+              </div>
+              <div className="relative">
+                <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="search"
+                  value={spotSearch}
+                  onChange={(e) => setSpotSearch(e.target.value)}
+                  placeholder="Search markets..."
+                  className="w-36 rounded-lg bg-accent/50 pl-7 pr-2 py-1.5 text-xs outline-none focus:bg-accent"
+                />
+              </div>
+            </div>
+
+            {spotMarketsLoading ? (
+              <div className="flex flex-col items-center justify-center py-14">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <p className="mt-2 text-xs text-muted-foreground">Loading spot markets...</p>
+              </div>
+            ) : filteredSpotMarkets.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-14">
+                <HugeiconsIcon icon={Search01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
+                <p className="text-xs font-medium text-muted-foreground">No markets found</p>
+                <p className="text-[10px] text-muted-foreground/70">Try a different search term</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                      <th className="px-4 py-2 text-left font-medium">Pair</th>
+                      <th className="px-4 py-2 text-right font-medium">Price</th>
+                      <th className="px-4 py-2 text-right font-medium">24h Change</th>
+                      <th className="px-4 py-2 text-right font-medium hidden sm:table-cell">Volume</th>
+                      <th className="px-4 py-2 text-right font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {filteredSpotMarkets.map((market) => {
+                      const isPositive = market.change24h >= 0
+                      return (
+                        <tr key={market.id} className="transition-colors hover:bg-accent/30">
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              {market.image ? (
+                                <img src={market.image} alt={market.symbol} className="h-7 w-7 rounded-full" />
+                              ) : (
+                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/50 text-[10px] font-bold">
+                                  {market.symbol.slice(0, 2)}
+                                </div>
+                              )}
+                              <div>
+                                <span className="font-medium">{market.symbol}/{market.quoteAsset || "USDC"}</span>
+                                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{market.name}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                            ${market.price.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: market.price < 1 ? 6 : 2,
+                            })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className={`text-xs font-medium tabular-nums ${isPositive ? "text-emerald-500" : "text-red-500"}`}>
+                              {isPositive ? "+" : ""}{market.change24h.toFixed(2)}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
+                            {market.volume24h > 0
+                              ? `$${(market.volume24h / 1_000_000).toFixed(2)}M`
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <button
+                              onClick={() => router.push(`/spot?pair=${market.symbol}`)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+                            >
+                              Trade
+                              <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
 

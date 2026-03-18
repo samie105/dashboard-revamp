@@ -11,6 +11,7 @@ import { useAuth } from "@/components/auth-provider"
 import { useWallet } from "@/components/wallet-provider"
 import { useSpotBalances } from "@/hooks/useSpotBalances"
 import type { OrderType } from "./spot-types"
+import type { OrderBookLevel } from "@/lib/actions"
 
 const MIN_ORDER_VALUE = 10
 
@@ -20,6 +21,8 @@ export function OrderPanel({
   price,
   bestBid: externalBestBid,
   bestAsk: externalBestAsk,
+  orderBookAsks = [],
+  orderBookBids = [],
   externalTP,
   externalSL,
 }: {
@@ -28,6 +31,8 @@ export function OrderPanel({
   price: number
   bestBid?: number
   bestAsk?: number
+  orderBookAsks?: OrderBookLevel[]
+  orderBookBids?: OrderBookLevel[]
   externalTP?: number
   externalSL?: number
 }) {
@@ -80,6 +85,31 @@ export function OrderPanel({
     (isBuy && bestAsk > 0 && parseFloat(limitPrice) >= bestAsk) ||
     (!isBuy && bestBid > 0 && parseFloat(limitPrice) <= bestBid)
   )
+
+  // Estimate slippage for market orders by walking the order book
+  const slippageEstimate = React.useMemo(() => {
+    if (orderType !== "market" || numericAmount <= 0) return null
+    const levels = isBuy ? orderBookAsks : orderBookBids
+    if (levels.length === 0) return null
+
+    let remaining = numericAmount
+    let costWeighted = 0
+    for (const level of levels) {
+      const fill = Math.min(remaining, level.amount)
+      costWeighted += fill * level.price
+      remaining -= fill
+      if (remaining <= 0) break
+    }
+
+    if (remaining > 0) return { pct: null, partial: true }
+
+    const avgPrice = costWeighted / numericAmount
+    const refPrice = isBuy ? bestAsk : bestBid
+    if (refPrice <= 0) return null
+
+    const pct = Math.abs((avgPrice - refPrice) / refPrice) * 100
+    return { pct, partial: false }
+  }, [orderType, numericAmount, isBuy, orderBookAsks, orderBookBids, bestAsk, bestBid])
 
   // Sync total display when amount changes (unless user is typing in total)
   React.useEffect(() => {
@@ -389,6 +419,34 @@ export function OrderPanel({
               {price.toLocaleString(undefined, {
                 maximumFractionDigits: 2,
               })}
+            </span>
+          </div>
+        )}
+
+        {/* Slippage estimate for market orders */}
+        {orderType === "market" && slippageEstimate && (
+          <div className={`flex items-center justify-between rounded-lg px-2.5 py-1 text-[10px] ${
+            slippageEstimate.partial
+              ? "border border-red-500/20 bg-red-500/5 text-red-500"
+              : slippageEstimate.pct !== null && slippageEstimate.pct > 1
+                ? "border border-amber-500/20 bg-amber-500/5 text-amber-500"
+                : "border border-border/20 bg-accent/10 text-muted-foreground"
+          }`}>
+            <span className="font-medium">Est. Slippage</span>
+            <span className="font-semibold tabular-nums">
+              {slippageEstimate.partial
+                ? "Insufficient liquidity"
+                : `~${slippageEstimate.pct!.toFixed(3)}%`}
+            </span>
+          </div>
+        )}
+
+        {/* Spread indicator */}
+        {bestBid > 0 && bestAsk > 0 && (
+          <div className="flex items-center justify-between rounded-lg px-2.5 py-1 text-[10px] border border-border/20 bg-accent/10">
+            <span className="text-muted-foreground font-medium">Spread</span>
+            <span className="text-muted-foreground tabular-nums">
+              ${(bestAsk - bestBid).toFixed(bestAsk - bestBid < 0.01 ? 6 : 4)} ({((bestAsk - bestBid) / bestAsk * 100).toFixed(3)}%)
             </span>
           </div>
         )}

@@ -70,7 +70,7 @@ const DEPOSIT_ONBOARDING: OnboardingStep[] = [
   {
     target: '[data-onboarding="deposit-cta"]',
     title: "Start your deposit",
-    description: "Click to be redirected to GlobalPay. USDT arrives in your wallet automatically!",
+    description: "Click to pay. Your USDT usually arrives within 1–3 minutes.",
     placement: "top",
   },
 ]
@@ -98,8 +98,8 @@ function StatusLabel({ status }: { status: string }) {
 const STEPS = [
   { title: "Choose network", desc: "Solana or Ethereum" },
   { title: "Enter amount", desc: "Set the USDT you need" },
-  { title: "Pay via bank", desc: "Redirected to GlobalPay" },
-  { title: "Receive USDT", desc: "Tokens sent to your wallet" },
+  { title: "Pay securely", desc: "Redirected to payment page" },
+  { title: "Receive USDT", desc: "Arrives in 1–3 minutes" },
 ]
 
 function HowItWorks() {
@@ -343,7 +343,7 @@ export function DepositClient() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-xl font-bold tracking-tight">Deposit</h1>
-          <p className="text-xs text-muted-foreground">Fund your wallet with USDT via bank transfer</p>
+          <p className="text-xs text-muted-foreground">Buy USDT instantly · Usually arrives in 1–3 minutes</p>
         </div>
         <div className="hidden sm:flex items-center gap-2">
           {CHAINS.map((c) => (
@@ -577,9 +577,9 @@ export function DepositClient() {
                   <HugeiconsIcon icon={Loading03Icon} className="h-5 w-5 animate-spin text-primary" />
                 </div>
                 <p className="text-sm font-medium">
-                  {activeDeposit.status === "verifying" ? "Checking with GlobalPay…" : `Sending ${activeDeposit.usdtAmount} USDT to your ${activeDeposit.network === "ethereum" ? "Ethereum" : "Solana"} wallet`}
+                  {activeDeposit.status === "verifying" ? "Verifying your payment…" : activeDeposit.status === "payment_confirmed" ? `Sending ${activeDeposit.usdtAmount} USDT to your wallet…` : `Sending ${activeDeposit.usdtAmount} USDT to your wallet…`}
                 </p>
-                <p className="text-[10px] text-muted-foreground">Status updates automatically</p>
+                <p className="text-[10px] text-muted-foreground">This usually takes 1–3 minutes</p>
               </div>
             </div>
           )}

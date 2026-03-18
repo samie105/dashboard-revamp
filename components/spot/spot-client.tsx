@@ -20,7 +20,6 @@ import { ChartArea } from "./chart-area"
 import { OrderPanel } from "./order-panel"
 import { AnimatedOrderBook } from "./animated-order-book"
 import { OpenOrdersPanel } from "./open-orders-panel"
-import { TokenSearchModal } from "./token-search-modal"
 import { RecentTrades } from "./recent-trades"
 import { SpotDepositModal } from "./spot-deposit-modal"
 import { SpotWithdrawModal } from "./spot-withdraw-modal"
@@ -49,7 +48,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     target: '[data-onboarding="spot-markets-trigger"]',
     title: "Switch Pairs",
-    description: "Tap here to open the markets sheet and browse all available spot pairs. Search by name or symbol to find your pair quickly.",
+    description: "Tap the pair name to open the markets panel and browse all available spot pairs. Search by name or symbol to find your pair quickly.",
     placement: "bottom",
   },
   {
@@ -91,7 +90,6 @@ export function SpotClient({
     new Set(["BTC", "ETH", "SOL"]),
   )
 
-  const [showSearch, setShowSearch] = React.useState(false)
   const [showDeposit, setShowDeposit] = React.useState(false)
   const [showWithdraw, setShowWithdraw] = React.useState(false)
   const [balanceRefreshKey, setBalanceRefreshKey] = React.useState(0)
@@ -253,7 +251,14 @@ export function SpotClient({
       <div data-onboarding="spot-topbar">
         <SpotTopBar
           coin={selectedCoin}
-          onOpenSearch={() => setShowSearch(true)}
+          onOpenSearch={() => {
+            // Open the appropriate Markets sheet based on viewport
+            if (window.innerWidth >= 1024) {
+              setShowMarkets(true)
+            } else {
+              setMobileMarketsOpen(true)
+            }
+          }}
           onOpenDeposit={() => setShowDeposit(true)}
           onOpenWithdraw={() => setShowWithdraw(true)}
           refreshTrigger={balanceRefreshKey}
@@ -273,7 +278,6 @@ export function SpotClient({
                 symbol={selectedPair}
                 price={currentPrice}
                 change24h={selectedCoin.change24h}
-                onMarketsClick={() => setShowMarkets(true)}
                 openOrders={openOrders}
                 bestBid={liveBestBid}
                 bestAsk={liveBestAsk}
@@ -420,6 +424,8 @@ export function SpotClient({
                     price={currentPrice}
                     bestBid={liveBestBid}
                     bestAsk={liveBestAsk}
+                    orderBookAsks={orderBookAsks}
+                    orderBookBids={orderBookBids}
                     externalTP={chartSetTP}
                     externalSL={chartSetSL}
                   />
@@ -510,6 +516,8 @@ export function SpotClient({
               price={currentPrice}
               bestBid={liveBestBid}
               bestAsk={liveBestAsk}
+              orderBookAsks={orderBookAsks}
+              orderBookBids={orderBookBids}
               externalTP={chartSetTP}
               externalSL={chartSetSL}
             />
@@ -615,14 +623,6 @@ export function SpotClient({
           </div>
         </SheetContent>
       </Sheet>
-
-      {/* Search modal */}
-      <TokenSearchModal
-        open={showSearch}
-        onClose={() => setShowSearch(false)}
-        coins={coins}
-        onSelect={handlePairSelect}
-      />
 
       {/* Onboarding */}
       <OnboardingFlow

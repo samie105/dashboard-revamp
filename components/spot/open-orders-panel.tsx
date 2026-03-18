@@ -15,6 +15,7 @@ import { useOpenOrders, type OpenOrder } from "@/hooks/useOpenOrders"
 import { useOrderHistory, type HistoricalOrder } from "@/hooks/useOrderHistory"
 import { useUserFills, type UserFill } from "@/hooks/useUserFills"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { useSearchParams } from "next/navigation"
 
 type Tab = "orders" | "history" | "holdings"
 
@@ -22,11 +23,40 @@ export function OpenOrdersPanel() {
   const { user, isSignedIn } = useAuth()
   const [tab, setTab] = React.useState<Tab>("orders")
   const [selectedOrder, setSelectedOrder] = React.useState<OpenOrder | null>(null)
+  const [hideOtherPairs, setHideOtherPairs] = React.useState(false)
+  const searchParams = useSearchParams()
+  const currentPair = searchParams.get("pair")?.toUpperCase() ?? ""
 
   const { orders: openOrders, cancelOrder, cancelAll, loading: ordersLoading } = useOpenOrders()
   const { orders: orderHistory, loading: historyLoading } = useOrderHistory()
   const { fills, loading: fillsLoading } = useUserFills()
   const { balances: hlBalances, loading: balancesLoading } = useHyperliquidBalance(user?.userId, isSignedIn)
+
+  // Filter orders/fills by current pair if toggle is on
+  const filteredOrders = React.useMemo(
+    () => hideOtherPairs && currentPair
+      ? openOrders.filter((o) => o.coin.toUpperCase() === currentPair)
+      : openOrders,
+    [openOrders, hideOtherPairs, currentPair],
+  )
+  const filteredFills = React.useMemo(
+    () => hideOtherPairs && currentPair
+      ? fills.filter((f) => (f.coinDisplay || f.coin).toUpperCase() === currentPair)
+      : fills,
+    [fills, hideOtherPairs, currentPair],
+  )
+  const filteredHistory = React.useMemo(
+    () => hideOtherPairs && currentPair
+      ? orderHistory.filter((o) => (o.order.coinDisplay || o.order.coin).toUpperCase() === currentPair)
+      : orderHistory,
+    [orderHistory, hideOtherPairs, currentPair],
+  )
+  const filteredBalances = React.useMemo(
+    () => hideOtherPairs && currentPair
+      ? hlBalances.filter((b) => b.coin.toUpperCase() === currentPair)
+      : hlBalances,
+    [hlBalances, hideOtherPairs, currentPair],
+  )
 
   // Flash badge when order count changes
   const prevCountRef = React.useRef(openOrders.length)
@@ -68,23 +98,23 @@ export function OpenOrdersPanel() {
             >
               <HugeiconsIcon icon={t.icon} className="h-3 w-3" />
               {t.label}
-              {t.id === "orders" && openOrders.length > 0 && (
+              {t.id === "orders" && filteredOrders.length > 0 && (
                 <span className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold tabular-nums transition-all ${
                   badgeFlash
                     ? "bg-primary text-white animate-pulse scale-110"
                     : "bg-primary/15 text-primary"
                 }`}>
-                  {openOrders.length}
+                  {filteredOrders.length}
                 </span>
               )}
-              {t.id === "history" && (fills.length + orderHistory.length) > 0 && (
+              {t.id === "history" && (filteredFills.length + filteredHistory.length) > 0 && (
                 <span className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold tabular-nums bg-primary/15 text-primary">
-                  {fills.length + orderHistory.length}
+                  {filteredFills.length + filteredHistory.length}
                 </span>
               )}
-              {t.id === "holdings" && hlBalances.length > 0 && (
+              {t.id === "holdings" && filteredBalances.length > 0 && (
                 <span className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold tabular-nums bg-primary/15 text-primary">
-                  {hlBalances.length}
+                  {filteredBalances.length}
                 </span>
               )}
               {tab === t.id && (
@@ -95,7 +125,21 @@ export function OpenOrdersPanel() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto pr-2">
-          {tab === "orders" && openOrders.length > 0 && (
+          {/* Hide Other Pairs toggle */}
+          {currentPair && (
+            <button
+              onClick={() => setHideOtherPairs((v) => !v)}
+              className={`rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                hideOtherPairs
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+              title={hideOtherPairs ? "Show all pairs" : `Show only ${currentPair}`}
+            >
+              {hideOtherPairs ? currentPair : "All Pairs"}
+            </button>
+          )}
+          {tab === "orders" && filteredOrders.length > 0 && (
             <button
               onClick={cancelAll}
               className="rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-500 transition-colors hover:bg-red-500/15"
@@ -114,21 +158,21 @@ export function OpenOrdersPanel() {
         {!isSignedIn ? (
           <EmptyState icon={Menu01Icon} message="Sign in to view your orders" sub="Connect your account to start trading" />
         ) : tab === "orders" ? (
-          openOrders.length === 0 ? (
+          filteredOrders.length === 0 ? (
             <EmptyState icon={Clock01Icon} message="No open orders" sub="Your active orders will appear here" />
           ) : (
-            <OpenOrdersTable orders={openOrders} onCancel={cancelOrder} onSelect={setSelectedOrder} />
+            <OpenOrdersTable orders={filteredOrders} onCancel={cancelOrder} onSelect={setSelectedOrder} />
           )
         ) : tab === "history" ? (
-          fills.length === 0 && orderHistory.length === 0 ? (
+          filteredFills.length === 0 && filteredHistory.length === 0 ? (
             <EmptyState icon={Exchange01Icon} message="No trade history" sub="Your executed trades will appear here" />
           ) : (
-            <OrderHistoryTable orders={orderHistory} fills={fills} />
+            <OrderHistoryTable orders={filteredHistory} fills={filteredFills} />
           )
-        ) : hlBalances.length === 0 ? (
+        ) : filteredBalances.length === 0 ? (
           <EmptyState icon={Wallet01Icon} message="No holdings found" sub="Your spot balances will appear here" />
         ) : (
-          <HoldingsTable balances={hlBalances} />
+          <HoldingsTable balances={filteredBalances} />
         )}
       </div>
 

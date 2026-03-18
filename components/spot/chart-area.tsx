@@ -699,7 +699,6 @@ export function ChartArea({
   symbol,
   price,
   change24h,
-  onMarketsClick,
   openOrders = [],
   bestBid = 0,
   bestAsk = 0,
@@ -709,7 +708,6 @@ export function ChartArea({
   symbol: string
   price: number
   change24h: number
-  onMarketsClick?: () => void
   openOrders?: OpenOrderForChart[]
   bestBid?: number
   bestAsk?: number
@@ -1599,17 +1597,6 @@ export function ChartArea({
     <div data-onboarding="spot-chart" className="flex h-full flex-col bg-card overflow-hidden">
       {/* ── TOP BAR: Indicators + Chart type + Tools + Price ── */}
       <div className="flex items-center gap-0.5 border-b border-border/20 px-2 py-1 shrink-0 overflow-x-auto">
-        {/* Markets trigger */}
-        {onMarketsClick && (
-          <button
-            onClick={onMarketsClick}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors mr-0.5"
-          >
-            <HugeiconsIcon icon={Menu01Icon} className="h-3 w-3" />
-            <span>Markets</span>
-          </button>
-        )}
-        <div className="h-4 w-px bg-border/30 shrink-0 mr-0.5" />
         {/* Indicators toggle */}
         <button
           onClick={() => setShowIndicatorMenu((v) => !v)}

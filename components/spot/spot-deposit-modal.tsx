@@ -24,14 +24,14 @@ interface SpotDepositModalProps {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; spinning?: boolean }> = {
-  initiated: { label: "Initializing deposit…", color: "text-muted-foreground", spinning: true },
-  sending_usdt: { label: "Sending USDT to treasury…", color: "text-amber-500", spinning: true },
-  awaiting_deposit: { label: "USDT sent — awaiting confirmation", color: "text-blue-500", spinning: true },
-  deposit_detected: { label: "Deposit detected!", color: "text-emerald-500" },
-  disbursing: { label: "Converting to Arb USDC…", color: "text-orange-500", spinning: true },
-  disbursed: { label: "USDC received — bridging…", color: "text-orange-500", spinning: true },
-  bridging: { label: "Depositing to Hyperliquid…", color: "text-blue-500", spinning: true },
-  transferring: { label: "Transferring to Spot wallet…", color: "text-blue-500", spinning: true },
+  initiated: { label: "Starting deposit…", color: "text-muted-foreground", spinning: true },
+  sending_usdt: { label: "Sending your USDT…", color: "text-amber-500", spinning: true },
+  awaiting_deposit: { label: "Confirming your payment…", color: "text-blue-500", spinning: true },
+  deposit_detected: { label: "Payment received!", color: "text-emerald-500" },
+  disbursing: { label: "Processing your deposit…", color: "text-orange-500", spinning: true },
+  disbursed: { label: "Processing your deposit…", color: "text-orange-500", spinning: true },
+  bridging: { label: "Almost ready…", color: "text-blue-500", spinning: true },
+  transferring: { label: "Finishing up…", color: "text-blue-500", spinning: true },
   completed: { label: "Deposit complete — ready to trade!", color: "text-emerald-500" },
   failed: { label: "Deposit failed", color: "text-red-500" },
   expired: { label: "Deposit expired", color: "text-red-500" },
@@ -60,7 +60,7 @@ const CHAINS = [
 
 const STAGE_GROUPS = [
   { label: "Send USDT", stages: ["sending_usdt", "awaiting_deposit"] },
-  { label: "Convert & Bridge", stages: ["deposit_detected", "disbursing", "disbursed", "bridging"] },
+  { label: "Processing", stages: ["deposit_detected", "disbursing", "disbursed", "bridging"] },
   { label: "Ready", stages: ["transferring", "completed"] },
 ]
 
@@ -441,7 +441,7 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
               <div className="flex items-start gap-2.5 rounded-xl border border-border/30 bg-accent/20 px-3.5 py-2.5">
                 <HugeiconsIcon icon={InformationCircleIcon} className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-px" />
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Your USDT is being converted and bridged to Hyperliquid. This usually takes 2–5 minutes.
+                  Your deposit is being processed. This usually takes 1–3 minutes.
                 </p>
               </div>
 
