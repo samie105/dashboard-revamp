@@ -16,7 +16,7 @@ import {
   Wallet01Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData, TradeResult, FuturesMarket } from "@/lib/actions"
-import { getFuturesMarkets } from "@/lib/actions"
+import { getFuturesMarkets, getSpotMarkets } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
@@ -29,17 +29,20 @@ import { getCoinImage, coinFallback } from "@/lib/coin-images"
 const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
 
 /* ========== Markets Table ========== */
-const MARKET_TABS = ["Favorites", "Hot", "New", "Gainers", "Losers", "Turnover", "Spot", "Futures"] as const
+const MARKET_TABS = ["Total", "Main", "Spot", "Futures"] as const
 type MarketTab = (typeof MARKET_TABS)[number]
 
 function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
-  const [tab, setTab] = React.useState<MarketTab>("Hot")
+  const [tab, setTab] = React.useState<MarketTab>("Total")
   const [search, setSearch] = React.useState("")
   const { openTradeSelector } = useTradeSelector()
   const [visibleCount, setVisibleCount] = React.useState(8)
   const [futuresMarkets, setFuturesMarkets] = React.useState<FuturesMarket[]>([])
   const [futuresLoading, setFuturesLoading] = React.useState(false)
   const hasFetchedFutures = React.useRef(false)
+  const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
+  const [spotLoading, setSpotLoading] = React.useState(false)
+  const hasFetchedSpot = React.useRef(false)
 
   // Fetch futures lazily when tab is selected
   React.useEffect(() => {
@@ -54,30 +57,41 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
       .finally(() => setFuturesLoading(false))
   }, [tab])
 
+  // Fetch spot markets lazily when Spot tab is selected
+  React.useEffect(() => {
+    if (tab !== "Spot" || hasFetchedSpot.current) return
+    hasFetchedSpot.current = true
+    setSpotLoading(true)
+    getSpotMarkets()
+      .then((res) => { setSpotMarkets(res.markets) })
+      .catch(() => {})
+      .finally(() => setSpotLoading(false))
+  }, [tab])
+
   const filtered = React.useMemo(() => {
-    let list = [...coins]
+    let list = tab === "Spot" ? [...spotMarkets] : [...coins]
     if (search) {
       const q = search.toLowerCase()
       list = list.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
     }
     switch (tab) {
-      case "Gainers":
-        list.sort((a, b) => b.change24h - a.change24h)
-        break
-      case "Losers":
-        list.sort((a, b) => a.change24h - b.change24h)
-        break
-      case "Turnover":
+      case "Total":
         list.sort((a, b) => b.volume24h - a.volume24h)
         break
-      case "Hot":
-      case "Spot":
-      default:
+      case "Main":
         list.sort((a, b) => b.marketCap - a.marketCap)
+        // Only top 20 for Main — no artificial slice, let pagination handle display
+        if (!search) list = list.slice(0, 20)
+        break
+      case "Spot":
+        list.sort((a, b) => b.marketCap - a.marketCap)
+        break
+      default:
+        list.sort((a, b) => b.volume24h - a.volume24h)
         break
     }
     return list
-  }, [coins, tab, search])
+  }, [coins, spotMarkets, tab, search])
 
   // Reset pagination when filters change
   React.useEffect(() => {
@@ -135,7 +149,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}
             >
-              {t}
+              {t === "Futures" ? "Futures" : t}
             </button>
           ))}
         </div>
@@ -223,8 +237,12 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
           </div>
         )
       ) : (
-        /* Table — Spot */
-        error && filtered.length === 0 ? (
+        /* Table — Total / Main / Spot */
+        (tab === "Spot" && spotLoading) ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : error && filtered.length === 0 ? (
           <ErrorState message={error} />
         ) : filtered.length === 0 ? (
           <EmptyState

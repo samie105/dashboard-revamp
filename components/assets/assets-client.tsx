@@ -17,7 +17,7 @@ import {
   ChartLineData01Icon,
   Coins01Icon,
 } from "@hugeicons/core-free-icons"
-import { getPrices, getSpotMarkets, type CoinData } from "@/lib/actions"
+import { getPrices, getSpotMarkets, getFuturesMarkets, type CoinData, type FuturesMarket } from "@/lib/actions"
 import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
 import { WalletSetupLoader } from "@/components/wallet-setup-loader"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
@@ -117,7 +117,8 @@ const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Solana: "sol
 // ── Wallet view tabs ─────────────────────────────────────────────────────
 
 const WALLET_VIEWS = [
-  { key: "total",   label: "Total",   icon: Coins01Icon,         sub: "Spot + Futures" },
+  { key: "total",   label: "Total",   icon: Coins01Icon,         sub: "All assets" },
+  { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain balance" },
   { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot holdings" },
   { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Perpetual positions" },
 ] as const
@@ -282,10 +283,14 @@ export default function AssetsClient() {
   const [chainTab, setChainTab] = React.useState<ChainTab>("All")
   const [search, setSearch] = React.useState("")
   const [sendModal, setSendModal] = React.useState<{ open: boolean; asset?: SendableAsset }>({ open: false })
-  const [assetsView, setAssetsView] = React.useState<"my-assets" | "spot-markets">("my-assets")
   const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
   const [spotMarketsLoading, setSpotMarketsLoading] = React.useState(false)
+  const [spotMarketsLoaded, setSpotMarketsLoaded] = React.useState(false)
   const [spotSearch, setSpotSearch] = React.useState("")
+  const [futuresMarkets, setFuturesMarkets] = React.useState<FuturesMarket[]>([])
+  const [futuresMarketsLoading, setFuturesMarketsLoading] = React.useState(false)
+  const [futuresMarketsLoaded, setFuturesMarketsLoaded] = React.useState(false)
+  const [futuresSearch, setFuturesSearch] = React.useState("")
   const router = useRouter()
 
   // Fetch prices for crypto→USD conversion
@@ -302,29 +307,39 @@ export default function AssetsClient() {
     return () => { cancelled = true; clearInterval(interval) }
   }, [])
 
-  // Fetch Hyperliquid spot markets for the "Spot Markets" tab
+  // Load spot markets when Spot tab is active
   React.useEffect(() => {
-    if (assetsView !== "spot-markets" || spotMarkets.length > 0) return
+    if (activeView !== "spot" || spotMarketsLoaded) return
     let cancelled = false
     setSpotMarketsLoading(true)
     getSpotMarkets().then((data) => {
-      if (!cancelled) {
-        setSpotMarkets(data.markets)
-        setSpotMarketsLoading(false)
-      }
-    }).catch(() => {
-      if (!cancelled) setSpotMarketsLoading(false)
-    })
+      if (!cancelled) { setSpotMarkets(data.markets); setSpotMarketsLoading(false); setSpotMarketsLoaded(true) }
+    }).catch(() => { if (!cancelled) setSpotMarketsLoading(false) })
     return () => { cancelled = true }
-  }, [assetsView, spotMarkets.length])
+  }, [activeView, spotMarketsLoaded])
+
+  // Load futures markets when Futures tab is active
+  React.useEffect(() => {
+    if (activeView !== "futures" || futuresMarketsLoaded) return
+    let cancelled = false
+    setFuturesMarketsLoading(true)
+    getFuturesMarkets().then((data) => {
+      if (!cancelled) { setFuturesMarkets(data.markets); setFuturesMarketsLoading(false); setFuturesMarketsLoaded(true) }
+    }).catch(() => { if (!cancelled) setFuturesMarketsLoading(false) })
+    return () => { cancelled = true }
+  }, [activeView, futuresMarketsLoaded])
 
   const filteredSpotMarkets = React.useMemo(() => {
     if (!spotSearch) return spotMarkets
     const q = spotSearch.toLowerCase()
-    return spotMarkets.filter(
-      (m) => m.symbol.toLowerCase().includes(q) || m.name.toLowerCase().includes(q),
-    )
+    return spotMarkets.filter((m) => m.symbol.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
   }, [spotMarkets, spotSearch])
+
+  const filteredFuturesMarkets = React.useMemo(() => {
+    if (!futuresSearch) return futuresMarkets
+    const q = futuresSearch.toLowerCase()
+    return futuresMarkets.filter((m) => m.symbol.toLowerCase().includes(q) || m.baseAsset.toLowerCase().includes(q))
+  }, [futuresMarkets, futuresSearch])
 
   function getPrice(symbol: string): number {
     return prices[symbol] ?? 0
@@ -376,10 +391,11 @@ export default function AssetsClient() {
     switch (activeView) {
       case "spot":    return spotBalance
       case "futures": return futuresBalance
+      case "main":    return onChainTotal
       case "total":
-      default:        return spotBalance + futuresBalance
+      default:        return onChainTotal + spotBalance + futuresBalance
     }
-  }, [activeView, spotBalance, futuresBalance])
+  }, [activeView, onChainTotal, spotBalance, futuresBalance])
 
   const copy = React.useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text)
@@ -515,7 +531,7 @@ export default function AssetsClient() {
         {/* Balance display */}
         <div>
           <span className="text-3xl font-bold tracking-tight tabular-nums">
-            {(hlLoading && hlBalances.length === 0) ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {((activeView === "total" || activeView === "main") && balancesLoading && onChainBalances.length === 0) ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span>
           <p className="text-[10px] text-muted-foreground mt-1">
             {WALLET_VIEWS.find((v) => v.key === activeView)?.sub}
@@ -576,10 +592,147 @@ export default function AssetsClient() {
         </div>
       </div>
 
-      {/* ═══ Assets Table — Tabbed: My Assets | Spot Markets ═══ */}
+      {/* ═══ Assets Table ═══ */}
       <div data-onboarding="assets-table" className="flex h-full flex-col rounded-2xl bg-card">
-        {/* ═══ Spot Holdings ═══ */}
-        {(activeView === "spot" || activeView === "total") && (
+
+        {/* ═══ TOTAL TAB: Combined summary (on-chain + spot + futures) ═══ */}
+        {activeView === "total" && (
+          <div className="flex flex-col gap-4 p-4">
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "On-chain", value: onChainTotal, color: "text-foreground" },
+                { label: "Spot",     value: spotBalance,  color: "text-primary" },
+                { label: "Futures",  value: futuresBalance, color: "text-amber-500" },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="flex flex-col gap-1 rounded-xl bg-accent/40 p-3">
+                  <span className="text-[10px] text-muted-foreground">{label}</span>
+                  <span className={`text-sm font-semibold tabular-nums ${color}`}>
+                    ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Switch to <strong>Main</strong>, <strong>Spot</strong>, or <strong>Futures</strong> tabs to see detailed holdings.
+            </p>
+          </div>
+        )}
+
+        {/* ═══ MAIN TAB: On-chain wallet balances ═══ */}
+        {activeView === "main" && (
+          <>
+            {/* Header + search + chain filter */}
+            <div className="flex flex-col gap-3 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <HugeiconsIcon icon={Wallet01Icon} className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold">My Assets</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-[7px] h-3.5 w-3.5 text-muted-foreground" />
+                    <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search tokens..." className="w-36 rounded-lg bg-accent/50 pl-7 pr-2 py-1.5 text-xs outline-none focus:bg-accent" />
+                  </div>
+                  <button data-onboarding="add-token-btn" onClick={() => setShowAddToken(true)}
+                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                    <HugeiconsIcon icon={Add01Icon} className="h-3.5 w-3.5" /> Add Token
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+                {CHAIN_TABS.map((tab) => (
+                  <button key={tab} onClick={() => setChainTab(tab)}
+                    className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                      chainTab === tab ? "bg-primary text-white" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    }`}>{tab}</button>
+                ))}
+              </div>
+            </div>
+            {balancesLoading && onChainBalances.length === 0 ? (
+              <div className="flex items-center justify-center py-14">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : filteredTokens.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-14">
+                <HugeiconsIcon icon={Search01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
+                <p className="text-xs font-medium text-muted-foreground">No tokens found</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                      <th className="px-4 py-2 text-left font-medium">Asset</th>
+                      <th className="px-4 py-2 text-left font-medium">Network</th>
+                      <th className="px-4 py-2 text-right font-medium">Balance</th>
+                      <th className="px-4 py-2 text-right font-medium">Value</th>
+                      <th className="px-4 py-2 text-right font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {filteredTokens.map((token) => {
+                      const chainInfo = CHAINS.find((c) => c.key === token.chain)
+                      const bal = getTokenBalance(token)
+                      const usdVal = ["USDT", "USDC"].includes(token.symbol)
+                        ? bal
+                        : bal * (getPrice(token.symbol) || 0)
+                      return (
+                        <tr key={`${token.chain}-${token.symbol}-${token.contractAddress ?? "native"}`}
+                          className="transition-colors hover:bg-accent/30">
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="relative shrink-0">
+                                <img src={token.icon} alt={token.symbol} className="h-7 w-7 rounded-full"
+                                  onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(token.symbol) }} />
+                                {!token.isNative && chainInfo && (
+                                  <img src={chainInfo.icon} alt="" className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+                                )}
+                              </div>
+                              <div>
+                                <span className="font-medium">{token.symbol}</span>
+                                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{token.name}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {chainInfo && (
+                              <div className="flex items-center gap-1.5">
+                                <img src={chainInfo.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
+                                <span className="text-xs text-muted-foreground">{chainInfo.name}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                            {bal > 0 ? bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }) : "0.00"}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                            {bal > 0 ? `$${usdVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00"}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <button onClick={() => setSendModal({ open: true, asset: { symbol: token.symbol, name: token.name, balance: bal,
+                                chain: token.chain as SendableAsset["chain"], icon: token.icon, contractAddress: token.contractAddress,
+                                decimals: token.isNative ? undefined : 18 } })}
+                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                                Send <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                              </button>
+                              <AssetTradeButton symbol={token.symbol} />
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ═══ SPOT TAB: Spot Holdings ═══ */}
+        {activeView === "spot" && (
           <div className="flex flex-col">
             <div className="flex items-center justify-between p-4 pb-2">
               <div className="flex items-center gap-2">
@@ -674,13 +827,92 @@ export default function AssetsClient() {
           </div>
         )}
 
-        {/* Divider in Total view */}
-        {activeView === "total" && (hlBalances.length > 0 || hlLoading) && (
-          <div className="mx-4 h-px bg-border/30" />
+        {/* ═══ Spot Markets (below holdings, Spot tab only) ═══ */}
+        {activeView === "spot" && (
+          <>
+            <div className="mx-4 h-px bg-border/30" />
+            <div className="flex items-center justify-between p-4 pb-2">
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={Chart01Icon} className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Spot Markets</h3>
+                {spotMarkets.length > 0 && (
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{spotMarkets.length}</span>
+                )}
+              </div>
+              <div className="relative">
+                <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-[7px] h-3.5 w-3.5 text-muted-foreground" />
+                <input type="search" value={spotSearch} onChange={(e) => setSpotSearch(e.target.value)}
+                  placeholder="Search markets..." className="w-36 rounded-lg bg-accent/50 pl-7 pr-2 py-1.5 text-xs outline-none focus:bg-accent" />
+              </div>
+            </div>
+            {spotMarketsLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : filteredSpotMarkets.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10">
+                <p className="text-xs text-muted-foreground">{spotSearch ? "No markets found" : "No spot markets available"}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                      <th className="px-4 py-2 text-left font-medium">Pair</th>
+                      <th className="px-4 py-2 text-right font-medium">Price</th>
+                      <th className="px-4 py-2 text-right font-medium">24h</th>
+                      <th className="px-4 py-2 text-right font-medium hidden sm:table-cell">Volume</th>
+                      <th className="px-4 py-2 text-right font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {filteredSpotMarkets.map((m) => {
+                      const pos = m.change24h >= 0
+                      const img = m.image || getCoinImage(m.symbol)
+                      return (
+                        <tr key={m.id} className="transition-colors hover:bg-accent/30">
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              {img ? (
+                                <img src={img} alt={m.symbol} className="h-7 w-7 rounded-full object-contain" onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(m.symbol) }} />
+                              ) : (
+                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/50 text-[10px] font-bold">{m.symbol.slice(0, 2)}</div>
+                              )}
+                              <div>
+                                <span className="font-medium">{m.symbol}/{m.quoteAsset || "USDC"}</span>
+                                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{m.name}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                            ${m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: m.price < 1 ? 6 : 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className={`text-xs font-medium tabular-nums ${pos ? "text-emerald-500" : "text-red-500"}`}>
+                              {pos ? "+" : ""}{m.change24h.toFixed(2)}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
+                            {m.volume24h > 0 ? `$${(m.volume24h / 1_000_000).toFixed(2)}M` : "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <button onClick={() => router.push(`/spot?pair=${m.symbol}`)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors">
+                              Trade <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
 
-        {/* ═══ Futures Positions ═══ */}
-        {(activeView === "futures" || activeView === "total") && (
+        {/* ═══ FUTURES TAB: Open Positions ═══ */}
+        {activeView === "futures" && (
           <div className="flex flex-col">
             <div className="flex items-center justify-between p-4 pb-2">
               <div className="flex items-center gap-2">
@@ -786,13 +1018,94 @@ export default function AssetsClient() {
           </div>
         )}
 
-        {/* Empty state for Total when nothing to show */}
-        {activeView === "total" && hlBalances.length === 0 && hlPositions.length === 0 && !hlLoading && !hlPositionsLoading && (
-          <div className="flex flex-col items-center justify-center py-14">
-            <HugeiconsIcon icon={Coins01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
-            <p className="text-xs font-medium text-muted-foreground">No assets yet</p>
-            <p className="text-[10px] text-muted-foreground/70">Deposit or trade to see your holdings here</p>
-          </div>
+        {/* ═══ Futures Markets (below positions, Futures tab only) ═══ */}
+        {activeView === "futures" && (
+          <>
+            <div className="mx-4 h-px bg-border/30" />
+            <div className="flex items-center justify-between p-4 pb-2">
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={ChartLineData01Icon} className="h-4 w-4 text-amber-500" />
+                <h3 className="text-sm font-semibold">Futures Contracts</h3>
+                {futuresMarkets.length > 0 && (
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600">{futuresMarkets.length}</span>
+                )}
+              </div>
+              <div className="relative">
+                <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-[7px] h-3.5 w-3.5 text-muted-foreground" />
+                <input type="search" value={futuresSearch} onChange={(e) => setFuturesSearch(e.target.value)}
+                  placeholder="Search contracts..." className="w-36 rounded-lg bg-accent/50 pl-7 pr-2 py-1.5 text-xs outline-none focus:bg-accent" />
+              </div>
+            </div>
+            {futuresMarketsLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+              </div>
+            ) : filteredFuturesMarkets.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10">
+                <p className="text-xs text-muted-foreground">{futuresSearch ? "No contracts found" : "No futures markets available"}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                      <th className="px-4 py-2 text-left font-medium">Contract</th>
+                      <th className="px-4 py-2 text-right font-medium">Mark Price</th>
+                      <th className="px-4 py-2 text-right font-medium">24h</th>
+                      <th className="px-4 py-2 text-right font-medium hidden sm:table-cell">Volume</th>
+                      <th className="px-4 py-2 text-right font-medium hidden md:table-cell">Funding</th>
+                      <th className="px-4 py-2 text-right font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {filteredFuturesMarkets.map((m) => {
+                      const pos = m.change24h >= 0
+                      const img = m.image || getCoinImage(m.baseAsset)
+                      return (
+                        <tr key={m.symbol} className="transition-colors hover:bg-accent/30">
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              {img ? (
+                                <img src={img} alt={m.baseAsset} className="h-7 w-7 rounded-full object-contain" onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(m.baseAsset) }} />
+                              ) : (
+                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-500/10 text-[10px] font-bold text-amber-600">{m.baseAsset.slice(0, 2)}</div>
+                              )}
+                              <div>
+                                <span className="font-medium">{m.symbol}</span>
+                                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Perpetual · {m.maxLeverage}× max</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                            ${m.markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: m.markPrice < 1 ? 6 : 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className={`text-xs font-medium tabular-nums ${pos ? "text-emerald-500" : "text-red-500"}`}>
+                              {pos ? "+" : ""}{m.change24h.toFixed(2)}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
+                            {m.volume24h > 0 ? `$${(m.volume24h / 1_000_000).toFixed(2)}M` : "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden md:table-cell">
+                            <span className={m.fundingRate >= 0 ? "text-emerald-500" : "text-red-500"}>
+                              {m.fundingRate >= 0 ? "+" : ""}{(m.fundingRate * 100).toFixed(4)}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <button onClick={() => router.push(`/futures?pair=${m.baseAsset}`)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-500/20 transition-colors">
+                              Trade <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
 

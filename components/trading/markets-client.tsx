@@ -13,6 +13,7 @@ import {
   Fire02Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData, FuturesMarket } from "@/lib/actions"
+import { getSpotMarkets, getFuturesMarkets } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
 import { useTradeSelector } from "@/components/trade-selector"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
@@ -190,11 +191,10 @@ function RankedFuturesRow({ market, rank }: { market: FuturesMarket; rank: numbe
 
 // ── Markets Client ───────────────────────────────────────────────────────
 
-const ALL_TABS = ["All", "Gainers", "Losers", "Volume"] as const
-type Tab = (typeof ALL_TABS)[number]
+const MARKET_TABS = ["Total", "Main", "Spot", "Futures"] as const
+type Tab = (typeof MARKET_TABS)[number]
 
 type SortKey = "marketCap" | "price" | "change24h" | "volume24h"
-type MarketType = "spot" | "futures"
 
 function fmtFunding(rate: number): string {
   return `${(rate * 100).toFixed(4)}%`
@@ -219,65 +219,87 @@ interface MarketsClientProps {
   error?: string
 }
 
-export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }: MarketsClientProps) {
-  const [tab, setTab] = React.useState<Tab>("All")
+export function MarketsClient({ coins, globalStats, error }: MarketsClientProps) {
+  const [tab, setTab] = React.useState<Tab>("Total")
   const [search, setSearch] = React.useState("")
   const [sortBy, setSortBy] = React.useState<SortKey>("marketCap")
   const [sortAsc, setSortAsc] = React.useState(false)
   const [favorites, setFavorites] = React.useState<Set<string>>(new Set())
-  const [marketType, setMarketType] = React.useState<MarketType>("spot")
   const { user } = useAuth()
   const { positions, loading: positionsLoading } = useHyperliquidPositions()
   const { balances: spotHoldings, loading: spotHoldingsLoading } = useHyperliquidBalance(user?.userId, !!user)
 
-  const isFutures = marketType === "futures"
+  // Lazy-load spot markets (Hyperliquid spotMeta)
+  const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
+  const [spotLoading, setSpotLoading] = React.useState(false)
+  const hasFetchedSpot = React.useRef(false)
+  React.useEffect(() => {
+    if (tab !== "Spot" || hasFetchedSpot.current) return
+    hasFetchedSpot.current = true
+    setSpotLoading(true)
+    getSpotMarkets().then((res) => { setSpotMarkets(res.markets) }).catch(() => {}).finally(() => setSpotLoading(false))
+  }, [tab])
+
+  // Lazy-load futures markets
+  const [futuresMarkets, setFuturesMarkets] = React.useState<FuturesMarket[]>([])
+  const [futuresLoading, setFuturesLoading] = React.useState(false)
+  const hasFetchedFutures = React.useRef(false)
+  React.useEffect(() => {
+    if (tab !== "Futures" || hasFetchedFutures.current) return
+    hasFetchedFutures.current = true
+    setFuturesLoading(true)
+    getFuturesMarkets().then((res) => { if (res.success) setFuturesMarkets(res.markets) }).catch(() => {}).finally(() => setFuturesLoading(false))
+  }, [tab])
+
+  const isFutures = tab === "Futures"
 
   // ── Spot-mode memos ─────────────────────────────────────────────────────
 
   const gainers = React.useMemo(
     () =>
-      [...coins]
+      [...(tab === "Spot" ? spotMarkets : coins)]
         .filter((c) => c.change24h > 0)
         .sort((a, b) => b.change24h - a.change24h)
         .slice(0, 12),
-    [coins],
+    [coins, spotMarkets, tab],
   )
 
   const losers = React.useMemo(
     () =>
-      [...coins]
+      [...(tab === "Spot" ? spotMarkets : coins)]
         .filter((c) => c.change24h < 0)
         .sort((a, b) => a.change24h - b.change24h)
         .slice(0, 12),
-    [coins],
+    [coins, spotMarkets, tab],
   )
 
   const movers = React.useMemo(
     () =>
-      [...coins]
+      [...(tab === "Spot" ? spotMarkets : coins)]
         .sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h))
         .slice(0, 8),
-    [coins],
+    [coins, spotMarkets, tab],
   )
 
   const filtered = React.useMemo(() => {
-    let list = [...coins]
+    const source = tab === "Spot" ? spotMarkets : [...coins]
+    let list = tab === "Spot" ? [...source] : [...source]
     if (search) {
       const q = search.toLowerCase()
       list = list.filter(
         (c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q),
       )
     }
-    if (tab === "Gainers") list = list.filter((c) => c.change24h > 0)
-    if (tab === "Losers") list = list.filter((c) => c.change24h < 0)
-    const key = tab === "Volume" ? "volume24h" : sortBy
+    if (tab === "Main") list = list.slice(0, search ? list.length : 20)
+    const key = sortBy
     list.sort((a, b) => {
       const av = (a[key] as number) ?? 0
       const bv = (b[key] as number) ?? 0
+      if (tab === "Total") return bv - av === 0 ? 0 : sortAsc ? av - bv : b.volume24h - a.volume24h
       return sortAsc ? av - bv : bv - av
     })
     return list
-  }, [coins, tab, search, sortBy, sortAsc])
+  }, [coins, spotMarkets, tab, search, sortBy, sortAsc])
 
   // ── Futures-mode memos ──────────────────────────────────────────────────
 
@@ -304,17 +326,14 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
       const q = search.toLowerCase()
       list = list.filter((m) => m.symbol.toLowerCase().includes(q) || m.baseAsset.toLowerCase().includes(q))
     }
-    if (tab === "Gainers") list = list.filter((m) => m.change24h > 0)
-    if (tab === "Losers") list = list.filter((m) => m.change24h < 0)
     list.sort((a, b) => {
-      if (tab === "Volume" || sortBy === "volume24h") return sortAsc ? a.volume24h - b.volume24h : b.volume24h - a.volume24h
+      if (sortBy === "volume24h") return sortAsc ? a.volume24h - b.volume24h : b.volume24h - a.volume24h
       if (sortBy === "price") return sortAsc ? a.markPrice - b.markPrice : b.markPrice - a.markPrice
       if (sortBy === "change24h") return sortAsc ? a.change24h - b.change24h : b.change24h - a.change24h
-      // default: OI
       return sortAsc ? a.openInterest - b.openInterest : b.openInterest - a.openInterest
     })
     return list
-  }, [futuresMarkets, tab, search, sortBy, sortAsc])
+  }, [futuresMarkets, search, sortBy, sortAsc])
 
   const toggleSort = (col: SortKey) => {
     if (sortBy === col) setSortAsc((v) => !v)
@@ -327,7 +346,7 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
   const sortIndicator = (col: SortKey) =>
     sortBy === col ? (sortAsc ? " ↑" : " ↓") : ""
 
-  if (error && coins.length === 0 && futuresMarkets.length === 0) {
+  if (error && coins.length === 0) {
     return (
       <div className="rounded-2xl border border-border/50 bg-card">
         <ErrorState message={error} />
@@ -344,7 +363,7 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header + Market Type Toggle */}
+      {/* Header + Tabs */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-col gap-0.5">
@@ -352,31 +371,30 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
             <p className="text-sm text-muted-foreground">
               {isFutures
                 ? `Hyperliquid perpetual futures · ${futuresMarkets.length} contracts`
-                : `Real-time prices and market data for ${coins.length} assets`}
+                : tab === "Spot"
+                ? `Hyperliquid spot markets · ${spotMarkets.length} pairs`
+                : tab === "Main"
+                ? `Top 20 assets by market cap`
+                : `Real-time prices for ${coins.length} assets`}
             </p>
           </div>
-          {/* Spot / Futures toggle */}
+          {/* Market type tabs */}
           <div className="flex items-center rounded-xl bg-accent/50 p-1">
-            <button
-              onClick={() => setMarketType("spot")}
-              className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all ${
-                !isFutures
-                  ? "bg-primary text-white shadow-md shadow-primary/25"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
-              }`}
-            >
-              Spot
-            </button>
-            <button
-              onClick={() => setMarketType("futures")}
-              className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all ${
-                isFutures
-                  ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
-              }`}
-            >
-              Futures
-            </button>
+            {MARKET_TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all ${
+                  tab === t
+                    ? t === "Futures"
+                      ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
+                      : "bg-primary text-white shadow-md shadow-primary/25"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -607,7 +625,7 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 p-4">
             <div className="flex items-center gap-2">
               <HugeiconsIcon icon={Chart01Icon} className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold">{isFutures ? "Futures Markets" : "All Markets"}</h2>
+              <h2 className="text-sm font-semibold">{isFutures ? "Futures Markets" : tab === "Spot" ? "Spot Markets" : tab === "Main" ? "Main Markets" : "All Markets"}</h2>
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                 isFutures ? "bg-amber-500/10 text-amber-500" : "bg-primary/10 text-primary"
               }`}>
@@ -615,33 +633,6 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex items-center rounded-xl bg-accent/50 p-1">
-                {ALL_TABS.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    className={`relative rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                      tab === t
-                        ? "bg-primary text-white shadow-md shadow-primary/25"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                    }`}
-                  >
-                    {t}
-                    {tab === t && t === "Gainers" && (
-                      <span className="ml-1 text-[10px] opacity-75">
-                        {isFutures ? futuresGainers.length : gainers.length}
-                      </span>
-                    )}
-                    {tab === t && t === "Losers" && (
-                      <span className="ml-1 text-[10px] opacity-75">
-                        {isFutures
-                          ? futuresMarkets.filter((m) => m.change24h < 0).length
-                          : losers.length}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
               <div className="relative">
                 <HugeiconsIcon
                   icon={Search01Icon}
@@ -658,8 +649,13 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
             </div>
           </div>
 
-          {/* Table — Spot */}
+          {/* Table — Spot / Total / Main */}
           {!isFutures && (
+            spotLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -750,6 +746,7 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
                 </tbody>
               </table>
             </div>
+            )
           )}
 
           {/* Table — Futures */}
