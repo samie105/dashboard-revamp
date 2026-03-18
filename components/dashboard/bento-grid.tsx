@@ -12,6 +12,8 @@ import {
   ArrowUpRight01Icon,
   Search01Icon,
   Exchange01Icon,
+  ChartLineData01Icon,
+  Wallet01Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData, TradeResult, FuturesMarket } from "@/lib/actions"
 import { getFuturesMarkets } from "@/lib/actions"
@@ -19,6 +21,9 @@ import { ErrorState } from "@/components/error-state"
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
 import { useTradeSelector } from "@/components/trade-selector"
+import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { useAuth } from "@/components/auth-provider"
 
 const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
 
@@ -527,6 +532,136 @@ function EmptyState({
   )
 }
 
+/* ========== My Positions ========== */
+function MyPositions() {
+  const { user } = useAuth()
+  const { positions, loading: posLoading } = useHyperliquidPositions()
+  const { balances: spotHoldings, loading: spotLoading } = useHyperliquidBalance(user?.userId, !!user)
+  const [view, setView] = React.useState<"positions" | "spot">("positions")
+
+  const loading = view === "positions" ? posLoading : spotLoading
+
+  return (
+    <div className="flex h-full flex-col rounded-2xl bg-card">
+      <div className="flex items-center justify-between px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <HugeiconsIcon icon={Wallet01Icon} className="h-4 w-4 text-primary" />
+          <h3 className="text-base font-semibold">My Holdings</h3>
+        </div>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => setView("positions")}
+            className={`rounded-lg px-2 py-1 text-xs font-medium transition-colors ${
+              view === "positions" ? "bg-amber-500/10 text-amber-600" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
+          >
+            Futures
+          </button>
+          <button
+            onClick={() => setView("spot")}
+            className={`rounded-lg px-2 py-1 text-xs font-medium transition-colors ${
+              view === "spot" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
+          >
+            Spot
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center p-8">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      ) : view === "positions" ? (
+        positions.length === 0 ? (
+          <EmptyState
+            icon={ChartLineData01Icon}
+            title="No open positions"
+            description="Your futures positions will appear here"
+            cta={{ label: "Trade Futures", href: "/futures" }}
+          />
+        ) : (
+          <div className="flex flex-1 flex-col divide-y divide-border/30">
+            {positions.slice(0, 6).map((pos) => {
+              const size = parseFloat(pos.szi)
+              const isLong = size > 0
+              const pnl = parseFloat(pos.unrealizedPnl)
+              const roe = parseFloat(pos.returnOnEquity) * 100
+              const isProfit = pnl >= 0
+              const lev = pos.leverage ? `${pos.leverage.value}×` : ""
+              return (
+                <div key={pos.coin} className="flex items-center gap-3 px-3 py-1.5 transition-colors hover:bg-accent/30">
+                  <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[9px] font-bold ${isLong ? "bg-emerald-500/10 text-emerald-600" : "bg-red-500/10 text-red-600"}`}>
+                    {isLong ? "L" : "S"}
+                  </span>
+                  <div className="flex flex-1 flex-col">
+                    <span className="text-sm font-medium">{pos.coin}-PERP</span>
+                    <span className="text-xs text-muted-foreground">{lev} · {Math.abs(size).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className={`text-sm font-semibold tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
+                      {isProfit ? "+" : ""}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className={`text-xs tabular-nums ${isProfit ? "text-emerald-500/70" : "text-red-500/70"}`}>
+                      {isProfit ? "+" : ""}{roe.toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+            {positions.length > 6 && (
+              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-primary hover:underline">
+                View all {positions.length} positions
+              </a>
+            )}
+          </div>
+        )
+      ) : (
+        spotHoldings.length === 0 ? (
+          <EmptyState
+            icon={Chart01Icon}
+            title="No spot holdings"
+            description="Your spot assets will appear here"
+            cta={{ label: "Trade Spot", href: "/spot" }}
+          />
+        ) : (
+          <div className="flex flex-1 flex-col divide-y divide-border/30">
+            {spotHoldings.slice(0, 6).map((b) => {
+              const isProfit = b.unrealizedPnl >= 0
+              return (
+                <div key={b.coin} className="flex items-center gap-3 px-3 py-1.5 transition-colors hover:bg-accent/30">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">
+                    {b.coin.slice(0, 2)}
+                  </div>
+                  <div className="flex flex-1 flex-col">
+                    <span className="text-sm font-medium">{b.coin}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{b.total.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-sm font-semibold tabular-nums">
+                      ${b.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    {b.unrealizedPnl !== 0 && (
+                      <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
+                        {isProfit ? "+" : ""}{b.unrealizedPnlPercent.toFixed(2)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+            {spotHoldings.length > 6 && (
+              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-primary hover:underline">
+                View all {spotHoldings.length} assets
+              </a>
+            )}
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
 /* ========== Dashboard Grid ========== */
 interface DashboardGridProps {
   coins: CoinData[]
@@ -544,9 +679,10 @@ export function DashboardGrid({ coins, tradesByPair, prices, error }: DashboardG
         <RecentTrades coins={coins} tradesByPair={tradesByPair} error={error} />
       </div>
 
-      {/* Column 2: Swap + Watchlist */}
+      {/* Column 2: Swap + My Holdings + Watchlist */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
         <SwapClient coins={coins} prices={prices} error={error} compact />
+        <MyPositions />
         <Watchlist coins={coins} error={error} />
       </div>
     </div>

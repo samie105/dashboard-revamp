@@ -26,6 +26,7 @@ import { markOnboardingComplete } from "@/lib/profile-actions"
 import { useTradeSelector } from "@/components/trade-selector"
 import { useWalletBalances, type TokenBalance } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
 import { useRouter } from "next/navigation"
@@ -269,6 +270,7 @@ export default function AssetsClient() {
   const { user } = useAuth()
   const { balances: onChainBalances, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances()
   const { balances: hlBalances, accountValue: hlAccountValue, loading: hlLoading } = useHyperliquidBalance(user?.userId, !!user)
+  const { positions: hlPositions, loading: hlPositionsLoading } = useHyperliquidPositions()
   const [prices, setPrices] = React.useState<Record<string, number>>({})
   const [activeView, setActiveView] = React.useState<WalletView>("total")
   const [selectedChain, setSelectedChain] = React.useState<string>(CHAINS[0].key)
@@ -611,6 +613,191 @@ export default function AssetsClient() {
 
         {assetsView === "my-assets" ? (
           <>
+        {/* ═══ Spot Holdings View ═══ */}
+        {activeView === "spot" ? (
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between p-4 pb-2">
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={Chart01Icon} className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Spot Holdings</h3>
+                {hlBalances.length > 0 && (
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    {hlBalances.length}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {hlLoading ? (
+              <div className="flex flex-col items-center justify-center py-14">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <p className="mt-2 text-xs text-muted-foreground">Loading spot holdings...</p>
+              </div>
+            ) : hlBalances.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-14">
+                <HugeiconsIcon icon={Wallet01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
+                <p className="text-xs font-medium text-muted-foreground">No spot holdings</p>
+                <p className="text-[10px] text-muted-foreground/70">Deposit or trade to see your holdings here</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                      <th className="px-4 py-2 text-left font-medium">Asset</th>
+                      <th className="px-4 py-2 text-right font-medium">Total</th>
+                      <th className="px-4 py-2 text-right font-medium">Available</th>
+                      <th className="px-4 py-2 text-right font-medium hidden sm:table-cell">Entry Price</th>
+                      <th className="px-4 py-2 text-right font-medium">Value</th>
+                      <th className="px-4 py-2 text-right font-medium">PnL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {hlBalances.map((b) => {
+                      const isProfit = b.unrealizedPnl >= 0
+                      return (
+                        <tr key={b.coin} className="transition-colors hover:bg-accent/30">
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
+                                {b.coin.slice(0, 3)}
+                              </div>
+                              <div>
+                                <span className="font-medium">{b.coin}</span>
+                                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Spot</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                            {b.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                            {b.available.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
+                            ${b.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: b.entryPrice < 1 ? 6 : 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                            ${b.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <div className="flex flex-col items-end">
+                              <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
+                                {isProfit ? "+" : ""}${b.unrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                              <span className={`text-[10px] tabular-nums ${isProfit ? "text-emerald-500/70" : "text-red-500/70"}`}>
+                                {isProfit ? "+" : ""}{b.unrealizedPnlPercent.toFixed(2)}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : activeView === "futures" ? (
+          /* ═══ Futures Positions View ═══ */
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between p-4 pb-2">
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={ChartLineData01Icon} className="h-4 w-4 text-amber-500" />
+                <h3 className="text-sm font-semibold">Open Positions</h3>
+                {hlPositions.length > 0 && (
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600">
+                    {hlPositions.length}
+                  </span>
+                )}
+              </div>
+              <a
+                href="/futures"
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                Trade Futures
+                <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+              </a>
+            </div>
+
+            {hlPositionsLoading ? (
+              <div className="flex flex-col items-center justify-center py-14">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+                <p className="mt-2 text-xs text-muted-foreground">Loading positions...</p>
+              </div>
+            ) : hlPositions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-14">
+                <HugeiconsIcon icon={ChartLineData01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
+                <p className="text-xs font-medium text-muted-foreground">No open positions</p>
+                <p className="text-[10px] text-muted-foreground/70">Open a futures trade to see your positions here</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                      <th className="px-4 py-2 text-left font-medium">Contract</th>
+                      <th className="px-4 py-2 text-right font-medium">Size</th>
+                      <th className="px-4 py-2 text-right font-medium">Entry</th>
+                      <th className="px-4 py-2 text-right font-medium hidden sm:table-cell">Liq. Price</th>
+                      <th className="px-4 py-2 text-right font-medium">Value</th>
+                      <th className="px-4 py-2 text-right font-medium">PnL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {hlPositions.map((pos) => {
+                      const size = parseFloat(pos.szi)
+                      const isLong = size > 0
+                      const pnl = parseFloat(pos.unrealizedPnl)
+                      const roe = parseFloat(pos.returnOnEquity) * 100
+                      const isProfit = pnl >= 0
+                      const lev = pos.leverage ? `${pos.leverage.value}×` : "—"
+                      return (
+                        <tr key={pos.coin} className="transition-colors hover:bg-accent/30">
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              <span className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded text-[9px] font-bold ${isLong ? "bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20" : "bg-red-500/10 text-red-600 ring-1 ring-red-500/20"}`}>
+                                {isLong ? "L" : "S"}
+                              </span>
+                              <div>
+                                <span className="font-medium">{pos.coin}-PERP</span>
+                                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{lev} Leverage</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                            {Math.abs(size).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                            ${parseFloat(pos.entryPx).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: parseFloat(pos.entryPx) < 1 ? 6 : 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
+                            {pos.liquidationPx ? `$${parseFloat(pos.liquidationPx).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                            ${parseFloat(pos.positionValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <div className="flex flex-col items-end">
+                              <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
+                                {isProfit ? "+" : ""}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                              <span className={`text-[10px] tabular-nums ${isProfit ? "text-emerald-500/70" : "text-red-500/70"}`}>
+                                {isProfit ? "+" : ""}{roe.toFixed(2)}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ═══ On-Chain Assets View (Total / Main) ═══ */
+          <>
         {/* Header */}
         <div className="flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between">
@@ -756,6 +943,8 @@ export default function AssetsClient() {
               </tbody>
             </table>
           </div>
+        )}
+          </>
         )}
           </>
         ) : (

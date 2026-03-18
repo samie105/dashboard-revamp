@@ -13,6 +13,7 @@ import {
   Exchange01Icon,
   ArrowUpRight01Icon,
   Clock01Icon,
+  AlertCircleIcon,
 } from "@hugeicons/core-free-icons"
 import { useWallet } from "@/components/wallet-provider"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
@@ -131,20 +132,70 @@ function HowItWorks() {
   )
 }
 
-function RecentDeposits() {
+function RecentDeposits({ refreshKey }: { refreshKey: number }) {
+  const [deposits, setDeposits] = React.useState<DepositRecord[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    setLoading(true)
+    fetch("/api/deposit/history")
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setDeposits(d.deposits ?? []) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [refreshKey])
+
   return (
     <div className="rounded-2xl border border-border/40 bg-card">
       <div className="flex items-center gap-2 border-b border-border/30 px-4 py-3">
         <HugeiconsIcon icon={Clock01Icon} className="h-3.5 w-3.5 text-primary" />
         <h3 className="text-xs font-semibold">Recent Deposits</h3>
       </div>
-      <div className="flex flex-col items-center justify-center gap-2 px-4 py-8">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50">
-          <HugeiconsIcon icon={Exchange01Icon} className="h-5 w-5 text-muted-foreground/40" />
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin text-muted-foreground" />
         </div>
-        <p className="text-xs font-medium text-muted-foreground">No deposit history yet</p>
-        <p className="text-[10px] text-muted-foreground/60">Completed deposits will appear here</p>
-      </div>
+      ) : deposits.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 px-4 py-8">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50">
+            <HugeiconsIcon icon={Exchange01Icon} className="h-5 w-5 text-muted-foreground/40" />
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">No deposit history yet</p>
+          <p className="text-[10px] text-muted-foreground/60">Completed deposits will appear here</p>
+        </div>
+      ) : (
+        <div className="flex flex-col divide-y divide-border/20">
+          {deposits.map((d) => {
+            const isUp = d.status === "completed"
+            const isFailed = ["payment_failed", "delivery_failed", "cancelled"].includes(d.status)
+            const isPending = !isUp && !isFailed
+            return (
+              <div key={d._id} className="flex items-center gap-3 px-4 py-3">
+                <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                  isUp ? "bg-emerald-500/10" : isFailed ? "bg-red-500/10" : "bg-amber-500/10"
+                }`}>
+                  <HugeiconsIcon
+                    icon={isUp ? CheckmarkCircle01Icon : isFailed ? Cancel01Icon : Clock01Icon}
+                    className={`h-3.5 w-3.5 ${isUp ? "text-emerald-500" : isFailed ? "text-red-500" : "text-amber-500"}`}
+                  />
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-xs font-semibold tabular-nums">{d.usdtAmount} USDT</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {CURRENCY_SYM[d.fiatCurrency] ?? ""}{d.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {d.network === "ethereum" ? "ERC-20" : "SPL"}
+                  </span>
+                </div>
+                <div className="flex flex-col items-end gap-0.5">
+                  <StatusLabel status={d.status} />
+                  <span className="text-[10px] text-muted-foreground">
+                    {new Date(d.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -177,6 +228,9 @@ export function DepositClient() {
   const [loading, setLoading] = React.useState(false)
   const [verifying, setVerifying] = React.useState(false)
   const [verifyMsg, setVerifyMsg] = React.useState("")
+  const [historyKey, setHistoryKey] = React.useState(0)
+  // Banner for a silently-detected pending deposit that we don't want to block the form
+  const [resumeBanner, setResumeBanner] = React.useState<DepositRecord | null>(null)
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ── Rates ────────────────────────────────────────────────────────────
@@ -202,37 +256,63 @@ export function DepositClient() {
   React.useEffect(() => {
     const did = searchParams.get("depositId")
     if (did) {
+      // Explicit resume via URL param — always show payment step
       ;(async () => {
         try {
           const r = await fetch(`/api/deposit/status/${encodeURIComponent(did)}`)
           const d = await r.json()
-          if (d.success && d.deposit) { setActiveDeposit(d.deposit); setPaymentUrl(d.deposit.checkoutUrl || null) }
+          if (d.success && d.deposit) {
+            setActiveDeposit(d.deposit)
+            setPaymentUrl(d.deposit.checkoutUrl || null)
+          }
         } catch { /* ignore */ }
       })()
       return
     }
 
     if (activeDeposit) return
+
     ;(async () => {
       try {
         const r = await fetch("/api/deposit/pending")
         const d = await r.json()
         if (!d.success || !d.deposit) return
-        setActiveDeposit(d.deposit)
-        setPaymentUrl(d.deposit.checkoutUrl || null)
 
-        if (!autoVerified.current && ["pending", "awaiting_verification"].includes(d.deposit.status)) {
-          autoVerified.current = true
-          setVerifying(true)
-          try {
-            const vr = await fetch("/api/deposit/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ depositId: d.deposit._id }) })
-            const vd = await vr.json()
-            if (vd.deposit) setActiveDeposit(vd.deposit)
-            if (!vd.success) setVerifyMsg(vd.message || "Verifying payment…")
-          } catch { setVerifyMsg("Auto-verification pending. Click 'I've Paid' to retry.") }
-          finally { setVerifying(false) }
+        const dep: DepositRecord = d.deposit
+        const PROCESSING = ["verifying", "payment_confirmed", "sending_usdt"]
+        const ACTIONABLE = ["pending", "awaiting_verification", "payment_failed"]
+
+        if (PROCESSING.includes(dep.status)) {
+          // Actively processing — take over UI so user can track it
+          setActiveDeposit(dep)
+          setPaymentUrl(dep.checkoutUrl || null)
+        } else if (ACTIONABLE.includes(dep.status)) {
+          // Not yet paid or failed — show a non-blocking banner, don't touch the form
+          setResumeBanner(dep)
+
+          // Try a silent background verify — only swap to payment step if it succeeds
+          if (!autoVerified.current) {
+            autoVerified.current = true
+            try {
+              const vr = await fetch("/api/deposit/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ depositId: dep._id }),
+              })
+              const vd = await vr.json()
+              if (vd.success && vd.deposit && PROCESSING.includes(vd.deposit.status)) {
+                // Payment actually went through — now it makes sense to show it
+                setResumeBanner(null)
+                setActiveDeposit(vd.deposit)
+                setHistoryKey((k) => k + 1)
+              } else if (vd.deposit) {
+                // Update the banner with the fresh status but keep form accessible
+                setResumeBanner(vd.deposit)
+              }
+            } catch { /* silent — banner stays, form stays accessible */ }
+          }
         }
-      } catch { /* no pending */ }
+      } catch { /* no pending deposit */ }
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -273,6 +353,7 @@ export function DepositClient() {
       const r = await fetch("/api/deposit/initiate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ usdtAmount: amount, fiatCurrency: "NGN", network }) })
       const d = await r.json()
       if (!d.success) { setError(d.message || "Failed to create deposit."); return }
+      setResumeBanner(null)
       setActiveDeposit(d.deposit); setPaymentUrl(d.checkoutUrl || null); setUsdtAmount("")
     } catch { setError("Something went wrong.") }
     finally { setLoading(false) }
@@ -301,12 +382,24 @@ export function DepositClient() {
     finally { setLoading(false) }
   }
 
+  function reset() {
+    setActiveDeposit(null); setPaymentUrl(null); setError(""); setVerifyMsg("")
+    setHistoryKey((k) => k + 1)
+  }
+
   function openPay() {
     if (!paymentUrl) { setError("Payment link unavailable."); return }
     window.open(paymentUrl, "_blank", "noopener,noreferrer")
   }
 
-  function reset() { setActiveDeposit(null); setPaymentUrl(null); setError(""); setVerifyMsg("") }
+  function dismissBanner() { setResumeBanner(null) }
+
+  function resumeFromBanner() {
+    if (!resumeBanner) return
+    setActiveDeposit(resumeBanner)
+    setPaymentUrl(resumeBanner.checkoutUrl || null)
+    setResumeBanner(null)
+  }
 
   // ── Wallet guard ─────────────────────────────────────────────────────
 
@@ -358,7 +451,36 @@ export function DepositClient() {
       {/* Two-column layout */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]">
         {/* LEFT — Main card */}
-        <div>
+        <div className="flex flex-col gap-4">
+          {/* ═══ Resume banner — non-blocking ═══ */}
+          {resumeBanner && !activeDeposit && (
+            <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+              <HugeiconsIcon icon={AlertCircleIcon} className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  You have an unfinished deposit — {resumeBanner.usdtAmount} USDT
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Status: <StatusLabel status={resumeBanner.status} /> · You can resume it or start a new one.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={resumeFromBanner}
+                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-amber-600 transition-colors"
+                >
+                  Resume
+                </button>
+                <button
+                  onClick={dismissBanner}
+                  className="rounded-lg border border-border/30 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-accent transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ═══ Input form ═══ */}
           {!activeDeposit && (
             <div className="rounded-2xl border border-border/40 bg-card shadow-sm">
@@ -633,7 +755,7 @@ export function DepositClient() {
 
         {/* RIGHT — Side panels */}
         <div className="flex flex-col gap-4">
-          <RecentDeposits />
+          <RecentDeposits refreshKey={historyKey} />
           <HowItWorks />
         </div>
       </div>
