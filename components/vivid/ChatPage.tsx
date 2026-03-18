@@ -135,15 +135,14 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-0.5">
-            {activeConversation && (
-              <button
-                onClick={() => setInstructionsOpen(true)}
-                className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground transition-colors"
-                title="Custom Instructions"
-              >
-                <HugeiconsIcon icon={Settings01Icon} className="h-4.5 w-4.5" />
-              </button>
-            )}
+            <button
+              onClick={() => setInstructionsOpen(true)}
+              disabled={!activeConversation}
+              className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Custom Instructions"
+            >
+              <HugeiconsIcon icon={Settings01Icon} className="h-4.5 w-4.5" />
+            </button>
             <button
               onClick={handleNewChat}
               className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground transition-colors"
