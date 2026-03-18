@@ -220,6 +220,14 @@ export function SpotClient({
     coins.find((c) => c.symbol === selectedPair) || coins[0]
   const currentPrice = prices[selectedPair] ?? selectedCoin?.price ?? 0
 
+  // Live best bid/ask derived directly from WS orderbook state
+  const liveBestBid = orderBookBids[0]?.price ?? 0
+  const liveBestAsk = orderBookAsks[0]?.price ?? 0
+
+  // TP/SL set by tapping on chart — lifted state shared between ChartArea and OrderPanel
+  const [chartSetTP, setChartSetTP] = React.useState<number | undefined>()
+  const [chartSetSL, setChartSetSL] = React.useState<number | undefined>()
+
   function handlePairSelect(symbol: string) {
     setSelectedPair(symbol)
     const url = new URL(window.location.href)
@@ -267,6 +275,10 @@ export function SpotClient({
                 change24h={selectedCoin.change24h}
                 onMarketsClick={() => setShowMarkets(true)}
                 openOrders={openOrders}
+                bestBid={liveBestBid}
+                bestAsk={liveBestAsk}
+                onSetTP={(p) => setChartSetTP(p)}
+                onSetSL={(p) => setChartSetSL(p)}
               />
             </div>
 
@@ -402,7 +414,15 @@ export function SpotClient({
                   </button>
                 </div>
                 <div className="max-h-[320px] overflow-y-auto slim-scroll">
-                  <OrderPanel side={orderSide} symbol={selectedPair} price={currentPrice} />
+                  <OrderPanel
+                    side={orderSide}
+                    symbol={selectedPair}
+                    price={currentPrice}
+                    bestBid={liveBestBid}
+                    bestAsk={liveBestAsk}
+                    externalTP={chartSetTP}
+                    externalSL={chartSetSL}
+                  />
                 </div>
               </div>
             </div>
@@ -452,6 +472,10 @@ export function SpotClient({
               price={currentPrice}
               change24h={selectedCoin.change24h}
               openOrders={openOrders}
+              bestBid={liveBestBid}
+              bestAsk={liveBestAsk}
+              onSetTP={(p) => setChartSetTP(p)}
+              onSetSL={(p) => setChartSetSL(p)}
             />
           </div>
 
@@ -480,7 +504,15 @@ export function SpotClient({
                 Sell
               </button>
             </div>
-            <OrderPanel side={orderSide} symbol={selectedPair} price={currentPrice} />
+            <OrderPanel
+              side={orderSide}
+              symbol={selectedPair}
+              price={currentPrice}
+              bestBid={liveBestBid}
+              bestAsk={liveBestAsk}
+              externalTP={chartSetTP}
+              externalSL={chartSetSL}
+            />
           </div>
         </div>
       </div>

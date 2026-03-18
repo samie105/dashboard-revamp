@@ -18,10 +18,18 @@ export function OrderPanel({
   side,
   symbol,
   price,
+  bestBid: externalBestBid,
+  bestAsk: externalBestAsk,
+  externalTP,
+  externalSL,
 }: {
   side: "buy" | "sell"
   symbol: string
   price: number
+  bestBid?: number
+  bestAsk?: number
+  externalTP?: number
+  externalSL?: number
 }) {
   const { user, isSignedIn } = useAuth()
   const { addresses, walletsGenerated } = useWallet()
@@ -38,8 +46,9 @@ export function OrderPanel({
     type: "success" | "error"
     message: string
   } | null>(null)
-  const [bestBid, setBestBid] = React.useState(0)
-  const [bestAsk, setBestAsk] = React.useState(0)
+  // Use live bid/ask from parent WS feed (no polling needed)
+  const bestBid = externalBestBid ?? 0
+  const bestAsk = externalBestAsk ?? 0
   const [showTPSL, setShowTPSL] = React.useState(false)
   const [takeProfitPrice, setTakeProfitPrice] = React.useState("")
   const [stopLossPrice, setStopLossPrice] = React.useState("")
@@ -52,24 +61,19 @@ export function OrderPanel({
   const numericAmount = parseFloat(amount) || 0
   const total = numericAmount * effectivePrice
 
-  // Fetch best bid/ask for limit order reference and warnings
+  // Sync external TP/SL from chart clicks
   React.useEffect(() => {
-    const fetchBidAsk = async () => {
-      try {
-        const res = await fetch(
-          `/api/hyperliquid/slippage-estimate?coin=${symbol}&side=buy&amount=1`
-        )
-        const data = await res.json()
-        if (data.success && data.data) {
-          if (data.data.bestBid) setBestBid(data.data.bestBid)
-          if (data.data.bestAsk) setBestAsk(data.data.bestAsk)
-        }
-      } catch { /* ignore */ }
+    if (externalTP && externalTP > 0) {
+      setTakeProfitPrice(externalTP.toFixed(6))
+      setShowTPSL(true)
     }
-    fetchBidAsk()
-    const interval = setInterval(fetchBidAsk, 5000)
-    return () => clearInterval(interval)
-  }, [symbol])
+  }, [externalTP])
+  React.useEffect(() => {
+    if (externalSL && externalSL > 0) {
+      setStopLossPrice(externalSL.toFixed(6))
+      setShowTPSL(true)
+    }
+  }, [externalSL])
 
   // Check if limit order would fill immediately
   const wouldFillImmediately = orderType === "limit" && limitPrice && (
@@ -103,11 +107,13 @@ export function OrderPanel({
 
   const minOrderError = React.useMemo(() => {
     if (numericAmount <= 0 || effectivePrice <= 0) return null
-    if (isBuy && total < MIN_ORDER_VALUE) {
-      return `Min order $${MIN_ORDER_VALUE}. Yours: $${total.toFixed(2)}`
+    // Use raw totalInput when user typed into total field to avoid float rounding
+    const notional = editingField === "total" ? (parseFloat(totalInput) || 0) : total
+    if (isBuy && notional < MIN_ORDER_VALUE - 0.005) {
+      return `Min order $${MIN_ORDER_VALUE}. Yours: $${notional.toFixed(2)}`
     }
     return null
-  }, [numericAmount, effectivePrice, total, isBuy])
+  }, [numericAmount, effectivePrice, total, totalInput, editingField, isBuy])
 
   const canTrade =
     isSignedIn &&

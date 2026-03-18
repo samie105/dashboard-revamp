@@ -701,12 +701,20 @@ export function ChartArea({
   change24h,
   onMarketsClick,
   openOrders = [],
+  bestBid = 0,
+  bestAsk = 0,
+  onSetTP,
+  onSetSL,
 }: {
   symbol: string
   price: number
   change24h: number
   onMarketsClick?: () => void
   openOrders?: OpenOrderForChart[]
+  bestBid?: number
+  bestAsk?: number
+  onSetTP?: (price: number) => void
+  onSetSL?: (price: number) => void
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<IChartApi | null>(null)
@@ -718,6 +726,7 @@ export function ChartArea({
   const isLoadingHistoryRef = React.useRef(false)
   const historyExhaustedRef = React.useRef(false)
   const priceLinesRef = React.useRef<Map<number, any>>(new Map())
+  const bidAskLinesRef = React.useRef<{ bid: any; ask: any } | null>(null)
   const wsRef = React.useRef<WebSocket | null>(null)
 
   const [interval, setInterval] = React.useState("1H")
@@ -1351,7 +1360,51 @@ export function ChartArea({
     }
   }, [openOrders, symbol, price])
 
+  // ── Live bid/ask lines ───────────────────────────────────────────────
+  React.useEffect(() => {
+    const series = mainSeriesRef.current
+    if (!series) return
+
+    // Remove old bid/ask lines
+    if (bidAskLinesRef.current) {
+      try { series.removePriceLine(bidAskLinesRef.current.bid) } catch {}
+      try { series.removePriceLine(bidAskLinesRef.current.ask) } catch {}
+      bidAskLinesRef.current = null
+    }
+
+    if (bestBid > 0 && bestAsk > 0) {
+      const bidLine = series.createPriceLine({
+        price: bestBid,
+        color: "rgba(16,185,129,0.7)",
+        lineWidth: 1,
+        lineStyle: 3, // dotted
+        axisLabelVisible: true,
+        title: `Bid $${bestBid.toLocaleString(undefined, { maximumFractionDigits: 4 })}`,
+      })
+      const askLine = series.createPriceLine({
+        price: bestAsk,
+        color: "rgba(239,68,68,0.7)",
+        lineWidth: 1,
+        lineStyle: 3, // dotted
+        axisLabelVisible: true,
+        title: `Ask $${bestAsk.toLocaleString(undefined, { maximumFractionDigits: 4 })}`,
+      })
+      bidAskLinesRef.current = { bid: bidLine, ask: askLine }
+    }
+  }, [bestBid, bestAsk])
+
   function handleSvgMouseDown(e: React.MouseEvent<SVGSVGElement>) {
+    // Right-click on chart: set TP if above current price, SL if below
+    if (e.button === 2 && (onSetTP || onSetSL)) {
+      const rect = svgRef.current!.getBoundingClientRect()
+      const y = e.clientY - rect.top
+      const pt = screenToChart(e.clientX - rect.left, y)
+      if (pt) {
+        if (pt.price > price && onSetTP) { onSetTP(pt.price); return }
+        if (pt.price < price && onSetSL) { onSetSL(pt.price); return }
+      }
+      return
+    }
     if (activeTool === "select") { setSelectedId(null); return }
     const rect = svgRef.current!.getBoundingClientRect()
     const x = e.clientX - rect.left
@@ -1780,11 +1833,12 @@ export function ChartArea({
               </div>
             )}
 
-            {/* SVG Drawing layer */}
+            {/* SVG Drawing layer — right-click sets TP/SL when onSetTP/SL provided */}
             <svg
               ref={svgRef}
               className="absolute inset-0 w-full h-full overflow-hidden"
-              style={{ pointerEvents: activeTool === "select" ? "none" : "all", zIndex: 15, cursor: activeTool === "select" ? "default" : "crosshair" }}
+              style={{ pointerEvents: (activeTool === "select" && !onSetTP && !onSetSL) ? "none" : "all", zIndex: 15, cursor: activeTool === "select" ? "default" : "crosshair" }}
+              onContextMenu={(e) => { if (onSetTP || onSetSL) e.preventDefault() }}
               onMouseDown={handleSvgMouseDown}
               onMouseMove={handleSvgMouseMove}
               onMouseLeave={handleSvgLeave}
