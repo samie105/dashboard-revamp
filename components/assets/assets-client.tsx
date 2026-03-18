@@ -30,6 +30,7 @@ import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
 import { useRouter } from "next/navigation"
+import { getCoinImage, coinFallback } from "@/lib/coin-images"
 
 // ── Onboarding steps ─────────────────────────────────────────────────────
 
@@ -659,9 +660,18 @@ export default function AssetsClient() {
                         <tr key={b.coin} className="transition-colors hover:bg-accent/30">
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2.5">
-                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
-                                {b.coin.slice(0, 3)}
-                              </div>
+                              {getCoinImage(b.coin) ? (
+                                <img
+                                  src={getCoinImage(b.coin)}
+                                  alt={b.coin}
+                                  className="h-7 w-7 shrink-0 rounded-full object-contain"
+                                  onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(b.coin) }}
+                                />
+                              ) : (
+                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
+                                  {b.coin.slice(0, 3)}
+                                </div>
+                              )}
                               <div>
                                 <span className="font-medium">{b.coin}</span>
                                 <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Spot</p>
@@ -756,9 +766,17 @@ export default function AssetsClient() {
                         <tr key={pos.coin} className="transition-colors hover:bg-accent/30">
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2.5">
-                              <span className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded text-[9px] font-bold ${isLong ? "bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20" : "bg-red-500/10 text-red-600 ring-1 ring-red-500/20"}`}>
+                              <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded text-[9px] font-bold ${isLong ? "bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20" : "bg-red-500/10 text-red-600 ring-1 ring-red-500/20"}`}>
                                 {isLong ? "L" : "S"}
                               </span>
+                              {getCoinImage(pos.coin) ? (
+                                <img
+                                  src={getCoinImage(pos.coin)}
+                                  alt={pos.coin}
+                                  className="h-6 w-6 shrink-0 rounded-full object-contain"
+                                  onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(pos.coin) }}
+                                />
+                              ) : null}
                               <div>
                                 <span className="font-medium">{pos.coin}-PERP</span>
                                 <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{lev} Leverage</p>
@@ -872,9 +890,9 @@ export default function AssetsClient() {
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2.5">
                           <div className="relative shrink-0">
-                            <img src={token.icon} alt={token.symbol} className="h-7 w-7 rounded-full" />
+                            <img src={token.icon} alt={token.symbol} className="h-7 w-7 rounded-full" onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(token.symbol) }} />
                             {!token.isNative && chainInfo && (
-                              <img src={chainInfo.icon} alt="" className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card" />
+                              <img src={chainInfo.icon} alt="" className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                             )}
                           </div>
                           <div>
@@ -1001,7 +1019,9 @@ export default function AssetsClient() {
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2.5">
                               {market.image ? (
-                                <img src={market.image} alt={market.symbol} className="h-7 w-7 rounded-full" />
+                                <img src={market.image} alt={market.symbol} className="h-7 w-7 rounded-full" onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(market.symbol) }} />
+                              ) : getCoinImage(market.symbol) ? (
+                                <img src={getCoinImage(market.symbol)} alt={market.symbol} className="h-7 w-7 rounded-full" onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(market.symbol) }} />
                               ) : (
                                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/50 text-[10px] font-bold">
                                   {market.symbol.slice(0, 2)}

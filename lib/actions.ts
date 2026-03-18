@@ -1573,6 +1573,7 @@ export interface FuturesMarket {
   fundingRate: number
   openInterest: number
   maxLeverage: number
+  image: string
 }
 
 export interface FuturesMarketsResponse {
@@ -1656,6 +1657,7 @@ export async function getFuturesMarkets(): Promise<FuturesMarketsResponse> {
         fundingRate: Number(ctx.funding ?? 0),
         openInterest: Number(ctx.openInterest ?? 0),
         maxLeverage: asset.maxLeverage ?? 50,
+        image: SYMBOL_IMAGE[asset.name] || "",
       }
     }).filter((m) => m.markPrice > 0)
 

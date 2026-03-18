@@ -15,6 +15,10 @@ import {
 import type { CoinData, FuturesMarket } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
 import { useTradeSelector } from "@/components/trade-selector"
+import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
+import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { useAuth } from "@/components/auth-provider"
+import { getCoinImage, coinFallback } from "@/lib/coin-images"
 
 // ── Sparkline generator (deterministic from coin data) ───────────────────
 
@@ -119,7 +123,7 @@ function RankedCoinRow({ coin, rank }: { coin: CoinData; rank: number }) {
         alt={coin.symbol}
         className="h-7 w-7 shrink-0 rounded-full object-contain ring-1 ring-border/20"
         onError={(e) => {
-          ;(e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${coin.symbol}&size=28&background=random&bold=true&color=fff`
+          ;(e.target as HTMLImageElement).src = coinFallback(coin.symbol)
         }}
       />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -144,6 +148,7 @@ function RankedCoinRow({ coin, rank }: { coin: CoinData; rank: number }) {
 
 function RankedFuturesRow({ market, rank }: { market: FuturesMarket; rank: number }) {
   const isUp = market.change24h >= 0
+  const imgSrc = market.image || getCoinImage(market.baseAsset)
   return (
     <Link
       href={`/futures?pair=${market.symbol}`}
@@ -152,9 +157,18 @@ function RankedFuturesRow({ market, rank }: { market: FuturesMarket; rank: numbe
       <span className="w-5 text-center text-[11px] font-semibold text-muted-foreground">
         {rank}
       </span>
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/20 text-[9px] font-bold text-amber-600">
-        {market.baseAsset.slice(0, 3)}
-      </div>
+      {imgSrc ? (
+        <img
+          src={imgSrc}
+          alt={market.baseAsset}
+          className="h-7 w-7 shrink-0 rounded-full object-contain ring-1 ring-amber-500/20"
+          onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(market.baseAsset) }}
+        />
+      ) : (
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/20 text-[9px] font-bold text-amber-600">
+          {market.baseAsset.slice(0, 3)}
+        </div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="text-xs font-semibold">{market.symbol}</span>
         <span className="truncate text-[10px] text-muted-foreground">Perpetual</span>
@@ -212,6 +226,9 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
   const [sortAsc, setSortAsc] = React.useState(false)
   const [favorites, setFavorites] = React.useState<Set<string>>(new Set())
   const [marketType, setMarketType] = React.useState<MarketType>("spot")
+  const { user } = useAuth()
+  const { positions, loading: positionsLoading } = useHyperliquidPositions()
+  const { balances: spotHoldings, loading: spotHoldingsLoading } = useHyperliquidBalance(user?.userId, !!user)
 
   const isFutures = marketType === "futures"
 
@@ -425,6 +442,164 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
         )}
       </div>
 
+      {/* My Positions / Holdings */}
+      {(isFutures ? positions.length > 0 || positionsLoading : spotHoldings.length > 0 || spotHoldingsLoading) && (
+        <section className="overflow-hidden rounded-2xl border border-border/50 bg-card">
+          <div className="flex items-center gap-2 border-b border-border/50 px-4 py-3">
+            <div className={`flex h-6 w-6 items-center justify-center rounded-lg ${isFutures ? "bg-amber-500/10" : "bg-primary/10"}`}>
+              <HugeiconsIcon icon={StarIcon} className={`h-3.5 w-3.5 ${isFutures ? "text-amber-500" : "text-primary"}`} />
+            </div>
+            <h3 className="text-sm font-semibold">{isFutures ? "My Positions" : "My Holdings"}</h3>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              isFutures ? "bg-amber-500/10 text-amber-500" : "bg-primary/10 text-primary"
+            }`}>
+              {isFutures ? positions.length : spotHoldings.length}
+            </span>
+            <Link
+              href="/assets"
+              className="ml-auto text-xs font-medium text-primary hover:underline"
+            >
+              View all
+            </Link>
+          </div>
+
+          {(isFutures ? positionsLoading : spotHoldingsLoading) ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : isFutures ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border/30 text-muted-foreground">
+                    <th className="px-4 py-2.5 text-left font-medium">Contract</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Size</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Entry</th>
+                    <th className="hidden px-4 py-2.5 text-right font-medium sm:table-cell">Liq. Price</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Value</th>
+                    <th className="px-4 py-2.5 text-right font-medium">PnL</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  {positions.map((pos) => {
+                    const size = parseFloat(pos.szi)
+                    const isLong = size > 0
+                    const pnl = parseFloat(pos.unrealizedPnl)
+                    const roe = parseFloat(pos.returnOnEquity) * 100
+                    const isProfit = pnl >= 0
+                    const lev = pos.leverage ? `${pos.leverage.value}×` : ""
+                    return (
+                      <tr key={pos.coin} className="transition-colors hover:bg-accent/20">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[9px] font-bold ${isLong ? "bg-emerald-500/10 text-emerald-600" : "bg-red-500/10 text-red-600"}`}>
+                              {isLong ? "L" : "S"}
+                            </span>
+                            {getCoinImage(pos.coin) ? (
+                              <img
+                                src={getCoinImage(pos.coin)}
+                                alt={pos.coin}
+                                className="h-5 w-5 shrink-0 rounded-full object-contain"
+                                onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(pos.coin) }}
+                              />
+                            ) : null}
+                            <div className="flex flex-col">
+                              <span className="font-semibold">{pos.coin}-PERP</span>
+                              <span className="text-[10px] text-muted-foreground">{lev}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono font-medium tabular-nums">
+                          {Math.abs(size).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                          ${fmtPrice(parseFloat(pos.entryPx))}
+                        </td>
+                        <td className="hidden px-4 py-2.5 text-right text-muted-foreground tabular-nums sm:table-cell">
+                          {pos.liquidationPx ? `$${fmtPrice(parseFloat(pos.liquidationPx))}` : "—"}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                          ${parseFloat(pos.positionValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <div className="flex flex-col items-end">
+                            <span className={`font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
+                              {isProfit ? "+" : ""}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className={`text-[10px] tabular-nums ${isProfit ? "text-emerald-500/70" : "text-red-500/70"}`}>
+                              {isProfit ? "+" : ""}{roe.toFixed(2)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border/30 text-muted-foreground">
+                    <th className="px-4 py-2.5 text-left font-medium">Asset</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Balance</th>
+                    <th className="hidden px-4 py-2.5 text-right font-medium sm:table-cell">Entry Price</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Value</th>
+                    <th className="px-4 py-2.5 text-right font-medium">PnL</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  {spotHoldings.map((b) => {
+                    const isProfit = b.unrealizedPnl >= 0
+                    return (
+                      <tr key={b.coin} className="transition-colors hover:bg-accent/20">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            {getCoinImage(b.coin) ? (
+                              <img
+                                src={getCoinImage(b.coin)}
+                                alt={b.coin}
+                                className="h-6 w-6 shrink-0 rounded-full object-contain"
+                                onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(b.coin) }}
+                              />
+                            ) : (
+                              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">
+                                {b.coin.slice(0, 2)}
+                              </div>
+                            )}
+                            <span className="font-semibold">{b.coin}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono font-medium tabular-nums">
+                          {b.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                        </td>
+                        <td className="hidden px-4 py-2.5 text-right text-muted-foreground tabular-nums sm:table-cell">
+                          ${b.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: b.entryPrice < 1 ? 6 : 2 })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                          ${b.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <div className="flex flex-col items-end">
+                            <span className={`font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
+                              {isProfit ? "+" : ""}${b.unrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className={`text-[10px] tabular-nums ${isProfit ? "text-emerald-500/70" : "text-red-500/70"}`}>
+                              {isProfit ? "+" : ""}{b.unrealizedPnlPercent.toFixed(2)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Full Markets Table */}
       <section>
         <div className="overflow-hidden rounded-2xl border border-border/50 bg-card">
@@ -470,7 +645,7 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
               <div className="relative">
                 <HugeiconsIcon
                   icon={Search01Icon}
-                  className="absolute left-2 top-1.75 h-3.5 w-3.5 text-muted-foreground"
+                  className="absolute left-2 top-[7px] h-3.5 w-3.5 text-muted-foreground"
                 />
                 <input
                   type="search"
@@ -536,7 +711,7 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
                               alt={coin.symbol}
                               className="h-6 w-6 shrink-0 rounded-full object-contain ring-1 ring-border/20"
                               onError={(e) => {
-                                ;(e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${coin.symbol}&size=24&background=random&bold=true&color=fff`
+                                ;(e.target as HTMLImageElement).src = coinFallback(coin.symbol)
                               }}
                             />
                             <div className="flex flex-col">
@@ -608,9 +783,18 @@ export function MarketsClient({ coins, futuresMarkets = [], globalStats, error }
                         <td className="sticky left-0 z-10 bg-card px-4 py-3 text-muted-foreground transition-colors group-hover/row:bg-accent/20">{idx + 1}</td>
                         <td className="sticky left-10 z-10 bg-card px-3 py-3 transition-colors group-hover/row:bg-accent/20">
                           <div className="flex items-center gap-2">
-                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/20 text-[9px] font-bold text-amber-600">
-                              {market.baseAsset.slice(0, 3)}
-                            </div>
+                            {(market.image || getCoinImage(market.baseAsset)) ? (
+                              <img
+                                src={market.image || getCoinImage(market.baseAsset)}
+                                alt={market.baseAsset}
+                                className="h-6 w-6 shrink-0 rounded-full object-contain ring-1 ring-amber-500/20"
+                                onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(market.baseAsset) }}
+                              />
+                            ) : (
+                              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/20 text-[9px] font-bold text-amber-600">
+                                {market.baseAsset.slice(0, 3)}
+                              </div>
+                            )}
                             <div className="flex flex-col">
                               <span className="font-semibold">{market.symbol}</span>
                               <span className="hidden text-[10px] text-muted-foreground sm:block">

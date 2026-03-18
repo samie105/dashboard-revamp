@@ -24,6 +24,7 @@ import { useTradeSelector } from "@/components/trade-selector"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useAuth } from "@/components/auth-provider"
+import { getCoinImage, coinFallback } from "@/lib/coin-images"
 
 const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
 
@@ -166,9 +167,18 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                     <tr key={market.symbol} className="transition-colors hover:bg-accent/30">
                       <td className="px-3 sm:px-4 py-2.5">
                         <div className="flex items-center gap-2">
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-[9px] font-bold text-amber-600 ring-1 ring-amber-500/20">
-                            {market.baseAsset.slice(0, 3)}
-                          </span>
+                          {(market.image || getCoinImage(market.baseAsset)) ? (
+                            <img
+                              src={market.image || getCoinImage(market.baseAsset)}
+                              alt={market.baseAsset}
+                              className="h-5 w-5 shrink-0 rounded-full object-contain ring-1 ring-amber-500/20"
+                              onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(market.baseAsset) }}
+                            />
+                          ) : (
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-[9px] font-bold text-amber-600 ring-1 ring-amber-500/20">
+                              {market.baseAsset.slice(0, 3)}
+                            </span>
+                          )}
                           <div className="flex flex-col">
                             <span className="font-medium leading-none">{market.symbol}</span>
                             <span className="text-[10px] text-muted-foreground">Perp · {market.maxLeverage}×</span>
@@ -594,6 +604,14 @@ function MyPositions() {
                   <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[9px] font-bold ${isLong ? "bg-emerald-500/10 text-emerald-600" : "bg-red-500/10 text-red-600"}`}>
                     {isLong ? "L" : "S"}
                   </span>
+                  {getCoinImage(pos.coin) ? (
+                    <img
+                      src={getCoinImage(pos.coin)}
+                      alt={pos.coin}
+                      className="h-5 w-5 shrink-0 rounded-full object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(pos.coin) }}
+                    />
+                  ) : null}
                   <div className="flex flex-1 flex-col">
                     <span className="text-sm font-medium">{pos.coin}-PERP</span>
                     <span className="text-xs text-muted-foreground">{lev} · {Math.abs(size).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
@@ -630,9 +648,18 @@ function MyPositions() {
               const isProfit = b.unrealizedPnl >= 0
               return (
                 <div key={b.coin} className="flex items-center gap-3 px-3 py-1.5 transition-colors hover:bg-accent/30">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">
-                    {b.coin.slice(0, 2)}
-                  </div>
+                  {getCoinImage(b.coin) ? (
+                    <img
+                      src={getCoinImage(b.coin)}
+                      alt={b.coin}
+                      className="h-5 w-5 shrink-0 rounded-full object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(b.coin) }}
+                    />
+                  ) : (
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">
+                      {b.coin.slice(0, 2)}
+                    </div>
+                  )}
                   <div className="flex flex-1 flex-col">
                     <span className="text-sm font-medium">{b.coin}</span>
                     <span className="text-xs text-muted-foreground tabular-nums">{b.total.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
