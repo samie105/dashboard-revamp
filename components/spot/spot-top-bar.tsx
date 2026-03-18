@@ -254,12 +254,12 @@ export function SpotTopBar({
             </Popover>
           </div>
 
-          {/* Mobile "more" button — visible only < lg */}
+          {/* Mobile "Transact" button — visible only < lg */}
           <button
             onClick={() => setMobileInfoOpen(true)}
-            className="lg:hidden rounded-lg p-1.5 transition-colors hover:bg-accent"
+            className="lg:hidden rounded-lg border border-border/50 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent active:scale-95"
           >
-            <HugeiconsIcon icon={MoreHorizontalIcon} className="h-4 w-4 text-muted-foreground" />
+            Transact
           </button>
         </div>
       </header>

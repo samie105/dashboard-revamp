@@ -68,7 +68,9 @@ export function MarketSelect({
             className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground"
           />
           <input
-            type="text"
+            type="search"
+            inputMode="search"
+            autoFocus
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search pairs…"

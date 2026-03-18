@@ -117,8 +117,6 @@ const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Solana: "sol
 // ── Wallet view tabs ─────────────────────────────────────────────────────
 
 const WALLET_VIEWS = [
-  { key: "total",   label: "Total",   icon: Coins01Icon,         sub: "All assets" },
-  { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain balance" },
   { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot holdings" },
   { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Perpetual positions" },
 ] as const
@@ -273,7 +271,7 @@ export default function AssetsClient() {
   const { balances: hlBalances, accountValue: hlAccountValue, loading: hlLoading } = useHyperliquidBalance(user?.userId, !!user)
   const { positions: hlPositions, loading: hlPositionsLoading } = useHyperliquidPositions()
   const [prices, setPrices] = React.useState<Record<string, number>>({})
-  const [activeView, setActiveView] = React.useState<WalletView>("total")
+  const [activeView, setActiveView] = React.useState<WalletView>("spot")
   const [selectedChain, setSelectedChain] = React.useState<string>(CHAINS[0].key)
   const [chainDropdownOpen, setChainDropdownOpen] = React.useState(false)
   const chainDropdownRef = React.useRef<HTMLDivElement>(null)
@@ -389,13 +387,11 @@ export default function AssetsClient() {
   // Per-view displayed balance
   const displayedBalance = React.useMemo(() => {
     switch (activeView) {
-      case "spot":    return spotBalance
       case "futures": return futuresBalance
-      case "main":    return onChainTotal
-      case "total":
-      default:        return onChainTotal + spotBalance + futuresBalance
+      case "spot":
+      default:        return spotBalance
     }
-  }, [activeView, onChainTotal, spotBalance, futuresBalance])
+  }, [activeView, spotBalance, futuresBalance])
 
   const copy = React.useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text)
@@ -531,205 +527,25 @@ export default function AssetsClient() {
         {/* Balance display */}
         <div>
           <span className="text-3xl font-bold tracking-tight tabular-nums">
-            {((activeView === "total" || activeView === "main") && balancesLoading && onChainBalances.length === 0) ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {((activeView === "spot") && balancesLoading && onChainBalances.length === 0) ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span>
           <p className="text-[10px] text-muted-foreground mt-1">
             {WALLET_VIEWS.find((v) => v.key === activeView)?.sub}
           </p>
         </div>
 
-        {/* Divider */}
-        <div className="my-4 h-px bg-border/30" />
-
-        {/* Chain select dropdown + displayed address */}
-        <div data-onboarding="chain-selector" className="flex items-center gap-3">
-          {/* Chain selector */}
-          <div ref={chainDropdownRef} className="relative">
-            <button
-              onClick={() => setChainDropdownOpen((v) => !v)}
-              className="inline-flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2 text-xs font-medium transition-colors hover:bg-accent"
-            >
-              <img src={activeChain.icon} alt={activeChain.name} className="h-4 w-4 rounded-full" />
-              <span>{activeChain.name}</span>
-              <HugeiconsIcon icon={ChevronDownIcon} className={`h-3 w-3 text-muted-foreground transition-transform ${chainDropdownOpen ? "rotate-180" : ""}`} />
-            </button>
-
-            {chainDropdownOpen && (
-              <div className="absolute left-0 top-full z-50 mt-1 min-w-[160px] rounded-xl bg-popover shadow-xl border border-border/30 py-1">
-                {CHAINS.map((chain) => (
-                  <button
-                    key={chain.key}
-                    onClick={() => { setSelectedChain(chain.key); setChainDropdownOpen(false) }}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-xs transition-colors hover:bg-accent ${
-                      selectedChain === chain.key ? "text-foreground font-medium" : "text-muted-foreground"
-                    }`}
-                  >
-                    <img src={chain.icon} alt={chain.name} className="h-4 w-4 rounded-full" />
-                    <span>{chain.name}</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground/60">{chain.symbol}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Address display + copy */}
-          {displayedAddress && (
-            <button
-              onClick={() => copy(displayedAddress, activeChain.key)}
-              className={`inline-flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2 text-xs font-mono transition-colors hover:bg-accent ${
-                copied === activeChain.key ? "border-emerald-500/40 bg-emerald-500/5" : ""
-              }`}
-            >
-              <span className="text-muted-foreground">{truncAddr(displayedAddress)}</span>
-              <HugeiconsIcon
-                icon={copied === activeChain.key ? CheckmarkSquare01Icon : Copy01Icon}
-                className={`h-3 w-3 ${copied === activeChain.key ? "text-emerald-500" : "text-muted-foreground/60"}`}
-              />
-              {copied === activeChain.key && <span className="text-[10px] text-emerald-500">Copied!</span>}
-            </button>
-          )}
-        </div>
+        {/* Divider + Chain selector — on-chain only, hidden now */}
+        {/* (total/main tabs removed; chain selector reserved for future on-chain tab) */}
       </div>
 
       {/* ═══ Assets Table ═══ */}
       <div data-onboarding="assets-table" className="flex h-full flex-col rounded-2xl bg-card">
 
-        {/* ═══ TOTAL TAB: Combined summary (on-chain + spot + futures) ═══ */}
-        {activeView === "total" && (
-          <div className="flex flex-col gap-4 p-4">
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "On-chain", value: onChainTotal, color: "text-foreground" },
-                { label: "Spot",     value: spotBalance,  color: "text-primary" },
-                { label: "Futures",  value: futuresBalance, color: "text-amber-500" },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="flex flex-col gap-1 rounded-xl bg-accent/40 p-3">
-                  <span className="text-[10px] text-muted-foreground">{label}</span>
-                  <span className={`text-sm font-semibold tabular-nums ${color}`}>
-                    ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Switch to <strong>Main</strong>, <strong>Spot</strong>, or <strong>Futures</strong> tabs to see detailed holdings.
-            </p>
-          </div>
-        )}
+        {/* ═══ TOTAL TAB — hidden (on-chain removed) ═══ */}
+        {/* {activeView === "total" && ( ... )} */}
 
-        {/* ═══ MAIN TAB: On-chain wallet balances ═══ */}
-        {activeView === "main" && (
-          <>
-            {/* Header + search + chain filter */}
-            <div className="flex flex-col gap-3 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <HugeiconsIcon icon={Wallet01Icon} className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold">My Assets</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-[7px] h-3.5 w-3.5 text-muted-foreground" />
-                    <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search tokens..." className="w-36 rounded-lg bg-accent/50 pl-7 pr-2 py-1.5 text-xs outline-none focus:bg-accent" />
-                  </div>
-                  <button data-onboarding="add-token-btn" onClick={() => setShowAddToken(true)}
-                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-                    <HugeiconsIcon icon={Add01Icon} className="h-3.5 w-3.5" /> Add Token
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
-                {CHAIN_TABS.map((tab) => (
-                  <button key={tab} onClick={() => setChainTab(tab)}
-                    className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                      chainTab === tab ? "bg-primary text-white" : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                    }`}>{tab}</button>
-                ))}
-              </div>
-            </div>
-            {balancesLoading && onChainBalances.length === 0 ? (
-              <div className="flex items-center justify-center py-14">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              </div>
-            ) : filteredTokens.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-14">
-                <HugeiconsIcon icon={Search01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
-                <p className="text-xs font-medium text-muted-foreground">No tokens found</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-t border-border/30 text-xs text-muted-foreground">
-                      <th className="px-4 py-2 text-left font-medium">Asset</th>
-                      <th className="px-4 py-2 text-left font-medium">Network</th>
-                      <th className="px-4 py-2 text-right font-medium">Balance</th>
-                      <th className="px-4 py-2 text-right font-medium">Value</th>
-                      <th className="px-4 py-2 text-right font-medium">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/20">
-                    {filteredTokens.map((token) => {
-                      const chainInfo = CHAINS.find((c) => c.key === token.chain)
-                      const bal = getTokenBalance(token)
-                      const usdVal = ["USDT", "USDC"].includes(token.symbol)
-                        ? bal
-                        : bal * (getPrice(token.symbol) || 0)
-                      return (
-                        <tr key={`${token.chain}-${token.symbol}-${token.contractAddress ?? "native"}`}
-                          className="transition-colors hover:bg-accent/30">
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-2.5">
-                              <div className="relative shrink-0">
-                                <img src={token.icon} alt={token.symbol} className="h-7 w-7 rounded-full"
-                                  onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(token.symbol) }} />
-                                {!token.isNative && chainInfo && (
-                                  <img src={chainInfo.icon} alt="" className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card"
-                                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
-                                )}
-                              </div>
-                              <div>
-                                <span className="font-medium">{token.symbol}</span>
-                                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{token.name}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            {chainInfo && (
-                              <div className="flex items-center gap-1.5">
-                                <img src={chainInfo.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
-                                <span className="text-xs text-muted-foreground">{chainInfo.name}</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-right font-medium tabular-nums">
-                            {bal > 0 ? bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }) : "0.00"}
-                          </td>
-                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
-                            {bal > 0 ? `$${usdVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00"}
-                          </td>
-                          <td className="px-4 py-2.5 text-right">
-                            <div className="inline-flex items-center gap-1">
-                              <button onClick={() => setSendModal({ open: true, asset: { symbol: token.symbol, name: token.name, balance: bal,
-                                chain: token.chain as SendableAsset["chain"], icon: token.icon, contractAddress: token.contractAddress,
-                                decimals: token.isNative ? undefined : 18 } })}
-                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-                                Send <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-                              </button>
-                              <AssetTradeButton symbol={token.symbol} />
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
+        {/* ═══ MAIN TAB — hidden (on-chain removed) ═══ */}
+        {/* {activeView === "main" && ( ... )} */}
 
         {/* ═══ SPOT TAB: Spot Holdings ═══ */}
         {activeView === "spot" && (

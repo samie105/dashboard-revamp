@@ -246,7 +246,7 @@ export function SpotClient({
 
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-[100dvh] flex-col overflow-hidden">
       {/* ── TOP BAR ── */}
       <div data-onboarding="spot-topbar">
         <SpotTopBar
@@ -470,7 +470,7 @@ export function SpotClient({
         </div>
 
         {/* Scrollable content: chart + order panel */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto pb-36">
           {/* Chart */}
           <div className="h-[55vh] min-h-[300px]">
             <ChartArea
@@ -584,19 +584,19 @@ export function SpotClient({
       <Sheet open={mobileMarketsOpen} onOpenChange={setMobileMarketsOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[80vh] rounded-t-3xl border-t border-border/15 bg-background/98 backdrop-blur-2xl p-0 shadow-2xl"
+          className="flex flex-col max-h-[85dvh] rounded-t-3xl border-t border-border/15 bg-background/98 backdrop-blur-2xl p-0 shadow-2xl"
           showCloseButton={false}
         >
-          <div className="flex justify-center pt-3 pb-1">
+          <div className="flex justify-center pt-3 pb-1 shrink-0">
             <div className="h-1 w-10 rounded-full bg-foreground/10" />
           </div>
-          <SheetHeader className="px-4 pt-0 pb-2">
+          <SheetHeader className="px-4 pt-0 pb-2 shrink-0">
             <SheetTitle className="flex items-center gap-2 text-sm">
               <HugeiconsIcon icon={ChartCandleIcon} className="h-4 w-4 text-primary" />
               Markets
             </SheetTitle>
           </SheetHeader>
-          <div className="h-[62vh] overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <MarketSelect
               coins={coins}
               selected={selectedPair}
