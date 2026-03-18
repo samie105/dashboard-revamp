@@ -279,38 +279,34 @@ export function DepositClient() {
         if (!d.success || !d.deposit) return
 
         const dep: DepositRecord = d.deposit
-        const PROCESSING = ["verifying", "payment_confirmed", "sending_usdt"]
-        const ACTIONABLE = ["pending", "awaiting_verification", "payment_failed"]
+        const TERMINAL = ["completed", "cancelled"]
 
-        if (PROCESSING.includes(dep.status)) {
-          // Actively processing — take over UI so user can track it
-          setActiveDeposit(dep)
-          setPaymentUrl(dep.checkoutUrl || null)
-        } else if (ACTIONABLE.includes(dep.status)) {
-          // Not yet paid or failed — show a non-blocking banner, don't touch the form
-          setResumeBanner(dep)
+        // Skip terminal deposits — nothing to show
+        if (TERMINAL.includes(dep.status)) return
 
-          // Try a silent background verify — only swap to payment step if it succeeds
-          if (!autoVerified.current) {
-            autoVerified.current = true
-            try {
-              const vr = await fetch("/api/deposit/verify", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ depositId: dep._id }),
-              })
-              const vd = await vr.json()
-              if (vd.success && vd.deposit && PROCESSING.includes(vd.deposit.status)) {
-                // Payment actually went through — now it makes sense to show it
+        // Always show a non-blocking banner — never auto-take-over the form
+        setResumeBanner(dep)
+
+        // Try a silent background verify to refresh the status
+        if (!autoVerified.current) {
+          autoVerified.current = true
+          try {
+            const vr = await fetch("/api/deposit/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ depositId: dep._id }),
+            })
+            const vd = await vr.json()
+            if (vd.deposit) {
+              // Update the banner with the fresh status — form stays accessible
+              if (TERMINAL.includes(vd.deposit.status)) {
                 setResumeBanner(null)
-                setActiveDeposit(vd.deposit)
                 setHistoryKey((k) => k + 1)
-              } else if (vd.deposit) {
-                // Update the banner with the fresh status but keep form accessible
+              } else {
                 setResumeBanner(vd.deposit)
               }
-            } catch { /* silent — banner stays, form stays accessible */ }
-          }
+            }
+          } catch { /* silent — banner stays, form stays accessible */ }
         }
       } catch { /* no pending deposit */ }
     })()
