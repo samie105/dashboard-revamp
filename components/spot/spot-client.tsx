@@ -86,7 +86,7 @@ export function SpotClient({
 }: SpotClientProps) {
   const { profile } = useProfile()
   const { orders: openOrders } = useOpenOrders()
-  const [selectedPair, setSelectedPair] = React.useState("BTC")
+  const [selectedPair, setSelectedPair] = React.useState(() => coins[0]?.symbol ?? "BTC")
   const [watchlist, setWatchlist] = React.useState<Set<string>>(
     new Set(["BTC", "ETH", "SOL"]),
   )

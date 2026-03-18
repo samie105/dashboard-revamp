@@ -731,6 +731,10 @@ export function ChartArea({
   const [showDrawTools, setShowDrawTools] = React.useState(false)
   const [crosshairMode, setCrosshairMode] = React.useState<"normal" | "magnet">("normal")
   const refreshIndicatorsRef = React.useRef<() => void>(() => {})
+  // Debounce timer: limits indicator setData() calls to max once per 1.5s during live WS updates
+  const indicatorDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  // RAF handle: coalesces scroll/range-change redraws to one animation frame
+  const drawRafRef = React.useRef<number>(0)
 
   // Drawing tools state
   const [activeTool, setActiveTool] = React.useState<DrawTool>("select")
@@ -739,12 +743,14 @@ export function ChartArea({
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [drawColor, setDrawColor] = React.useState("#f97316")
   const [drawTick, setDrawTick] = React.useState(0)
+  const drawingsLenRef = React.useRef(0)
   const [mouseXY, setMouseXY] = React.useState<{ x: number; y: number } | null>(null)
   const svgRef = React.useRef<SVGSVGElement>(null)
 
   // Keep ref in sync
   chartTypeRef.current = chartType
   intervalRef.current = interval
+  drawingsLenRef.current = drawings.length
 
   // Map chart-area intervals to Hyperliquid API format
   const hlIntervalMap: Record<string, string> = {
@@ -782,10 +788,19 @@ export function ChartArea({
         historyExhaustedRef.current = true
         return
       }
+      // Save viewport before prepend — logical indices will shift by older.length
+      const savedRange = chartRef.current?.timeScale().getVisibleLogicalRange()
       klinesRef.current = [...older, ...existing]
       applyMainData(klinesRef.current)
       applyVolumeData(klinesRef.current)
       refreshIndicatorsRef.current()
+      // Restore shifted range so viewport doesn't jump
+      if (savedRange && chartRef.current) {
+        chartRef.current.timeScale().setVisibleLogicalRange({
+          from: savedRange.from + older.length,
+          to: savedRange.to + older.length,
+        })
+      }
     } catch {
       // ignore history load errors
     } finally {
@@ -846,13 +861,19 @@ export function ChartArea({
     volumeSeriesRef.current = vol
 
     const onRangeChange = (range: { from: number; to: number } | null) => {
-      setDrawTick((t) => t + 1)
       if (range && range.from < 10) loadOlderHistory()
+      // Only re-render the SVG drawing overlay when drawings actually exist,
+      // and coalesce to one repaint per animation frame to eliminate jitter.
+      if (drawingsLenRef.current > 0) {
+        cancelAnimationFrame(drawRafRef.current)
+        drawRafRef.current = requestAnimationFrame(() => setDrawTick((t) => t + 1))
+      }
     }
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
 
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange)
+      cancelAnimationFrame(drawRafRef.current)
       indicatorSeriesRef.current.clear()
       mainSeriesRef.current = null
       volumeSeriesRef.current = null
@@ -1158,8 +1179,9 @@ export function ChartArea({
           } else {
             klines.push(klineEntry)
           }
-          // Refresh indicators with updated data
-          refreshIndicatorsRef.current()
+          // Debounce indicator refresh — setData() on many series each tick causes jitter
+          if (indicatorDebounceRef.current) clearTimeout(indicatorDebounceRef.current)
+          indicatorDebounceRef.current = setTimeout(() => refreshIndicatorsRef.current(), 1500)
         } catch {
           // ignore malformed messages
         }
