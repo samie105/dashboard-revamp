@@ -1393,18 +1393,29 @@ export function ChartArea({
     }
   }, [bestBid, bestAsk])
 
-  function handleSvgMouseDown(e: React.MouseEvent<SVGSVGElement>) {
-    // Right-click on chart: set TP if above current price, SL if below
-    if (e.button === 2 && (onSetTP || onSetSL)) {
-      const rect = svgRef.current!.getBoundingClientRect()
+  // ── Right-click on chart canvas → set TP/SL ──────────────────────────
+  // Attached to the container (not the SVG) so it never blocks chart pan/zoom.
+  // The SVG has pointerEvents:none in select mode so events reach the canvas.
+  React.useEffect(() => {
+    const el = containerRef.current
+    if (!el || (!onSetTP && !onSetSL)) return
+
+    function handleContextMenu(e: MouseEvent) {
+      e.preventDefault()
+      const rect = el!.getBoundingClientRect()
+      const x = e.clientX - rect.left
       const y = e.clientY - rect.top
-      const pt = screenToChart(e.clientX - rect.left, y)
-      if (pt) {
-        if (pt.price > price && onSetTP) { onSetTP(pt.price); return }
-        if (pt.price < price && onSetSL) { onSetSL(pt.price); return }
-      }
-      return
+      const chart = chartRef.current
+      if (!chart) return
+      const priceVal = chart.priceScale("right").coordinateToPrice(y)
+      if (priceVal === null) return
+      if (priceVal > price && onSetTP) onSetTP(priceVal)
+      else if (priceVal < price && onSetSL) onSetSL(priceVal)
     }
+
+    el.addEventListener("contextmenu", handleContextMenu)
+    return () => el.removeEventListener("contextmenu", handleContextMenu)
+  }, [onSetTP, onSetSL, price])(e: React.MouseEvent<SVGSVGElement>) {
     if (activeTool === "select") { setSelectedId(null); return }
     const rect = svgRef.current!.getBoundingClientRect()
     const x = e.clientX - rect.left
@@ -1833,12 +1844,11 @@ export function ChartArea({
               </div>
             )}
 
-            {/* SVG Drawing layer — right-click sets TP/SL when onSetTP/SL provided */}
+            {/* SVG Drawing layer */}
             <svg
               ref={svgRef}
               className="absolute inset-0 w-full h-full overflow-hidden"
-              style={{ pointerEvents: (activeTool === "select" && !onSetTP && !onSetSL) ? "none" : "all", zIndex: 15, cursor: activeTool === "select" ? "default" : "crosshair" }}
-              onContextMenu={(e) => { if (onSetTP || onSetSL) e.preventDefault() }}
+              style={{ pointerEvents: activeTool === "select" ? "none" : "all", zIndex: 15, cursor: activeTool === "select" ? "default" : "crosshair" }}
               onMouseDown={handleSvgMouseDown}
               onMouseMove={handleSvgMouseMove}
               onMouseLeave={handleSvgLeave}
