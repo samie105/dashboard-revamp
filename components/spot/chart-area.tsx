@@ -1405,17 +1405,17 @@ export function ChartArea({
       const rect = el!.getBoundingClientRect()
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
-      const chart = chartRef.current
-      if (!chart) return
-      const priceVal = chart.priceScale("right").coordinateToPrice(y)
-      if (priceVal === null) return
-      if (priceVal > price && onSetTP) onSetTP(priceVal)
-      else if (priceVal < price && onSetSL) onSetSL(priceVal)
+      const pt = screenToChart(x, y)
+      if (!pt) return
+      if (pt.price > price && onSetTP) onSetTP(pt.price)
+      else if (pt.price < price && onSetSL) onSetSL(pt.price)
     }
 
     el.addEventListener("contextmenu", handleContextMenu)
     return () => el.removeEventListener("contextmenu", handleContextMenu)
-  }, [onSetTP, onSetSL, price])(e: React.MouseEvent<SVGSVGElement>) {
+  }, [onSetTP, onSetSL, price])
+
+  function handleSvgMouseDown(e: React.MouseEvent<SVGSVGElement>) {
     if (activeTool === "select") { setSelectedId(null); return }
     const rect = svgRef.current!.getBoundingClientRect()
     const x = e.clientX - rect.left
