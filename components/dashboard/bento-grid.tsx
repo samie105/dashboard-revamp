@@ -137,11 +137,11 @@ function TradeConfirmDialog({
     </div>
   )
 }
-const MARKET_TABS = ["Total", "Main", "Spot", "Futures"] as const
+const MARKET_TABS = ["Spot", "Futures"] as const
 type MarketTab = (typeof MARKET_TABS)[number]
 
 function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
-  const [tab, setTab] = React.useState<MarketTab>("Total")
+  const [tab, setTab] = React.useState<MarketTab>("Spot")
   const [search, setSearch] = React.useState("")
   const { openTradeSelector } = useTradeSelector()
   const [visibleCount, setVisibleCount] = React.useState(8)
@@ -178,29 +178,14 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
   }, [tab])
 
   const filtered = React.useMemo(() => {
-    let list = tab === "Spot" ? [...spotMarkets] : [...coins]
+    let list = [...spotMarkets]
     if (search) {
       const q = search.toLowerCase()
       list = list.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
     }
-    switch (tab) {
-      case "Total":
-        list.sort((a, b) => b.volume24h - a.volume24h)
-        break
-      case "Main":
-        list.sort((a, b) => b.marketCap - a.marketCap)
-        // Only top 20 for Main — no artificial slice, let pagination handle display
-        if (!search) list = list.slice(0, 20)
-        break
-      case "Spot":
-        list.sort((a, b) => b.marketCap - a.marketCap)
-        break
-      default:
-        list.sort((a, b) => b.volume24h - a.volume24h)
-        break
-    }
+    list.sort((a, b) => b.marketCap - a.marketCap)
     return list
-  }, [coins, spotMarkets, tab, search])
+  }, [spotMarkets, search])
 
   // Reset pagination when filters change
   React.useEffect(() => {

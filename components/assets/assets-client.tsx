@@ -118,7 +118,7 @@ const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Solana: "sol
 // ── Wallet view tabs ─────────────────────────────────────────────────────
 
 const WALLET_VIEWS = [
-  // { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain wallet" },
+  { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain wallet" },
   { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot holdings" },
   { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Perpetual positions" },
 ] as const
@@ -389,11 +389,12 @@ export default function AssetsClient() {
   // Per-view displayed balance
   const displayedBalance = React.useMemo(() => {
     switch (activeView) {
+      case "main":    return onChainTotal
       case "futures": return futuresBalance
       case "spot":
       default:        return spotBalance
     }
-  }, [activeView, spotBalance, futuresBalance])
+  }, [activeView, onChainTotal, spotBalance, futuresBalance])
 
   const copy = React.useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text)
@@ -550,8 +551,8 @@ export default function AssetsClient() {
           </div>
         </div>
 
-        {/* Divider + Chain selector — hidden: on-chain flows commented out */}
-        {false && (
+        {/* Divider + Chain selector — shown when Main tab is active */}
+        {activeView === "main" && (
           <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/20">
             <div ref={chainDropdownRef} className="relative">
               <button
@@ -603,8 +604,8 @@ export default function AssetsClient() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div data-onboarding="assets-table" className="flex h-full flex-col rounded-2xl bg-card lg:col-span-8">
 
-        {/* ═══ MAIN TAB: On-chain wallet balances — commented out ═══ */}
-        {false && (
+        {/* ═══ MAIN TAB: On-chain wallet balances ═══ */}
+        {activeView === "main" && (
           <>
             <div className="flex flex-col gap-3 p-4">
               <div className="flex items-center justify-between">
@@ -651,7 +652,6 @@ export default function AssetsClient() {
                       <th className="px-4 py-2 text-left font-medium">Network</th>
                       <th className="px-4 py-2 text-right font-medium">Balance</th>
                       <th className="px-4 py-2 text-right font-medium">Value</th>
-                      <th className="px-4 py-2 text-right font-medium">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/20">
@@ -695,15 +695,12 @@ export default function AssetsClient() {
                             {bal > 0 ? `$${usdVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00"}
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <div className="inline-flex items-center gap-1">
-                              <button onClick={() => setSendModal({ open: true, asset: { symbol: token.symbol, name: token.name, balance: bal,
-                                chain: token.chain as SendableAsset["chain"], icon: token.icon, contractAddress: token.contractAddress,
-                                decimals: token.isNative ? undefined : 18 } })}
-                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-                                Send <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-                              </button>
-                              <AssetTradeButton symbol={token.symbol} />
-                            </div>
+                            <button onClick={() => setSendModal({ open: true, asset: { symbol: token.symbol, name: token.name, balance: bal,
+                              chain: token.chain as SendableAsset["chain"], icon: token.icon, contractAddress: token.contractAddress,
+                              decimals: token.isNative ? undefined : 18 } })}
+                              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                              Send <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                            </button>
                           </td>
                         </tr>
                       )

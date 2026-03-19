@@ -50,6 +50,7 @@ interface TradeSelectorCtx {
   setOpen: (v: boolean) => void
   /** Optional: pre-set a pair to pass to the target route */
   pair?: string
+  setPair: (v: string | undefined) => void
   /** Unsupported onchain token modal */
   unsupportedToken?: { symbol: string; name?: string }
   setUnsupportedToken: (v: { symbol: string; name?: string } | undefined) => void
@@ -58,6 +59,7 @@ interface TradeSelectorCtx {
 const TradeSelectorContext = React.createContext<TradeSelectorCtx>({
   open: false,
   setOpen: () => {},
+  setPair: () => {},
   setUnsupportedToken: () => {},
 })
 
@@ -76,6 +78,7 @@ export function TradeSelectorProvider({ children }: { children: React.ReactNode 
     open,
     setOpen: (v: boolean) => { setOpen(v); if (!v) setPair(undefined) },
     pair,
+    setPair,
     unsupportedToken,
     setUnsupportedToken,
   }), [open, pair, unsupportedToken])
@@ -98,6 +101,7 @@ export function useTradeSelector() {
   const ctx = React.useContext(TradeSelectorContext)
   return {
     openTradeSelector: (_pair?: string) => {
+      if (_pair) ctx.setPair(_pair)
       ctx.setOpen(true)
     },
     openUnsupportedToken: (symbol: string, name?: string) => {
@@ -169,7 +173,7 @@ function UnsupportedTokenModal({
           {/* Actions */}
           <div className="grid grid-cols-2 gap-3 border-t border-border/30 px-5 py-4">
             <button
-              onClick={() => goTo("/spot")}
+              onClick={() => goTo(`/spot${token.symbol ? `?pair=${token.symbol}` : ""}`)}
               className="flex flex-col items-start gap-1.5 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-left transition-colors hover:bg-primary/20"
             >
               <div className="flex items-center gap-2">
@@ -179,7 +183,7 @@ function UnsupportedTokenModal({
               <span className="text-[11px] text-muted-foreground">Buy / Sell tab</span>
             </button>
             <button
-              onClick={() => goTo("/futures")}
+              onClick={() => goTo(`/futures${token.symbol ? `?pair=${token.symbol}` : ""}`)}
               className="flex flex-col items-start gap-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-left transition-colors hover:bg-emerald-500/20"
             >
               <div className="flex items-center gap-2">
