@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useHlWs } from "./useHyperliquidWs"
 
 export interface PendingTPSL {
   orderId: number
@@ -111,85 +112,87 @@ export function useOrderMonitor(): OrderMonitorReturn {
     }
   }, [])
 
+  // Consume open orders from WS context instead of independent polling
+  const { openOrders: wsOpenOrders, connected: wsConnected } = useHlWs()
+  const initializedRef = useRef(false)
+
+  // Seed prevOpenIdsRef on first WS snapshot so we don't false-detect fills
   useEffect(() => {
+    if (wsConnected && wsOpenOrders.length > 0 && !initializedRef.current) {
+      prevOpenIdsRef.current = new Set(wsOpenOrders.map((o) => o.oid))
+      initializedRef.current = true
+    }
+  }, [wsConnected, wsOpenOrders])
+
+  // React to WS open-orders changes to detect fills & OCO
+  useEffect(() => {
+    if (!initializedRef.current) return
     if (pendingRef.current.size === 0 && linkedRef.current.size === 0) return
 
-    const poll = async () => {
-      try {
-        const res = await fetch("/api/hyperliquid/open-orders")
-        const data = await res.json()
-        if (!data.success) return
+    const currentIds = new Set<number>(wsOpenOrders.map((o) => o.oid))
 
-        const currentIds = new Set<number>(
-          (data.data || []).map((o: { oid: number }) => o.oid)
-        )
+    const processUpdates = async () => {
+      // 1. Check pending limit orders for fills → place TP/SL
+      for (const [orderId, config] of pendingRef.current) {
+        if (prevOpenIdsRef.current.has(orderId) && !currentIds.has(orderId)) {
+          pendingRef.current.delete(orderId)
+          setTrackedCount(pendingRef.current.size)
 
-        // 1. Check pending limit orders for fills → place TP/SL
-        for (const [orderId, config] of pendingRef.current) {
-          if (prevOpenIdsRef.current.has(orderId) && !currentIds.has(orderId)) {
-            pendingRef.current.delete(orderId)
-            setTrackedCount(pendingRef.current.size)
+          const oppositeSide = config.side === "buy" ? "sell" : "buy"
+          let tpOid: number | undefined
+          let slOid: number | undefined
 
-            const oppositeSide = config.side === "buy" ? "sell" : "buy"
-            let tpOid: number | undefined
-            let slOid: number | undefined
-
-            if (config.tp) {
-              const tpResult = await placeStopLimit(config.asset, oppositeSide, config.size, config.tp, true)
-              if (tpResult.success) {
-                tpOid = tpResult.orderId
-                addNotification(`Limit order filled → TP placed at $${config.tp}`)
-              } else {
-                addNotification(`Limit order filled → TP failed: ${tpResult.error}`)
-              }
-            }
-            if (config.sl) {
-              const slResult = await placeStopLimit(config.asset, oppositeSide, config.size, config.sl, true)
-              if (slResult.success) {
-                slOid = slResult.orderId
-                addNotification(`Limit order filled → SL placed at $${config.sl}`)
-              } else {
-                addNotification(`Limit order filled → SL failed: ${slResult.error}`)
-              }
-            }
-
-            if (tpOid && slOid) {
-              addLinkedPair({ tpOrderId: tpOid, slOrderId: slOid, coin: config.asset })
+          if (config.tp) {
+            const tpResult = await placeStopLimit(config.asset, oppositeSide, config.size, config.tp, true)
+            if (tpResult.success) {
+              tpOid = tpResult.orderId
+              addNotification(`Limit order filled → TP placed at $${config.tp}`)
+            } else {
+              addNotification(`Limit order filled → TP failed: ${tpResult.error}`)
             }
           }
-        }
+          if (config.sl) {
+            const slResult = await placeStopLimit(config.asset, oppositeSide, config.size, config.sl, true)
+            if (slResult.success) {
+              slOid = slResult.orderId
+              addNotification(`Limit order filled → SL placed at $${config.sl}`)
+            } else {
+              addNotification(`Limit order filled → SL failed: ${slResult.error}`)
+            }
+          }
 
-        // 2. OCO: check linked pairs — when one fills, cancel the other
-        for (const [key, pair] of linkedRef.current) {
-          const tpGone = !currentIds.has(pair.tpOrderId)
-          const slGone = !currentIds.has(pair.slOrderId)
-
-          if (tpGone && !slGone && prevOpenIdsRef.current.has(pair.tpOrderId)) {
-            await cancelOrder(pair.coin, pair.slOrderId)
-            linkedRef.current.delete(key)
-            setLinkedCount(linkedRef.current.size)
-            addNotification("Take Profit hit — Stop Loss cancelled")
-          } else if (slGone && !tpGone && prevOpenIdsRef.current.has(pair.slOrderId)) {
-            await cancelOrder(pair.coin, pair.tpOrderId)
-            linkedRef.current.delete(key)
-            setLinkedCount(linkedRef.current.size)
-            addNotification("Stop Loss hit — Take Profit cancelled")
-          } else if (tpGone && slGone) {
-            linkedRef.current.delete(key)
-            setLinkedCount(linkedRef.current.size)
+          if (tpOid && slOid) {
+            addLinkedPair({ tpOrderId: tpOid, slOrderId: slOid, coin: config.asset })
           }
         }
-
-        prevOpenIdsRef.current = currentIds
-      } catch (err) {
-        console.error("[useOrderMonitor] Poll error:", err)
       }
+
+      // 2. OCO: check linked pairs — when one fills, cancel the other
+      for (const [key, pair] of linkedRef.current) {
+        const tpGone = !currentIds.has(pair.tpOrderId)
+        const slGone = !currentIds.has(pair.slOrderId)
+
+        if (tpGone && !slGone && prevOpenIdsRef.current.has(pair.tpOrderId)) {
+          await cancelOrder(pair.coin, pair.slOrderId)
+          linkedRef.current.delete(key)
+          setLinkedCount(linkedRef.current.size)
+          addNotification("Take Profit hit — Stop Loss cancelled")
+        } else if (slGone && !tpGone && prevOpenIdsRef.current.has(pair.slOrderId)) {
+          await cancelOrder(pair.coin, pair.tpOrderId)
+          linkedRef.current.delete(key)
+          setLinkedCount(linkedRef.current.size)
+          addNotification("Stop Loss hit — Take Profit cancelled")
+        } else if (tpGone && slGone) {
+          linkedRef.current.delete(key)
+          setLinkedCount(linkedRef.current.size)
+        }
+      }
+
+      prevOpenIdsRef.current = currentIds
     }
 
-    poll()
-    const interval = setInterval(poll, 10000)
-    return () => clearInterval(interval)
-  }, [trackedCount, linkedCount, placeStopLimit, cancelOrder, addLinkedPair, addNotification])
+    processUpdates()
+  }, [wsOpenOrders, placeStopLimit, cancelOrder, addLinkedPair, addNotification])
 
   return {
     trackOrder,

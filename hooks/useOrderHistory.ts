@@ -49,9 +49,10 @@ export function useOrderHistory(pollInterval = 30_000) {
 
   useEffect(() => {
     fetchOrders()
-    const interval = setInterval(fetchOrders, pollInterval)
+    // Reduced from 30s → 60s; orderUpdates via WS cover real-time needs
+    const interval = setInterval(fetchOrders, 60_000)
     return () => clearInterval(interval)
-  }, [fetchOrders, pollInterval])
+  }, [fetchOrders])
 
   return { orders, loading, error, refetch: fetchOrders }
 }

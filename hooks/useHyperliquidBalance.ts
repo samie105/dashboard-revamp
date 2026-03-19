@@ -94,7 +94,7 @@ export function useHyperliquidBalance(
     hasFetchedOnce.current = false
     fetchBalance(false)
 
-    const interval = setInterval(() => fetchBalance(true), 15_000)
+    const interval = setInterval(() => fetchBalance(true), 30_000)
     return () => clearInterval(interval)
   }, [fetchBalance])
 

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useHlWs } from "./useHyperliquidWs"
 
 export interface OpenOrder {
   coin: string
@@ -18,6 +19,8 @@ export function useOpenOrders() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<number | null>(null)
+  const hasFetched = useRef(false)
+  const { openOrders: wsOrders, connected } = useHlWs()
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -34,8 +37,16 @@ export function useOpenOrders() {
       setError("Failed to fetch open orders")
     } finally {
       setLoading(false)
+      hasFetched.current = true
     }
   }, [])
+
+  // Overlay WS open orders once initial fetch is done
+  useEffect(() => {
+    if (connected && hasFetched.current && wsOrders.length > 0) {
+      setOrders(wsOrders as OpenOrder[])
+    }
+  }, [wsOrders, connected])
 
   const cancelOrder = useCallback(
     async (coin: string, orderId: number) => {
@@ -74,9 +85,12 @@ export function useOpenOrders() {
 
   useEffect(() => {
     fetchOrders()
-    const interval = setInterval(fetchOrders, 10_000)
+    // Fallback poll at 30s (only if WS disconnects)
+    const interval = setInterval(() => {
+      if (!connected) fetchOrders()
+    }, 30_000)
     return () => clearInterval(interval)
-  }, [fetchOrders])
+  }, [fetchOrders, connected])
 
   return {
     orders,

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
+import { useHlWs } from "./useHyperliquidWs"
 
 export interface UseSpotBalancesReturn {
   baseBalance: number
@@ -16,6 +17,7 @@ export function useSpotBalances(
   const [quoteBalance, setQuoteBalance] = useState<number>(0)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+  const { connected } = useHlWs()
 
   const fetchBalances = useCallback(async () => {
     try {
@@ -58,7 +60,8 @@ export function useSpotBalances(
 
   useEffect(() => {
     fetchBalances()
-    const interval = setInterval(fetchBalances, 10_000)
+    // Reduced poll: 30s fallback (WS openOrders channel triggers refetches indirectly)
+    const interval = setInterval(fetchBalances, 30_000)
     return () => clearInterval(interval)
   }, [fetchBalances])
 

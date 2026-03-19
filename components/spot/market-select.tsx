@@ -4,7 +4,6 @@ import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Search01Icon, StarIcon } from "@hugeicons/core-free-icons"
 import type { CoinData } from "@/lib/actions"
-import { getSpotMarkets } from "@/lib/actions"
 import { PairAvatar } from "./coin-avatar"
 
 export function MarketSelect({
@@ -35,23 +34,49 @@ export function MarketSelect({
     return () => clearTimeout(t)
   }, [open])
 
-  // Keep live coins in sync with fresh props
+  // Keep live coins in sync with fresh props (initial load)
   React.useEffect(() => {
     if (coins.length) setLiveCoins(coins)
   }, [coins])
 
-  // Poll spot markets every 10s for real-time updates
+  // WebSocket for real-time price updates (replaces 10s poll)
   React.useEffect(() => {
-    let cancelled = false
-    async function poll() {
+    const ws = new WebSocket("wss://api.hyperliquid.xyz/ws")
+    let alive = true
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        method: "subscribe",
+        subscription: { type: "allMids" },
+      }))
+    }
+
+    ws.onmessage = (evt) => {
+      if (!alive) return
       try {
-        const res = await getSpotMarkets()
-        if (cancelled) return
-        if (res.markets?.length) setLiveCoins(res.markets)
+        const msg = JSON.parse(evt.data)
+        if (msg.channel !== "allMids" || !msg.data?.mids) return
+        const mids: Record<string, string> = msg.data.mids
+
+        setLiveCoins((prev) => {
+          let changed = false
+          const next = prev.map((coin) => {
+            const key = coin.hlName ?? coin.symbol
+            const raw = mids[key]
+            if (!raw) return coin
+            const newPrice = parseFloat(raw)
+            if (newPrice > 0 && Math.abs(newPrice - coin.price) > 1e-10) {
+              changed = true
+              return { ...coin, price: newPrice }
+            }
+            return coin
+          })
+          return changed ? next : prev
+        })
       } catch { /* ignore */ }
     }
-    const id = window.setInterval(poll, 10_000)
-    return () => { cancelled = true; clearInterval(id) }
+
+    return () => { alive = false; ws.close() }
   }, [])
 
   const list = React.useMemo(() => {
