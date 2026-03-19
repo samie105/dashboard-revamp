@@ -118,7 +118,7 @@ const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Solana: "sol
 // ── Wallet view tabs ─────────────────────────────────────────────────────
 
 const WALLET_VIEWS = [
-  { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain wallet" },
+  // { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain wallet" },
   { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot holdings" },
   { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Perpetual positions" },
 ] as const
@@ -389,12 +389,11 @@ export default function AssetsClient() {
   // Per-view displayed balance
   const displayedBalance = React.useMemo(() => {
     switch (activeView) {
-      case "main":    return onChainTotal
       case "futures": return futuresBalance
       case "spot":
       default:        return spotBalance
     }
-  }, [activeView, onChainTotal, spotBalance, futuresBalance])
+  }, [activeView, spotBalance, futuresBalance])
 
   const copy = React.useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text)
@@ -530,15 +529,29 @@ export default function AssetsClient() {
         {/* Balance display */}
         <div>
           <span className="text-3xl font-bold tracking-tight tabular-nums">
-            {((activeView === "main" || activeView === "spot") && balancesLoading && onChainBalances.length === 0) ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {(activeView === "spot" && balancesLoading && onChainBalances.length === 0) ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span>
           <p className="text-[10px] text-muted-foreground mt-1">
             {WALLET_VIEWS.find((v) => v.key === activeView)?.sub}
           </p>
+          {/* On-chain balance — always visible */}
+          <div className="mt-2 flex items-center gap-2">
+            <HugeiconsIcon icon={Wallet01Icon} className="h-3 w-3 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
+              On-chain:{" "}
+              {balancesLoading && onChainBalances.length === 0 ? (
+                <span className="text-muted-foreground/50">Loading…</span>
+              ) : (
+                <span className="font-medium text-foreground">
+                  ${onChainTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              )}
+            </span>
+          </div>
         </div>
 
-        {/* Divider + Chain selector — visible only for Main (on-chain) tab */}
-        {activeView === "main" && (
+        {/* Divider + Chain selector — hidden: on-chain flows commented out */}
+        {false && (
           <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/20">
             <div ref={chainDropdownRef} className="relative">
               <button
@@ -590,8 +603,8 @@ export default function AssetsClient() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div data-onboarding="assets-table" className="flex h-full flex-col rounded-2xl bg-card lg:col-span-8">
 
-        {/* ═══ MAIN TAB: On-chain wallet balances ═══ */}
-        {activeView === "main" && (
+        {/* ═══ MAIN TAB: On-chain wallet balances — commented out ═══ */}
+        {false && (
           <>
             <div className="flex flex-col gap-3 p-4">
               <div className="flex items-center justify-between">

@@ -23,6 +23,13 @@ export function MarketSelect({
   const [search, setSearch] = React.useState("")
   const [tab, setTab] = React.useState<"all" | "watchlist">("all")
   const [liveCoins, setLiveCoins] = React.useState<CoinData[]>(coins)
+  const searchRef = React.useRef<HTMLInputElement>(null)
+
+  // Focus search input on mount (delayed to work inside Sheet/Dialog portals)
+  React.useEffect(() => {
+    const t = setTimeout(() => searchRef.current?.focus(), 100)
+    return () => clearTimeout(t)
+  }, [])
 
   // Keep live coins in sync with fresh props
   React.useEffect(() => {
@@ -68,9 +75,10 @@ export function MarketSelect({
             className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground"
           />
           <input
-            type="search"
+            ref={searchRef}
+            type="text"
             inputMode="search"
-            autoFocus
+            autoComplete="off"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search pairs…"
