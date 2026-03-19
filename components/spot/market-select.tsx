@@ -5,6 +5,18 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Search01Icon, StarIcon } from "@hugeicons/core-free-icons"
 import type { CoinData } from "@/lib/actions"
 import { PairAvatar } from "./coin-avatar"
+import { useHlWs } from "@/hooks/useHyperliquidWs"
+
+/** Deduplicate coins by hlName (unique market identifier) */
+function dedup(coins: CoinData[]): CoinData[] {
+  const seen = new Set<string>()
+  return coins.filter((c) => {
+    const key = c.hlName ?? `${c.symbol}-${c.quoteAsset ?? ""}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
 
 export function MarketSelect({
   coins,
@@ -23,8 +35,9 @@ export function MarketSelect({
 }) {
   const [search, setSearch] = React.useState("")
   const [tab, setTab] = React.useState<"all" | "watchlist">("all")
-  const [liveCoins, setLiveCoins] = React.useState<CoinData[]>(coins)
+  const [liveCoins, setLiveCoins] = React.useState<CoinData[]>(() => dedup(coins))
   const searchRef = React.useRef<HTMLInputElement>(null)
+  const { allMids } = useHlWs()
 
   // Reset search and focus the input every time the sheet opens
   React.useEffect(() => {
@@ -36,48 +49,29 @@ export function MarketSelect({
 
   // Keep live coins in sync with fresh props (initial load)
   React.useEffect(() => {
-    if (coins.length) setLiveCoins(coins)
+    if (coins.length) setLiveCoins(dedup(coins))
   }, [coins])
 
-  // WebSocket for real-time price updates (replaces 10s poll)
+  // Update prices from shared WS allMids (no local WebSocket)
   React.useEffect(() => {
-    const ws = new WebSocket("wss://api.hyperliquid.xyz/ws")
-    let alive = true
+    if (!allMids || Object.keys(allMids).length === 0) return
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        method: "subscribe",
-        subscription: { type: "allMids" },
-      }))
-    }
-
-    ws.onmessage = (evt) => {
-      if (!alive) return
-      try {
-        const msg = JSON.parse(evt.data)
-        if (msg.channel !== "allMids" || !msg.data?.mids) return
-        const mids: Record<string, string> = msg.data.mids
-
-        setLiveCoins((prev) => {
-          let changed = false
-          const next = prev.map((coin) => {
-            const key = coin.hlName ?? coin.symbol
-            const raw = mids[key]
-            if (!raw) return coin
-            const newPrice = parseFloat(raw)
-            if (newPrice > 0 && Math.abs(newPrice - coin.price) > 1e-10) {
-              changed = true
-              return { ...coin, price: newPrice }
-            }
-            return coin
-          })
-          return changed ? next : prev
-        })
-      } catch { /* ignore */ }
-    }
-
-    return () => { alive = false; ws.close() }
-  }, [])
+    setLiveCoins((prev) => {
+      let changed = false
+      const next = prev.map((coin) => {
+        const key = coin.hlName ?? coin.symbol
+        const raw = allMids[key]
+        if (!raw) return coin
+        const newPrice = parseFloat(raw)
+        if (newPrice > 0 && Math.abs(newPrice - coin.price) > 1e-10) {
+          changed = true
+          return { ...coin, price: newPrice }
+        }
+        return coin
+      })
+      return changed ? next : prev
+    })
+  }, [allMids])
 
   const list = React.useMemo(() => {
     let items = liveCoins
@@ -88,10 +82,13 @@ export function MarketSelect({
       items = items.filter(
         (c) =>
           c.symbol.toLowerCase().includes(q) ||
-          c.name.toLowerCase().includes(q),
+          c.name.toLowerCase().includes(q) ||
+          (c.quoteAsset && c.quoteAsset.toLowerCase().includes(q)) ||
+          (c.hlName && c.hlName.toLowerCase().includes(q)),
       )
     }
-    return items.sort((a, b) => b.volume24h - a.volume24h)
+    // Use spread to avoid mutating state array
+    return [...items].sort((a, b) => b.volume24h - a.volume24h)
   }, [liveCoins, search, tab, watchlist])
 
   return (
@@ -149,9 +146,10 @@ export function MarketSelect({
             const pos = coin.change24h >= 0
             const active = coin.symbol === selected
             const quote = coin.quoteAsset || "USDC"
+            const uniqueKey = coin.hlName ?? `${coin.symbol}-${quote}`
             return (
               <button
-                key={coin.symbol}
+                key={uniqueKey}
                 onClick={() => onSelect(coin.symbol)}
                 className={`grid w-full grid-cols-[1fr_auto_auto] items-center gap-2 px-3 py-2 text-left transition-colors ${
                   active ? "bg-primary/5" : "hover:bg-accent/30"
