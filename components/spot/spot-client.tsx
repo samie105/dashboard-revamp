@@ -584,14 +584,11 @@ export function SpotClient({
       {/* Markets */}
       <Sheet open={mobileMarketsOpen} onOpenChange={setMobileMarketsOpen}>
         <SheetContent
-          side="bottom"
-          className="flex flex-col max-h-[85dvh] rounded-t-3xl border-t border-border/15 bg-background/98 backdrop-blur-2xl p-0 shadow-2xl"
+          side="left"
+          className="flex flex-col h-full w-[min(88vw,360px)] max-w-[88vw] border-r border-border/15 bg-background/98 backdrop-blur-2xl p-0 shadow-2xl"
           showCloseButton={false}
         >
-          <div className="flex justify-center pt-3 pb-1 shrink-0">
-            <div className="h-1 w-10 rounded-full bg-foreground/10" />
-          </div>
-          <SheetHeader className="px-4 pt-0 pb-2 shrink-0">
+          <SheetHeader className="px-4 pt-4 pb-2 shrink-0">
             <SheetTitle className="flex items-center gap-2 text-sm">
               <HugeiconsIcon icon={ChartCandleIcon} className="h-4 w-4 text-primary" />
               Markets

@@ -26,7 +26,10 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col h-screen overflow-hidden">
       <div className="flex flex-1 overflow-hidden">
         <SidebarProvider>
-          <AppSidebar />
+          {/* Sidebar hidden on mobile — bottom nav replaces it */}
+          <div className="hidden md:flex">
+            <AppSidebar />
+          </div>
           <div className="flex flex-1 flex-col w-full overflow-hidden">
             <Navbar />
             <main className="flex-1 overflow-y-auto w-full pb-16 md:pb-0">
