@@ -135,10 +135,12 @@ function CollapsibleNavGroup({
   group,
   pathname,
   isCollapsed,
+  onNavigate,
 }: {
   group: NavGroup
   pathname: string
   isCollapsed: boolean
+  onNavigate?: () => void
 }) {
   const hasActive = groupHasActiveRoute(pathname, group.items)
   const [open, setOpen] = React.useState(hasActive)
@@ -190,7 +192,7 @@ function CollapsibleNavGroup({
               <SidebarMenuButton
                 tooltip={item.name}
                 isActive={!ext && isActiveRoute(pathname, item.url)}
-                render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} />}
+                render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} onClick={onNavigate} />}
                 className={cn(
                   "transition-colors text-sm items-center",
                   !ext && isActiveRoute(pathname, item.url)
@@ -260,7 +262,7 @@ function CollapsibleNavGroup({
                   <SidebarMenuButton
                     tooltip={item.description || item.name}
                     isActive={isActive}
-                    render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} />}
+                    render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} onClick={onNavigate} />}
                     className={cn(
                       "ml-4 min-h-7 py-1 text-sm transition-all data-[active=true]:bg-transparent data-[active=true]:text-yellow-400",
                       isActive
@@ -303,7 +305,7 @@ function CollapsibleNavGroup({
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { state } = useSidebar()
+  const { state, isMobile, setOpenMobile } = useSidebar()
   const isCollapsed = state === "collapsed"
   const _vivid = useVividOptional()
   const vividState = _vivid?.state ?? "idle"
@@ -311,6 +313,11 @@ export function AppSidebar() {
   const startSession = _vivid?.startSession ?? (async () => {})
   const endSession = _vivid?.endSession ?? (() => {})
   const vividIsActive = vividState !== "idle" && vividState !== "error"
+
+  // Close drawer on mobile when a nav link is tapped
+  const onNavigate = React.useCallback(() => {
+    if (isMobile) setOpenMobile(false)
+  }, [isMobile, setOpenMobile])
 
   const VIVID_DOT: Record<string, string> = {
     idle: "",
@@ -374,7 +381,7 @@ export function AppSidebar() {
                             <SidebarMenuButton
                               tooltip={vividIsActive ? `Vivid AI — ${vividState}` : "Vivid AI"}
                               isActive={vividActive}
-                              render={<Link href={item.url} />}
+                              render={<Link href={item.url} onClick={onNavigate} />}
                               className={cn(
                                 "min-h-10 py-2 px-2.5 text-sm transition-all rounded-md data-[active=true]:bg-transparent data-[active=true]:text-yellow-400",
                                 vividActive || vividIsActive
@@ -412,7 +419,7 @@ export function AppSidebar() {
                           <SidebarMenuButton
                             tooltip={item.name}
                             isActive={isActive}
-                            render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} />}
+                            render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} onClick={onNavigate} />}
                             className={cn(
                               "min-h-10 py-2 px-2.5 text-sm transition-all rounded-md data-[active=true]:bg-transparent data-[active=true]:text-yellow-400",
                               isActive
@@ -451,6 +458,7 @@ export function AppSidebar() {
                     group={group}
                     pathname={pathname}
                     isCollapsed={isCollapsed}
+                    onNavigate={onNavigate}
                   />
                 </SidebarMenu>
               )}
