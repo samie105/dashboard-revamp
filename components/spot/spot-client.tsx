@@ -327,6 +327,7 @@ export function SpotClient({
                   onSelect={(s) => { handlePairSelect(s); setShowMarkets(false) }}
                   watchlist={watchlist}
                   onToggleWatch={toggleWatch}
+                  open={showMarkets}
                 />
               </div>
             </SheetContent>
@@ -603,6 +604,7 @@ export function SpotClient({
               onSelect={(s) => { handlePairSelect(s); setMobileMarketsOpen(false) }}
               watchlist={watchlist}
               onToggleWatch={toggleWatch}
+              open={mobileMarketsOpen}
             />
           </div>
         </SheetContent>

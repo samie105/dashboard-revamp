@@ -13,23 +13,27 @@ export function MarketSelect({
   onSelect,
   watchlist,
   onToggleWatch,
+  open,
 }: {
   coins: CoinData[]
   selected: string
   onSelect: (s: string) => void
   watchlist: Set<string>
   onToggleWatch: (s: string) => void
+  open?: boolean
 }) {
   const [search, setSearch] = React.useState("")
   const [tab, setTab] = React.useState<"all" | "watchlist">("all")
   const [liveCoins, setLiveCoins] = React.useState<CoinData[]>(coins)
   const searchRef = React.useRef<HTMLInputElement>(null)
 
-  // Focus search input on mount (delayed to work inside Sheet/Dialog portals)
+  // Reset search and focus the input every time the sheet opens
   React.useEffect(() => {
-    const t = setTimeout(() => searchRef.current?.focus(), 100)
+    if (!open) return
+    setSearch("")
+    const t = setTimeout(() => searchRef.current?.focus(), 150)
     return () => clearTimeout(t)
-  }, [])
+  }, [open])
 
   // Keep live coins in sync with fresh props
   React.useEffect(() => {
