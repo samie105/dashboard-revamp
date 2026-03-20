@@ -19,21 +19,15 @@ async function WalletCardLoader() {
 }
 
 async function DashboardGridLoader() {
-  const [pricesData, btcTrades, ethTrades, solTrades] = await Promise.all([
+  const [pricesData, btcTrades] = await Promise.all([
     getPrices(),
     getTrades("BTCUSDT", 8),
-    getTrades("ETHUSDT", 8),
-    getTrades("SOLUSDT", 8),
   ])
   return (
     <DashboardGrid
       coins={pricesData.coins}
       prices={pricesData.prices}
-      tradesByPair={{
-        BTC: btcTrades.data,
-        ETH: ethTrades.data,
-        SOL: solTrades.data,
-      }}
+      initialTrades={btcTrades.data}
       error={pricesData.error || (pricesData.coins.length === 0 ? "No market data available" : undefined)}
     />
   )

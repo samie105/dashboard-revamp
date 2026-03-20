@@ -1,27 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getTrades } from "@/lib/actions"
 
 export async function GET(request: NextRequest) {
-  try {
-    const symbol = request.nextUrl.searchParams.get("symbol")
-    if (!symbol) {
-      return NextResponse.json({ error: "symbol required" }, { status: 400 })
-    }
-
-    const response = await fetch(
-      `https://api.kucoin.com/api/v1/market/histories?symbol=${encodeURIComponent(symbol)}`,
-      { cache: "no-store" }
-    )
-
-    if (!response.ok) {
-      throw new Error(`KuCoin error: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return NextResponse.json(data)
-  } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to fetch trades" },
-      { status: 500 }
-    )
+  const symbol = request.nextUrl.searchParams.get("symbol")
+  if (!symbol) {
+    return NextResponse.json({ error: "symbol required" }, { status: 400 })
   }
+
+  const limit = parseInt(request.nextUrl.searchParams.get("limit") ?? "8", 10)
+  const result = await getTrades(symbol, Math.min(limit, 50))
+  return NextResponse.json(result)
 }
