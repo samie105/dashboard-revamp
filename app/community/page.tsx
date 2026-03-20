@@ -425,7 +425,18 @@ export default function CommunityPage() {
 
       if (result.success && result.message) {
         setMessages((prev) =>
-          prev.map((m) => m.id === tempId ? { ...result.message!, status: "sent" as const } : m)
+          prev.map((m) => {
+            if (m.id !== tempId) return m
+            const serverMsg = result.message!
+            return {
+              ...serverMsg,
+              status: "sent" as const,
+              // Preserve local blob URL for audio so playback works immediately
+              fileUrl: m.type === "audio" && m.fileUrl?.startsWith("blob:")
+                ? m.fileUrl
+                : serverMsg.fileUrl,
+            }
+          })
         )
         loadConversations()
       } else {
@@ -492,12 +503,12 @@ export default function CommunityPage() {
 
       <div ref={pageRef} className={cn(
         "flex-1 flex overflow-hidden",
-        showMobileChat ? "h-[calc(100dvh-4rem)]" : "h-[calc(100dvh-4rem)] pb-16 md:pb-0"
+        showMobileChat ? "h-[calc(100dvh-3rem)]" : "h-[calc(100dvh-3rem)] pb-14 md:pb-0"
       )}>
         {/* Conversation List */}
         <div className={showMobileChat ? "hidden md:flex" : "flex w-full md:w-auto"}>
-          <div className="w-full md:w-80 lg:w-96 border-r flex flex-col bg-background h-full">
-            <div className="p-3 border-b flex items-center justify-between">
+          <div className="w-full md:w-80 lg:w-96 border-r border-border/40 flex flex-col bg-background h-full">
+            <div className="p-3 border-b border-border/40 flex items-center justify-between">
               <h2 className="font-semibold">Community</h2>
               <Button
                 variant="ghost"
@@ -533,7 +544,7 @@ export default function CommunityPage() {
         </div>
 
         {/* Chat Area */}
-        <div className={`flex-1 flex flex-col bg-muted/10 overflow-hidden ${!showMobileChat ? "hidden md:flex" : "flex"}`}>
+        <div className={`flex-1 flex flex-col bg-background overflow-hidden ${!showMobileChat ? "hidden md:flex" : "flex"}`}>
           {selectedParticipant ? (
             <>
               <ChatHeader
@@ -555,7 +566,7 @@ export default function CommunityPage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex-1 overflow-y-auto max-h-[calc(100vh-16rem)] md:max-h-[calc(100vh-12rem)]">
+                  <div className="flex-1 overflow-y-auto">
                     <div className="px-3 py-4 space-y-1 max-w-3xl mx-auto w-full">
                       {messageGroups.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 px-4">

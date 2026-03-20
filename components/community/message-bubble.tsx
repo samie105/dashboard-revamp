@@ -51,6 +51,7 @@ export function MessageBubble({ message, showAvatar = true, showTimestamp = true
   const [isPlaying, setIsPlaying] = useState(false)
   const [hasPlayed, setHasPlayed] = useState(false)
   const [isAudioLoading, setIsAudioLoading] = useState(false)
+  const [audioError, setAudioError] = useState(false)
   const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [audioDuration, setAudioDuration] = useState(0)
@@ -275,10 +276,12 @@ export function MessageBubble({ message, showAvatar = true, showTimestamp = true
                   }
                 }}
                 onCanPlay={() => {
+                  setAudioError(false)
                   if (audioRef.current && audioRef.current.duration && !isNaN(audioRef.current.duration)) {
                     setAudioDuration(audioRef.current.duration)
                   }
                 }}
+                onError={() => setAudioError(true)}
               />
             )}
             <button
@@ -287,10 +290,10 @@ export function MessageBubble({ message, showAvatar = true, showTimestamp = true
                 message.isOwn 
                   ? "hover:bg-primary-foreground/20" 
                   : "hover:bg-muted-foreground/20",
-                !message.fileUrl && "opacity-50 cursor-not-allowed"
+                (!message.fileUrl || audioError) && "opacity-50 cursor-not-allowed"
               )}
-              onClick={message.fileUrl ? toggleAudio : undefined}
-              disabled={!message.fileUrl || isAudioLoading}
+              onClick={message.fileUrl && !audioError ? toggleAudio : undefined}
+              disabled={!message.fileUrl || isAudioLoading || audioError}
             >
               {isAudioLoading ? (
                 <div className={cn(

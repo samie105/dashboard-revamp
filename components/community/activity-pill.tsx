@@ -15,6 +15,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { useProfile } from "@/components/profile-provider"
+import { useIsMobile } from "@/hooks/use-mobile"
 import {
   getConversations,
   getTotalUnreadCount,
@@ -22,6 +23,8 @@ import {
 } from "@/lib/community/actions/messages"
 
 type ActivitySection = "messages" | "voice" | "video" | null
+
+const MAX_ITEMS = 5
 
 function formatLastMessage(c: ConversationWithDetails): string {
   const prefix = c.isOwnLastMessage ? "You: " : ""
@@ -73,29 +76,34 @@ function getCallStatusInfo(msg: string, isOwn: boolean): { label: string; isNega
 
 export function CommunityActivityPill() {
   const { profile } = useProfile()
+  const isMobile = useIsMobile()
   const [unreadCount, setUnreadCount] = useState(0)
   const [allConversations, setAllConversations] = useState<ConversationWithDetails[]>([])
   const [activeSection, setActiveSection] = useState<ActivitySection>(null)
   const [loaded, setLoaded] = useState(false)
   const pillRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Derived data for each popover
-  const recentMessages = useMemo(
+  // Derived data — full lists + sliced for display
+  const allMessages = useMemo(
     () => allConversations
-      .filter((c) => !c.lastMessage.startsWith("CALL_EVENT:") && !c.lastMessage.startsWith("📹") && !c.lastMessage.startsWith("📞"))
-      .slice(0, 5),
+      .filter((c) => !c.lastMessage.startsWith("CALL_EVENT:") && !c.lastMessage.startsWith("📹") && !c.lastMessage.startsWith("📞")),
     [allConversations]
   )
-  const recentVoiceCalls = useMemo(
-    () => allConversations.filter((c) => isCallMessage(c.lastMessage, "audio")).slice(0, 5),
+  const allVoiceCalls = useMemo(
+    () => allConversations.filter((c) => isCallMessage(c.lastMessage, "audio")),
     [allConversations]
   )
-  const recentVideoCalls = useMemo(
-    () => allConversations.filter((c) => isCallMessage(c.lastMessage, "video")).slice(0, 5),
+  const allVideoCalls = useMemo(
+    () => allConversations.filter((c) => isCallMessage(c.lastMessage, "video")),
     [allConversations]
   )
+
+  const recentMessages = allMessages.slice(0, MAX_ITEMS)
+  const recentVoiceCalls = allVoiceCalls.slice(0, MAX_ITEMS)
+  const recentVideoCalls = allVideoCalls.slice(0, MAX_ITEMS)
 
   const getDropdownItems = useCallback((section: ActivitySection) => {
     if (section === "messages") return recentMessages
@@ -103,6 +111,13 @@ export function CommunityActivityPill() {
     if (section === "video") return recentVideoCalls
     return []
   }, [recentMessages, recentVoiceCalls, recentVideoCalls])
+
+  const hasMore = useCallback((section: ActivitySection) => {
+    if (section === "messages") return allMessages.length > MAX_ITEMS
+    if (section === "voice") return allVoiceCalls.length > MAX_ITEMS
+    if (section === "video") return allVideoCalls.length > MAX_ITEMS
+    return false
+  }, [allMessages.length, allVoiceCalls.length, allVideoCalls.length])
 
   // Load data on mount
   useEffect(() => {
@@ -143,6 +158,17 @@ export function CommunityActivityPill() {
     }
   }, [activeSection])
 
+  // Close on click outside (for mobile tap)
+  useEffect(() => {
+    if (!activeSection || !isMobile) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current?.contains(e.target as Node)) return
+      setActiveSection(null)
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [activeSection, isMobile])
+
   const handleEnter = useCallback((section: ActivitySection) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     setActiveSection(section)
@@ -154,6 +180,10 @@ export function CommunityActivityPill() {
 
   const handleDropdownEnter = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
+  }, [])
+
+  const handleMobileTap = useCallback((section: NonNullable<ActivitySection>) => {
+    setActiveSection((prev) => prev === section ? null : section)
   }, [])
 
   if (!loaded) return null
@@ -169,7 +199,7 @@ export function CommunityActivityPill() {
     return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
   }
 
-  const sections: { key: ActivitySection; icon: typeof Video01Icon; label: string }[] = [
+  const sections: { key: NonNullable<ActivitySection>; icon: typeof Video01Icon; label: string }[] = [
     { key: "messages", icon: Message01Icon, label: "Messages" },
     { key: "voice", icon: Call02Icon, label: "Voice Calls" },
     { key: "video", icon: Video01Icon, label: "Video Calls" },
@@ -177,44 +207,72 @@ export function CommunityActivityPill() {
 
   const dropdownItems = getDropdownItems(activeSection)
   const isCallSection = activeSection === "voice" || activeSection === "video"
+  const showViewMore = hasMore(activeSection)
 
   return (
-    <div className="relative hidden md:block" onMouseLeave={handleLeave}>
+    <div
+      ref={containerRef}
+      className="relative"
+      onMouseLeave={isMobile ? undefined : handleLeave}
+    >
       <div
         ref={pillRef}
         className="flex items-center h-8 rounded-lg border border-border/30 bg-muted/30 overflow-hidden"
       >
         {sections.map((s, i) => (
           <div key={s.key} className="relative">
-            <Link
-              href="/community"
-              onMouseEnter={() => handleEnter(s.key)}
-              className={cn(
-                "flex items-center justify-center h-8 w-9 transition-colors relative",
-                activeSection === s.key
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground/60 hover:text-foreground hover:bg-muted/50",
-                i > 0 && "border-l border-border/30",
-              )}
-            >
-              <HugeiconsIcon icon={s.icon} size={15} />
-              {s.key === "messages" && unreadCount > 0 && (
-                <div className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-primary text-primary-foreground text-[8px] flex items-center justify-center font-bold">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </div>
-              )}
-            </Link>
+            {isMobile ? (
+              <button
+                onClick={() => handleMobileTap(s.key)}
+                className={cn(
+                  "flex items-center justify-center h-8 w-8 transition-colors relative",
+                  activeSection === s.key
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground/60 active:text-foreground active:bg-muted/50",
+                  i > 0 && "border-l border-border/30",
+                )}
+              >
+                <HugeiconsIcon icon={s.icon} size={14} />
+                {s.key === "messages" && unreadCount > 0 && (
+                  <div className="absolute -top-0.5 -right-0.5 h-3 min-w-3 px-0.5 rounded-full bg-primary text-primary-foreground text-[7px] flex items-center justify-center font-bold">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </div>
+                )}
+              </button>
+            ) : (
+              <Link
+                href="/community"
+                onMouseEnter={() => handleEnter(s.key)}
+                className={cn(
+                  "flex items-center justify-center h-8 w-9 transition-colors relative",
+                  activeSection === s.key
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground/60 hover:text-foreground hover:bg-muted/50",
+                  i > 0 && "border-l border-border/30",
+                )}
+              >
+                <HugeiconsIcon icon={s.icon} size={15} />
+                {s.key === "messages" && unreadCount > 0 && (
+                  <div className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-primary text-primary-foreground text-[8px] flex items-center justify-center font-bold">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </div>
+                )}
+              </Link>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Hover dropdown */}
+      {/* Dropdown */}
       {activeSection && (
         <div
           ref={dropdownRef}
-          className="absolute right-0 top-full mt-2 w-72 z-50"
-          onMouseEnter={handleDropdownEnter}
-          onMouseLeave={handleLeave}
+          className={cn(
+            "absolute top-full mt-2 z-50",
+            isMobile ? "right-0 w-64" : "right-0 w-72"
+          )}
+          onMouseEnter={isMobile ? undefined : handleDropdownEnter}
+          onMouseLeave={isMobile ? undefined : handleLeave}
         >
           <div className="bg-popover/90 backdrop-blur-2xl shadow-xl rounded-xl ring-1 ring-border/20 overflow-hidden">
             {/* Header */}
@@ -245,6 +303,7 @@ export function CommunityActivityPill() {
                       <Link
                         key={c.id}
                         href={`/community?chat=${c.id}`}
+                        onClick={() => setActiveSection(null)}
                         className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/40 transition-colors"
                       >
                         <div className="relative shrink-0">
@@ -302,15 +361,18 @@ export function CommunityActivityPill() {
               )}
             </div>
 
-            {/* Footer */}
-            <div className="border-t border-border/10 px-3 py-2">
-              <Link
-                href="/community"
-                className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors"
-              >
-                Open Community →
-              </Link>
-            </div>
+            {/* Footer — only show "View more" when there are more items beyond the top 5 */}
+            {showViewMore && (
+              <div className="border-t border-border/10 px-3 py-2">
+                <Link
+                  href="/community"
+                  onClick={() => setActiveSection(null)}
+                  className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  View more →
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       )}
