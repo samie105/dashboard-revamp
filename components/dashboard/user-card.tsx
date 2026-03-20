@@ -80,6 +80,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const { usdcBalance, accountValue, balances: hlBalances } = useHyperliquidBalance(user?.userId, !!user)
   const [isCopied, setIsCopied] = React.useState<string | null>(null)
   const [activeView, setActiveView] = React.useState<WalletView>("total")
+  const [selectedWallet, setSelectedWallet] = React.useState<"tron" | "solana" | "ethereum">("tron")
 
   // On-chain balance: sum of all on-chain tokens valued in USD
   const onChainTotal = React.useMemo(() => {
@@ -216,29 +217,54 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
         </div>
         <div className="flex items-end gap-3">
           <span className="text-2xl font-bold tabular-nums tracking-tight">{formatUSD(displayedBalance)}</span>
-          {activeView === "main" && (
-            <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
-              {([
-                { chain: "tron",     addr: tronAddress, icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
-                { chain: "solana",   addr: solAddress,  icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
-                { chain: "ethereum", addr: ethAddress,  icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
-              ] as const).filter((w) => w.addr).map((w) => (
-                <button
-                  key={w.chain}
-                  onClick={() => handleCopy(w.addr, w.chain)}
-                  className="inline-flex items-center gap-1 rounded bg-accent/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground transition-colors hover:bg-accent"
+        </div>
+        {activeView === "main" && (() => {
+          const WALLETS = [
+            { chain: "tron"     as const, label: "Tron",     addr: tronAddress, icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
+            { chain: "solana"   as const, label: "Solana",   addr: solAddress,  icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
+            { chain: "ethereum" as const, label: "Ethereum", addr: ethAddress,  icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
+          ]
+          const active = WALLETS.find((w) => w.chain === selectedWallet) ?? WALLETS[0]
+          return (
+            <div className="flex items-center gap-2 mt-1">
+              {/* Chain selector */}
+              <div className="relative">
+                <img
+                  src={active.icon}
+                  alt=""
+                  className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full"
+                />
+                <select
+                  value={selectedWallet}
+                  onChange={(e) => setSelectedWallet(e.target.value as "tron" | "solana" | "ethereum")}
+                  className="appearance-none rounded-lg border border-border/30 bg-accent/30 py-1.5 pl-7 pr-6 text-[11px] font-medium text-foreground outline-none focus:border-primary/40 cursor-pointer"
                 >
-                  <img src={w.icon} alt={w.chain} className="h-3 w-3 rounded-full" />
-                  {truncAddr(w.addr)}
+                  {WALLETS.map((w) => (
+                    <option key={w.chain} value={w.chain}>{w.label}</option>
+                  ))}
+                </select>
+                <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+              {/* Address + copy */}
+              {active.addr ? (
+                <button
+                  onClick={() => handleCopy(active.addr, active.chain)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5 text-[11px] font-mono text-muted-foreground transition-colors hover:bg-accent"
+                >
+                  {truncAddr(active.addr)}
                   <HugeiconsIcon
                     icon={Copy01Icon}
-                    className={`h-2.5 w-2.5 ${isCopied === w.chain ? "text-emerald-500" : "text-muted-foreground/50"}`}
+                    className={`h-3 w-3 shrink-0 ${isCopied === active.chain ? "text-emerald-500" : "text-muted-foreground/50"}`}
                   />
                 </button>
-              ))}
+              ) : (
+                <span className="text-[11px] text-muted-foreground/50">No address</span>
+              )}
             </div>
-          )}
-        </div>
+          )
+        })()}
         <span className="text-xs text-muted-foreground">{currentView.sub}</span>
       </div>
 
