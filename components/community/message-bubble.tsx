@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   File01Icon,
@@ -156,7 +155,8 @@ export function MessageBubble({ message, showAvatar = true, showTimestamp = true
               className="block relative bg-muted cursor-pointer active:scale-[0.98] transition-transform overflow-hidden w-full aspect-4/3"
               style={{ minWidth: 280 }}
             >
-              <Image src={urls[0]} alt="" fill className="object-cover" sizes="280px" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={urls[0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
               {count > 1 && (
                 <div
                   className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full text-white text-xs font-medium"
@@ -621,13 +621,11 @@ function FullscreenMediaViewer({
       >
         {type === "image" ? (
           <div className="relative w-full h-full flex items-center justify-center">
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src={activeUrl}
               alt=""
-              fill
-              className="object-contain p-8"
-              sizes="100vw"
-              priority
+              className="absolute inset-0 w-full h-full object-contain p-8"
             />
             {hasGallery && (
               <>
