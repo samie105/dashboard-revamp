@@ -4,6 +4,10 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import type { SpotV2ClientProps, SpotV2Pair } from "./spotv2-types"
 import { PairSidebar } from "./pair-sidebar"
+import { DexScreenerChart } from "./dexscreener-chart"
+import { SpotV2OrderBook } from "./order-book"
+import { SpotV2RecentTrades } from "./recent-trades"
+import { useBinanceStreams } from "@/hooks/useBinanceStreams"
 import {
   Sheet,
   SheetContent,
@@ -11,49 +15,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 
-// ── Placeholder panels (to be implemented in later phases) ───────────────
-
-function ChartPlaceholder({ pair }: { pair: SpotV2Pair | undefined }) {
-  return (
-    <div className="flex h-full items-center justify-center rounded-lg border border-border/10 bg-muted/20">
-      <div className="text-center">
-        <p className="text-sm font-medium text-muted-foreground/70">Chart</p>
-        <p className="text-xs text-muted-foreground/40">
-          {pair ? `${pair.displaySymbol} — DEXScreener` : "Select a pair"}
-        </p>
-        <p className="mt-1 text-[10px] text-muted-foreground/30">Phase 2</p>
-      </div>
-    </div>
-  )
-}
-
-function OrderBookPlaceholder({ pair }: { pair: SpotV2Pair | undefined }) {
-  return (
-    <div className="flex h-full items-center justify-center rounded-lg border border-border/10 bg-muted/20">
-      <div className="text-center">
-        <p className="text-sm font-medium text-muted-foreground/70">Order Book</p>
-        <p className="text-xs text-muted-foreground/40">
-          {pair ? `${pair.displaySymbol}` : ""}
-        </p>
-        <p className="mt-1 text-[10px] text-muted-foreground/30">Binance WS — Phase 2</p>
-      </div>
-    </div>
-  )
-}
-
-function RecentTradesPlaceholder({ pair }: { pair: SpotV2Pair | undefined }) {
-  return (
-    <div className="flex h-full items-center justify-center rounded-lg border border-border/10 bg-muted/20">
-      <div className="text-center">
-        <p className="text-sm font-medium text-muted-foreground/70">Recent Trades</p>
-        <p className="text-xs text-muted-foreground/40">
-          {pair ? `${pair.displaySymbol}` : ""}
-        </p>
-        <p className="mt-1 text-[10px] text-muted-foreground/30">Binance WS — Phase 2</p>
-      </div>
-    </div>
-  )
-}
+// ── Placeholder panels (later phases) ────────────────────────────────────
 
 function OrderFormPlaceholder({ pair }: { pair: SpotV2Pair | undefined }) {
   return (
@@ -147,6 +109,10 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
     [pairs, selectedSymbol],
   )
 
+  // Binance WebSocket for order book + recent trades
+  const { bids, asks, trades, connected, unavailable } =
+    useBinanceStreams(selectedSymbol)
+
   // Refresh prices every 60 seconds
   React.useEffect(() => {
     const interval = setInterval(async () => {
@@ -190,11 +156,25 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         <div className="flex flex-col gap-px overflow-hidden">
           {/* Chart — 60% height */}
           <div className="flex-3 min-h-0">
-            <ChartPlaceholder pair={selectedPair} />
+            {selectedPair ? (
+              <DexScreenerChart
+                chain={selectedPair.chain}
+                contractAddress={selectedPair.contractAddress}
+                displaySymbol={selectedPair.displaySymbol}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground/50">
+                Select a pair
+              </div>
+            )}
           </div>
           {/* Recent trades — 20% height */}
           <div className="flex-1 min-h-0">
-            <RecentTradesPlaceholder pair={selectedPair} />
+            <SpotV2RecentTrades
+              trades={trades}
+              connected={connected}
+              unavailable={unavailable}
+            />
           </div>
           {/* Bottom panel — 20% height */}
           <div className="flex-1 min-h-0">
@@ -206,7 +186,12 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         <div className="flex flex-col gap-px overflow-hidden border-l border-border/10">
           {/* Order book — top half */}
           <div className="flex-1 min-h-0">
-            <OrderBookPlaceholder pair={selectedPair} />
+            <SpotV2OrderBook
+              bids={bids}
+              asks={asks}
+              connected={connected}
+              unavailable={unavailable}
+            />
           </div>
           {/* Buy/Sell form — bottom half */}
           <div className="flex-1 min-h-0">
@@ -219,7 +204,17 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-1 lg:hidden">
         {/* Chart */}
         <div className="h-[300px] shrink-0">
-          <ChartPlaceholder pair={selectedPair} />
+          {selectedPair ? (
+            <DexScreenerChart
+              chain={selectedPair.chain}
+              contractAddress={selectedPair.contractAddress}
+              displaySymbol={selectedPair.displaySymbol}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground/50">
+              Select a pair
+            </div>
+          )}
         </div>
 
         {/* Order form */}
@@ -228,9 +223,18 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         </div>
 
         {/* Order book + recent trades side by side */}
-        <div className="grid h-[200px] grid-cols-2 gap-1 shrink-0">
-          <OrderBookPlaceholder pair={selectedPair} />
-          <RecentTradesPlaceholder pair={selectedPair} />
+        <div className="grid h-[280px] grid-cols-2 gap-1 shrink-0">
+          <SpotV2OrderBook
+            bids={bids}
+            asks={asks}
+            connected={connected}
+            unavailable={unavailable}
+          />
+          <SpotV2RecentTrades
+            trades={trades}
+            connected={connected}
+            unavailable={unavailable}
+          />
         </div>
 
         {/* Bottom panel */}
