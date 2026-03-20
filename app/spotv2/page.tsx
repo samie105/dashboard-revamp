@@ -1,24 +1,10 @@
 import { Suspense } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SpotV2Client } from "@/components/spotv2/spotv2-client"
-import type { SpotV2Pair } from "@/components/spotv2/spotv2-types"
+import { fetchSpotV2Pairs } from "@/lib/spotv2/pairs"
 
 async function SpotV2Loader() {
-  let pairs: SpotV2Pair[] = []
-
-  try {
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
-    const res = await fetch(`${base}/api/spotv2/pairs`, {
-      cache: "no-store",
-    })
-    const data = await res.json()
-    if (data.success && Array.isArray(data.pairs)) {
-      pairs = data.pairs
-    }
-  } catch {
-    // Pairs will be empty — client shows "no pairs" state
-  }
-
+  const pairs = await fetchSpotV2Pairs()
   return <SpotV2Client initialPairs={pairs} />
 }
 

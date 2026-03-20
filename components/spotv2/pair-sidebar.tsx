@@ -3,7 +3,6 @@
 import * as React from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
-import { getChainLabel, getChainColorClass } from "@/lib/spotv2/pairs"
 import type { SpotV2Pair } from "./spotv2-types"
 
 interface PairSidebarProps {
@@ -21,95 +20,97 @@ function formatPrice(price: number): string {
 
 export function PairSidebar({ pairs, selectedPair, onSelect }: PairSidebarProps) {
   const [search, setSearch] = React.useState("")
+  const searchRef = React.useRef<HTMLInputElement>(null)
 
   const filtered = React.useMemo(() => {
-    if (!search.trim()) return pairs
-    const q = search.toLowerCase()
-    return pairs.filter(
-      (p) =>
-        p.symbol.toLowerCase().includes(q) ||
-        p.name.toLowerCase().includes(q) ||
-        p.displaySymbol.toLowerCase().includes(q),
-    )
+    let items = pairs
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      items = items.filter(
+        (p) =>
+          p.symbol.toLowerCase().includes(q) ||
+          p.name.toLowerCase().includes(q),
+      )
+    }
+    return [...items].sort((a, b) => b.volume24h - a.volume24h)
   }, [pairs, search])
 
   return (
-    <div className="flex h-full flex-col border-r border-border/10 bg-background">
+    <div className="flex h-full flex-col bg-card overflow-hidden">
       {/* Search */}
-      <div className="p-2">
-        <input
-          type="text"
-          placeholder="Search pairs..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-border/20 bg-muted/50 px-3 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
-        />
+      <div className="p-2.5 border-b border-border/20">
+        <div className="relative">
+          <svg className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            ref={searchRef}
+            type="text"
+            inputMode="search"
+            autoComplete="off"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search pairs…"
+            className="w-full rounded-lg bg-accent/40 py-1.5 pl-8 pr-2 text-xs outline-none placeholder:text-muted-foreground/60 focus:bg-accent"
+          />
+        </div>
       </div>
 
-      {/* Header */}
-      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-1 px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+      {/* Column header */}
+      <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
         <span>Pair</span>
-        <span className="text-right">Price</span>
-        <span className="w-14 text-right">24h</span>
+        <span className="w-20 text-right">Price</span>
+        <span className="w-16 text-right">24h</span>
       </div>
 
       {/* Scrollable list */}
-      <div className="flex-1 overflow-y-auto">
-        {filtered.length === 0 && (
-          <div className="px-3 py-8 text-center text-xs text-muted-foreground/50">
-            No pairs found
-          </div>
-        )}
-        {filtered.map((pair) => (
-          <button
-            key={pair.id}
-            onClick={() => onSelect(pair.symbol)}
-            className={cn(
-              "grid w-full grid-cols-[1fr_auto_auto] items-center gap-1 px-3 py-1.5 text-left transition-colors hover:bg-muted/50",
-              selectedPair === pair.symbol && "bg-muted/70",
-            )}
-          >
-            {/* Token info */}
-            <div className="flex items-center gap-2 min-w-0">
-              <Image
-                src={pair.image}
-                alt={pair.name}
-                width={20}
-                height={20}
-                className="rounded-full shrink-0"
-              />
-              <div className="min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-semibold truncate">{pair.displaySymbol}</span>
-                  <span
-                    className={cn(
-                      "shrink-0 rounded px-1 py-px text-[9px] font-medium leading-tight",
-                      getChainColorClass(pair.chain),
-                    )}
-                  >
-                    {getChainLabel(pair.chain)}
+      <div className="flex-1 overflow-y-auto slim-scroll">
+        {filtered.length === 0 ? (
+          <p className="py-10 text-center text-xs text-muted-foreground">
+            Nothing found
+          </p>
+        ) : (
+          filtered.map((pair) => {
+            const pos = pair.change24h >= 0
+            const active = pair.symbol === selectedPair
+            return (
+              <button
+                key={pair.id}
+                onClick={() => onSelect(pair.symbol)}
+                className={cn(
+                  "grid w-full grid-cols-[1fr_auto_auto] items-center gap-2 px-3 py-2 text-left transition-colors",
+                  active ? "bg-primary/5" : "hover:bg-accent/30",
+                )}
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Image
+                    src={pair.image}
+                    alt={pair.name}
+                    width={20}
+                    height={20}
+                    className="rounded-full shrink-0"
+                  />
+                  <span className="truncate text-sm font-semibold">
+                    {pair.symbol}
+                    <span className="text-xs text-muted-foreground font-normal">/USDC</span>
                   </span>
                 </div>
-              </div>
-            </div>
-
-            {/* Price */}
-            <span className="text-right text-xs font-medium tabular-nums">
-              ${formatPrice(pair.price)}
-            </span>
-
-            {/* 24h Change */}
-            <span
-              className={cn(
-                "w-14 text-right text-xs font-medium tabular-nums",
-                pair.change24h >= 0 ? "text-emerald-400" : "text-red-400",
-              )}
-            >
-              {pair.change24h >= 0 ? "+" : ""}
-              {pair.change24h.toFixed(2)}%
-            </span>
-          </button>
-        ))}
+                <span className="w-20 text-right text-xs font-medium tabular-nums">
+                  ${formatPrice(pair.price)}
+                </span>
+                <span
+                  className={cn(
+                    "w-16 text-right text-xs font-bold tabular-nums",
+                    pos ? "text-emerald-500" : "text-red-500",
+                  )}
+                >
+                  {pos ? "+" : ""}
+                  {pair.change24h.toFixed(2)}%
+                </span>
+              </button>
+            )
+          })
+        )}
       </div>
     </div>
   )

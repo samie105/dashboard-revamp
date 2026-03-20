@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 
-// ── Types (same contract as the old useBinanceStreams) ────────────────────
+// ── Types (same contract as before) ──────────────────────────────────────
 
 export interface OrderBookLevel {
   price: number
@@ -28,15 +28,14 @@ export interface MarketDataState {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-const MAX_TRADES = 50
-const RECONNECT_DELAY = 3_000
-const MAX_FAILURES = 3
+const POLL_INTERVAL = 2_000
+const MAX_FAILURES = 5
 
 // ── Hook ─────────────────────────────────────────────────────────────────
 
 /**
- * Connects to the server-side SSE proxy at `/api/spotv2/stream?symbol=...`
- * and streams order-book + trade data. Same interface as the old useBinanceStreams.
+ * Polls `/api/spotv2/stream?symbol=...` every 2 seconds for order-book +
+ * recent trades. Reliable on Vercel — no WebSocket or SSE required.
  */
 export function useMarketDataSSE(symbol: string | undefined): MarketDataState {
   const [state, setState] = useState<MarketDataState>({
@@ -49,7 +48,60 @@ export function useMarketDataSSE(symbol: string | undefined): MarketDataState {
 
   const failureCount = useRef(0)
   const mountedRef = useRef(true)
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const fetchData = useCallback(async (sym: string) => {
+    if (!mountedRef.current) return
+
+    try {
+      const res = await fetch(`/api/spotv2/stream?symbol=${encodeURIComponent(sym)}`)
+      if (!mountedRef.current) return
+
+      if (!res.ok) {
+        failureCount.current++
+        if (failureCount.current >= MAX_FAILURES) {
+          setState((prev) => ({ ...prev, connected: false, unavailable: true }))
+        }
+        return
+      }
+
+      const data = await res.json()
+      failureCount.current = 0
+
+      let bidTotal = 0
+      const bids: OrderBookLevel[] = (data.bids ?? []).map(
+        ([p, a]: [number, number]) => {
+          bidTotal += a
+          return { price: p, amount: a, total: bidTotal }
+        },
+      )
+
+      let askTotal = 0
+      const asks: OrderBookLevel[] = (data.asks ?? []).map(
+        ([p, a]: [number, number]) => {
+          askTotal += a
+          return { price: p, amount: a, total: askTotal }
+        },
+      )
+
+      const trades: TradeTick[] = (data.trades ?? []).map(
+        (t: { id: number; price: number; qty: number; time: number; isBuyerMaker: boolean }) => ({
+          id: t.id,
+          price: t.price,
+          qty: t.qty,
+          time: t.time,
+          isBuyerMaker: t.isBuyerMaker,
+        }),
+      )
+
+      setState({ bids, asks, trades, connected: true, unavailable: false })
+    } catch {
+      if (!mountedRef.current) return
+      failureCount.current++
+      if (failureCount.current >= MAX_FAILURES) {
+        setState((prev) => ({ ...prev, connected: false, unavailable: true }))
+      }
+    }
+  }, [])
 
   useEffect(() => {
     mountedRef.current = true
@@ -60,109 +112,16 @@ export function useMarketDataSSE(symbol: string | undefined): MarketDataState {
       return
     }
 
-    let es: EventSource | null = null
-    const currentSymbol = symbol
-
-    function connect() {
-      if (!mountedRef.current || !currentSymbol) return
-
-      es = new EventSource(`/api/spotv2/stream?symbol=${encodeURIComponent(currentSymbol)}`)
-
-      es.addEventListener("connected", () => {
-        if (!mountedRef.current) return
-        failureCount.current = 0
-        setState((prev) => ({ ...prev, connected: true, unavailable: false }))
-      })
-
-      es.addEventListener("depth", (evt) => {
-        if (!mountedRef.current) return
-
-        try {
-          const data = JSON.parse(evt.data)
-
-          let bidTotal = 0
-          const bids: OrderBookLevel[] = (data.bids ?? []).map(
-            ([p, a]: [number, number]) => {
-              bidTotal += a
-              return { price: p, amount: a, total: bidTotal }
-            },
-          )
-
-          let askTotal = 0
-          const asks: OrderBookLevel[] = (data.asks ?? []).map(
-            ([p, a]: [number, number]) => {
-              askTotal += a
-              return { price: p, amount: a, total: askTotal }
-            },
-          )
-
-          setState((prev) => ({ ...prev, bids, asks }))
-        } catch {
-          // Ignore parse errors
-        }
-      })
-
-      es.addEventListener("trade", (evt) => {
-        if (!mountedRef.current) return
-
-        try {
-          const data = JSON.parse(evt.data)
-          const tick: TradeTick = {
-            id: data.id,
-            price: data.price,
-            qty: data.qty,
-            time: data.time,
-            isBuyerMaker: data.isBuyerMaker,
-          }
-
-          setState((prev) => ({
-            ...prev,
-            trades: [tick, ...prev.trades].slice(0, MAX_TRADES),
-          }))
-        } catch {
-          // Ignore parse errors
-        }
-      })
-
-      es.addEventListener("error", () => {
-        if (!mountedRef.current) return
-
-        failureCount.current++
-        setState((prev) => ({ ...prev, connected: false }))
-
-        if (failureCount.current >= MAX_FAILURES) {
-          setState((prev) => ({ ...prev, unavailable: true }))
-          es?.close()
-          return
-        }
-      })
-
-      // EventSource onerror fires on connection loss — reconnect manually
-      es.onerror = () => {
-        if (!mountedRef.current) return
-
-        es?.close()
-        setState((prev) => ({ ...prev, connected: false }))
-
-        failureCount.current++
-        if (failureCount.current >= MAX_FAILURES) {
-          setState((prev) => ({ ...prev, unavailable: true }))
-          return
-        }
-
-        reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY)
-      }
-    }
-
-    connect()
+    // Fetch immediately, then poll
+    fetchData(symbol)
+    const interval = setInterval(() => fetchData(symbol), POLL_INTERVAL)
 
     return () => {
       mountedRef.current = false
-      clearTimeout(reconnectTimer.current)
-      es?.close()
+      clearInterval(interval)
       setState({ bids: [], asks: [], trades: [], connected: false, unavailable: false })
     }
-  }, [symbol])
+  }, [symbol, fetchData])
 
   return state
 }
