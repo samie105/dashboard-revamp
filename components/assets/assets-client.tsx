@@ -76,12 +76,12 @@ interface ChainInfo {
 }
 
 const CHAINS: ChainInfo[] = [
+  { key: "tron",     name: "Tron",     symbol: "TRX",  icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
   { key: "solana",   name: "Solana",   symbol: "SOL",  icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
   { key: "ethereum", name: "Ethereum", symbol: "ETH",  icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
   { key: "arbitrum", name: "Arbitrum", symbol: "ETH",  icon: "https://coin-images.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg" },
   { key: "sui",      name: "Sui",      symbol: "SUI",  icon: "https://coin-images.coingecko.com/coins/images/26375/small/sui-ocean-square.png" },
   { key: "ton",      name: "TON",      symbol: "TON",  icon: "https://coin-images.coingecko.com/coins/images/17980/small/ton_symbol.png" },
-  { key: "tron",     name: "Tron",     symbol: "TRX",  icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
 ]
 
 // Token list across all chains
@@ -95,6 +95,8 @@ interface TokenInfo {
 }
 
 const ALL_TOKENS: TokenInfo[] = [
+  { symbol: "TRX",  name: "Tron",      icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png",  chain: "tron", isNative: true },
+  { symbol: "USDT", name: "Tether",    icon: "https://coin-images.coingecko.com/coins/images/325/small/Tether.png",      chain: "tron", isNative: false, contractAddress: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" },
   { symbol: "SOL",  name: "Solana",    icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png",    chain: "solana",   isNative: true },
   { symbol: "USDT", name: "Tether",    icon: "https://coin-images.coingecko.com/coins/images/325/small/Tether.png",     chain: "solana",   isNative: false, contractAddress: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" },
   { symbol: "USDC", name: "USD Coin",  icon: "https://coin-images.coingecko.com/coins/images/6319/small/usdc.png",      chain: "solana",   isNative: false, contractAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
@@ -107,13 +109,11 @@ const ALL_TOKENS: TokenInfo[] = [
   { symbol: "USDC", name: "USD Coin",  icon: "https://coin-images.coingecko.com/coins/images/6319/small/usdc.png",      chain: "arbitrum", isNative: false, contractAddress: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
   { symbol: "SUI",  name: "Sui",       icon: "https://coin-images.coingecko.com/coins/images/26375/small/sui-ocean-square.png", chain: "sui", isNative: true },
   { symbol: "TON",  name: "TON",       icon: "https://coin-images.coingecko.com/coins/images/17980/small/ton_symbol.png", chain: "ton", isNative: true },
-  { symbol: "TRX",  name: "Tron",      icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png",  chain: "tron", isNative: true },
-  { symbol: "USDT", name: "Tether",    icon: "https://coin-images.coingecko.com/coins/images/325/small/Tether.png",      chain: "tron", isNative: false, contractAddress: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" },
 ]
 
-const CHAIN_TABS = ["All", "Solana", "Ethereum", "Arbitrum", "Sui", "TON", "Tron"] as const
+const CHAIN_TABS = ["All", "Tron", "Solana", "Ethereum", "Arbitrum", "Sui", "TON"] as const
 type ChainTab = (typeof CHAIN_TABS)[number]
-const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Solana: "solana", Ethereum: "ethereum", Arbitrum: "arbitrum", Sui: "sui", TON: "ton", Tron: "tron" }
+const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Tron: "tron", Solana: "solana", Ethereum: "ethereum", Arbitrum: "arbitrum", Sui: "sui", TON: "ton" }
 
 // ── Wallet view tabs ─────────────────────────────────────────────────────
 

@@ -12,7 +12,7 @@ import {
 interface DepositRecord {
   _id: string
   depositAmount: number
-  depositChain: "ethereum" | "solana"
+  depositChain: "ethereum" | "solana" | "tron"
   depositToken: string
   status: string
   spotAmount?: number
@@ -34,6 +34,7 @@ function getBadge(status: string) {
 const CHAIN_ICONS: Record<string, string> = {
   ethereum: "https://tse3.mm.bing.net/th/id/OIP.Rbhwx2hMogpqEO08SXJShwHaLo?rs=1&pid=ImgDetMain&o=7&rm=3",
   solana: "https://th.bing.com/th/id/OIP.hnScG3zE2G41YaH7Iir9zAHaHa?w=153&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3",
+  tron: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png",
 }
 
 export function FundingHistory({ refreshKey = 0 }: { refreshKey?: number }) {

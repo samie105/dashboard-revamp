@@ -45,6 +45,7 @@ function getStageIndex(status: string): number {
 const CHAIN_IMG: Record<string, string> = {
   ethereum: "https://tse3.mm.bing.net/th/id/OIP.Rbhwx2hMogpqEO08SXJShwHaLo?rs=1&pid=ImgDetMain&o=7&rm=3",
   solana:   "https://th.bing.com/th/id/OIP.hnScG3zE2G41YaH7Iir9zAHaHa?w=153&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3",
+  tron:     "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png",
 }
 
 // ── Component ────────────────────────────────────────────────────────────
@@ -54,7 +55,7 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
   const { addresses, isLoading: walletsLoading } = useWallet()
   const { balances: onChainBalances, isLoading: balancesLoading } = useWalletBalances()
 
-  const [chain, setChain] = React.useState<"ethereum" | "solana">("ethereum")
+  const [chain, setChain] = React.useState<"ethereum" | "solana" | "tron">("tron")
   const [amount, setAmount] = React.useState("")
   const [spotBalance, setSpotBalance] = React.useState<number>(0)
   const [spotBalanceLoading, setSpotBalanceLoading] = React.useState(false)
@@ -62,15 +63,16 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
   // Derive wallet address from the revamp's wallet provider
   const fromAddress = React.useMemo(() => {
     if (!addresses) return ""
-    return chain === "ethereum" ? addresses.ethereum : addresses.solana
+    if (chain === "ethereum") return addresses.ethereum
+    if (chain === "solana") return addresses.solana
+    return addresses.tron
   }, [chain, addresses])
 
   // USDT balance from on-chain balances hook
   const usdtBalance = React.useMemo(() => {
+    const chainKey = chain === "tron" ? "tron" : chain === "ethereum" ? "ethereum" : "solana"
     const match = onChainBalances.find(
-      (b) =>
-        b.symbol === "USDT" &&
-        b.chain === (chain === "ethereum" ? "ethereum" : "solana"),
+      (b) => b.symbol === "USDT" && b.chain === chainKey,
     )
     return match?.balance ?? 0
   }, [onChainBalances, chain])
@@ -186,7 +188,7 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
 
               {/* Chain toggle */}
               <div className="flex gap-2">
-                {(["ethereum", "solana"] as const).map((c) => (
+                {(["tron", "ethereum", "solana"] as const).map((c) => (
                   <button
                     key={c}
                     onClick={() => setChain(c)}
@@ -197,7 +199,7 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
                     }`}
                   >
                     <img src={CHAIN_IMG[c]} alt={c} className="h-3.5 w-3.5 rounded-full" />
-                    {c === "ethereum" ? "Ethereum" : "Solana"}
+                    {c === "ethereum" ? "Ethereum" : c === "solana" ? "Solana" : "Tron"}
                   </button>
                 ))}
               </div>

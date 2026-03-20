@@ -39,7 +39,7 @@ interface DepositRecord {
   status: string
   txHash?: string
   deliveryError?: string
-  network?: "solana" | "ethereum"
+  network?: "solana" | "ethereum" | "tron"
   checkoutUrl?: string
   createdAt: string
   completedAt?: string
@@ -53,7 +53,7 @@ const DEPOSIT_ONBOARDING: OnboardingStep[] = [
   {
     target: '[data-onboarding="deposit-network"]',
     title: "Choose your network",
-    description: "Select which blockchain you want to receive USDT on — Solana (fast, low fees) or Ethereum.",
+    description: "Select which blockchain you want to receive USDT on — Tron (TRC-20), Solana (fast, low fees), or Ethereum.",
     placement: "bottom",
   },
   {
@@ -182,7 +182,7 @@ function RecentDeposits({ refreshKey }: { refreshKey: number }) {
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="text-xs font-semibold tabular-nums">{d.usdtAmount} USDT</span>
                   <span className="text-[10px] text-muted-foreground">
-                    {CURRENCY_SYM[d.fiatCurrency] ?? ""}{d.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {d.network === "ethereum" ? "ERC-20" : "SPL"}
+                    {CURRENCY_SYM[d.fiatCurrency] ?? ""}{d.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {d.network === "ethereum" ? "ERC-20" : d.network === "tron" ? "TRC-20" : "SPL"}
                   </span>
                 </div>
                 <div className="flex flex-col items-end gap-0.5">
@@ -203,7 +203,8 @@ function RecentDeposits({ refreshKey }: { refreshKey: number }) {
 // ── Chains ───────────────────────────────────────────────────────────────
 
 const CHAINS = [
-  { id: "solana" as const, label: "Solana", tag: "SPL", icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
+  { id: "tron" as const,     label: "Tron",     tag: "TRC-20", icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
+  { id: "solana" as const,   label: "Solana",   tag: "SPL",    icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
   { id: "ethereum" as const, label: "Ethereum", tag: "ERC-20", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
 ]
 
@@ -214,7 +215,7 @@ export function DepositClient() {
   const { profile } = useProfile()
   const searchParams = useSearchParams()
 
-  const [network, setNetwork] = React.useState<"solana" | "ethereum">("solana")
+  const [network, setNetwork] = React.useState<"solana" | "ethereum" | "tron">("tron")
   const [usdtAmount, setUsdtAmount] = React.useState(() => {
     const v = searchParams.get("amount")
     return v && !isNaN(parseFloat(v)) ? v : ""

@@ -78,7 +78,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const { addresses, walletsGenerated } = useWallet()
   const { balances: onChainBalances } = useWalletBalances()
   const { usdcBalance, accountValue, balances: hlBalances } = useHyperliquidBalance(user?.userId, !!user)
-  const [isCopied, setIsCopied] = React.useState(false)
+  const [isCopied, setIsCopied] = React.useState<string | null>(null)
   const [activeView, setActiveView] = React.useState<WalletView>("total")
 
   // On-chain balance: sum of all on-chain tokens valued in USD
@@ -135,14 +135,16 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
     : "Trader"
 
+  const tronAddress = addresses?.tron ?? ""
   const solAddress = addresses?.solana ?? ""
+  const ethAddress = addresses?.ethereum ?? ""
   const currentView = WALLET_VIEWS.find((v) => v.key === activeView)!
 
-  const handleCopy = () => {
-    if (solAddress) {
-      navigator.clipboard.writeText(solAddress)
-      setIsCopied(true)
-      setTimeout(() => setIsCopied(false), 1500)
+  const handleCopy = (addr: string, chain: string) => {
+    if (addr) {
+      navigator.clipboard.writeText(addr)
+      setIsCopied(chain)
+      setTimeout(() => setIsCopied(null), 1500)
     }
   }
 
@@ -214,17 +216,27 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
         </div>
         <div className="flex items-end gap-3">
           <span className="text-2xl font-bold tabular-nums tracking-tight">{formatUSD(displayedBalance)}</span>
-          {activeView === "main" && solAddress && (
-            <button
-              onClick={handleCopy}
-              className="mb-0.5 inline-flex items-center gap-1 rounded bg-accent/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground transition-colors hover:bg-accent"
-            >
-              {truncAddr(solAddress)}
-              <HugeiconsIcon
-                icon={Copy01Icon}
-                className={`h-2.5 w-2.5 ${isCopied ? "text-emerald-500" : "text-muted-foreground/50"}`}
-              />
-            </button>
+          {activeView === "main" && (
+            <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+              {([
+                { chain: "tron",     addr: tronAddress, icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
+                { chain: "solana",   addr: solAddress,  icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
+                { chain: "ethereum", addr: ethAddress,  icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
+              ] as const).filter((w) => w.addr).map((w) => (
+                <button
+                  key={w.chain}
+                  onClick={() => handleCopy(w.addr, w.chain)}
+                  className="inline-flex items-center gap-1 rounded bg-accent/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground transition-colors hover:bg-accent"
+                >
+                  <img src={w.icon} alt={w.chain} className="h-3 w-3 rounded-full" />
+                  {truncAddr(w.addr)}
+                  <HugeiconsIcon
+                    icon={Copy01Icon}
+                    className={`h-2.5 w-2.5 ${isCopied === w.chain ? "text-emerald-500" : "text-muted-foreground/50"}`}
+                  />
+                </button>
+              ))}
+            </div>
           )}
         </div>
         <span className="text-xs text-muted-foreground">{currentView.sub}</span>
