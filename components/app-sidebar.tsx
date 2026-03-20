@@ -74,6 +74,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Dashboard", description: "Account snapshot", url: "/", icon: DashboardSquare01Icon },
       { name: "Portfolio", description: "Market activity", url: "/portfolio", icon: ChartCandlestickIcon },
       { name: "Assets", description: "Wallet balances", url: "/assets", icon: Wallet01Icon },
+      { name: "Community", description: "Chat & calls", url: "/community", icon: UserGroup02Icon },
       { name: "Transactions", description: "History and receipts", url: "/transactions", icon: File01Icon },
     ],
   },
