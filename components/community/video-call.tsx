@@ -1251,6 +1251,12 @@ export function VideoCall({
                 </GlassButton>
               )}
 
+              {(callState === "ringing" || callState === "connecting") && !isIncoming && (
+                <GlassButton onClick={handleMinimize} variant="transparent" size="default">
+                  <HugeiconsIcon icon={MinimizeScreenIcon} size={16} className="text-white/70" />
+                </GlassButton>
+              )}
+
               <GlassButton variant="danger" size="large" onClick={handleEndCall} disabled={isEnding}>
                 {isEnding ? (
                   <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />

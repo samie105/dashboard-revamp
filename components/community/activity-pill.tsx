@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import Link from "next/link"
 import gsap from "gsap"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -9,6 +9,8 @@ import {
   Call02Icon,
   Message01Icon,
   Cancel01Icon,
+  CallIncoming04Icon,
+  CallOutgoing04Icon,
 } from "@hugeicons/core-free-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
@@ -21,15 +23,86 @@ import {
 
 type ActivitySection = "messages" | "voice" | "video" | null
 
+function formatLastMessage(c: ConversationWithDetails): string {
+  const prefix = c.isOwnLastMessage ? "You: " : ""
+  const msg = c.lastMessage
+
+  if (!msg) return "No messages"
+
+  if (msg.startsWith("CALL_EVENT:")) {
+    const parts = msg.split(":")
+    const type = parts[1] === "video" ? "Video" : "Voice"
+    const status = parts[2] || "completed"
+    if (status === "missed") return `${prefix}Missed ${type.toLowerCase()} call`
+    if (status === "declined") return `${prefix}Declined ${type.toLowerCase()} call`
+    if (status === "failed") return `${prefix}${type} call failed`
+    return `${prefix}${type} call`
+  }
+
+  if (msg.startsWith("📹") || msg.startsWith("📞")) {
+    return `${prefix}${msg}`
+  }
+
+  return `${prefix}${msg}`
+}
+
+function isCallMessage(msg: string, type: "audio" | "video"): boolean {
+  if (msg.startsWith("CALL_EVENT:")) {
+    const callType = msg.split(":")[1]
+    return type === "video" ? callType === "video" : callType === "audio"
+  }
+  if (type === "video") return msg.startsWith("📹") || msg.includes("Video call")
+  return msg.startsWith("📞") || msg.includes("Voice call")
+}
+
+function getCallStatusInfo(msg: string, isOwn: boolean): { label: string; isNegative: boolean; isCaller: boolean } {
+  if (msg.startsWith("CALL_EVENT:")) {
+    const parts = msg.split(":")
+    const status = parts[2] || "completed"
+    const isCaller = isOwn
+    if (status === "missed") return { label: isCaller ? "No answer" : "Missed", isNegative: true, isCaller }
+    if (status === "declined") return { label: "Declined", isNegative: true, isCaller }
+    if (status === "failed") return { label: "Failed", isNegative: true, isCaller }
+    const dur = parts[3]
+    if (dur && dur !== "0") return { label: dur, isNegative: false, isCaller }
+    return { label: "Completed", isNegative: false, isCaller }
+  }
+  const isMissed = msg.toLowerCase().includes("missed")
+  return { label: isMissed ? "Missed" : "Completed", isNegative: isMissed, isCaller: isOwn }
+}
+
 export function CommunityActivityPill() {
   const { profile } = useProfile()
   const [unreadCount, setUnreadCount] = useState(0)
-  const [recentConversations, setRecentConversations] = useState<ConversationWithDetails[]>([])
+  const [allConversations, setAllConversations] = useState<ConversationWithDetails[]>([])
   const [activeSection, setActiveSection] = useState<ActivitySection>(null)
   const [loaded, setLoaded] = useState(false)
   const pillRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Derived data for each popover
+  const recentMessages = useMemo(
+    () => allConversations
+      .filter((c) => !c.lastMessage.startsWith("CALL_EVENT:") && !c.lastMessage.startsWith("📹") && !c.lastMessage.startsWith("📞"))
+      .slice(0, 5),
+    [allConversations]
+  )
+  const recentVoiceCalls = useMemo(
+    () => allConversations.filter((c) => isCallMessage(c.lastMessage, "audio")).slice(0, 5),
+    [allConversations]
+  )
+  const recentVideoCalls = useMemo(
+    () => allConversations.filter((c) => isCallMessage(c.lastMessage, "video")).slice(0, 5),
+    [allConversations]
+  )
+
+  const getDropdownItems = useCallback((section: ActivitySection) => {
+    if (section === "messages") return recentMessages
+    if (section === "voice") return recentVoiceCalls
+    if (section === "video") return recentVideoCalls
+    return []
+  }, [recentMessages, recentVoiceCalls, recentVideoCalls])
 
   // Load data on mount
   useEffect(() => {
@@ -42,13 +115,12 @@ export function CommunityActivityPill() {
       ])
       if (unread.success) setUnreadCount(unread.count ?? 0)
       if (convos.success && convos.conversations) {
-        setRecentConversations(convos.conversations.slice(0, 5))
+        setAllConversations(convos.conversations)
       }
       setLoaded(true)
     }
     load()
 
-    // Poll every 30s
     const interval = setInterval(load, 30_000)
     return () => clearInterval(interval)
   }, [profile?.authUserId])
@@ -99,9 +171,12 @@ export function CommunityActivityPill() {
 
   const sections: { key: ActivitySection; icon: typeof Video01Icon; label: string }[] = [
     { key: "messages", icon: Message01Icon, label: "Messages" },
-    { key: "voice", icon: Call02Icon, label: "Voice calls" },
-    { key: "video", icon: Video01Icon, label: "Video calls" },
+    { key: "voice", icon: Call02Icon, label: "Voice Calls" },
+    { key: "video", icon: Video01Icon, label: "Video Calls" },
   ]
+
+  const dropdownItems = getDropdownItems(activeSection)
+  const isCallSection = activeSection === "voice" || activeSection === "video"
 
   return (
     <div className="relative hidden md:block" onMouseLeave={handleLeave}>
@@ -157,52 +232,72 @@ export function CommunityActivityPill() {
 
             {/* Content */}
             <div className="max-h-60 overflow-y-auto">
-              {recentConversations.length === 0 ? (
+              {dropdownItems.length === 0 ? (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground/50">
-                  No recent activity
+                  {isCallSection ? "No recent calls" : "No recent messages"}
                 </div>
               ) : (
                 <div className="py-1">
-                  {recentConversations.map((c) => (
-                    <Link
-                      key={c.id}
-                      href="/community"
-                      className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/40 transition-colors"
-                    >
-                      <div className="relative shrink-0">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={c.participant.avatar || undefined} />
-                          <AvatarFallback className="text-[10px] bg-muted">
-                            {c.participant.name[0]?.toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        {c.participant.isOnline && (
-                          <div className="absolute bottom-0 right-0 h-2 w-2 bg-emerald-500 rounded-full border border-background" />
+                  {dropdownItems.map((c) => {
+                    const callInfo = isCallSection ? getCallStatusInfo(c.lastMessage, c.isOwnLastMessage) : null
+
+                    return (
+                      <Link
+                        key={c.id}
+                        href={`/community?chat=${c.id}`}
+                        className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/40 transition-colors"
+                      >
+                        <div className="relative shrink-0">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={c.participant.avatar || undefined} />
+                            <AvatarFallback className="text-[10px] bg-muted">
+                              {c.participant.name[0]?.toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          {c.participant.isOnline && (
+                            <div className="absolute bottom-0 right-0 h-2 w-2 bg-emerald-500 rounded-full border border-background" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={cn(
+                              "text-xs truncate",
+                              c.unreadCount > 0 ? "font-semibold" : "font-medium text-foreground/80"
+                            )}>
+                              {c.participant.name}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground/50 shrink-0 tabular-nums">
+                              {formatTime(new Date(c.lastMessageAt))}
+                            </span>
+                          </div>
+                          {isCallSection && callInfo ? (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <HugeiconsIcon
+                                icon={callInfo.isCaller ? CallOutgoing04Icon : CallIncoming04Icon}
+                                size={10}
+                                className={callInfo.isNegative ? "text-destructive" : "text-muted-foreground/60"}
+                              />
+                              <span className={cn(
+                                "text-[11px] truncate",
+                                callInfo.isNegative ? "text-destructive" : "text-muted-foreground/50"
+                              )}>
+                                {callInfo.label}
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground/50 truncate mt-0.5">
+                              {formatLastMessage(c)}
+                            </p>
+                          )}
+                        </div>
+                        {!isCallSection && c.unreadCount > 0 && (
+                          <div className="h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] flex items-center justify-center font-bold shrink-0">
+                            {c.unreadCount}
+                          </div>
                         )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className={cn(
-                            "text-xs truncate",
-                            c.unreadCount > 0 ? "font-semibold" : "font-medium text-foreground/80"
-                          )}>
-                            {c.participant.name}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground/50 shrink-0 tabular-nums">
-                            {formatTime(new Date(c.lastMessageAt))}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground/50 truncate mt-0.5">
-                          {c.isOwnLastMessage ? "You: " : ""}{c.lastMessage || "No messages"}
-                        </p>
-                      </div>
-                      {c.unreadCount > 0 && (
-                        <div className="h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] flex items-center justify-center font-bold shrink-0">
-                          {c.unreadCount}
-                        </div>
-                      )}
-                    </Link>
-                  ))}
+                      </Link>
+                    )
+                  })}
                 </div>
               )}
             </div>

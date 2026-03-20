@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import gsap from "gsap"
 import { AnimatePresence, motion } from "motion/react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { UserAdd01Icon, Search01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
+import { UserAdd01Icon, Search01Icon, Cancel01Icon, Message01Icon } from "@hugeicons/core-free-icons"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,6 +56,8 @@ type OptimisticMessage = MessageWithDetails & { status?: "pending" | "sent" | "e
 export default function CommunityPage() {
   const { profile } = useProfile()
   const userId = profile?.authUserId ?? ""
+  const searchParams = useSearchParams()
+  const router = useRouter()
 
   const [showTransition, setShowTransition] = useState(true)
   const pageRef = useRef<HTMLDivElement>(null)
@@ -109,6 +112,19 @@ export default function CommunityPage() {
     loadConversations()
   }, [loadConversations])
 
+  // Restore conversation from URL on mount / when conversations load
+  useEffect(() => {
+    const chatId = searchParams.get("chat")
+    if (chatId && conversations.length > 0 && !selectedId) {
+      const conv = conversations.find((c) => c.id === chatId)
+      if (conv) {
+        setSelectedId(chatId)
+        setSelectedParticipant(conv.participant)
+        setShowMobileChat(true)
+      }
+    }
+  }, [searchParams, conversations, selectedId])
+
   // Load messages when conversation changes
   useEffect(() => {
     async function loadMessages() {
@@ -128,17 +144,26 @@ export default function CommunityPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
 
+  // Track messages we've sent locally to prevent SSE duplicates
+  const sentMessageIdsRef = useRef<Set<string>>(new Set())
+
   // Real-time messages via Ably
   const handleMessageEvent = useCallback((event: MessageEventPayload) => {
     if (event.type === "message:new") {
       const currentConvId = selectedIdRef.current
       const isFromMe = event.senderId === userId
 
+      // Skip own messages — they're already in state from optimistic + server response
+      if (isFromMe) {
+        loadConversations()
+        return
+      }
+
       if (currentConvId && event.conversationId === currentConvId) {
         const newMsg: OptimisticMessage = {
           id: event.messageId,
           senderId: event.senderId,
-          senderName: isFromMe ? "You" : event.senderName,
+          senderName: event.senderName,
           senderAvatar: event.senderAvatar,
           content: event.content,
           type: event.messageType,
@@ -148,7 +173,7 @@ export default function CommunityPage() {
           fileSize: event.fileSize,
           duration: event.duration,
           waveform: event.waveform,
-          isOwn: isFromMe,
+          isOwn: false,
           isRead: false,
           isDelivered: true,
           timestamp: new Date(event.timestamp),
@@ -158,7 +183,7 @@ export default function CommunityPage() {
           if (prev.some((m) => m.id === event.messageId)) return prev
           return [...prev, newMsg]
         })
-        if (!isFromMe) markMessagesAsRead(currentConvId)
+        markMessagesAsRead(currentConvId)
       }
       loadConversations()
     } else if (event.type === "message:read") {
@@ -226,12 +251,26 @@ export default function CommunityPage() {
 
   const messageGroups = groupMessagesByDate(mappedMessages)
 
+  // Prefetch first few conversation messages in background
+  const prefetchedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (conversations.length === 0) return
+    const toPrefetch = conversations.slice(0, 3)
+    toPrefetch.forEach((c) => {
+      if (prefetchedRef.current.has(c.id) || c.id === selectedId) return
+      prefetchedRef.current.add(c.id)
+      getMessages(c.id) // fire-and-forget prefetch
+    })
+  }, [conversations, selectedId])
+
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id)
     const conv = conversations.find((c) => c.id === id)
     setSelectedParticipant(conv?.participant || null)
     setShowMobileChat(true)
-  }, [conversations])
+    // Update URL without navigation
+    router.replace(`/community?chat=${id}`, { scroll: false })
+  }, [conversations, router])
 
   const startCall = useCallback((type: "video" | "audio") => {
     setCallType(type)
@@ -442,8 +481,9 @@ export default function CommunityPage() {
       setSelectedId(result.conversationId)
       setSelectedParticipant({ id: user.id, name: user.name, avatar: user.avatar, isOnline: false })
       setShowMobileChat(true)
+      router.replace(`/community?chat=${result.conversationId}`, { scroll: false })
     }
-  }, [loadConversations])
+  }, [loadConversations, router])
 
   return (
     <IncomingCallProvider>
@@ -639,11 +679,11 @@ export default function CommunityPage() {
         </div>
       </div>
 
-      {/* User Search Modal */}
+      {/* User Search Modal — Redesigned */}
       <ResponsiveModal open={showUserSearch} onOpenChange={setShowUserSearch}>
-        <ResponsiveModalContent className="sm:max-w-md">
+        <ResponsiveModalContent className="sm:max-w-2xl">
           <ResponsiveModalHeader>
-            <ResponsiveModalTitle>New Conversation</ResponsiveModalTitle>
+            <ResponsiveModalTitle className="text-lg">New Conversation</ResponsiveModalTitle>
           </ResponsiveModalHeader>
           <div className="space-y-4">
             <div className="relative">
@@ -653,10 +693,10 @@ export default function CommunityPage() {
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
               />
               <Input
-                placeholder="Search users by name..."
+                placeholder="Search by name or email..."
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="pl-9"
+                className="pl-9 h-10"
               />
               {searchQuery && (
                 <Button
@@ -673,74 +713,132 @@ export default function CommunityPage() {
               )}
             </div>
 
-            <ScrollArea className="h-75">
+            <ScrollArea className="h-96">
               {searchQuery.length >= 2 ? (
                 isSearching ? (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    Searching...
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 animate-pulse">
+                        <div className="h-10 w-10 rounded-full bg-muted" />
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-3 w-20 rounded bg-muted" />
+                          <div className="h-2 w-14 rounded bg-muted" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : searchResults.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    No users found
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+                      <HugeiconsIcon icon={Search01Icon} size={22} className="text-muted-foreground/40" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">No users found</p>
+                    <p className="text-xs text-muted-foreground/50 mt-1">Try a different search term</p>
                   </div>
                 ) : (
-                  <div className="space-y-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {searchResults.map((user) => (
                       <button
                         key={user.id}
                         onClick={() => handleStartConversation(user)}
-                        className="w-full p-3 text-left hover:bg-muted rounded-lg transition-colors flex items-center gap-3"
+                        className="flex items-center gap-3 p-3 text-left hover:bg-muted/50 rounded-xl transition-colors ring-1 ring-border/10 hover:ring-border/30"
                       >
-                        <Avatar className="h-10 w-10">
+                        <Avatar className="h-10 w-10 ring-1 ring-border/20">
                           <AvatarImage src={user.avatar || undefined} />
-                          <AvatarFallback>{user.name[0]?.toUpperCase()}</AvatarFallback>
+                          <AvatarFallback className="text-sm bg-primary/5 text-primary">
+                            {user.name[0]?.toUpperCase()}
+                          </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{user.name}</p>
+                          <p className="text-xs text-muted-foreground/50">Start chatting</p>
                         </div>
+                        <HugeiconsIcon icon={Message01Icon} size={14} className="text-muted-foreground/40" />
                       </button>
                     ))}
                   </div>
                 )
               ) : (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Recently Added
-                  </p>
-                  {isLoadingRecent ? (
-                    <div className="grid grid-cols-4 gap-2">
-                      {Array.from({ length: 8 }).map((_, i) => (
-                        <div key={i} className="flex flex-col items-center gap-1">
-                          <div className="h-12 w-12 rounded-full bg-muted animate-pulse" />
-                          <div className="h-3 w-10 rounded bg-muted animate-pulse" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : recentUsers.length === 0 ? (
-                    <div className="text-center py-6 text-muted-foreground text-sm">
-                      No users yet
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-4 gap-2">
-                      {recentUsers.map((user) => (
-                        <button
-                          key={user.id}
-                          onClick={() => handleStartConversation(user)}
-                          className="flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-muted transition-colors"
-                        >
-                          <Avatar className="h-12 w-12">
-                            <AvatarImage src={user.avatar || undefined} />
-                            <AvatarFallback className="text-sm">
-                              {user.name[0]?.toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <p className="text-xs font-medium truncate w-full text-center">
-                            {user.name.split(" ")[0]}
-                          </p>
-                        </button>
-                      ))}
+                <div className="space-y-5">
+                  {/* Existing conversations */}
+                  {conversations.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Your Conversations
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {conversations.slice(0, 6).map((conv) => (
+                          <button
+                            key={conv.id}
+                            onClick={() => {
+                              setShowUserSearch(false)
+                              handleSelect(conv.id)
+                            }}
+                            className="flex items-center gap-3 p-3 text-left hover:bg-muted/50 rounded-xl transition-colors ring-1 ring-border/10 hover:ring-border/30"
+                          >
+                            <div className="relative">
+                              <Avatar className="h-10 w-10">
+                                <AvatarImage src={conv.participant.avatar || undefined} />
+                                <AvatarFallback className="text-sm bg-muted">
+                                  {conv.participant.name[0]?.toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              {conv.participant.isOnline && (
+                                <div className="absolute bottom-0 right-0 h-2.5 w-2.5 bg-emerald-500 rounded-full border-2 border-background" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{conv.participant.name}</p>
+                              {conv.unreadCount > 0 && (
+                                <p className="text-xs text-primary font-medium">{conv.unreadCount} unread</p>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
+
+                  {/* People to connect with */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      People to Connect With
+                    </p>
+                    {isLoadingRecent ? (
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                        {Array.from({ length: 10 }).map((_, i) => (
+                          <div key={i} className="flex flex-col items-center gap-1.5">
+                            <div className="h-14 w-14 rounded-full bg-muted animate-pulse" />
+                            <div className="h-3 w-12 rounded bg-muted animate-pulse" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : recentUsers.length === 0 ? (
+                      <div className="text-center py-6 text-muted-foreground/50 text-sm">
+                        Search above to find people
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                        {recentUsers.map((user) => (
+                          <button
+                            key={user.id}
+                            onClick={() => handleStartConversation(user)}
+                            className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-muted/50 transition-colors group"
+                          >
+                            <Avatar className="h-14 w-14 ring-1 ring-border/20 group-hover:ring-primary/30 transition-all">
+                              <AvatarImage src={user.avatar || undefined} />
+                              <AvatarFallback className="text-sm bg-primary/5 text-primary">
+                                {user.name[0]?.toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <p className="text-xs font-medium truncate w-full text-center">
+                              {user.name.split(" ")[0]}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </ScrollArea>
