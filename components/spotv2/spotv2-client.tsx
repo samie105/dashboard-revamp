@@ -58,9 +58,10 @@ function SpotV2TopBar({
   return (
     <div className="flex items-center justify-between border-b border-border/10 px-3 py-2">
       <div className="flex items-center gap-3">
+        {/* Mobile-only: opens the pair sheet */}
         <button
           onClick={onOpenMarkets}
-          className="flex items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-muted/50"
+          className="flex items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-muted/50 lg:hidden"
         >
           {pair.image && (
             <img src={pair.image} alt={pair.name} className="h-5 w-5 rounded-full" />
@@ -70,6 +71,14 @@ function SpotV2TopBar({
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </button>
+
+        {/* Desktop: static pair info (sidebar already visible) */}
+        <div className="hidden items-center gap-2 lg:flex">
+          {pair.image && (
+            <img src={pair.image} alt={pair.name} className="h-5 w-5 rounded-full" />
+          )}
+          <span className="text-sm font-bold">{pair.displaySymbol}</span>
+        </div>
 
         <span className="text-sm font-semibold tabular-nums">
           ${pair.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 8 })}
@@ -143,19 +152,21 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         onOpenMarkets={() => setMobileMarketsOpen(true)}
       />
 
-      {/* ── Desktop: 3-column CEX layout ──────────────────────────────── */}
-      <div className="hidden flex-1 overflow-hidden lg:grid lg:grid-cols-[220px_1fr_280px] lg:gap-px">
-        {/* Left: Pair sidebar */}
-        <PairSidebar
-          pairs={pairs}
-          selectedPair={selectedSymbol}
-          onSelect={handleSelectPair}
-        />
+      {/* ── Desktop: flex-based CEX layout ────────────────────────────── */}
+      <div className="hidden flex-1 min-h-0 overflow-hidden lg:flex">
+        {/* Left: Pair sidebar — fixed 220px */}
+        <div className="shrink-0 w-[220px] overflow-hidden">
+          <PairSidebar
+            pairs={pairs}
+            selectedPair={selectedSymbol}
+            onSelect={handleSelectPair}
+          />
+        </div>
 
-        {/* Center column */}
-        <div className="flex flex-col gap-px overflow-hidden">
-          {/* Chart — 60% height */}
-          <div className="flex-3 min-h-0">
+        {/* Center column — fills remaining space */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {/* Chart — takes 60% of center */}
+          <div className="flex-3 min-h-0 overflow-hidden">
             {selectedPair ? (
               <DexScreenerChart
                 chain={selectedPair.chain}
@@ -168,24 +179,24 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
               </div>
             )}
           </div>
-          {/* Recent trades — 20% height */}
-          <div className="flex-1 min-h-0">
+          {/* Recent trades — 20% */}
+          <div className="flex-1 min-h-0 border-t border-border/10 overflow-hidden">
             <SpotV2RecentTrades
               trades={trades}
               connected={connected}
               unavailable={unavailable}
             />
           </div>
-          {/* Bottom panel — 20% height */}
-          <div className="flex-1 min-h-0">
+          {/* Bottom panel — 20% */}
+          <div className="flex-1 min-h-0 border-t border-border/10 overflow-hidden">
             <BottomPanelPlaceholder />
           </div>
         </div>
 
-        {/* Right column */}
-        <div className="flex flex-col gap-px overflow-hidden border-l border-border/10">
+        {/* Right column — fixed 280px, Order Book + Buy/Sell */}
+        <div className="shrink-0 w-[280px] xl:w-[320px] flex flex-col overflow-hidden border-l border-border/10">
           {/* Order book — top half */}
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <SpotV2OrderBook
               bids={bids}
               asks={asks}
@@ -194,7 +205,7 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
             />
           </div>
           {/* Buy/Sell form — bottom half */}
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 border-t border-border/10 overflow-hidden">
             <OrderFormPlaceholder pair={selectedPair} />
           </div>
         </div>

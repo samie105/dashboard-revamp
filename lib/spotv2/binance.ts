@@ -56,5 +56,5 @@ export function getDexScreenerUrl(
     address = nativeMapping[chain]
   }
 
-  return `https://dexscreener.com/${chainSlug}/${address}?embed=1&theme=dark&trades=0&info=0`
+  return `https://dexscreener.com/${chainSlug}/${address}?embed=1&theme=dark&trades=0&info=0&chartLeftToolbar=0&chartTheme=dark&chartStyle=1&chartType=usd`
 }

@@ -17,7 +17,7 @@ export function DexScreenerChart({
 
   if (!url) {
     return (
-      <div className="flex h-full items-center justify-center rounded-lg border border-border/10 bg-muted/20">
+      <div className="flex h-full items-center justify-center bg-muted/10">
         <p className="text-sm text-muted-foreground/60">
           No chart available for {displaySymbol}
         </p>
@@ -29,7 +29,7 @@ export function DexScreenerChart({
     <iframe
       key={url}
       src={url}
-      className="h-full w-full rounded-lg border-0"
+      className="h-full w-full border-0 bg-background"
       title={`${displaySymbol} Chart`}
       allow="clipboard-write"
       loading="lazy"
