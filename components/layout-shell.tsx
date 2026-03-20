@@ -8,7 +8,7 @@ import { Navbar } from "@/components/navbar"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 
 /** Routes that render full-bleed (no sidebar / top-nav / navbar). */
-const FULL_BLEED_ROUTES = ["/spot", "/futures", "/forex", "/binary", "/vivid"]
+const FULL_BLEED_ROUTES = ["/spot", "/spotv2", "/futures", "/forex", "/binary", "/vivid"]
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()

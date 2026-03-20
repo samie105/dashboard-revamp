@@ -59,6 +59,12 @@ const navItems: NavItem[] = [
           icon: Exchange01Icon,
         },
         {
+          name: "Spot V2",
+          description: "Multi-chain DEX trading",
+          href: "/spotv2",
+          icon: Exchange01Icon,
+        },
+        {
           name: "Futures",
           description: "Perpetual futures trading",
           href: "/futures",
