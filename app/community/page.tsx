@@ -428,13 +428,18 @@ export default function CommunityPage() {
           prev.map((m) => {
             if (m.id !== tempId) return m
             const serverMsg = result.message!
+            const isMedia = m.type === "image" || m.type === "video" || m.type === "audio"
             return {
               ...serverMsg,
               status: "sent" as const,
-              // Preserve local blob URL for audio so playback works immediately
-              fileUrl: m.type === "audio" && m.fileUrl?.startsWith("blob:")
+              // Preserve local blob URLs for media so they render immediately
+              // R2 URLs will be used on next page load from DB
+              fileUrl: isMedia && m.fileUrl?.startsWith("blob:")
                 ? m.fileUrl
                 : serverMsg.fileUrl,
+              fileUrls: isMedia && m.fileUrls?.length
+                ? m.fileUrls
+                : serverMsg.fileUrls,
             }
           })
         )
