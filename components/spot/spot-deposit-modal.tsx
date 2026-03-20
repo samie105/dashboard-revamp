@@ -56,6 +56,7 @@ function getStageIndex(status: string): number {
 const CHAINS = [
   { id: "ethereum" as const, label: "Ethereum", tag: "ERC-20", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
   { id: "solana" as const, label: "Solana", tag: "SPL", icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
+  { id: "tron" as const, label: "Tron", tag: "TRC-20", icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
 ]
 
 const STAGE_GROUPS = [
@@ -69,16 +70,18 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
   const { addresses, isLoading: walletsLoading } = useWallet()
   const { balances: onChainBalances, isLoading: balancesLoading } = useWalletBalances()
 
-  const [chain, setChain] = React.useState<"ethereum" | "solana">("ethereum")
+  const [chain, setChain] = React.useState<"ethereum" | "solana" | "tron">("ethereum")
   const [amount, setAmount] = React.useState("")
   const [copied, setCopied] = React.useState(false)
 
   const fromAddress = React.useMemo(() => {
     if (!addresses) return ""
-    return chain === "ethereum" ? addresses.ethereum : addresses.solana
+    if (chain === "ethereum") return addresses.ethereum
+    if (chain === "solana") return addresses.solana
+    return addresses.tron
   }, [chain, addresses])
 
-  // Compute USDT balances for both chains
+  // Compute USDT balances for all chains
   const ETH_USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
   const solUsdtBalance = React.useMemo(() => {
     const t = onChainBalances.find(
@@ -95,9 +98,15 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
     )
     return t?.balance ?? 0
   }, [onChainBalances])
+  const tronUsdtBalance = React.useMemo(() => {
+    const t = onChainBalances.find(
+      (b) => b.chain === "tron" && b.symbol === "USDT",
+    )
+    return t?.balance ?? 0
+  }, [onChainBalances])
 
   // Active chain balance (used for max button & validation)
-  const usdtBalance = chain === "solana" ? solUsdtBalance : ethUsdtBalance
+  const usdtBalance = chain === "solana" ? solUsdtBalance : chain === "tron" ? tronUsdtBalance : ethUsdtBalance
 
   React.useEffect(() => {
     if (isOpen) resumePolling()
@@ -261,7 +270,7 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
               {/* Wallet address */}
               <div>
                 <span className="mb-2 block text-[11px] font-medium text-muted-foreground">
-                  Your {chain === "ethereum" ? "Ethereum" : "Solana"} wallet
+                  Your {chain === "ethereum" ? "Ethereum" : chain === "solana" ? "Solana" : "Tron"} wallet
                 </span>
                 {walletsLoading ? (
                   <div className="flex items-center gap-2.5 rounded-xl border border-border/30 bg-accent/20 px-3.5 py-3">
@@ -282,7 +291,7 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
                         />
                       </button>
                     </div>
-                    {/* Both chain balances */}
+                    {/* All chain balances */}
                     <div className="flex items-center justify-between pt-1.5 border-t border-border/20">
                       <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <img src="https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" alt="ETH" className="h-3 w-3 rounded-full" />
@@ -309,11 +318,24 @@ export function SpotDepositModal({ isOpen, onClose, onDepositComplete }: SpotDep
                         )}
                       </span>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <img src="https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" alt="TRX" className="h-3 w-3 rounded-full" />
+                        Tron USDT
+                      </span>
+                      <span className={`text-[11px] font-semibold tabular-nums ${chain === "tron" ? "text-foreground" : "text-muted-foreground"}`}>
+                        {balancesLoading ? (
+                          <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin text-muted-foreground" />
+                        ) : (
+                          `${tronUsdtBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`
+                        )}
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/5 px-3.5 py-3">
                     <HugeiconsIcon icon={Alert02Icon} className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                    <span className="text-[11px] text-red-500">No {chain === "ethereum" ? "Ethereum" : "Solana"} wallet found</span>
+                    <span className="text-[11px] text-red-500">No {chain === "ethereum" ? "Ethereum" : chain === "solana" ? "Solana" : "Tron"} wallet found</span>
                   </div>
                 )}
               </div>

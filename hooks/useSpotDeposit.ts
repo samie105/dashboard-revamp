@@ -20,7 +20,7 @@ export interface DepositInfo {
 }
 
 interface InitiateParams {
-  depositChain: "ethereum" | "solana"
+  depositChain: "ethereum" | "solana" | "tron"
   depositAmount: number
   depositFromAddress: string
   depositToken?: "USDT" | "USDC"

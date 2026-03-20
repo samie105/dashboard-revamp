@@ -27,9 +27,9 @@ export async function POST(request: NextRequest) {
       depositToken = "USDT",
     } = await request.json()
 
-    if (!depositChain || !["ethereum", "solana"].includes(depositChain)) {
+    if (!depositChain || !["ethereum", "solana", "tron"].includes(depositChain)) {
       return NextResponse.json(
-        { error: "Invalid depositChain (ethereum | solana)" },
+        { error: "Invalid depositChain (ethereum | solana | tron)" },
         { status: 400 },
       )
     }

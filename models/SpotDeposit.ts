@@ -17,7 +17,7 @@ export interface ISpotDeposit extends Document {
   userId: string
   email?: string
 
-  depositChain: "ethereum" | "solana"
+  depositChain: "ethereum" | "solana" | "tron"
   depositToken: "USDT" | "USDC"
   depositAmount: number
   depositFromAddress?: string
@@ -58,7 +58,7 @@ const SpotDepositSchema = new Schema<ISpotDeposit>(
     depositChain: {
       type: String,
       required: true,
-      enum: ["ethereum", "solana"],
+      enum: ["ethereum", "solana", "tron"],
     },
     depositToken: {
       type: String,
