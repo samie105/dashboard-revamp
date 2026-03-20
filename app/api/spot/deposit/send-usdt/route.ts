@@ -186,10 +186,19 @@ async function signTronTransaction(
   // TRON requires 65-byte signature: r (32) + s (32) + v (1)
   const walletHex = TronWeb.address.toHex(walletAddress).toLowerCase()
 
+  // Create a TronWeb instance for recovery verification
+  const tronWeb = new TronWeb({
+    fullHost: process.env.TRON_RPC_URL || "https://api.trongrid.io",
+    headers: process.env.TRON_API_KEY
+      ? { "TRON-PRO-API-KEY": process.env.TRON_API_KEY }
+      : {},
+  })
+
   for (const v of ["1b", "1c"]) {
     const sig65 = sig64 + v
     try {
-      const recovered = TronWeb.Trx.ecRecover(hash.replace(/^0x/, ""), `0x${sig65}`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const recovered = (tronWeb.trx as any).ecRecover(hash.replace(/^0x/, ""), `0x${sig65}`)
       if (recovered.toLowerCase() === walletHex) {
         return sig65
       }
