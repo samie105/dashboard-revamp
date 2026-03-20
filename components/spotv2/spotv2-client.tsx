@@ -7,6 +7,7 @@ import { PairSidebar } from "./pair-sidebar"
 import { TradingViewChart } from "./tradingview-chart"
 import { SpotV2OrderBook } from "./order-book"
 import { SpotV2RecentTrades } from "./recent-trades"
+import { SpotV2OrderForm } from "./order-form"
 import { useMarketDataSSE } from "@/hooks/useMarketDataSSE"
 import {
   Sheet,
@@ -16,20 +17,6 @@ import {
 } from "@/components/ui/sheet"
 
 // ── Placeholder panels (later phases) ────────────────────────────────────
-
-function OrderFormPlaceholder({ pair }: { pair: SpotV2Pair | undefined }) {
-  return (
-    <div className="flex h-full items-center justify-center rounded-lg border border-border/10 bg-muted/20">
-      <div className="text-center">
-        <p className="text-sm font-medium text-muted-foreground/70">Buy / Sell</p>
-        <p className="text-xs text-muted-foreground/40">
-          {pair ? `Market order — ${pair.displaySymbol}` : "Select a pair"}
-        </p>
-        <p className="mt-1 text-[10px] text-muted-foreground/30">Phase 3</p>
-      </div>
-    </div>
-  )
-}
 
 function BottomPanelPlaceholder() {
   return (
@@ -202,7 +189,7 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
           </div>
           {/* Buy/Sell form — bottom half */}
           <div className="flex-1 min-h-0 border-t border-border/10 overflow-hidden">
-            <OrderFormPlaceholder pair={selectedPair} />
+            <SpotV2OrderForm pair={selectedPair} />
           </div>
         </div>
       </div>
@@ -221,8 +208,8 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         </div>
 
         {/* Order form */}
-        <div className="h-[200px] shrink-0">
-          <OrderFormPlaceholder pair={selectedPair} />
+        <div className="shrink-0">
+          <SpotV2OrderForm pair={selectedPair} />
         </div>
 
         {/* Order book + recent trades side by side */}
