@@ -4,10 +4,10 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import type { SpotV2ClientProps, SpotV2Pair } from "./spotv2-types"
 import { PairSidebar } from "./pair-sidebar"
-import { DexScreenerChart } from "./dexscreener-chart"
+import { TradingViewChart } from "./tradingview-chart"
 import { SpotV2OrderBook } from "./order-book"
 import { SpotV2RecentTrades } from "./recent-trades"
-import { useBinanceStreams } from "@/hooks/useBinanceStreams"
+import { useMarketDataSSE } from "@/hooks/useMarketDataSSE"
 import {
   Sheet,
   SheetContent,
@@ -118,9 +118,9 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
     [pairs, selectedSymbol],
   )
 
-  // Binance WebSocket for order book + recent trades
+  // Market data via SSE proxy (order book + recent trades)
   const { bids, asks, trades, connected, unavailable } =
-    useBinanceStreams(selectedSymbol)
+    useMarketDataSSE(selectedSymbol)
 
   // Refresh prices every 60 seconds
   React.useEffect(() => {
@@ -168,11 +168,7 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
           {/* Chart — takes 60% of center */}
           <div className="flex-3 min-h-0 overflow-hidden">
             {selectedPair ? (
-              <DexScreenerChart
-                chain={selectedPair.chain}
-                contractAddress={selectedPair.contractAddress}
-                displaySymbol={selectedPair.displaySymbol}
-              />
+              <TradingViewChart symbol={selectedPair.symbol} />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground/50">
                 Select a pair
@@ -216,11 +212,7 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         {/* Chart */}
         <div className="h-[300px] shrink-0">
           {selectedPair ? (
-            <DexScreenerChart
-              chain={selectedPair.chain}
-              contractAddress={selectedPair.contractAddress}
-              displaySymbol={selectedPair.displaySymbol}
-            />
+            <TradingViewChart symbol={selectedPair.symbol} />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground/50">
               Select a pair

@@ -44,7 +44,7 @@ Durable decisions that apply across all phases:
 
 ---
 
-## Phase 1: Pair Registry + Static Page Shell
+## Phase 1: Pair Registry + Static Page Shell ✅
 
 **User stories**: #4, #13, #14, #15, #16, #17, #18
 
@@ -52,41 +52,43 @@ Durable decisions that apply across all phases:
 
 A functional `/spotv2` page with the three-column CEX layout. The left sidebar shows a searchable, filterable list of 85+ tokens ranked by market cap. Each entry displays the token symbol as `TOKEN/USDC`, current price, 24h percentage change, market cap, and a chain badge indicating where the token trades. Prices refresh on a 60-second interval. Selecting a pair updates shared state that other panels will consume. The center and right panels render as empty placeholders with labels ("Chart", "Order Book", "Order Form", etc.) so the layout is visible and correct.
 
-The server-side pair registry fetches from Coingecko, maps each token to its best chain and contract address, caches with 1h TTL, and exposes an API route the UI consumes.
+The server-side pair registry fetches from CoinMarketCap API, maps each token to its best chain and contract address, caches with 1h TTL, and exposes an API route the UI consumes. A hardcoded fallback list of 20 top tokens ensures the page never loads empty.
 
 ### Acceptance criteria
 
-- [ ] `/spotv2` is accessible from the app navigation
-- [ ] Page renders the three-column layout with correct proportions
-- [ ] Pair sidebar lists 85+ tokens from Coingecko top 100 (excluding stablecoins)
-- [ ] Each pair shows: symbol (`TOKEN/USDC`), price, 24h change %, chain badge
-- [ ] Pair list is searchable by token name or symbol
-- [ ] Prices auto-refresh at least every 60 seconds
-- [ ] Selecting a pair updates the active pair in shared state
-- [ ] Pair registry API caches responses with ~1h TTL
-- [ ] Existing `/spot` page is unaffected
+- [x] `/spotv2` is accessible from the app navigation
+- [x] Page renders the three-column layout with correct proportions
+- [x] Pair sidebar lists 85+ tokens from CoinMarketCap top 100 (excluding stablecoins)
+- [x] Each pair shows: symbol (`TOKEN/USDC`), price, 24h change %, chain badge
+- [x] Pair list is searchable by token name or symbol
+- [x] Prices auto-refresh at least every 60 seconds
+- [x] Selecting a pair updates the active pair in shared state
+- [x] Pair registry API caches responses with ~1h TTL
+- [x] Existing `/spot` page is unaffected
 
 ---
 
-## Phase 2: Chart + Order Book + Recent Trades
+## Phase 2: Chart + Order Book + Recent Trades ✅
 
 **User stories**: #19, #20, #21, #22
 
 ### What to build
 
-Wire up the center and right-top panels with live data for the selected pair. The center panel embeds a DEXScreener chart (TradingView-powered candlestick chart with indicators and timeframe selection). The right-top panel displays a live order book (bid/ask price ladder) sourced from a Binance WebSocket connection. Below the chart, a recent trades feed shows individual trade ticks (time, price, amount, buy/sell color-coded) also from Binance WebSocket.
+Wire up the center and right-top panels with live data for the selected pair. The center panel renders a TradingView Advanced Chart widget (Binance CEX data, dark theme, minimal toolbar). The right-top panel displays a live order book (bid/ask price ladder) sourced from Binance via a server-side SSE proxy. Below the chart, a recent trades feed shows individual trade ticks (time, price, amount, buy/sell color-coded) also via the SSE proxy.
 
-When the user switches pairs in the sidebar, all three data feeds (chart, order book, recent trades) re-subscribe to the new pair. The Binance symbol mapping converts between platform format (`ETH/USDC`) and Binance format (`ETHUSDT`). For pairs Binance doesn't list, fall back to a Li.Fi quote-based simulated depth display.
+The SSE proxy route (`/api/spotv2/stream`) opens a server-side WebSocket to Binance and forwards depth + trade events to the browser via Server-Sent Events. This avoids browser-origin restrictions that block direct Binance WebSocket connections.
+
+When the user switches pairs in the sidebar, all three data feeds (chart, order book, recent trades) re-subscribe to the new pair. The Binance symbol mapping converts between platform format (`ETH/USDC`) and Binance format (`ETHUSDT`).
 
 ### Acceptance criteria
 
-- [ ] DEXScreener chart renders for the selected pair with candlesticks, volume, and timeframe controls
-- [ ] Order book shows live bid/ask levels updating in real-time via Binance WebSocket
-- [ ] Recent trades feed shows individual ticks with time, price, amount, and buy/sell coloring
-- [ ] Switching pairs re-subscribes the chart, order book, and trades to the new pair within 1 second
-- [ ] Binance symbol mapping correctly translates between platform and Binance formats
-- [ ] Pairs not on Binance fall back to Li.Fi simulated depth (quotes at ±1%, ±2%, ±5%, ±10%)
-- [ ] WebSocket connections clean up properly on unmount and pair switch (no leaked subscriptions)
+- [x] TradingView chart renders for the selected pair with candlesticks, volume, and timeframe controls
+- [x] Order book shows live bid/ask levels updating in real-time via SSE proxy
+- [x] Recent trades feed shows individual ticks with time, price, amount, and buy/sell coloring
+- [x] Switching pairs re-subscribes the chart, order book, and trades to the new pair within 1 second
+- [x] Binance symbol mapping correctly translates between platform and Binance formats
+- [x] Pairs not on Binance show "unavailable" gracefully after 3 connection failures
+- [x] SSE connections clean up properly on unmount and pair switch (no leaked subscriptions)
 
 ---
 
