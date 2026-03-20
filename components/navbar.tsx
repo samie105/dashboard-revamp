@@ -34,6 +34,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { TopNav } from "@/components/top-nav"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { CommunityActivityPill } from "@/components/community/activity-pill"
 
 export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   const isMobile = useIsMobile()
@@ -202,6 +203,7 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
           </div>
         )}
 
+        <CommunityActivityPill />
         <NotificationBell />
         <ThemeToggle />
 

@@ -17,7 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { useState, useRef, useEffect, useCallback } from "react"
-import { motion } from "motion/react"
+import gsap from "gsap"
 
 export type MessageType = {
   id: string
@@ -352,11 +352,21 @@ export function MessageBubble({ message, showAvatar = true, showTimestamp = true
     }
   }
 
+  const bubbleRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!bubbleRef.current || !message.isNew) return
+    gsap.fromTo(
+      bubbleRef.current,
+      { y: 10, opacity: 0, scale: 0.97 },
+      { y: 0, opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.2)" }
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
-    <motion.div
-      initial={{ y: 12, scale: 0.97 }}
-      animate={{ y: 0, scale: 1 }}
-      transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+    <div
+      ref={bubbleRef}
       className={cn(
         "flex gap-2 transition-opacity duration-200",
         message.isOwn ? "justify-end" : "justify-start",
@@ -407,12 +417,12 @@ export function MessageBubble({ message, showAvatar = true, showTimestamp = true
           return (
             <div
               className={cn(
-                "shadow-sm",
+                "shadow-sm ring-1 ring-black/3 dark:ring-white/4",
                 getBubbleRadius(),
-                isMedia ? "p-0 overflow-hidden" : "px-3 py-2",
+                isMedia ? "p-0 overflow-hidden" : "px-3.5 py-2",
                 message.isOwn
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted/80",
+                  ? "bg-primary text-primary-foreground shadow-primary/10"
+                  : "bg-muted/70 backdrop-blur-sm",
                 message.status === "error" && "bg-destructive/90 text-destructive-foreground"
               )}
             >
@@ -472,7 +482,7 @@ export function MessageBubble({ message, showAvatar = true, showTimestamp = true
           />
         )
       })()}
-    </motion.div>
+    </div>
   )
 }
 

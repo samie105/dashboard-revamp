@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import gsap from "gsap"
 import dynamic from "next/dynamic"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
@@ -67,6 +68,26 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
   const waveformSamplesRef = useRef<number[]>([])
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const inputRowRef = useRef<HTMLDivElement>(null)
+  const [isFocused, setIsFocused] = useState(false)
+
+  // GSAP glow on focus
+  useEffect(() => {
+    if (!inputRowRef.current) return
+    if (isFocused) {
+      gsap.to(inputRowRef.current, {
+        boxShadow: "0 0 0 2px rgba(var(--primary-rgb, 99,102,241), 0.15)",
+        duration: 0.25,
+        ease: "power2.out",
+      })
+    } else {
+      gsap.to(inputRowRef.current, {
+        boxShadow: "0 0 0 0px transparent",
+        duration: 0.2,
+        ease: "power2.out",
+      })
+    }
+  }, [isFocused])
 
   const hasContent = message.trim().length > 0 || attachments.length > 0 || audioBlob
 
@@ -566,7 +587,7 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
       )}
 
       {/* Input Row */}
-      <div className="flex items-center gap-1.5 max-w-3xl mx-auto bg-muted/50 rounded-full p-1 pl-1.5">
+      <div ref={inputRowRef} className="flex items-center gap-1.5 max-w-3xl mx-auto bg-muted/40 rounded-full p-1 pl-1.5 ring-1 ring-border/10 transition-colors">
         <div className={cn(
           "transition-all duration-150",
           hasContent ? "w-0 opacity-0 overflow-hidden" : "w-auto opacity-100"
@@ -614,8 +635,10 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           disabled={disabled}
-          className="flex-1 bg-transparent py-2 px-2 text-sm outline-none placeholder:text-muted-foreground/50"
+          className="flex-1 bg-transparent py-2 px-2 text-sm outline-none placeholder:text-muted-foreground/40"
         />
 
         <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>

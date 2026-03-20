@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import gsap from "gsap"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Call02Icon,
@@ -115,6 +116,57 @@ function CallTimer({ startTime }: { startTime: Date | null }) {
     <span className="text-white/70 text-sm font-medium tabular-nums">
       {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
     </span>
+  )
+}
+
+function MinimizedPip({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode
+  onClick?: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!ref.current) return
+    gsap.fromTo(
+      ref.current,
+      { y: 30, opacity: 0, scale: 0.9 },
+      { y: 0, opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.4)" }
+    )
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      onClick={onClick}
+      className="fixed bottom-24 right-4 z-9999"
+    >
+      {children}
+    </div>
+  )
+}
+
+function CallModal({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!ref.current) return
+    gsap.fromTo(
+      ref.current,
+      { opacity: 0, scale: 0.95 },
+      { opacity: 1, scale: 1, duration: 0.35, ease: "power2.out" }
+    )
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      className="fixed inset-0 z-9998 flex items-center justify-center"
+    >
+      {children}
+    </div>
   )
 }
 
@@ -874,36 +926,33 @@ export function VideoCall({
   if (isMinimized) {
     if (callState === "ended") {
       return (
-        <div className="fixed bottom-24 right-4 z-9999 animate-in slide-in-from-bottom-4 fade-in duration-200">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border border-border/50 bg-background">
-            <Avatar className="w-10 h-10">
+        <MinimizedPip>
+          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border border-border/30 bg-background/95 backdrop-blur-xl">
+            <Avatar className="w-10 h-10 ring-2 ring-muted/50">
               <AvatarImage src={callerAvatar} alt={callerName} />
-              <AvatarFallback className="text-xs">
+              <AvatarFallback className="text-xs bg-muted">
                 {getInitials(callerName)}
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="text-sm font-medium text-foreground">{callerName}</span>
-              <span className="text-xs text-muted-foreground">Call ended</span>
+              <span className="text-sm font-semibold text-foreground">{callerName}</span>
+              <span className="text-[11px] text-muted-foreground/60">Call ended</span>
             </div>
             <button
               onClick={handleDismiss}
-              className="ml-1 w-7 h-7 rounded-full flex items-center justify-center hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              className="ml-1 w-7 h-7 rounded-full flex items-center justify-center hover:bg-muted/60 transition-all active:scale-90 text-muted-foreground hover:text-foreground"
             >
               <HugeiconsIcon icon={Cancel01Icon} size={14} />
             </button>
           </div>
-        </div>
+        </MinimizedPip>
       )
     }
 
     return (
-      <div
-        className="fixed bottom-24 right-4 z-9999 cursor-pointer animate-in slide-in-from-bottom-4 fade-in duration-200"
-        onClick={handleRestore}
-      >
+      <MinimizedPip onClick={handleRestore}>
         {remoteAudioElement}
-        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border border-border/50 bg-background">
+        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border border-border/30 bg-background/95 backdrop-blur-xl cursor-pointer">
           <div className="relative">
             <Avatar className="w-10 h-10">
               <AvatarImage src={callerAvatar} alt={callerName} />
@@ -980,16 +1029,16 @@ export function VideoCall({
             )}
           </div>
         </div>
-      </div>
+      </MinimizedPip>
     )
   }
 
   // Full modal call UI
   return (
-    <div className="fixed inset-0 z-9998 flex items-center justify-center">
+    <CallModal>
       {remoteAudioElement}
       <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={callState === "ended" || callState === "busy" ? handleDismiss : undefined}
       />
 
@@ -1256,6 +1305,6 @@ export function VideoCall({
           </div>
         )}
       </div>
-    </div>
+    </CallModal>
   )
 }

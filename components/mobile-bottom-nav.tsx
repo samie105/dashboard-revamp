@@ -74,8 +74,14 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: "Dashboard", url: "/", icon: DashboardSquare01Icon },
       { name: "Portfolio", url: "/portfolio", icon: ChartCandlestickIcon },
       { name: "Assets", url: "/assets", icon: Wallet01Icon },
-      { name: "Community", url: "/community", icon: UserGroup02Icon },
       { name: "Transactions", url: "/transactions", icon: File01Icon },
+    ],
+  },
+  {
+    label: "Community",
+    icon: UserGroup02Icon,
+    items: [
+      { name: "Community", url: "/community", icon: UserGroup02Icon },
     ],
   },
   {

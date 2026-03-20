@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import gsap from "gsap"
 import { AnimatePresence, motion } from "motion/react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { UserAdd01Icon, Search01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
@@ -28,7 +29,8 @@ import {
   VideoCall,
   IncomingCallProvider,
 } from "@/components/community"
-import type { Conversation } from "@/components/community/conversation-list"
+import type { Conversation } from "@/components/community"
+import { CommunityPageTransition } from "@/components/community/page-transition"
 import type { MessageType } from "@/components/community/message-bubble"
 import type { Attachment } from "@/components/community/message-input"
 import {
@@ -53,6 +55,19 @@ type OptimisticMessage = MessageWithDetails & { status?: "pending" | "sent" | "e
 export default function CommunityPage() {
   const { profile } = useProfile()
   const userId = profile?.authUserId ?? ""
+
+  const [showTransition, setShowTransition] = useState(true)
+  const pageRef = useRef<HTMLDivElement>(null)
+
+  // GSAP page entrance after transition completes
+  useEffect(() => {
+    if (showTransition || !pageRef.current) return
+    gsap.fromTo(
+      pageRef.current,
+      { opacity: 0, y: 12 },
+      { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }
+    )
+  }, [showTransition])
 
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -432,12 +447,16 @@ export default function CommunityPage() {
 
   return (
     <IncomingCallProvider>
+      {showTransition && (
+        <CommunityPageTransition onComplete={() => setShowTransition(false)} />
+      )}
+
       {/* Hide bottom nav when mobile chat is open */}
       {showMobileChat && (
         <style>{`@media (max-width: 767px) { nav.fixed.bottom-0 { display: none !important; } }`}</style>
       )}
 
-      <div className={cn(
+      <div ref={pageRef} className={cn(
         "flex-1 flex overflow-hidden",
         showMobileChat ? "h-[calc(100dvh-4rem)]" : "h-[calc(100dvh-4rem)] pb-16 md:pb-0"
       )}>
@@ -505,13 +524,17 @@ export default function CommunityPage() {
                   <div className="flex-1 overflow-y-auto max-h-[calc(100vh-16rem)] md:max-h-[calc(100vh-12rem)]">
                     <div className="px-3 py-4 space-y-1 max-w-3xl mx-auto w-full">
                       {messageGroups.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 px-4">
-                          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                            <HugeiconsIcon icon={UserAdd01Icon} size={28} className="text-muted-foreground" />
+                        <div className="flex flex-col items-center justify-center py-16 px-4">
+                          <div className="relative w-20 h-20 mb-5">
+                            <div className="absolute inset-0 rounded-full bg-primary/5" />
+                            <div className="absolute inset-2 rounded-full bg-primary/8" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <HugeiconsIcon icon={UserAdd01Icon} size={28} className="text-primary/40" />
+                            </div>
                           </div>
-                          <h3 className="text-base font-semibold mb-1">No messages here yet</h3>
-                          <p className="text-sm text-muted-foreground text-center max-w-xs">
-                            Be the first to send a hello! Start a conversation and connect.
+                          <h3 className="text-base font-semibold text-foreground/80 mb-1">Start the conversation</h3>
+                          <p className="text-[13px] text-muted-foreground/60 text-center max-w-xs">
+                            Say hello and connect with {selectedParticipant?.name?.split(" ")[0] || "them"}
                           </p>
                         </div>
                       ) : (
@@ -589,15 +612,22 @@ export default function CommunityPage() {
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                  <HugeiconsIcon icon={UserAdd01Icon} size={32} className="text-muted-foreground/60" />
+              <div className="text-center space-y-5">
+                <div className="relative mx-auto w-24 h-24">
+                  <div className="absolute inset-0 rounded-full bg-primary/5 animate-pulse" />
+                  <div className="absolute inset-2 rounded-full bg-primary/10" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <HugeiconsIcon icon={UserAdd01Icon} size={32} className="text-primary/40" />
+                  </div>
                 </div>
-                <p className="text-sm">Select a conversation or start a new one</p>
+                <div>
+                  <h3 className="text-base font-semibold text-foreground/80">Welcome to Community</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Select a conversation or start a new one</p>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-4"
+                  className="rounded-full px-6"
                   onClick={() => setShowUserSearch(true)}
                 >
                   <HugeiconsIcon icon={UserAdd01Icon} size={16} className="mr-2" />
