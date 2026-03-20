@@ -8,7 +8,7 @@ import { useProfile } from "@/components/profile-provider"
 import { allFunctions } from "@/lib/vivid-functions"
 import VividVoiceControl from "@/components/vivid/vivid-voice-control"
 
-const HIDE_MIC_ROUTES = ["/spot", "/futures", "/forex", "/binary", "/vivid"]
+const HIDE_MIC_ROUTES = ["/spot", "/futures", "/forex", "/binary", "/vivid", "/community"]
 
 export function VividVoiceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser()
