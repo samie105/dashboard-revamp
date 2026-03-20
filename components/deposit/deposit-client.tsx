@@ -435,13 +435,10 @@ export function DepositClient() {
           <h1 className="text-xl font-bold tracking-tight">Deposit</h1>
           <p className="text-xs text-muted-foreground">Buy USDT instantly · Usually arrives in 1–3 minutes</p>
         </div>
-        <div className="hidden sm:flex items-center gap-2">
-          {CHAINS.map((c) => (
-            <div key={c.id} className="flex items-center gap-1.5 rounded-full border border-border/40 bg-accent/30 px-2.5 py-1">
-              <img src={c.icon} alt={c.label} className="h-3.5 w-3.5 rounded-full" />
-              <span className="text-[10px] font-medium">{c.label}</span>
-            </div>
-          ))}
+        <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-border/40 bg-accent/30 px-2.5 py-1">
+          <img src={CHAINS.find((c) => c.id === network)!.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
+          <span className="text-[10px] font-medium">{CHAINS.find((c) => c.id === network)!.label}</span>
+          <span className="text-[10px] text-muted-foreground">{CHAINS.find((c) => c.id === network)!.tag}</span>
         </div>
       </div>
 
@@ -503,22 +500,24 @@ export function DepositClient() {
                     {/* Network */}
                     <div data-onboarding="deposit-network" className="mb-4">
                       <span className="mb-2 block text-[11px] font-medium text-muted-foreground">Receive on</span>
-                      <div className="flex gap-2">
-                        {CHAINS.map((c) => (
-                          <button
-                            key={c.id}
-                            onClick={() => setNetwork(c.id)}
-                            className={`flex flex-1 items-center justify-center gap-2 rounded-xl border p-2.5 transition-colors ${
-                              network === c.id ? "border-primary/50 bg-primary/5" : "border-border/30 hover:border-border"
-                            }`}
-                          >
-                            <img src={c.icon} alt={c.label} className="h-5 w-5 rounded-full" />
-                            <div className="text-left">
-                              <p className={`text-xs font-semibold ${network === c.id ? "text-primary" : ""}`}>{c.label}</p>
-                              <p className="text-[10px] text-muted-foreground">{c.tag} USDT</p>
-                            </div>
-                          </button>
-                        ))}
+                      <div className="relative">
+                        <img
+                          src={CHAINS.find((c) => c.id === network)!.icon}
+                          alt=""
+                          className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full"
+                        />
+                        <select
+                          value={network}
+                          onChange={(e) => setNetwork(e.target.value as "tron" | "solana" | "ethereum")}
+                          className="w-full appearance-none rounded-xl border border-border/30 bg-accent/20 py-3 pl-10 pr-10 text-sm font-medium text-foreground outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-colors cursor-pointer"
+                        >
+                          {CHAINS.map((c) => (
+                            <option key={c.id} value={c.id}>{c.label} · {c.tag} USDT</option>
+                          ))}
+                        </select>
+                        <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
                       </div>
                     </div>
 
@@ -551,7 +550,7 @@ export function DepositClient() {
                           ))}
                         </div>
                         <button
-                          onClick={() => setNetwork(network === "solana" ? "ethereum" : "solana")}
+                          onClick={() => { const idx = CHAINS.findIndex((c) => c.id === network); setNetwork(CHAINS[(idx + 1) % CHAINS.length].id) }}
                           className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <img src={CHAINS.find((c) => c.id === network)!.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
@@ -595,7 +594,7 @@ export function DepositClient() {
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Network</span>
-                          <span className="font-medium">{network === "solana" ? "Solana (SPL)" : "Ethereum (ERC-20)"}</span>
+                          <span className="font-medium">{network === "tron" ? "Tron (TRC-20)" : network === "solana" ? "Solana (SPL)" : "Ethereum (ERC-20)"}</span>
                         </div>
                       </div>
                     )}

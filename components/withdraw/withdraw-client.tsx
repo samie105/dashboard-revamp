@@ -43,7 +43,7 @@ interface WithdrawalRecord {
   fiatAmount: number
   fiatCurrency: string
   exchangeRate: number
-  chain: "solana" | "ethereum"
+  chain: "solana" | "ethereum" | "tron"
   userWalletAddress: string
   treasuryWalletAddress: string
   txHash?: string
@@ -162,6 +162,7 @@ function RecentWithdrawals() {
 // ── Chains ───────────────────────────────────────────────────────────────
 
 const CHAINS = [
+  { id: "tron" as const, label: "Tron", tag: "TRC-20", icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
   { id: "solana" as const, label: "Solana", tag: "SPL", icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
   { id: "ethereum" as const, label: "Ethereum", tag: "ERC-20", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
 ]
@@ -173,7 +174,7 @@ export function WithdrawClient() {
   const { profile } = useProfile()
 
   // Form state
-  const [chain, setChain] = React.useState<"solana" | "ethereum">("solana")
+  const [chain, setChain] = React.useState<"solana" | "ethereum" | "tron">("tron")
   const [usdtAmount, setUsdtAmount] = React.useState("")
   const [rates, setRates] = React.useState<Record<string, Rate>>({})
   const [ratesLoading, setRatesLoading] = React.useState(true)
@@ -458,7 +459,7 @@ export function WithdrawClient() {
                           ))}
                         </div>
                         <button
-                          onClick={() => setChain(chain === "solana" ? "ethereum" : "solana")}
+                          onClick={() => { const idx = CHAINS.findIndex((c) => c.id === chain); setChain(CHAINS[(idx + 1) % CHAINS.length].id) }}
                           className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <img src={CHAINS.find((c) => c.id === chain)!.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
@@ -584,7 +585,7 @@ export function WithdrawClient() {
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Network</span>
-                          <span className="font-medium">{chain === "solana" ? "Solana (SPL)" : "Ethereum (ERC-20)"}</span>
+                          <span className="font-medium">{chain === "tron" ? "Tron (TRC-20)" : chain === "solana" ? "Solana (SPL)" : "Ethereum (ERC-20)"}</span>
                         </div>
                       </div>
                     )}
@@ -651,7 +652,7 @@ export function WithdrawClient() {
                 {/* Treasury address */}
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 space-y-2">
                   <p className="text-xs font-medium">
-                    Send exactly <strong>{activeWithdrawal.usdtAmount} USDT</strong> ({activeWithdrawal.chain === "ethereum" ? "ERC-20" : "SPL"}) to:
+                    Send exactly <strong>{activeWithdrawal.usdtAmount} USDT</strong> ({activeWithdrawal.chain === "ethereum" ? "ERC-20" : activeWithdrawal.chain === "tron" ? "TRC-20" : "SPL"}) to:
                   </p>
                   <div className="flex items-center gap-2 rounded-lg bg-card border border-border/30 p-2.5">
                     <code className="flex-1 break-all text-[11px] font-mono text-muted-foreground">
@@ -665,7 +666,7 @@ export function WithdrawClient() {
                     </button>
                   </div>
                   <p className="text-[10px] text-amber-600/70 dark:text-amber-400/60">
-                    Only send USDT on {activeWithdrawal.chain === "ethereum" ? "Ethereum" : "Solana"}. Wrong tokens may be lost.
+                    Only send USDT on {activeWithdrawal.chain === "ethereum" ? "Ethereum" : activeWithdrawal.chain === "tron" ? "Tron" : "Solana"}. Wrong tokens may be lost.
                   </p>
                 </div>
 
@@ -753,7 +754,7 @@ export function WithdrawClient() {
                   <span className="font-bold">{CURRENCY_SYM[activeWithdrawal.fiatCurrency]}{activeWithdrawal.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span> sent to {activeWithdrawal.bankDetails?.bankName}
                 </p>
                 {activeWithdrawal.txHash && (
-                  <a href={activeWithdrawal.chain === "ethereum" ? `https://etherscan.io/tx/${activeWithdrawal.txHash}` : `https://solscan.io/tx/${activeWithdrawal.txHash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                  <a href={activeWithdrawal.chain === "ethereum" ? `https://etherscan.io/tx/${activeWithdrawal.txHash}` : activeWithdrawal.chain === "tron" ? `https://tronscan.org/#/transaction/${activeWithdrawal.txHash}` : `https://solscan.io/tx/${activeWithdrawal.txHash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                     View USDT TX <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
                   </a>
                 )}
