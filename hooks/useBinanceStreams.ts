@@ -53,7 +53,7 @@ export function useBinanceStreams(symbol: string | undefined): BinanceStreamStat
   const wsRef = useRef<WebSocket | null>(null)
   const mountedRef = useRef(true)
   const unavailableRef = useRef(false)
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>()
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
     mountedRef.current = true
