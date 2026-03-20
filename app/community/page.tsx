@@ -31,7 +31,6 @@ import {
   IncomingCallProvider,
 } from "@/components/community"
 import type { Conversation } from "@/components/community"
-import { CommunityPageTransition } from "@/components/community/page-transition"
 import type { MessageType } from "@/components/community/message-bubble"
 import type { Attachment } from "@/components/community/message-input"
 import {
@@ -59,18 +58,17 @@ export default function CommunityPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  const [showTransition, setShowTransition] = useState(true)
   const pageRef = useRef<HTMLDivElement>(null)
 
-  // GSAP page entrance after transition completes
+  // GSAP page entrance
   useEffect(() => {
-    if (showTransition || !pageRef.current) return
+    if (!pageRef.current) return
     gsap.fromTo(
       pageRef.current,
       { opacity: 0, y: 12 },
       { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }
     )
-  }, [showTransition])
+  }, [])
 
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -487,10 +485,6 @@ export default function CommunityPage() {
 
   return (
     <IncomingCallProvider>
-      {showTransition && (
-        <CommunityPageTransition onComplete={() => setShowTransition(false)} />
-      )}
-
       {/* Hide bottom nav when mobile chat is open */}
       {showMobileChat && (
         <style>{`@media (max-width: 767px) { nav.fixed.bottom-0 { display: none !important; } }`}</style>
