@@ -16,7 +16,7 @@ import {
   WifiConnected01Icon,
   Cancel01Icon,
 } from "@hugeicons/core-free-icons"
-import { cn } from "@/lib/utils"
+import { cn, avatarUrl } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { rtkClient } from "@/lib/community/rtk-client"
 import { callSounds } from "@/lib/community/call-sounds"
@@ -929,7 +929,7 @@ export function VideoCall({
         <MinimizedPip>
           <div className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border border-border/30 bg-background/95 backdrop-blur-xl">
             <Avatar className="w-10 h-10 ring-2 ring-muted/50">
-              <AvatarImage src={callerAvatar} alt={callerName} />
+              <AvatarImage src={avatarUrl(callerAvatar, callerName)} alt={callerName} />
               <AvatarFallback className="text-xs bg-muted">
                 {getInitials(callerName)}
               </AvatarFallback>
@@ -955,7 +955,7 @@ export function VideoCall({
         <div className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border border-border/30 bg-background/95 backdrop-blur-xl cursor-pointer">
           <div className="relative">
             <Avatar className="w-10 h-10">
-              <AvatarImage src={callerAvatar} alt={callerName} />
+              <AvatarImage src={avatarUrl(callerAvatar, callerName)} alt={callerName} />
               <AvatarFallback className="text-xs">
                 {getInitials(callerName)}
               </AvatarFallback>
@@ -1067,7 +1067,7 @@ export function VideoCall({
             <div className="absolute inset-0 bg-black/40" />
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <Avatar className="w-28 h-28 mb-5">
-                <AvatarImage src={callerAvatar} alt={callerName} />
+                <AvatarImage src={avatarUrl(callerAvatar, callerName)} alt={callerName} />
                 <AvatarFallback className="text-3xl bg-zinc-800 text-white">
                   {getInitials(callerName)}
                 </AvatarFallback>
@@ -1104,7 +1104,7 @@ export function VideoCall({
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950">
             <Avatar className="w-28 h-28 mb-5">
-              <AvatarImage src={callerAvatar} alt={callerName} />
+              <AvatarImage src={avatarUrl(callerAvatar, callerName)} alt={callerName} />
               <AvatarFallback className="text-3xl bg-zinc-800 text-white">
                 {getInitials(callerName)}
               </AvatarFallback>
@@ -1273,7 +1273,7 @@ export function VideoCall({
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950">
             <div className="flex flex-col items-center gap-3">
               <Avatar className="w-24 h-24 mb-3">
-                <AvatarImage src={callerAvatar} alt={callerName} />
+                <AvatarImage src={avatarUrl(callerAvatar, callerName)} alt={callerName} />
                 <AvatarFallback className="text-2xl bg-zinc-800 text-white">
                   {getInitials(callerName)}
                 </AvatarFallback>

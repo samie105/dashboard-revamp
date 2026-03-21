@@ -14,7 +14,7 @@ import {
   Download04Icon,
 } from "@hugeicons/core-free-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { cn } from "@/lib/utils"
+import { cn, avatarUrl } from "@/lib/utils"
 import { useState, useRef, useEffect, useCallback } from "react"
 import gsap from "gsap"
 
@@ -378,7 +378,7 @@ export function MessageBubble({ message, showAvatar = true, showTimestamp = true
     >
       {!message.isOwn && showAvatar && (
         <Avatar className="h-6 w-6 mt-1 shrink-0">
-          <AvatarImage src={message.senderAvatar} />
+          <AvatarImage src={avatarUrl(message.senderAvatar, message.senderName)} />
           <AvatarFallback className="text-[10px]">
             {message.senderName?.[0]?.toUpperCase() || "U"}
           </AvatarFallback>

@@ -6,7 +6,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Search01Icon, Image02Icon, Video01Icon, Mic01Icon, Attachment01Icon, Call02Icon } from "@hugeicons/core-free-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { cn } from "@/lib/utils"
+import { cn, avatarUrl } from "@/lib/utils"
 
 export type Conversation = {
   id: string
@@ -214,7 +214,7 @@ export function ConversationList({
                       "h-11 w-11 ring-2 transition-all",
                       isSelected ? "ring-primary/20" : "ring-transparent",
                     )}>
-                      <AvatarImage src={c.avatar} />
+                      <AvatarImage src={avatarUrl(c.avatar, c.name)} />
                       <AvatarFallback className="text-sm font-medium bg-muted">
                         {c.name[0]?.toUpperCase()}
                       </AvatarFallback>

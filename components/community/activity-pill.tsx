@@ -13,7 +13,7 @@ import {
   CallOutgoing04Icon,
 } from "@hugeicons/core-free-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { cn } from "@/lib/utils"
+import { cn, avatarUrl } from "@/lib/utils"
 import { useProfile } from "@/components/profile-provider"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
@@ -302,7 +302,7 @@ export function CommunityActivityPill() {
                       >
                         <div className="relative shrink-0">
                           <Avatar className="h-9 w-9">
-                            <AvatarImage src={c.participant.avatar || undefined} />
+                            <AvatarImage src={avatarUrl(c.participant.avatar, c.participant.name)} />
                             <AvatarFallback className="text-[10px] bg-muted">
                               {c.participant.name[0]?.toUpperCase()}
                             </AvatarFallback>
@@ -371,7 +371,7 @@ export function CommunityActivityPill() {
                           >
                             <div className="relative shrink-0">
                               <Avatar className="h-9 w-9">
-                                <AvatarImage src={call.participantAvatar || undefined} />
+                                <AvatarImage src={avatarUrl(call.participantAvatar, call.participantName)} />
                                 <AvatarFallback className="text-[10px] bg-muted">
                                   {call.participantName[0]?.toUpperCase()}
                                 </AvatarFallback>
@@ -437,7 +437,7 @@ export function CommunityActivityPill() {
                           className="flex items-center gap-2.5 px-3.5 py-2 border-b border-border/8 last:border-b-0"
                         >
                           <Avatar className="h-8 w-8 shrink-0">
-                            <AvatarImage src={user.avatar || undefined} />
+                            <AvatarImage src={avatarUrl(user.avatar, user.name)} />
                             <AvatarFallback className="text-[10px] bg-muted">
                               {user.name[0]?.toUpperCase()}
                             </AvatarFallback>

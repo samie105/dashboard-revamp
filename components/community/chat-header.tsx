@@ -10,7 +10,7 @@ import {
   MoreVerticalIcon,
 } from "@hugeicons/core-free-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { cn } from "@/lib/utils"
+import { cn, avatarUrl } from "@/lib/utils"
 
 type ChatHeaderProps = {
   name: string
@@ -81,7 +81,7 @@ export function ChatHeader({
             "h-9 w-9 ring-2 transition-all",
             isOnline ? "ring-emerald-500/30" : "ring-transparent",
           )}>
-            <AvatarImage src={avatar} />
+            <AvatarImage src={avatarUrl(avatar, name)} />
             <AvatarFallback className="text-xs font-medium bg-muted">
               {name[0]?.toUpperCase()}
             </AvatarFallback>
