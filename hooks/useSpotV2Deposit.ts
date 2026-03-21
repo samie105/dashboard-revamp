@@ -12,6 +12,8 @@ export interface SpotV2DepositInfo {
   disburseTxHash?: string
 }
 
+export type DepositPhase = "idle" | "initiating" | "sending" | "polling"
+
 interface InitiateParams {
   depositChain: "ethereum" | "solana" | "tron"
   depositAmount: number
@@ -21,6 +23,7 @@ interface InitiateParams {
 
 export function useSpotV2Deposit() {
   const [deposit, setDeposit] = useState<SpotV2DepositInfo | null>(null)
+  const [phase, setPhase] = useState<DepositPhase>("idle")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -54,6 +57,7 @@ export function useSpotV2Deposit() {
           const terminal = ["completed", "disbursed", "failed", "expired", "rejected"]
           if (terminal.includes(data.deposit.status)) {
             stopPolling()
+            setPhase("idle")
           }
         }
       } catch {
@@ -66,6 +70,7 @@ export function useSpotV2Deposit() {
   const startPolling = useCallback(
     (adminDepositId: string) => {
       stopPolling()
+      setPhase("polling")
       pollStatus(adminDepositId)
       pollingRef.current = setInterval(
         () => pollStatus(adminDepositId),
@@ -75,10 +80,50 @@ export function useSpotV2Deposit() {
     [pollStatus, stopPolling],
   )
 
+  const send = useCallback(
+    async (depositInfo: SpotV2DepositInfo): Promise<boolean> => {
+      setPhase("sending")
+      try {
+        const res = await fetch("/api/spotv2/deposit/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            treasuryAddress: depositInfo.treasuryAddress,
+            depositChain: depositInfo.depositChain,
+            depositToken: depositInfo.depositToken,
+            depositAmount: depositInfo.depositAmount,
+          }),
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to send funds")
+        }
+
+        setDeposit((prev) =>
+          prev ? { ...prev, depositTxHash: data.txHash } : prev,
+        )
+
+        // Start polling for admin confirmation
+        startPolling(depositInfo.adminDepositId)
+        return true
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : "Failed to send funds"
+        setError(msg)
+        setPhase("idle")
+        return false
+      }
+    },
+    [startPolling],
+  )
+
   const initiate = useCallback(
     async (params: InitiateParams) => {
       setLoading(true)
       setError(null)
+      setPhase("initiating")
 
       try {
         const res = await fetch("/api/spotv2/deposit/initiate", {
@@ -93,31 +138,32 @@ export function useSpotV2Deposit() {
           throw new Error(data.error || "Failed to initiate deposit")
         }
 
-        setDeposit(data.deposit)
+        const depositInfo: SpotV2DepositInfo = data.deposit
+        setDeposit(depositInfo)
 
-        // Start polling for deposit completion
-        if (data.deposit.adminDepositId) {
-          startPolling(data.deposit.adminDepositId)
-        }
+        // Auto-send from user's wallet to treasury
+        await send(depositInfo)
 
-        return data.deposit
+        return depositInfo
       } catch (err) {
         const msg =
           err instanceof Error ? err.message : "Failed to initiate deposit"
         setError(msg)
+        setPhase("idle")
         return null
       } finally {
         setLoading(false)
       }
     },
-    [startPolling],
+    [send],
   )
 
   const reset = useCallback(() => {
     stopPolling()
     setDeposit(null)
     setError(null)
+    setPhase("idle")
   }, [stopPolling])
 
-  return { deposit, loading, error, initiate, reset }
+  return { deposit, phase, loading, error, initiate, reset }
 }

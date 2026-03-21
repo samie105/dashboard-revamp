@@ -11,7 +11,7 @@ import {
   CheckmarkCircle02Icon,
   Download04Icon,
 } from "@hugeicons/core-free-icons"
-import { useSpotV2Deposit, type SpotV2DepositInfo } from "@/hooks/useSpotV2Deposit"
+import { useSpotV2Deposit, type SpotV2DepositInfo, type DepositPhase } from "@/hooks/useSpotV2Deposit"
 import { useWallet } from "@/components/wallet-provider"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
 
@@ -22,13 +22,13 @@ interface SpotV2DepositModalProps {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; spinning?: boolean }> = {
-  pending: { label: "Deposit created — send funds to the address below", color: "text-blue-500" },
+  pending: { label: "Sending from your wallet…", color: "text-blue-500", spinning: true },
   detected: { label: "Payment detected on-chain!", color: "text-emerald-500", spinning: true },
   matched: { label: "Payment confirmed!", color: "text-emerald-500", spinning: true },
   verified: { label: "Processing your deposit…", color: "text-orange-500", spinning: true },
   processing: { label: "Processing…", color: "text-orange-500", spinning: true },
-  completed: { label: "Deposit complete — USDC credited!", color: "text-emerald-500" },
-  disbursed: { label: "Deposit complete — USDC credited!", color: "text-emerald-500" },
+  completed: { label: "Deposit complete — balance credited!", color: "text-emerald-500" },
+  disbursed: { label: "Deposit complete — balance credited!", color: "text-emerald-500" },
   failed: { label: "Deposit failed", color: "text-red-500" },
   expired: { label: "Deposit expired", color: "text-red-500" },
   rejected: { label: "Deposit rejected", color: "text-red-500" },
@@ -46,7 +46,7 @@ const TOKENS = [
 ]
 
 export function SpotV2DepositModal({ isOpen, onClose, onDepositComplete }: SpotV2DepositModalProps) {
-  const { deposit, loading, error, initiate, reset } = useSpotV2Deposit()
+  const { deposit, phase, loading, error, initiate, reset } = useSpotV2Deposit()
   const { addresses, isLoading: walletsLoading } = useWallet()
   const { balances: onChainBalances, isLoading: balancesLoading } = useWalletBalances()
 
@@ -306,13 +306,12 @@ export function SpotV2DepositModal({ isOpen, onClose, onDepositComplete }: SpotV
             </div>
           )}
 
-          {/* ═══ ACTIVE DEPOSIT — Waiting for on-chain detection ═══ */}
+          {/* ═══ ACTIVE DEPOSIT — Auto-send + polling ═══ */}
           {isActive && deposit && (
             <ActiveDepositView
               deposit={deposit}
+              phase={phase}
               statusCfg={statusCfg}
-              onCopy={handleCopy}
-              copied={copied}
             />
           )}
         </div>
@@ -325,25 +324,59 @@ export function SpotV2DepositModal({ isOpen, onClose, onDepositComplete }: SpotV
 
 function ActiveDepositView({
   deposit,
+  phase,
   statusCfg,
-  onCopy,
-  copied,
 }: {
   deposit: SpotV2DepositInfo
+  phase: DepositPhase
   statusCfg: { label: string; color: string; spinning?: boolean } | null
-  onCopy: (text: string) => void
-  copied: boolean
 }) {
+  const PHASE_STEPS = [
+    { key: "initiating", label: "Creating deposit" },
+    { key: "sending", label: "Sending from wallet" },
+    { key: "polling", label: "Confirming on-chain" },
+  ]
+
+  const activeIdx = PHASE_STEPS.findIndex((s) => s.key === phase)
+
   return (
     <div className="space-y-4">
       {/* Status */}
       <div className="flex items-center gap-2.5 rounded-xl border border-border/30 bg-accent/20 p-3.5">
-        {statusCfg?.spinning ? (
-          <HugeiconsIcon icon={Loading03Icon} className={`h-4 w-4 animate-spin ${statusCfg.color}`} />
+        {statusCfg?.spinning || phase === "sending" ? (
+          <HugeiconsIcon icon={Loading03Icon} className={`h-4 w-4 animate-spin ${statusCfg?.color || "text-blue-500"}`} />
         ) : (
           <HugeiconsIcon icon={CheckmarkCircle02Icon} className={`h-4 w-4 ${statusCfg?.color}`} />
         )}
-        <p className={`text-xs font-medium ${statusCfg?.color}`}>{statusCfg?.label}</p>
+        <p className={`text-xs font-medium ${statusCfg?.color || "text-blue-500"}`}>
+          {phase === "sending" ? "Sending from your wallet…" : statusCfg?.label}
+        </p>
+      </div>
+
+      {/* Step progress */}
+      <div className="flex items-center gap-1">
+        {PHASE_STEPS.map((step, i) => {
+          const isDone = i < activeIdx || (phase === "polling" && deposit.depositTxHash)
+          const isActive = i === activeIdx
+          return (
+            <div key={step.key} className="flex flex-1 flex-col items-center gap-1">
+              <div
+                className={`h-1 w-full rounded-full transition-colors ${
+                  isDone
+                    ? "bg-emerald-500"
+                    : isActive
+                    ? "bg-primary animate-pulse"
+                    : "bg-border/30"
+                }`}
+              />
+              <span className={`text-[10px] ${
+                isDone ? "text-emerald-500" : isActive ? "text-primary" : "text-muted-foreground/50"
+              }`}>
+                {step.label}
+              </span>
+            </div>
+          )
+        })}
       </div>
 
       {/* Deposit info */}
@@ -368,37 +401,11 @@ function ActiveDepositView({
         </div>
       </div>
 
-      {/* Treasury address — user must send to this */}
-      {deposit.treasuryAddress && (
-        <div>
-          <span className="mb-2 block text-[11px] font-medium text-muted-foreground">
-            Send {deposit.depositToken} to this address
-          </span>
-          <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3.5 py-3">
-            <code className="text-[11px] text-foreground font-mono truncate mr-3">
-              {deposit.treasuryAddress}
-            </code>
-            <button
-              onClick={() => onCopy(deposit.treasuryAddress)}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-card transition-colors"
-            >
-              <HugeiconsIcon
-                icon={copied ? Tick02Icon : Copy01Icon}
-                className={`h-3 w-3 ${copied ? "text-emerald-500" : "text-muted-foreground"}`}
-              />
-            </button>
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-1.5 ml-1">
-            Send exactly {deposit.depositAmount} {deposit.depositToken} on the {deposit.depositChain} network. Your balance will be credited automatically once confirmed.
-          </p>
-        </div>
-      )}
-
-      {/* TX hash if detected */}
+      {/* TX hash once sent */}
       {deposit.depositTxHash && (
-        <div className="flex items-center justify-between rounded-xl border border-border/30 bg-accent/20 px-3.5 py-2.5">
+        <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3.5 py-2.5">
           <span className="text-[11px] text-muted-foreground">TX Hash</span>
-          <span className="text-[11px] text-muted-foreground/80 font-mono">
+          <span className="text-[11px] text-emerald-600 font-mono">
             {deposit.depositTxHash.slice(0, 12)}…{deposit.depositTxHash.slice(-4)}
           </span>
         </div>
@@ -407,7 +414,11 @@ function ActiveDepositView({
       {/* Waiting indicator */}
       <div className="flex items-center justify-center gap-2 rounded-xl border border-border/20 bg-accent/10 py-3">
         <HugeiconsIcon icon={Loading03Icon} className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-        <span className="text-[11px] text-muted-foreground">Waiting for on-chain confirmation…</span>
+        <span className="text-[11px] text-muted-foreground">
+          {phase === "sending"
+            ? "Signing and broadcasting transaction…"
+            : "Waiting for on-chain confirmation…"}
+        </span>
       </div>
     </div>
   )
