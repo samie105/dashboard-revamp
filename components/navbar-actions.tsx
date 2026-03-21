@@ -222,7 +222,7 @@ export function NavbarActions() {
   return (
     <div ref={containerRef} className="relative" onMouseLeave={isMobile ? undefined : leave}>
       {/* ── Icon Group ── */}
-      <div ref={pillRef} className="flex items-center h-8 rounded-xl border border-border/30 bg-muted/30 overflow-hidden">
+      <div ref={pillRef} className="flex items-center h-8 rounded-xl border border-border/30 bg-muted/30 overflow-visible">
         {/* Wallet */}
         {isMobile ? (
           <button onClick={() => tap("wallet")} className={cn("flex items-center justify-center h-8 w-8 transition-colors", section === "wallet" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>

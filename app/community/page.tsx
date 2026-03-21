@@ -27,7 +27,6 @@ import {
   CallEvent,
   isCallEventMessage,
   MessageContextMenu,
-  VideoCall,
 } from "@/components/community"
 import type { Conversation } from "@/components/community"
 import type { MessageType } from "@/components/community/message-bubble"
@@ -48,6 +47,7 @@ import {
 import { getImageUploadUrl, getVideoUploadUrl, getAudioUploadUrl } from "@/lib/community/actions/upload"
 import { useMessageEvents, useTypingEvents } from "@/lib/community/use-events"
 import { useProfile } from "@/components/profile-provider"
+import { useGlobalCall } from "@/components/community/incoming-call-provider"
 import type { MessageEventPayload, TypingEventPayload } from "@/lib/community/events"
 
 type OptimisticMessage = MessageWithDetails & { status?: "pending" | "sent" | "error"; uploadProgress?: number; isNew?: boolean }
@@ -78,11 +78,8 @@ export default function CommunityPage() {
   const [showMobileChat, setShowMobileChat] = useState(false)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
 
-  // Call state
-  const [callOpen, setCallOpen] = useState(false)
-  const [callType, setCallType] = useState<"video" | "audio">("video")
-  const [, setActiveCallId] = useState<string | null>(null)
-  const [isCallMinimized, setIsCallMinimized] = useState(false)
+  // Global call
+  const { startCall: globalStartCall } = useGlobalCall()
 
   const selectedIdRef = useRef<string | null>(null)
   selectedIdRef.current = selectedId
@@ -298,10 +295,14 @@ export default function CommunityPage() {
   }, [conversations, router])
 
   const startCall = useCallback((type: "video" | "audio") => {
-    setCallType(type)
-    setCallOpen(true)
-    setIsCallMinimized(false)
-  }, [])
+    if (!selectedParticipant) return
+    globalStartCall({
+      participantId: selectedParticipant.id,
+      participantName: selectedParticipant.name,
+      participantAvatar: selectedParticipant.avatar || undefined,
+      callType: type,
+    })
+  }, [selectedParticipant, globalStartCall])
 
   const handleTyping = useCallback((isTyping: boolean) => {
     if (!selectedId) return
@@ -892,22 +893,7 @@ export default function CommunityPage() {
         </ResponsiveModalContent>
       </ResponsiveModal>
 
-      {/* Video/Audio Call */}
-      {selectedParticipant && (
-        <VideoCall
-          open={callOpen}
-          onClose={() => { setCallOpen(false); setIsCallMinimized(false) }}
-          callType={callType}
-          callerName={selectedParticipant.name}
-          callerAvatar={selectedParticipant.avatar || undefined}
-          receiverId={selectedParticipant.id}
-          onCallStarted={(id) => setActiveCallId(id)}
-          onCallEnded={() => { setActiveCallId(null); setCallOpen(false); setIsCallMinimized(false) }}
-          isMinimized={isCallMinimized}
-          onMinimize={() => setIsCallMinimized(true)}
-          onRestore={() => setIsCallMinimized(false)}
-        />
-      )}
+
     </>
   )
 }

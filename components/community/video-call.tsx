@@ -744,6 +744,11 @@ export function VideoCall({
     setIsAnswering(true)
     setCallState("connecting")
 
+    // Expand for video calls when answering
+    if (callType === "video" && isMinimized) {
+      handleRestore()
+    }
+
     callSounds.resume()
 
     const token = incomingAuthToken || authTokenRef.current
