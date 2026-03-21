@@ -7,11 +7,7 @@ import {
   UserIcon as User,
   Settings01Icon as Settings,
   Logout01Icon as LogOut,
-  Wallet01Icon as Wallet,
   ArrowRight01Icon as ArrowRight,
-  Activity01Icon,
-  Wallet01Icon,
-  Exchange01Icon,
 } from "@hugeicons/core-free-icons"
 
 import {
@@ -29,78 +25,20 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useAuth } from "@/components/auth-provider"
-import { NotificationBell } from "@/components/notifications"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { TopNav } from "@/components/top-nav"
-import { useWalletBalances } from "@/hooks/useWalletBalances"
-import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
-import { CommunityActivityPill } from "@/components/community/activity-pill"
+import { NavbarActions } from "@/components/navbar-actions"
 
 export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   const isMobile = useIsMobile()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const [walletOpen, setWalletOpen] = React.useState(false)
   const { user, signOut } = useAuth()
-  const { balances: onChainBalances } = useWalletBalances(60_000)
-  const { usdcBalance: hlUsdc, accountValue: hlAccountValue, balances: hlBalances } = useHyperliquidBalance(user?.userId, !!user)
-
-  // Sum stablecoin on-chain balances + all Hyperliquid spot holdings + futures
-  const estValue = React.useMemo(() => {
-    let total = 0
-    for (const b of onChainBalances) {
-      if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
-    }
-    // Spot holdings (USDC + all tokens at current prices)
-    total += hlBalances.reduce((sum, b) => sum + (b.currentValue || 0), 0)
-    // Futures equity
-    total += hlAccountValue
-    return total
-  }, [onChainBalances, hlBalances, hlAccountValue])
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
     : "User"
   const email = user?.email || ""
   const initials = displayName.charAt(0).toUpperCase()
-
-  /* ── Shared wallet content ── */
-  const walletContent = (
-    <div className="flex flex-col gap-4 py-1">
-      <div className="flex items-baseline justify-between px-1">
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Est. Value</p>
-          <p className="text-xl font-bold tabular-nums tracking-tight mt-0.5">${estValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-normal text-muted-foreground">USD</span></p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <a href="/deposit" className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90">
-          <HugeiconsIcon
-            icon={Exchange01Icon}
-            className="h-3.5 w-3.5 text-white [&_path]:stroke-current [&_path]:fill-none [&_path]:opacity-100"
-          />
-          Deposit
-        </a>
-        <a href="/withdraw" className="flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/50">
-          Withdraw
-        </a>
-      </div>
-      <div className="h-px bg-border/20" />
-      <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-1 mb-1">Wallets</span>
-        {[
-          { label: "Spot Wallet", href: "/portfolio", icon: Wallet, color: "text-primary" },
-          { label: "Futures Wallet", href: "/futures", icon: Activity01Icon, color: "text-primary" },
-          { label: "Funding", href: "/assets", icon: Wallet01Icon, color: "text-primary" },
-        ].map((w) => (
-          <a key={w.label} href={w.href} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/40 group/link">
-            <HugeiconsIcon icon={w.icon} className={`h-3.5 w-3.5 ${w.color}`} />
-            <span className="flex-1 font-medium">{w.label}</span>
-            <HugeiconsIcon icon={ArrowRight} className="h-3 w-3 opacity-0 -translate-x-1 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all" />
-          </a>
-        ))}
-      </div>
-    </div>
-  )
 
   /* ── Shared profile content ── */
   const profileContent = (
@@ -136,12 +74,6 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
         Log out
       </button>
     </div>
-  )
-
-  const walletTrigger = (
-    <button className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/40 active:scale-95 focus:outline-none">
-      <HugeiconsIcon icon={Wallet} className="h-4 w-4" />
-    </button>
   )
 
   const profileTrigger = (
@@ -181,30 +113,7 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
       </div>
 
       <div className="flex items-center gap-0.5 md:gap-1 ml-auto">
-        {/* Wallet — bottom sheet on mobile, hover on desktop */}
-        {isMobile ? (
-          <Sheet open={walletOpen} onOpenChange={setWalletOpen}>
-            <SheetTrigger render={walletTrigger} />
-            <SheetContent side="bottom" className="max-h-[70vh] rounded-t-2xl">
-              <SheetHeader>
-                <SheetTitle className="text-sm">Wallet</SheetTitle>
-              </SheetHeader>
-              <div className="px-2 pb-6">{walletContent}</div>
-            </SheetContent>
-          </Sheet>
-        ) : (
-          <div className="relative group">
-            {walletTrigger}
-            <div className="absolute right-0 top-full pt-2 w-72 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-              <div className="bg-popover/80 shadow-xl shadow-black/8 backdrop-blur-2xl rounded-xl ring-1 ring-white/10 p-3.5 overflow-hidden">
-                {walletContent}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <CommunityActivityPill />
-        <NotificationBell />
+        <NavbarActions />
         <ThemeToggle />
 
         {/* Profile — bottom sheet on mobile, popover on desktop */}

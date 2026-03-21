@@ -40,7 +40,9 @@ export function IncomingCallProvider({ children }: { children: React.ReactNode }
   // Incoming call state
   const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null)
   const [showIncoming, setShowIncoming] = useState(false)
+  const [isIncomingMinimized, setIsIncomingMinimized] = useState(true)
   const dismissedCallsRef = useRef<Set<string>>(new Set())
+  const answeredRef = useRef(false)
 
   // Outgoing call state
   const [outgoingCall, setOutgoingCall] = useState<OutgoingCallData | null>(null)
@@ -63,7 +65,8 @@ export function IncomingCallProvider({ children }: { children: React.ReactNode }
           setIncomingCall(result.incoming as IncomingCallData)
           setShowIncoming(true)
         } else if (!result.incoming) {
-          if (incomingCall) {
+          // Only auto-close if we haven't answered yet
+          if (incomingCall && !answeredRef.current) {
             setShowIncoming(false)
             setIncomingCall(null)
           }
@@ -85,15 +88,23 @@ export function IncomingCallProvider({ children }: { children: React.ReactNode }
   // Incoming call handlers
   const handleIncomingClose = useCallback(() => {
     if (incomingCall) dismissedCallsRef.current.add(incomingCall.callId)
+    answeredRef.current = false
     setShowIncoming(false)
     setIncomingCall(null)
+    setIsIncomingMinimized(true)
   }, [incomingCall])
 
   const handleIncomingEnded = useCallback(() => {
     if (incomingCall) dismissedCallsRef.current.add(incomingCall.callId)
+    answeredRef.current = false
     setShowIncoming(false)
     setIncomingCall(null)
+    setIsIncomingMinimized(true)
   }, [incomingCall])
+
+  const handleIncomingAnswered = useCallback(() => {
+    answeredRef.current = true
+  }, [])
 
   // Outgoing call — start call minimized from anywhere
   const startCall = useCallback((data: OutgoingCallData) => {
@@ -119,7 +130,7 @@ export function IncomingCallProvider({ children }: { children: React.ReactNode }
     <CallContext.Provider value={{ startCall, isInCall }}>
       {children}
 
-      {/* Incoming call — always full screen first (ringing UI) */}
+      {/* Incoming call — starts minimized as a PIP */}
       {incomingCall && (
         <VideoCall
           open={showIncoming}
@@ -129,7 +140,11 @@ export function IncomingCallProvider({ children }: { children: React.ReactNode }
           callerAvatar={incomingCall.callerAvatar || undefined}
           isIncoming
           incomingCallId={incomingCall.callId}
+          onCallStarted={handleIncomingAnswered}
           onCallEnded={handleIncomingEnded}
+          isMinimized={isIncomingMinimized}
+          onMinimize={() => setIsIncomingMinimized(true)}
+          onRestore={() => setIsIncomingMinimized(false)}
         />
       )}
 
