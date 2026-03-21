@@ -35,6 +35,9 @@ interface Props {
 }
 
 export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Props) {
+  // Temporarily disabled until we have a better onboarding system
+  return null
+
   const [active, setActive] = React.useState(false)
   const [current, setCurrent] = React.useState(0)
   const [rect, setRect] = React.useState<DOMRect | null>(null)

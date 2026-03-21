@@ -172,7 +172,7 @@ export function ConversationList({
             onChange={(e) => setSearch(e.target.value)}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            className="w-full bg-transparent text-sm pl-9 pr-3 py-2 outline-none placeholder:text-muted-foreground/40"
+            className="w-full bg-transparent text-base pl-9 pr-3 py-2 outline-none placeholder:text-muted-foreground/40"
           />
         </div>
       </div>

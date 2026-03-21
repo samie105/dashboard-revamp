@@ -148,22 +148,26 @@ function MinimizedPip({
   )
 }
 
-function CallModal({ children }: { children: React.ReactNode }) {
+function CallModal({ children, hidden }: { children: React.ReactNode; hidden?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!ref.current) return
+    if (!ref.current || hidden) return
     gsap.fromTo(
       ref.current,
       { opacity: 0, scale: 0.95 },
       { opacity: 1, scale: 1, duration: 0.35, ease: "power2.out" }
     )
-  }, [])
+  }, [hidden])
 
   return (
     <div
       ref={ref}
-      className="fixed inset-0 z-9998 flex items-center justify-center"
+      className={cn(
+        "fixed inset-0 z-9998 flex items-center justify-center",
+        hidden && "opacity-0 pointer-events-none"
+      )}
+      aria-hidden={hidden}
     >
       {children}
     </div>
@@ -466,49 +470,17 @@ export function VideoCall({
     return () => clearTimeout(timer)
   }, [callState, callType, isVideoOff])
 
-  // Re-register video/audio when minimized state changes
+  // Resume video playback when restoring from minimized (elements stay mounted)
   useEffect(() => {
-    if (!rtkClient.client || !rtkClient.isInRoom) return
-    const timer = setTimeout(() => {
-      if (!rtkClient.client || !rtkClient.isInRoom) return
-      if (callType === "video") {
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = null
-          try {
-            rtkClient.client.self.registerVideoElement(localVideoRef.current, true)
-          } catch { /* ignore */ }
-          const selfTrack = rtkClient.client.self?.videoTrack
-          if (selfTrack && localVideoRef.current) {
-            try {
-              const stream = new MediaStream([selfTrack])
-              localVideoRef.current.srcObject = stream
-              localVideoRef.current.play().catch(() => {})
-            } catch { /* ignore */ }
-          }
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const remote = remoteParticipantRef.current as any
-        if (remoteVideoRef.current && remote) {
-          remoteVideoRef.current.srcObject = null
-          try {
-            remote.registerVideoElement(remoteVideoRef.current)
-          } catch { /* ignore */ }
-          if (remote.videoTrack) {
-            try {
-              const stream = new MediaStream([remote.videoTrack])
-              remoteVideoRef.current.srcObject = stream
-              remoteVideoRef.current.play().catch(() => {})
-            } catch { /* ignore */ }
-          }
-        }
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const remoteP = remoteParticipantRef.current as any
-      if (remoteP) {
-        setupRemoteAudio(remoteP)
-      }
-    }, 150)
-    return () => clearTimeout(timer)
+    if (isMinimized || !rtkClient.client || !rtkClient.isInRoom) return
+    if (callType === "video") {
+      // Just resume playback — no need to re-register since elements stay in DOM
+      if (localVideoRef.current) localVideoRef.current.play().catch(() => {})
+      if (remoteVideoRef.current) remoteVideoRef.current.play().catch(() => {})
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const remoteP = remoteParticipantRef.current as any
+    if (remoteP) setupRemoteAudio(remoteP)
   }, [callType, isMinimized, callState, setupRemoteAudio])
 
   // Loudspeaker toggle
@@ -888,7 +860,9 @@ export function VideoCall({
       try {
         if (next) await c.self.disableAudio()
         else await c.self.enableAudio()
-      } catch { /* ignore */ }
+      } catch {
+        setIsMuted(!next)
+      }
     }
   }
 
@@ -900,7 +874,9 @@ export function VideoCall({
       try {
         if (next) await c.self.disableVideo()
         else await c.self.enableVideo()
-      } catch { /* ignore */ }
+      } catch {
+        setIsVideoOff(!next)
+      }
     }
   }
 
@@ -925,36 +901,31 @@ export function VideoCall({
     />
   )
 
-  // Minimized floating pip
-  if (isMinimized) {
-    if (callState === "ended") {
-      return (
-        <MinimizedPip>
-          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border border-border/30 bg-background/95 backdrop-blur-xl">
-            <Avatar className="w-10 h-10 ring-2 ring-muted/50">
-              <AvatarImage src={avatarUrl(callerAvatar, callerName)} alt={callerName} />
-              <AvatarFallback className="text-xs bg-muted">
-                {getInitials(callerName)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold text-foreground">{callerName}</span>
-              <span className="text-[11px] text-muted-foreground/60">Call ended</span>
-            </div>
-            <button
-              onClick={handleDismiss}
-              className="ml-1 w-7 h-7 rounded-full flex items-center justify-center hover:bg-muted/60 transition-all active:scale-90 text-muted-foreground hover:text-foreground"
-            >
-              <HugeiconsIcon icon={Cancel01Icon} size={14} />
-            </button>
+  // Minimized floating pip (shown alongside hidden CallModal to preserve video tracks)
+  const minimizedPipContent = isMinimized ? (
+    callState === "ended" ? (
+      <MinimizedPip>
+        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border border-border/30 bg-background/95 backdrop-blur-xl">
+          <Avatar className="w-10 h-10 ring-2 ring-muted/50">
+            <AvatarImage src={avatarUrl(callerAvatar, callerName)} alt={callerName} />
+            <AvatarFallback className="text-xs bg-muted">
+              {getInitials(callerName)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-foreground">{callerName}</span>
+            <span className="text-[11px] text-muted-foreground/60">Call ended</span>
           </div>
-        </MinimizedPip>
-      )
-    }
-
-    return (
+          <button
+            onClick={handleDismiss}
+            className="ml-1 w-7 h-7 rounded-full flex items-center justify-center hover:bg-muted/60 transition-all active:scale-90 text-muted-foreground hover:text-foreground"
+          >
+            <HugeiconsIcon icon={Cancel01Icon} size={14} />
+          </button>
+        </div>
+      </MinimizedPip>
+    ) : (
       <MinimizedPip onClick={handleRestore}>
-        {remoteAudioElement}
         <div className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border border-border/30 bg-background/95 backdrop-blur-xl cursor-pointer">
           <div className="relative">
             <Avatar className="w-10 h-10">
@@ -1034,13 +1005,15 @@ export function VideoCall({
         </div>
       </MinimizedPip>
     )
-  }
+  ) : null
 
-  // Full modal call UI
+  // Full modal call UI — always rendered (hidden when minimized to preserve video tracks)
   return (
-    <CallModal>
-      {remoteAudioElement}
-      <div
+    <>
+      {minimizedPipContent}
+      <CallModal hidden={isMinimized}>
+        {remoteAudioElement}
+        <div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={callState === "ended" || callState === "busy" ? handleDismiss : undefined}
       />
@@ -1315,5 +1288,6 @@ export function VideoCall({
         )}
       </div>
     </CallModal>
+    </>
   )
 }

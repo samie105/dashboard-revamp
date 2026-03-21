@@ -129,9 +129,21 @@ export const rtkClient: RTKClientManager = {
       return
     }
     _isJoining = true
+    let attempts = 0
+    const maxAttempts = 3
     try {
-      await _client.joinRoom()
-      _isInRoom = true
+      while (attempts < maxAttempts) {
+        try {
+          await _client.joinRoom()
+          _isInRoom = true
+          return
+        } catch (err) {
+          attempts++
+          if (attempts >= maxAttempts) throw err
+          // Exponential backoff: 500ms, 1500ms
+          await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempts - 1)))
+        }
+      }
     } finally {
       _isJoining = false
     }

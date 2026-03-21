@@ -531,7 +531,7 @@ export default function CommunityPage() {
       )}
 
       <div ref={pageRef} className={cn(
-        "flex-1 flex overflow-hidden",
+        "flex-1 flex overflow-hidden touch-manipulation",
         showMobileChat ? "h-[calc(100dvh-3rem)]" : "h-[calc(100dvh-3rem)] pb-14 md:pb-0"
       )}>
         {/* Conversation List */}
@@ -573,7 +573,7 @@ export default function CommunityPage() {
         </div>
 
         {/* Chat Area */}
-        <div className={`flex-1 flex flex-col bg-background overflow-hidden ${!showMobileChat ? "hidden md:flex" : "flex"}`}>
+        <div className={`flex-1 flex flex-col bg-background overflow-hidden min-w-0 ${!showMobileChat ? "hidden md:flex" : "flex"}`}>
           {selectedParticipant ? (
             <>
               <ChatHeader

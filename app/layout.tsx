@@ -1,6 +1,16 @@
+import type { Viewport } from "next"
 import { Geist, Geist_Mono, Public_Sans } from "next/font/google"
 
 import "./globals.css"
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  minimumScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+}
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils";
 import { ClerkProvider } from "@clerk/nextjs"

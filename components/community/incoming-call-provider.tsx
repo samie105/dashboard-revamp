@@ -157,8 +157,18 @@ export function IncomingCallProvider({ children }: { children: ReactNode }) {
     preloadRTKSDK().catch(() => {})
     // Global presence heartbeat — keeps lastSeen updated across all pages
     updatePresence()
-    const presenceInterval = setInterval(() => updatePresence(), 60_000)
-    return () => clearInterval(presenceInterval)
+    const presenceInterval = setInterval(() => updatePresence(), 45_000)
+
+    // Update presence immediately when user returns to tab
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") updatePresence()
+    }
+    document.addEventListener("visibilitychange", handleVisibility)
+
+    return () => {
+      clearInterval(presenceInterval)
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
   }, [])
 
   // ── On mount: check for active call (reconnection), then cleanup stale ──

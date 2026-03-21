@@ -425,11 +425,15 @@ export function MessageInput({ onSendMessage, onTyping, disabled }: MessageInput
     const vv = window.visualViewport
     if (!vv) return
 
+    let rafId: number | null = null
     const handleResize = () => {
-      if (!containerRef.current) return
-      const offsetFromBottom = window.innerHeight - vv.height - vv.offsetTop
-      containerRef.current.style.transform =
-        offsetFromBottom > 0 ? `translateY(-${offsetFromBottom}px)` : ""
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        if (!containerRef.current) return
+        const offsetFromBottom = window.innerHeight - vv.height - vv.offsetTop
+        containerRef.current.style.transform =
+          offsetFromBottom > 0 ? `translateY(-${offsetFromBottom}px)` : ""
+      })
     }
 
     vv.addEventListener("resize", handleResize)
@@ -437,6 +441,7 @@ export function MessageInput({ onSendMessage, onTyping, disabled }: MessageInput
     return () => {
       vv.removeEventListener("resize", handleResize)
       vv.removeEventListener("scroll", handleResize)
+      if (rafId) cancelAnimationFrame(rafId)
     }
   }, [])
 
@@ -517,7 +522,7 @@ export function MessageInput({ onSendMessage, onTyping, disabled }: MessageInput
   }
 
   return (
-    <div ref={containerRef} className="shrink-0 px-2 py-2 bg-background border-t">
+    <div ref={containerRef} className="shrink-0 px-2 py-2 bg-background border-t touch-manipulation">
       <input ref={fileInputRef} type="file" className="hidden" />
 
       {/* Attachments Preview */}
@@ -671,7 +676,7 @@ export function MessageInput({ onSendMessage, onTyping, disabled }: MessageInput
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           disabled={disabled}
-          className="flex-1 bg-transparent py-2 px-2 text-sm outline-none placeholder:text-muted-foreground/40"
+          className="flex-1 bg-transparent py-2 px-2 text-base outline-none placeholder:text-muted-foreground/40"
         />
 
         <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>

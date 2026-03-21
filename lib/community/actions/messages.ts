@@ -98,7 +98,7 @@ export async function getConversations(): Promise<{
             name: otherProfile?.displayName || "Unknown User",
             avatar: otherProfile?.avatarUrl || null,
             isOnline: otherProfile?.lastSeen
-              ? Date.now() - new Date(otherProfile.lastSeen).getTime() < 2 * 60 * 1000
+              ? Date.now() - new Date(otherProfile.lastSeen).getTime() < 3 * 60 * 1000
               : false,
           },
           lastMessage: lastMsg?.content || "",
