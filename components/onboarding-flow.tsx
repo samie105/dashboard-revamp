@@ -219,6 +219,7 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
 
   if (!active || !rect) return null
 
+  const safeRect = rect as DOMRect
   const isFirst = current === 0
   const isLast = current === steps.length - 1
   const step = steps[current]
@@ -237,10 +238,10 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
             <rect x="0" y="0" width="100%" height="100%" fill="white" />
             <rect
               ref={spotlightRef}
-              x={rect.left - 8}
-              y={rect.top - 8}
-              width={rect.width + 16}
-              height={rect.height + 16}
+              x={safeRect.left - 8}
+              y={safeRect.top - 8}
+              width={safeRect.width + 16}
+              height={safeRect.height + 16}
               rx="16"
               fill="black"
             />
@@ -267,10 +268,10 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
       <div
         className="pointer-events-none absolute rounded-2xl border-2 border-primary/50 animate-pulse"
         style={{
-          left: rect.left - 8,
-          top: rect.top - 8,
-          width: rect.width + 16,
-          height: rect.height + 16,
+          left: safeRect.left - 8,
+          top: safeRect.top - 8,
+          width: safeRect.width + 16,
+          height: safeRect.height + 16,
           transition: "all 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       />
@@ -281,7 +282,7 @@ export function OnboardingFlow({ steps, storageKey, completed, onComplete }: Pro
         onClick={(e) => e.stopPropagation()}
         className="absolute z-10 w-[300px] rounded-2xl border border-border/40 bg-card p-4 shadow-2xl"
         style={{
-          ...getTooltipPosition(rect, step?.placement ?? "bottom", tooltipRef.current?.offsetHeight || 180),
+          ...getTooltipPosition(safeRect, step?.placement ?? "bottom", tooltipRef.current?.offsetHeight || 180),
           opacity: 0,
           transform: "scale(0.95)",
         }}
