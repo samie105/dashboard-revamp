@@ -318,7 +318,6 @@ export function SpotV2OrderForm({ pair, ledgerBalances, positions, balanceLoadin
         <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
           <div className="flex items-center justify-between mb-0.5">
             <span className="text-[10px] font-medium text-muted-foreground">Market Price</span>
-            <span className="text-[10px] text-muted-foreground">Binance</span>
           </div>
           <span className="text-sm font-semibold tabular-nums">
             ${price.toLocaleString(undefined, { maximumFractionDigits: price < 1 ? 6 : 2 })}
