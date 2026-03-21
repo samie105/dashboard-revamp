@@ -53,9 +53,20 @@ export type MessageEventPayload = {
   timestamp: string
 }
 
+// ── Typing event types ──
+
+export type TypingEventType = "typing:start" | "typing:stop"
+
+export type TypingEventPayload = {
+  type: TypingEventType
+  conversationId: string
+  userId: string
+  userName: string
+}
+
 // ── Unified event type ──
 
-export type SSEEventPayload = CallEventPayload | MessageEventPayload
+export type SSEEventPayload = CallEventPayload | MessageEventPayload | TypingEventPayload
 
 // ── Ably REST client (server-side, lazy-initialized) ──
 

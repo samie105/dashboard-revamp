@@ -171,9 +171,9 @@ export function CommunityActivityPill() {
   const initiateCall = useCallback((userId: string, type: "video" | "audio", userName: string, userAvatar?: string | null) => {
     setActivePopover(null)
     startCall({
-      receiverId: userId,
-      receiverName: userName,
-      receiverAvatar: userAvatar || undefined,
+      participantId: userId,
+      participantName: userName,
+      participantAvatar: userAvatar || undefined,
       callType: type,
     })
   }, [startCall])

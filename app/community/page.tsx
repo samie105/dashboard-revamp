@@ -40,14 +40,15 @@ import {
   getOrCreateConversation,
   getRecentUsers,
   markMessagesAsRead,
+  emitTypingEvent,
   type ConversationWithDetails,
   type MessageWithDetails,
   type UserSearchResult,
 } from "@/lib/community/actions/messages"
 import { getImageUploadUrl, getVideoUploadUrl, getAudioUploadUrl } from "@/lib/community/actions/upload"
-import { useMessageEvents } from "@/lib/community/use-events"
+import { useMessageEvents, useTypingEvents } from "@/lib/community/use-events"
 import { useProfile } from "@/components/profile-provider"
-import type { MessageEventPayload } from "@/lib/community/events"
+import type { MessageEventPayload, TypingEventPayload } from "@/lib/community/events"
 
 type OptimisticMessage = MessageWithDetails & { status?: "pending" | "sent" | "error"; uploadProgress?: number; isNew?: boolean }
 
@@ -95,6 +96,10 @@ export default function CommunityPage() {
   const [isLoadingRecent, setIsLoadingRecent] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Typing indicator state
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Load conversations
   const loadConversations = useCallback(async () => {
@@ -198,6 +203,29 @@ export default function CommunityPage() {
 
   useMessageEvents(userId || null, handleMessageEvent)
 
+  // Typing events via Ably
+  const handleTypingEvent = useCallback((event: TypingEventPayload) => {
+    if (event.conversationId !== selectedIdRef.current) return
+    if (event.type === "typing:start") {
+      setIsPartnerTyping(true)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = setTimeout(() => setIsPartnerTyping(false), 4000)
+    } else {
+      setIsPartnerTyping(false)
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+        typingTimeoutRef.current = null
+      }
+    }
+  }, [])
+
+  useTypingEvents(userId || null, handleTypingEvent)
+
+  // Clear typing state when switching conversations
+  useEffect(() => {
+    setIsPartnerTyping(false)
+  }, [selectedId])
+
   // Scroll to bottom
   const prevMessagesLenRef = useRef(0)
   useEffect(() => {
@@ -274,6 +302,11 @@ export default function CommunityPage() {
     setCallOpen(true)
     setIsCallMinimized(false)
   }, [])
+
+  const handleTyping = useCallback((isTyping: boolean) => {
+    if (!selectedId) return
+    emitTypingEvent(selectedId, isTyping)
+  }, [selectedId])
 
   const handleSendMessage = useCallback(async (content: string, attachments?: Attachment[]) => {
     if (!selectedParticipant) return
@@ -646,7 +679,20 @@ export default function CommunityPage() {
                     </div>
                   </div>
 
-                  <MessageInput onSendMessage={handleSendMessage} />
+                  {isPartnerTyping && selectedParticipant && (
+                    <div className="px-4 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-1 duration-200">
+                      <span className="inline-flex items-center gap-1">
+                        {selectedParticipant.name.split(" ")[0]} is typing
+                        <span className="inline-flex gap-0.5">
+                          <span className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <span className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+                        </span>
+                      </span>
+                    </div>
+                  )}
+
+                  <MessageInput onSendMessage={handleSendMessage} onTyping={handleTyping} />
                 </>
               )}
             </>

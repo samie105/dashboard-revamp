@@ -5,7 +5,7 @@ import { getAuthUser } from "@/lib/auth"
 import CommunityMessage from "@/models/CommunityMessage"
 import CommunityConversation from "@/models/CommunityConversation"
 import DashboardProfile from "@/models/DashboardProfile"
-import { emitEvent, type MessageEventPayload } from "@/lib/community/events"
+import { emitEvent, type MessageEventPayload, type TypingEventPayload } from "@/lib/community/events"
 
 export type ConversationWithDetails = {
   id: string
@@ -74,7 +74,7 @@ export async function getConversations(): Promise<{
 
         const otherProfile = otherParticipantId
           ? await DashboardProfile.findOne({ authUserId: otherParticipantId })
-              .select("displayName avatarUrl")
+              .select("displayName avatarUrl lastSeen")
               .lean()
           : null
 
@@ -97,7 +97,9 @@ export async function getConversations(): Promise<{
             id: otherParticipantId || "",
             name: otherProfile?.displayName || "Unknown User",
             avatar: otherProfile?.avatarUrl || null,
-            isOnline: false,
+            isOnline: otherProfile?.lastSeen
+              ? Date.now() - new Date(otherProfile.lastSeen).getTime() < 2 * 60 * 1000
+              : false,
           },
           lastMessage: lastMsg?.content || "",
           lastMessageType: (lastMsg?.type as ConversationWithDetails["lastMessageType"]) || "text",
@@ -493,5 +495,56 @@ export async function deleteMessage(messageId: string): Promise<{
   } catch (error) {
     console.error("Error deleting message:", error)
     return { success: false, error: "Failed to delete message" }
+  }
+}
+
+// ── Presence heartbeat ──
+
+export async function updatePresence(): Promise<void> {
+  try {
+    const user = await init()
+    if (!user) return
+
+    await DashboardProfile.updateOne(
+      { authUserId: user.userId },
+      { lastSeen: new Date() },
+    )
+  } catch {
+    // Silently ignore
+  }
+}
+
+// ── Typing indicators ──
+
+export async function emitTypingEvent(
+  conversationId: string,
+  isTyping: boolean,
+): Promise<void> {
+  try {
+    const user = await init()
+    if (!user) return
+
+    const conversation = await CommunityConversation.findById(conversationId).lean()
+    if (!conversation) return
+
+    const otherParticipantId = conversation.participants.find(
+      (p: string) => p !== user.userId,
+    )
+    if (!otherParticipantId) return
+
+    const profile = await DashboardProfile.findOne({ authUserId: user.userId })
+      .select("displayName")
+      .lean()
+
+    const event: TypingEventPayload = {
+      type: isTyping ? "typing:start" : "typing:stop",
+      conversationId,
+      userId: user.userId,
+      userName: profile?.displayName || "User",
+    }
+
+    await emitEvent(otherParticipantId, event)
+  } catch {
+    // Silently ignore
   }
 }

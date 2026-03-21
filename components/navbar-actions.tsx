@@ -214,7 +214,7 @@ export function NavbarActions() {
 
   const doCall = useCallback((uid: string, type: "video" | "audio", name: string, avatar?: string | null) => {
     setSection(null)
-    startCall({ receiverId: uid, receiverName: name, receiverAvatar: avatar || undefined, callType: type })
+    startCall({ participantId: uid, participantName: name, participantAvatar: avatar || undefined, callType: type })
   }, [startCall])
 
   const dismissNotif = useCallback((id: string) => setNotifs(p => p.filter(n => n.id !== id)), [])

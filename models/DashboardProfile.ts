@@ -29,6 +29,7 @@ export interface IDashboardProfile extends Document {
   theme: "light" | "dark" | "system"
   dashboardLayout: "vertical" | "horizontal"
   onboardingCompleted: string[]
+  lastSeen: Date
   createdAt: Date
   updatedAt: Date
 }
@@ -70,6 +71,7 @@ const DashboardProfileSchema = new Schema<IDashboardProfile>(
     theme: { type: String, enum: ["light", "dark", "system"], default: "system" },
     dashboardLayout: { type: String, enum: ["vertical", "horizontal"], default: "vertical" },
     onboardingCompleted: { type: [String], default: [] },
+    lastSeen: { type: Date, default: Date.now },
   },
   { timestamps: true },
 )

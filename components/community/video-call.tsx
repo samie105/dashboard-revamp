@@ -744,8 +744,6 @@ export function VideoCall({
     setIsAnswering(true)
     setCallState("connecting")
 
-    if (isMinimized) handleRestore()
-
     callSounds.resume()
 
     const token = incomingAuthToken || authTokenRef.current

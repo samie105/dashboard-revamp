@@ -38,12 +38,13 @@ export type Attachment = {
 
 type MessageInputProps = {
   onSendMessage: (content: string, attachments?: Attachment[]) => void
+  onTyping?: (isTyping: boolean) => void
   disabled?: boolean
 }
 
 const WAVEFORM_BARS = 40
 
-export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
+export function MessageInput({ onSendMessage, onTyping, disabled }: MessageInputProps) {
   const [message, setMessage] = useState("")
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
@@ -90,6 +91,38 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
   }, [isFocused])
 
   const hasContent = message.trim().length > 0 || attachments.length > 0 || audioBlob
+
+  // Typing indicator — debounce start/stop
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isTypingRef = useRef(false)
+  useEffect(() => {
+    if (!onTyping) return
+
+    if (message.trim().length > 0) {
+      if (!isTypingRef.current) {
+        isTypingRef.current = true
+        onTyping(true)
+      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = setTimeout(() => {
+        isTypingRef.current = false
+        onTyping(false)
+      }, 3000)
+    } else {
+      if (isTypingRef.current) {
+        isTypingRef.current = false
+        onTyping(false)
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+        typingTimeoutRef.current = null
+      }
+    }
+
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    }
+  }, [message, onTyping])
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)

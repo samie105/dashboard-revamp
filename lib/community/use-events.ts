@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import * as Ably from "ably"
-import type { CallEventPayload, MessageEventPayload, SSEEventPayload } from "@/lib/community/events"
+import type { CallEventPayload, MessageEventPayload, TypingEventPayload, SSEEventPayload } from "@/lib/community/events"
 
 type RealtimeEventHandler = (event: SSEEventPayload) => void
 
@@ -87,6 +87,16 @@ export function useMessageEvents(userId: string | null, onEvent: (event: Message
   const handler = useCallback(
     (event: SSEEventPayload) => {
       if (event.type.startsWith("message:")) onEvent(event as MessageEventPayload)
+    },
+    [onEvent],
+  )
+  return useSSEEvents(userId, handler)
+}
+
+export function useTypingEvents(userId: string | null, onEvent: (event: TypingEventPayload) => void) {
+  const handler = useCallback(
+    (event: SSEEventPayload) => {
+      if (event.type.startsWith("typing:")) onEvent(event as TypingEventPayload)
     },
     [onEvent],
   )
