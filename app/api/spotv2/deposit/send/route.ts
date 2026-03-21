@@ -407,6 +407,23 @@ export async function POST(request: NextRequest) {
           },
         },
       )
+
+      // Notify admin of txHash so it can verify + complete immediately
+      // (don't await — let the response return quickly, polling will pick up the result)
+      const adminUrl = process.env.ADMIN_BACKEND_URL
+      const adminKey = process.env.ADMIN_BACKEND_API_KEY
+      if (adminUrl && adminKey) {
+        fetch(`${adminUrl}/api/deposits/${encodeURIComponent(adminDepositId)}/notify-tx`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": adminKey,
+          },
+          body: JSON.stringify({ depositTxHash: txHash }),
+        }).catch((err) => {
+          console.error("[SpotV2 Deposit Send] Failed to notify admin of txHash:", err)
+        })
+      }
     }
 
     return NextResponse.json({

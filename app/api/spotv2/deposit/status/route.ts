@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Auto-expire deposits stuck in early states for more than 15 minutes
-    const stuckStatuses = ["initiated", "sending"]
+    const stuckStatuses = ["initiated", "sending", "awaiting_confirmation"]
     if (stuckStatuses.includes(localDeposit.status)) {
       const ageMs = Date.now() - new Date(localDeposit.createdAt).getTime()
       if (ageMs > 15 * 60 * 1000) {
