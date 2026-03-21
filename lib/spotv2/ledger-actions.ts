@@ -6,7 +6,19 @@ import SpotV2Ledger from "@/models/SpotV2Ledger"
 import SpotV2Position from "@/models/SpotV2Position"
 import SpotV2Order from "@/models/SpotV2Order"
 import SpotV2Trade from "@/models/SpotV2Trade"
-import { toBinanceSymbol } from "./binance"
+import { fetchSpotV2Pairs } from "./pairs"
+
+// ── CoinGecko ID mapping (fallback price source) ────────────────────────
+
+const COINGECKO_IDS: Record<string, string> = {
+  btc: "bitcoin", eth: "ethereum", sol: "solana", bnb: "binancecoin",
+  xrp: "ripple", ada: "cardano", doge: "dogecoin", dot: "polkadot",
+  avax: "avalanche-2", link: "chainlink", matic: "matic-network",
+  pol: "matic-network", shib: "shiba-inu", ltc: "litecoin", uni: "uniswap",
+  atom: "cosmos", xlm: "stellar", near: "near", apt: "aptos", sui: "sui",
+  arb: "arbitrum", op: "optimism", fil: "filecoin", hbar: "hedera-hashgraph",
+  trx: "tron", ton: "the-open-network", pepe: "pepe", wif: "dogwifcoin",
+}
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -38,22 +50,40 @@ export interface PositionInfo {
   avgEntryPrice: number
 }
 
-// ── Binance price fetch ──────────────────────────────────────────────────
+// ── Price fetch (CoinMarketCap primary, CoinGecko fallback) ──────────────
 
-async function getBinancePrice(token: string): Promise<number | null> {
+async function getTokenPrice(token: string): Promise<number | null> {
+  // Primary: CoinMarketCap via cached pair data
   try {
-    const symbol = toBinanceSymbol(token).toUpperCase()
-    const res = await fetch(
-      `https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`,
-      { signal: AbortSignal.timeout(5_000), cache: "no-store" },
+    const pairs = await fetchSpotV2Pairs()
+    const pair = pairs.find(
+      (p) => p.symbol.toUpperCase() === token.toUpperCase(),
     )
-    if (!res.ok) return null
-    const data = await res.json()
-    const price = parseFloat(data.price)
-    return isNaN(price) ? null : price
+    if (pair && pair.price > 0) return pair.price
   } catch {
-    return null
+    // CMC failed — try fallback
   }
+
+  // Fallback: CoinGecko simple price
+  try {
+    const cgId = COINGECKO_IDS[token.toLowerCase()]
+    if (cgId) {
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(cgId)}&vs_currencies=usd`,
+        { signal: AbortSignal.timeout(5_000), cache: "no-store" },
+      )
+      if (res.ok) {
+        const data = await res.json()
+        const price = data[cgId]?.usd
+        if (typeof price === "number" && price > 0) return price
+      }
+    }
+  } catch {
+    // All sources failed
+  }
+
+  console.error(`[SpotV2] Failed to fetch price for ${token} from all sources`)
+  return null
 }
 
 // ── Auth helper ──────────────────────────────────────────────────────────
@@ -84,7 +114,7 @@ export async function placeSpotV2Order(
 
   // ── Market orders fill instantly ─────────────────────────────────────
   if (orderType === "MARKET") {
-    const price = await getBinancePrice(token)
+    const price = await getTokenPrice(token)
     if (!price) return { success: false, error: "Unable to fetch current price" }
 
     if (side === "BUY") {
@@ -588,21 +618,41 @@ export async function fillLimitSell(
   return { success: true }
 }
 
-// ── Batch fetch Binance prices ───────────────────────────────────────────
+// ── Batch fetch token prices ─────────────────────────────────────────────
 
-export async function getBinancePrices(
+export async function getTokenPrices(
   tokens: string[],
 ): Promise<Map<string, number>> {
+  // Bulk fetch from CMC pairs cache first
   const prices = new Map<string, number>()
-  // Use Promise.allSettled so one failure doesn't block others
-  const results = await Promise.allSettled(
-    tokens.map(async (token) => {
-      const price = await getBinancePrice(token)
-      if (price !== null) prices.set(token, price)
-    }),
-  )
+  try {
+    const pairs = await fetchSpotV2Pairs()
+    for (const token of tokens) {
+      const pair = pairs.find(
+        (p) => p.symbol.toUpperCase() === token.toUpperCase(),
+      )
+      if (pair && pair.price > 0) prices.set(token, pair.price)
+    }
+  } catch {
+    // CMC failed — fall through to individual CoinGecko lookups
+  }
+
+  // Fill any missing tokens from CoinGecko
+  const missing = tokens.filter((t) => !prices.has(t))
+  if (missing.length > 0) {
+    await Promise.allSettled(
+      missing.map(async (token) => {
+        const price = await getTokenPrice(token)
+        if (price !== null) prices.set(token, price)
+      }),
+    )
+  }
+
   return prices
 }
+
+/** @deprecated Use getTokenPrices instead */
+export const getBinancePrices = getTokenPrices
 
 // ── Get Trade History ────────────────────────────────────────────────────
 
