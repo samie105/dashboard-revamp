@@ -121,7 +121,7 @@ export function SpotV2DepositModal({ isOpen, onClose, onDepositComplete }: SpotV
               <HugeiconsIcon icon={Download04Icon} className="h-3.5 w-3.5 text-emerald-500" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Deposit to SpotV2</h2>
+              <h2 className="text-sm font-semibold text-foreground">Deposit to spot wallet</h2>
               <p className="text-[10px] text-muted-foreground">Fund your trading balance</p>
             </div>
           </div>

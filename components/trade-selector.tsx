@@ -173,7 +173,7 @@ function UnsupportedTokenModal({
           {/* Actions */}
           <div className="grid grid-cols-2 gap-3 border-t border-border/30 px-5 py-4">
             <button
-              onClick={() => goTo(`/spot${token.symbol ? `?pair=${token.symbol}` : ""}`)}
+              onClick={() => goTo(`/spotv2${token.symbol ? `?pair=${token.symbol}` : ""}`)}
               className="flex flex-col items-start gap-1.5 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-left transition-colors hover:bg-primary/20"
             >
               <div className="flex items-center gap-2">
@@ -205,7 +205,7 @@ function RouteGrid({ pair, onClose }: { pair?: string; onClose: () => void }) {
   return (
     <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
       {TRADING_ROUTES.map((route) => {
-        const href = pair && (route.href === "/spot" || route.href === "/futures")
+        const href = pair && (route.href === "/spotv2" || route.href === "/futures")
           ? `${route.href}?pair=${pair}`
           : route.href
 

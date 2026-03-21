@@ -182,22 +182,16 @@ async function signTronTransaction(
   walletId: string,
   txID: string,
   walletAddress: string,
-  authorizationPrivateKey: string,
+  authorizationContext: AuthorizationContext,
 ): Promise<string> {
   const hash = txID.startsWith("0x") ? txID : `0x${txID}`
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const signResult = await (privyClient.wallets() as any)._rawSign(
-    walletId,
-    {
-      params: { hash },
-      "privy-authorization-signature": authorizationPrivateKey,
-    },
-  )
+  const signResult = await privyClient.wallets().rawSign(walletId, {
+    params: { hash },
+    authorization_context: authorizationContext,
+  })
 
-  const sig64 = (
-    signResult.data?.signature || signResult.signature || signResult
-  ).replace(/^0x/, "")
+  const sig64 = signResult.signature.replace(/^0x/, "")
 
   const walletHex = TronWeb.address.toHex(walletAddress).toLowerCase()
   const tronWeb = new TronWeb({
@@ -256,16 +250,11 @@ async function sendTokenTron(
 
   const txID = unsignedTx.txID
 
-  const authKey = authorizationContext.authorization_private_keys?.[0]
-  if (!authKey) {
-    throw new Error("Missing Privy authorization key for Tron signing")
-  }
-
   const signature = await signTronTransaction(
     walletId,
     txID,
     fromAddress,
-    authKey,
+    authorizationContext,
   )
   const signedTx = { ...unsignedTx, signature: [signature] }
 

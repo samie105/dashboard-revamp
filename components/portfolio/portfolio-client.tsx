@@ -583,7 +583,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                         ) : (
                           <div className="flex items-center justify-between rounded-lg border border-dashed border-border/40 bg-card/50 px-3 py-3">
                             <p className="text-[11px] text-muted-foreground">No trading wallet configured</p>
-                            <Link href="/spot" className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-primary/90 transition-colors">
+                            <Link href="/spotv2" className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-primary/90 transition-colors">
                               Set Up
                             </Link>
                           </div>

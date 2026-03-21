@@ -10,32 +10,36 @@ import {
   Alert02Icon,
   Clock01Icon,
 } from "@hugeicons/core-free-icons"
-import { useSpotDeposit } from "@/hooks/useSpotDeposit"
+import { useSpotV2Deposit } from "@/hooks/useSpotV2Deposit"
 import { useWallet } from "@/components/wallet-provider"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { getSpotV2Balance } from "@/lib/spotv2/ledger-actions"
+import { useAuth } from "@/components/auth-provider"
 
 // ── Status config ────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; spinning: boolean; color: string }> = {
-  initiated:        { label: "Initializing...",                  spinning: true,  color: "text-muted-foreground" },
-  sending_usdt:     { label: "Sending USDT to treasury...",      spinning: true,  color: "text-amber-500" },
-  awaiting_deposit: { label: "USDT sent, waiting for confirm...", spinning: false, color: "text-amber-500" },
-  deposit_detected: { label: "Deposit detected!",                spinning: false, color: "text-emerald-500" },
-  disbursing:       { label: "Converting to Arb USDC...",        spinning: true,  color: "text-amber-500" },
-  disbursed:        { label: "USDC received, bridging...",       spinning: true,  color: "text-amber-500" },
-  bridging:         { label: "Depositing to Hyperliquid...",     spinning: true,  color: "text-amber-500" },
-  transferring:     { label: "Transferring to Spot wallet...",   spinning: true,  color: "text-amber-500" },
-  completed:        { label: "Funds ready to trade!",            spinning: false, color: "text-emerald-500" },
-  failed:           { label: "Transfer failed",                  spinning: false, color: "text-red-500" },
-  expired:          { label: "Transfer expired",                 spinning: false, color: "text-red-500" },
+  initiating:  { label: "Initializing...",                   spinning: true,  color: "text-muted-foreground" },
+  sending:     { label: "Sending to treasury...",            spinning: true,  color: "text-amber-500" },
+  polling:     { label: "Waiting for confirmation...",       spinning: true,  color: "text-amber-500" },
+  pending:     { label: "Deposit pending...",                spinning: true,  color: "text-amber-500" },
+  detected:    { label: "Deposit detected!",                 spinning: false, color: "text-emerald-500" },
+  matched:     { label: "Deposit matched!",                  spinning: false, color: "text-emerald-500" },
+  verified:    { label: "Verifying deposit...",              spinning: true,  color: "text-amber-500" },
+  processing:  { label: "Processing...",                     spinning: true,  color: "text-amber-500" },
+  completed:   { label: "Funds ready to trade!",             spinning: false, color: "text-emerald-500" },
+  disbursed:   { label: "Funds ready to trade!",             spinning: false, color: "text-emerald-500" },
+  failed:      { label: "Transfer failed",                   spinning: false, color: "text-red-500" },
+  expired:     { label: "Transfer expired",                  spinning: false, color: "text-red-500" },
+  rejected:    { label: "Transfer rejected",                 spinning: false, color: "text-red-500" },
 }
 
 const STAGES = [
-  "sending_usdt", "awaiting_deposit", "deposit_detected",
-  "disbursing", "disbursed", "bridging", "transferring", "completed",
+  "sending", "pending", "detected", "verified", "completed",
 ]
 
 function getStageIndex(status: string): number {
+  if (status === "disbursed") return STAGES.length - 1
   const idx = STAGES.indexOf(status)
   return idx === -1 ? 0 : idx
 }
@@ -51,9 +55,10 @@ const CHAIN_IMG: Record<string, string> = {
 // ── Component ────────────────────────────────────────────────────────────
 
 export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: () => void }) {
-  const { deposit, loading, error, initiate, resumePolling, reset, cancel } = useSpotDeposit()
+  const { deposit, phase, loading, error, initiate, reset } = useSpotV2Deposit()
   const { addresses, isLoading: walletsLoading } = useWallet()
   const { balances: onChainBalances, isLoading: balancesLoading } = useWalletBalances()
+  const { isSignedIn } = useAuth()
 
   const [chain, setChain] = React.useState<"ethereum" | "solana" | "tron">("tron")
   const [amount, setAmount] = React.useState("")
@@ -77,38 +82,31 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
     return match?.balance ?? 0
   }, [onChainBalances, chain])
 
-  // Fetch spot wallet USDC balance
+  // Fetch SpotV2 ledger USDC balance
   const fetchSpotBalance = React.useCallback(async () => {
+    if (!isSignedIn) return
     try {
       setSpotBalanceLoading(true)
-      const res = await fetch("/api/hyperliquid/spot-balances")
-      const data = await res.json()
-      if (data.success && data.data?.balances) {
-        const usdc = data.data.balances.find(
-          (b: { coin: string; total: string }) =>
-            b.coin === "USDC" || b.coin === "USDT",
-        )
-        setSpotBalance(usdc ? parseFloat(usdc.total) : 0)
-      }
+      const balances = await getSpotV2Balance()
+      const usdc = balances.find((b) => b.token === "USDC")
+      setSpotBalance(usdc?.available ?? 0)
     } catch {
       /* silently fail */
     } finally {
       setSpotBalanceLoading(false)
     }
-  }, [])
+  }, [isSignedIn])
 
   React.useEffect(() => { fetchSpotBalance() }, [fetchSpotBalance])
 
-  // Resume any in-progress deposits on mount
-  React.useEffect(() => { resumePolling() }, [resumePolling])
-
   // On completion → refresh balance + notify parent
+  const depositStatus = deposit?.status
   React.useEffect(() => {
-    if (deposit?.status === "completed") {
+    if (depositStatus === "completed" || depositStatus === "disbursed") {
       fetchSpotBalance()
       onTransferComplete?.()
     }
-  }, [deposit?.status, fetchSpotBalance, onTransferComplete])
+  }, [depositStatus, fetchSpotBalance, onTransferComplete])
 
   const handleInitiate = async () => {
     if (!amount || parseFloat(amount) < 5 || !fromAddress) return
@@ -130,11 +128,12 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
     if (usdtBalance > 0) setAmount(String(usdtBalance))
   }
 
-  const isActive = deposit && !["completed", "failed", "expired"].includes(deposit.status)
-  const isTerminal = deposit && ["completed", "failed", "expired"].includes(deposit.status)
+  const terminalStatuses = ["completed", "disbursed", "failed", "expired", "rejected"]
+  const isActive = deposit && phase !== "idle" && !terminalStatuses.includes(deposit.status)
+  const isTerminal = deposit && terminalStatuses.includes(deposit.status)
   const showForm = !deposit || isTerminal
   const statusCfg = deposit
-    ? STATUS_CONFIG[deposit.status] || STATUS_CONFIG.initiated
+    ? STATUS_CONFIG[phase !== "idle" ? phase : deposit.status] || STATUS_CONFIG[deposit.status] || STATUS_CONFIG.pending
     : null
 
   return (
@@ -339,26 +338,21 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
             {/* Step labels */}
             <div className="grid grid-cols-3 gap-2 text-center text-[10px] text-muted-foreground">
               <div>Send USDT</div>
-              <div>Convert & Bridge</div>
+              <div>Confirm</div>
               <div>Ready to Trade</div>
             </div>
 
-            {/* TX hashes */}
-            {(deposit.depositTxHash || deposit.bridgeTxHash) && (
-              <div className="space-y-1 text-[10px] text-muted-foreground/50">
-                {deposit.depositTxHash && (
-                  <p>Send TX: <span className="font-mono text-muted-foreground">{deposit.depositTxHash.slice(0, 12)}...</span></p>
-                )}
-                {deposit.bridgeTxHash && (
-                  <p>Bridge TX: <span className="font-mono text-muted-foreground">{deposit.bridgeTxHash.slice(0, 12)}...</span></p>
-                )}
+            {/* TX hash */}
+            {deposit.depositTxHash && (
+              <div className="text-[10px] text-muted-foreground/50">
+                <p>TX: <span className="font-mono text-muted-foreground">{deposit.depositTxHash.slice(0, 12)}...</span></p>
               </div>
             )}
 
             {/* Cancel for stuck early-stage deposits */}
-            {["initiated", "sending_usdt"].includes(deposit.status) && (
+            {phase === "initiating" && (
               <button
-                onClick={cancel}
+                onClick={handleNewTransfer}
                 className="w-full py-2 bg-accent hover:bg-accent/80 text-red-500 text-xs font-medium rounded-lg transition-colors border border-border/30"
               >
                 Cancel Transfer

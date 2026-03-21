@@ -49,12 +49,12 @@ export const navigateToPage = createVividFunction({
   name: 'navigateToPage',
   description:
     'Navigate to a page in the WorldStreet dashboard. ' +
-    'Valid paths: / (Dashboard home), /spot (Spot trading), /futures (Futures trading), ' +
+    'Valid paths: / (Dashboard home), /spotv2 (Spot trading), /futures (Futures trading), ' +
     '/swap (Token swap), /assets (Portfolio & assets), /deposit (Deposit funds), ' +
     '/withdraw (Withdraw funds), /transactions (Transaction history).',
   parameters: buildParameters({
     path: stringParam(
-      'The URL path to navigate to. Must be one of: /, /spot, /futures, /swap, /assets, /deposit, /withdraw, /transactions',
+      'The URL path to navigate to. Must be one of: /, /spotv2, /futures, /swap, /assets, /deposit, /withdraw, /transactions',
       true,
     ),
   }),

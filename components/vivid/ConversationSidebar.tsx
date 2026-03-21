@@ -38,7 +38,7 @@ interface ConversationSidebarProps {
 const QUICK_LINKS = [
   { label: "Dashboard", href: "/", icon: DashboardSquare01Icon },
   { label: "Portfolio", href: "/portfolio", icon: ChartCandlestickIcon },
-  { label: "Spot Trading", href: "/spot", icon: Activity01Icon },
+  { label: "Spot Trading", href: "/spotv2", icon: Activity01Icon },
   { label: "Profile", href: "/profile", icon: UserIcon },
   { label: "Security", href: "/security", icon: Shield01Icon },
   { label: "Settings", href: "/settings", icon: Settings01Icon },

@@ -47,7 +47,7 @@ function TradeConfirmDialog({
 
   const isFutures = item.type === "futures"
   const isUp = item.change24h >= 0
-  const href = isFutures ? `/futures?pair=${item.symbol}` : `/spot?pair=${item.symbol}`
+  const href = isFutures ? `/futures?pair=${item.symbol}` : `/spotv2?pair=${item.symbol}`
 
   function handleTrade() {
     onClose()
@@ -581,7 +581,7 @@ function RecentTrades({ coins, initialTrades, error }: { coins: CoinData[]; init
           icon={Exchange01Icon}
           title="No recent trades"
           description={`Market trades for ${activePair}/USDT will appear here`}
-          cta={{ label: "Start trading", href: "/spot" }}
+          cta={{ label: "Start trading", href: "/spotv2" }}
         />
       ) : (
         <div className="flex flex-1 flex-col divide-y divide-border/30">
@@ -662,7 +662,7 @@ function Watchlist({ coins, error }: { coins: CoinData[]; error?: string }) {
           <HugeiconsIcon icon={StarIcon} className="h-4 w-4 text-primary" />
             <h3 className="text-base font-semibold">Watchlist</h3>
         </div>
-        <a href="/spot" className="text-xs font-medium text-primary hover:underline">
+        <a href="/spotv2" className="text-xs font-medium text-primary hover:underline">
           View all
         </a>
       </div>
@@ -689,7 +689,7 @@ function Watchlist({ coins, error }: { coins: CoinData[]; error?: string }) {
           icon={StarIcon}
           title="No favorites yet"
           description="Star assets on the Spot page to build your watchlist"
-          cta={{ label: "Browse markets", href: "/spot" }}
+          cta={{ label: "Browse markets", href: "/spotv2" }}
         />
       ) : (
         <div className="flex flex-1 flex-col divide-y divide-border/30">
@@ -860,7 +860,7 @@ function MyPositions() {
             icon={Chart01Icon}
             title="No spot holdings"
             description="Your spot assets will appear here"
-            cta={{ label: "Trade Spot", href: "/spot" }}
+            cta={{ label: "Trade Spot", href: "/spotv2" }}
           />
         ) : (
           <div className="flex flex-1 flex-col divide-y divide-border/30">

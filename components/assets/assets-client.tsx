@@ -877,7 +877,7 @@ export default function AssetsClient() {
                             {m.volume24h > 0 ? `$${(m.volume24h / 1_000_000).toFixed(2)}M` : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <button onClick={() => router.push(`/spot?pair=${m.symbol}`)}
+                            <button onClick={() => router.push(`/spotv2?pair=${m.symbol}`)}
                               className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors">
                               Trade <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
                             </button>
