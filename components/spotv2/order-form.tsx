@@ -9,48 +9,46 @@ import {
 } from "@hugeicons/core-free-icons"
 import { useAuth } from "@/components/auth-provider"
 import { useWallet } from "@/components/wallet-provider"
-import { useWalletBalances } from "@/hooks/useWalletBalances"
 import type { SpotV2Pair } from "./spotv2-types"
 import {
-  getSpotV2Quote,
-  executeSpotV2Trade,
-  type SpotV2QuoteResult,
-} from "@/lib/spotv2/trade-actions"
+  placeSpotV2Order,
+  getSpotV2Balance,
+  getSpotV2Positions,
+  type LedgerBalance,
+  type PositionInfo,
+} from "@/lib/spotv2/ledger-actions"
+import { SpotV2DepositModal } from "./spotv2-deposit-modal"
+import { SpotV2WithdrawModal } from "./spotv2-withdraw-modal"
 
 const MIN_ORDER_VALUE = 10
-const QUOTE_DEBOUNCE_MS = 800
 
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-function formatOutputAmount(rawAmount: string, decimals: number): string {
-  if (!rawAmount) return "0"
-  const str = rawAmount.padStart(decimals + 1, "0")
-  const intPart = str.slice(0, str.length - decimals) || "0"
-  const fracPart = str.slice(str.length - decimals)
-  return `${intPart}.${fracPart.slice(0, 6)}`
-}
+type OrderType = "MARKET" | "LIMIT" | "STOP_LIMIT"
 
 // ── Component ────────────────────────────────────────────────────────────
 
 export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
-  const { user, isSignedIn } = useAuth()
+  const { isSignedIn } = useAuth()
   const { walletsGenerated } = useWallet()
-  const { balances, refetch: refetchBalances } = useWalletBalances()
 
   // Side toggle
   const [side, setSide] = React.useState<"BUY" | "SELL">("BUY")
   const isBuy = side === "BUY"
 
+  // Order type
+  const [orderType, setOrderType] = React.useState<OrderType>("MARKET")
+
   // Inputs
   const [amount, setAmount] = React.useState("")
   const [totalInput, setTotalInput] = React.useState("")
+  const [limitPriceInput, setLimitPriceInput] = React.useState("")
+  const [stopPriceInput, setStopPriceInput] = React.useState("")
   const [editingField, setEditingField] = React.useState<"amount" | "total">("amount")
   const [pct, setPct] = React.useState(0)
 
-  // Quote
-  const [quote, setQuote] = React.useState<SpotV2QuoteResult | null>(null)
-  const [quoteLoading, setQuoteLoading] = React.useState(false)
-  const quoteTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Ledger balance
+  const [ledgerBalances, setLedgerBalances] = React.useState<LedgerBalance[]>([])
+  const [positions, setPositions] = React.useState<PositionInfo[]>([])
+  const [balanceLoading, setBalanceLoading] = React.useState(false)
 
   // Execution
   const [isExecuting, setIsExecuting] = React.useState(false)
@@ -59,123 +57,123 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
     message: string
   } | null>(null)
 
+  // Modals
+  const [depositOpen, setDepositOpen] = React.useState(false)
+  const [withdrawOpen, setWithdrawOpen] = React.useState(false)
+
   const numericAmount = parseFloat(amount) || 0
+  const numericLimitPrice = parseFloat(limitPriceInput) || 0
+  const numericStopPrice = parseFloat(stopPriceInput) || 0
   const price = pair?.price ?? 0
+
+  // The effective price used for calculations
+  const effectivePrice =
+    orderType === "MARKET" ? price : numericLimitPrice > 0 ? numericLimitPrice : price
+
+  // ── Fetch ledger balance ───────────────────────────────────────────────
+
+  const fetchBalances = React.useCallback(async () => {
+    if (!isSignedIn) return
+    setBalanceLoading(true)
+    try {
+      const [bal, pos] = await Promise.all([
+        getSpotV2Balance(),
+        getSpotV2Positions(),
+      ])
+      setLedgerBalances(bal)
+      setPositions(pos)
+    } catch {
+      // silently ignore
+    } finally {
+      setBalanceLoading(false)
+    }
+  }, [isSignedIn])
+
+  React.useEffect(() => {
+    fetchBalances()
+  }, [fetchBalances])
 
   // ── Reset on pair change ───────────────────────────────────────────────
 
   React.useEffect(() => {
     setAmount("")
     setTotalInput("")
+    setLimitPriceInput("")
+    setStopPriceInput("")
     setPct(0)
-    setQuote(null)
     setFeedback(null)
   }, [pair?.symbol])
 
-  // ── Balance lookup ─────────────────────────────────────────────────────
+  // ── Balance lookup from ledger ─────────────────────────────────────────
 
-  const baseBalance = React.useMemo(() => {
-    if (!pair) return 0
-    const match = balances.find(
-      (b) =>
-        b.symbol.toUpperCase() === pair.symbol.toUpperCase() &&
-        b.chain.toLowerCase() === (pair.chain || "ethereum").toLowerCase(),
-    )
-    return match?.balance ?? 0
-  }, [balances, pair])
+  const usdcBalance = React.useMemo(() => {
+    const entry = ledgerBalances.find((b) => b.token === "USDC")
+    return entry?.available ?? 0
+  }, [ledgerBalances])
 
-  const quoteBalance = React.useMemo(() => {
+  const tokenBalance = React.useMemo(() => {
     if (!pair) return 0
-    const chain = (pair.chain || "ethereum").toLowerCase()
-    const match = balances.find(
-      (b) =>
-        b.symbol.toUpperCase() === "USDC" &&
-        b.chain.toLowerCase() === chain,
+    const pos = positions.find(
+      (p) => p.token.toUpperCase() === pair.symbol.toUpperCase(),
     )
-    return match?.balance ?? 0
-  }, [balances, pair])
+    return pos?.quantity ?? 0
+  }, [positions, pair])
+
+  const tokenAvgEntry = React.useMemo(() => {
+    if (!pair) return 0
+    const pos = positions.find(
+      (p) => p.token.toUpperCase() === pair.symbol.toUpperCase(),
+    )
+    return pos?.avgEntryPrice ?? 0
+  }, [positions, pair])
 
   // ── Total sync ─────────────────────────────────────────────────────────
 
   React.useEffect(() => {
-    if (editingField === "amount" && numericAmount > 0 && price > 0) {
-      setTotalInput((numericAmount * price).toFixed(2))
+    if (editingField === "amount" && numericAmount > 0 && effectivePrice > 0) {
+      setTotalInput((numericAmount * effectivePrice).toFixed(2))
     } else if (editingField === "amount" && !amount) {
       setTotalInput("")
     }
-  }, [amount, price, editingField, numericAmount])
-
-  // ── Debounced quote fetching ───────────────────────────────────────────
-
-  React.useEffect(() => {
-    if (quoteTimerRef.current) clearTimeout(quoteTimerRef.current)
-    setQuote(null)
-
-    if (!pair || numericAmount <= 0) {
-      setQuoteLoading(false)
-      return
-    }
-
-    // Skip quote for very small amounts
-    const notional = isBuy ? numericAmount : numericAmount * price
-    if (notional < 1) return
-
-    setQuoteLoading(true)
-    quoteTimerRef.current = setTimeout(async () => {
-      try {
-        // BUY: user enters USD amount → amount is in USDC
-        // SELL: user enters token amount → amount is in token
-        const quoteAmount = isBuy
-          ? (numericAmount * price).toFixed(2)
-          : numericAmount.toString()
-
-        const result = await getSpotV2Quote({
-          chain: pair.chain || "ethereum",
-          contractAddress: pair.contractAddress,
-          symbol: pair.symbol,
-          side,
-          amount: quoteAmount,
-          decimals: isBuy ? 6 : 18,
-        })
-        setQuote(result)
-      } catch {
-        setQuote({ success: false, error: "Failed to fetch quote" })
-      } finally {
-        setQuoteLoading(false)
-      }
-    }, QUOTE_DEBOUNCE_MS)
-
-    return () => {
-      if (quoteTimerRef.current) clearTimeout(quoteTimerRef.current)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [numericAmount, side, pair?.symbol, pair?.chain])
+  }, [amount, effectivePrice, editingField, numericAmount])
 
   // ── Validation ─────────────────────────────────────────────────────────
 
   const balanceError = React.useMemo(() => {
-    if (!isSignedIn || !walletsGenerated || numericAmount <= 0) return null
+    if (!isSignedIn || numericAmount <= 0) return null
     if (isBuy) {
-      const totalNeeded = numericAmount * price
-      if (totalNeeded > quoteBalance) {
-        return `Insufficient USDC (need ~$${totalNeeded.toFixed(2)})`
+      const totalNeeded = numericAmount * effectivePrice
+      if (totalNeeded > usdcBalance) {
+        return `Insufficient USDC (need ~$${totalNeeded.toFixed(2)}, have $${usdcBalance.toFixed(2)})`
       }
     } else {
-      if (numericAmount > baseBalance) {
-        return `Insufficient ${pair?.symbol || "token"} balance`
+      if (numericAmount > tokenBalance) {
+        return `Insufficient ${pair?.symbol || "token"} (have ${tokenBalance.toFixed(6)})`
       }
     }
     return null
-  }, [isBuy, numericAmount, price, quoteBalance, baseBalance, pair?.symbol, isSignedIn, walletsGenerated])
+  }, [isBuy, numericAmount, effectivePrice, usdcBalance, tokenBalance, pair?.symbol, isSignedIn])
 
   const minOrderError = React.useMemo(() => {
-    if (numericAmount <= 0 || price <= 0) return null
-    const notional = isBuy ? numericAmount * price : numericAmount * price
+    if (numericAmount <= 0 || effectivePrice <= 0) return null
+    const notional = numericAmount * effectivePrice
     if (notional < MIN_ORDER_VALUE - 0.005) {
       return `Min order $${MIN_ORDER_VALUE}. Yours: $${notional.toFixed(2)}`
     }
     return null
-  }, [numericAmount, price, isBuy])
+  }, [numericAmount, effectivePrice])
+
+  const limitPriceError = React.useMemo(() => {
+    if (orderType === "MARKET") return null
+    if (numericLimitPrice <= 0) return "Enter a limit price"
+    return null
+  }, [orderType, numericLimitPrice])
+
+  const stopPriceError = React.useMemo(() => {
+    if (orderType !== "STOP_LIMIT") return null
+    if (numericStopPrice <= 0) return "Enter a stop price"
+    return null
+  }, [orderType, numericStopPrice])
 
   const canTrade =
     isSignedIn &&
@@ -184,8 +182,8 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
     !isExecuting &&
     !balanceError &&
     !minOrderError &&
-    quote?.success &&
-    quote.executionData
+    !limitPriceError &&
+    !stopPriceError
 
   // ── Feedback timeout ───────────────────────────────────────────────────
 
@@ -196,6 +194,15 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
   }, [feedback])
 
   // ── Input handlers ─────────────────────────────────────────────────────
+
+  function handleNumericInput(
+    value: string,
+    setter: (v: string) => void,
+  ) {
+    if (/^[0-9]*\.?[0-9]*$/.test(value)) {
+      setter(value)
+    }
+  }
 
   function handleAmountChange(value: string) {
     if (/^[0-9]*\.?[0-9]*$/.test(value)) {
@@ -210,8 +217,8 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
       setEditingField("total")
       setTotalInput(value)
       const numTotal = parseFloat(value) || 0
-      if (numTotal > 0 && price > 0) {
-        setAmount((numTotal / price).toFixed(6))
+      if (numTotal > 0 && effectivePrice > 0) {
+        setAmount((numTotal / effectivePrice).toFixed(6))
       } else {
         setAmount("")
       }
@@ -223,18 +230,18 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
     setPct(p)
     setEditingField("amount")
     if (isBuy) {
-      const maxSpend = quoteBalance
-      if (maxSpend > 0 && price > 0) {
-        const rawAmount = (maxSpend * p) / 100 / price
+      const maxSpend = usdcBalance
+      if (maxSpend > 0 && effectivePrice > 0) {
+        const rawAmount = (maxSpend * p) / 100 / effectivePrice
         setAmount(rawAmount.toFixed(6))
         setTotalInput(((maxSpend * p) / 100).toFixed(2))
       }
     } else {
-      const maxSell = baseBalance
+      const maxSell = tokenBalance
       if (maxSell > 0) {
         const rawAmount = (maxSell * p) / 100
         setAmount(rawAmount.toFixed(6))
-        setTotalInput((rawAmount * price).toFixed(2))
+        setTotalInput((rawAmount * effectivePrice).toFixed(2))
       }
     }
   }
@@ -242,53 +249,35 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
   // ── Execute ────────────────────────────────────────────────────────────
 
   async function handleExecute() {
-    if (!canTrade || !pair || !quote?.executionData) return
+    if (!canTrade || !pair) return
 
     setIsExecuting(true)
     setFeedback(null)
 
     try {
-      const USDC_CHAINS: Record<string, string> = {
-        ethereum: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        arbitrum: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-        polygon: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
-        optimism: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-        bsc: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
-        base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        avalanche: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
-      }
-
-      const chain = (pair.chain || "ethereum").toLowerCase()
-      const usdcAddr = USDC_CHAINS[chain] || USDC_CHAINS.ethereum
-      const tokenAddr = pair.contractAddress || "0x0000000000000000000000000000000000000000"
-
-      const result = await executeSpotV2Trade({
-        chain,
-        pair: `${pair.symbol}/USDC`,
+      const result = await placeSpotV2Order({
+        token: pair.symbol,
         side,
-        fromTokenAddress: isBuy ? usdcAddr : tokenAddr,
-        fromTokenSymbol: isBuy ? "USDC" : pair.symbol,
-        fromAmount: isBuy ? (numericAmount * price).toFixed(2) : numericAmount.toString(),
-        toTokenAddress: isBuy ? tokenAddr : usdcAddr,
-        toTokenSymbol: isBuy ? pair.symbol : "USDC",
-        expectedToAmount: quote.expectedOutput || "0",
-        executionPrice: price.toString(),
-        slippage: 0.5,
-        executionData: quote.executionData,
+        orderType,
+        quantity: numericAmount,
+        limitPrice: orderType !== "MARKET" ? numericLimitPrice : undefined,
+        stopPrice: orderType === "STOP_LIMIT" ? numericStopPrice : undefined,
       })
 
       if (result.success) {
-        setFeedback({
-          type: "success",
-          message: `${isBuy ? "Bought" : "Sold"} ${numericAmount.toFixed(4)} ${pair.symbol}`,
-        })
+        const actionLabel =
+          orderType === "MARKET"
+            ? `${isBuy ? "Bought" : "Sold"} ${numericAmount.toFixed(4)} ${pair.symbol}` +
+              (result.fillPrice ? ` @ $${result.fillPrice.toLocaleString()}` : "")
+            : `${orderType.replace("_", "-")} order placed for ${numericAmount.toFixed(4)} ${pair.symbol}`
+
+        setFeedback({ type: "success", message: actionLabel })
         setAmount("")
         setTotalInput("")
         setPct(0)
-        setQuote(null)
-        refetchBalances()
+        fetchBalances()
       } else {
-        setFeedback({ type: "error", message: result.error || "Trade failed" })
+        setFeedback({ type: "error", message: result.error || "Order failed" })
       }
     } catch {
       setFeedback({ type: "error", message: "Network error — try again" })
@@ -336,16 +325,75 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
       </div>
 
       <div className="flex flex-1 flex-col gap-1.5 p-2">
+        {/* Order type selector */}
+        <div className="flex rounded-lg border border-border/30 bg-accent/10 p-0.5">
+          {(["MARKET", "LIMIT", "STOP_LIMIT"] as const).map((ot) => (
+            <button
+              key={ot}
+              onClick={() => setOrderType(ot)}
+              className={`flex-1 rounded-md py-1 text-[10px] font-semibold transition-colors ${
+                orderType === ot
+                  ? "bg-accent text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {ot === "STOP_LIMIT" ? "Stop" : ot.charAt(0) + ot.slice(1).toLowerCase()}
+            </button>
+          ))}
+        </div>
+
         {/* Market price */}
         <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
           <div className="flex items-center justify-between mb-0.5">
             <span className="text-[10px] font-medium text-muted-foreground">Market Price</span>
-            <span className="text-[10px] text-muted-foreground">{pair.chain || "ethereum"}</span>
+            <span className="text-[10px] text-muted-foreground">Binance</span>
           </div>
           <span className="text-sm font-semibold tabular-nums">
             ${price.toLocaleString(undefined, { maximumFractionDigits: price < 1 ? 6 : 2 })}
           </span>
         </div>
+
+        {/* Stop price input (stop-limit only) */}
+        {orderType === "STOP_LIMIT" && (
+          <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[10px] font-medium text-muted-foreground">Stop Price</span>
+              <span className="text-[10px] text-muted-foreground">USDC</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-sm font-semibold text-muted-foreground/60 mr-0.5">$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={stopPriceInput}
+                onChange={(e) => handleNumericInput(e.target.value, setStopPriceInput)}
+                placeholder="0.00"
+                className="w-full bg-transparent text-sm font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Limit price input (limit + stop-limit) */}
+        {orderType !== "MARKET" && (
+          <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[10px] font-medium text-muted-foreground">Limit Price</span>
+              <span className="text-[10px] text-muted-foreground">USDC</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-sm font-semibold text-muted-foreground/60 mr-0.5">$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={limitPriceInput}
+                onChange={(e) => handleNumericInput(e.target.value, setLimitPriceInput)}
+                placeholder="0.00"
+                className="w-full bg-transparent text-sm font-semibold tabular-nums outline-none placeholder:text-muted-foreground/40"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Amount input */}
         <div className="rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5">
@@ -409,45 +457,45 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
           </div>
         </div>
 
-        {/* Quote info */}
-        {quoteLoading && numericAmount > 0 && (
-          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground px-1">
-            <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin" />
-            Fetching route…
-          </div>
-        )}
-        {quote?.success && quote.expectedOutput && (
+        {/* Order summary for limit/stop-limit */}
+        {orderType !== "MARKET" && numericAmount > 0 && numericLimitPrice > 0 && (
           <div className="rounded-lg border border-border/20 bg-accent/10 px-2.5 py-1 space-y-0.5">
             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>Expected</span>
-              <span className="tabular-nums font-medium">
-                {isBuy
-                  ? `~${formatOutputAmount(quote.expectedOutput, 18)} ${pair.symbol}`
-                  : `~$${formatOutputAmount(quote.expectedOutput, 6)}`}
-              </span>
+              <span>Order Type</span>
+              <span className="font-medium">{orderType === "STOP_LIMIT" ? "Stop-Limit" : "Limit"} (GTC)</span>
             </div>
-            {quote.gasEstimate && quote.gasEstimate !== "0" && (
+            {orderType === "STOP_LIMIT" && numericStopPrice > 0 && (
               <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>Gas Fee</span>
-                <span className="tabular-nums">~${parseFloat(quote.gasEstimate).toFixed(2)}</span>
+                <span>Trigger at</span>
+                <span className="tabular-nums font-medium">${numericStopPrice.toLocaleString()}</span>
               </div>
             )}
-            {quote.priceImpact !== undefined && quote.priceImpact > 0.5 && (
-              <div className="flex items-center justify-between text-[10px] text-amber-500">
-                <span>Price Impact</span>
-                <span className="tabular-nums font-medium">{quote.priceImpact.toFixed(2)}%</span>
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>{isBuy ? "Buy" : "Sell"} at</span>
+              <span className="tabular-nums font-medium">${numericLimitPrice.toLocaleString()}</span>
+            </div>
+            {isBuy && (
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>Lock</span>
+                <span className="tabular-nums font-medium">${(numericAmount * numericLimitPrice).toFixed(2)} USDC</span>
               </div>
             )}
-          </div>
-        )}
-        {quote && !quote.success && quote.error && (
-          <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] border border-amber-500/20 bg-amber-500/5 text-amber-500">
-            <HugeiconsIcon icon={Alert02Icon} className="h-3 w-3 shrink-0" />
-            {quote.error}
           </div>
         )}
 
         {/* Validation warnings */}
+        {limitPriceError && numericAmount > 0 && (
+          <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-medium border border-amber-500/20 bg-amber-500/5 text-amber-500">
+            <HugeiconsIcon icon={Alert02Icon} className="h-3 w-3 shrink-0" />
+            {limitPriceError}
+          </div>
+        )}
+        {stopPriceError && numericAmount > 0 && (
+          <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-medium border border-amber-500/20 bg-amber-500/5 text-amber-500">
+            <HugeiconsIcon icon={Alert02Icon} className="h-3 w-3 shrink-0" />
+            {stopPriceError}
+          </div>
+        )}
         {minOrderError && (
           <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-medium border border-amber-500/20 bg-amber-500/5 text-amber-500">
             <HugeiconsIcon icon={Alert02Icon} className="h-3 w-3 shrink-0" />
@@ -491,14 +539,16 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
           {isExecuting ? (
             <>
               <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin" />
-              Executing…
+              {orderType === "MARKET" ? "Executing…" : "Placing order…"}
             </>
           ) : !isSignedIn ? (
             "Sign in to trade"
           ) : !walletsGenerated ? (
             "Setting up wallet…"
           ) : numericAmount > 0 ? (
-            `${isBuy ? "Buy" : "Sell"} ${numericAmount.toFixed(4)} ${pair.symbol}`
+            orderType === "MARKET"
+              ? `${isBuy ? "Buy" : "Sell"} ${numericAmount.toFixed(4)} ${pair.symbol}`
+              : `Place ${orderType === "STOP_LIMIT" ? "Stop" : "Limit"} ${isBuy ? "Buy" : "Sell"}`
           ) : (
             `${isBuy ? "Buy" : "Sell"} ${pair.symbol}`
           )}
@@ -507,27 +557,82 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
         {/* Balance info */}
         <div className="flex flex-col gap-0.5 rounded-lg bg-accent/10 px-2 py-1.5">
           <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-            <span>{pair.symbol} Balance</span>
+            <span>{pair.symbol} Position</span>
             <span className="tabular-nums font-medium">
               {!isSignedIn
                 ? "—"
-                : !walletsGenerated
+                : balanceLoading
                   ? "Loading…"
-                  : `${baseBalance.toFixed(6)} ${pair.symbol}`}
+                  : tokenBalance > 0
+                    ? `${tokenBalance.toFixed(6)} ${pair.symbol}`
+                    : `0 ${pair.symbol}`}
             </span>
           </div>
+          {tokenBalance > 0 && tokenAvgEntry > 0 && (
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Avg Entry</span>
+              <span className="tabular-nums font-medium">
+                ${tokenAvgEntry.toLocaleString(undefined, { maximumFractionDigits: tokenAvgEntry < 1 ? 6 : 2 })}
+              </span>
+            </div>
+          )}
+          {tokenBalance > 0 && tokenAvgEntry > 0 && price > 0 && (
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-muted-foreground">Unrealized PnL</span>
+              <span
+                className={`tabular-nums font-medium ${
+                  (price - tokenAvgEntry) * tokenBalance >= 0
+                    ? "text-emerald-500"
+                    : "text-red-500"
+                }`}
+              >
+                {((price - tokenAvgEntry) * tokenBalance) >= 0 ? "+" : ""}
+                ${((price - tokenAvgEntry) * tokenBalance).toFixed(2)}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-            <span>USDC Balance</span>
+            <span>USDC Available</span>
             <span className="tabular-nums font-medium">
               {!isSignedIn
                 ? "—"
-                : !walletsGenerated
+                : balanceLoading
                   ? "Loading…"
-                  : `${quoteBalance.toFixed(2)} USDC`}
+                  : `$${usdcBalance.toFixed(2)}`}
             </span>
           </div>
+          {/* Deposit / Withdraw buttons */}
+          {isSignedIn && walletsGenerated && (
+            <div className="flex gap-1.5 mt-1 pt-1 border-t border-border/20">
+              <button
+                onClick={() => setDepositOpen(true)}
+                className="flex-1 rounded-md bg-emerald-500/10 py-1 text-[10px] font-semibold text-emerald-500 transition-colors hover:bg-emerald-500/20"
+              >
+                Deposit
+              </button>
+              <button
+                onClick={() => setWithdrawOpen(true)}
+                className="flex-1 rounded-md bg-orange-500/10 py-1 text-[10px] font-semibold text-orange-500 transition-colors hover:bg-orange-500/20"
+              >
+                Withdraw
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Deposit / Withdraw modals */}
+      <SpotV2DepositModal
+        isOpen={depositOpen}
+        onClose={() => setDepositOpen(false)}
+        onDepositComplete={fetchBalances}
+      />
+      <SpotV2WithdrawModal
+        isOpen={withdrawOpen}
+        onClose={() => setWithdrawOpen(false)}
+        usdcBalance={usdcBalance}
+        onWithdrawComplete={fetchBalances}
+      />
     </div>
   )
 }

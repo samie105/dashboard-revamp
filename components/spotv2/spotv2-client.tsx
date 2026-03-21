@@ -8,6 +8,7 @@ import { TradingViewChart } from "./tradingview-chart"
 import { SpotV2OrderBook } from "./order-book"
 import { SpotV2RecentTrades } from "./recent-trades"
 import { SpotV2OrderForm } from "./order-form"
+import { SpotV2BottomPanel } from "./bottom-panel"
 import { useMarketDataSSE } from "@/hooks/useMarketDataSSE"
 import {
   Sheet,
@@ -16,20 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 
-// ── Placeholder panels (later phases) ────────────────────────────────────
 
-function BottomPanelPlaceholder() {
-  return (
-    <div className="flex h-full items-center justify-center rounded-lg border border-border/10 bg-muted/20">
-      <div className="text-center">
-        <p className="text-sm font-medium text-muted-foreground/70">
-          Positions | Trade History | PnL
-        </p>
-        <p className="mt-1 text-[10px] text-muted-foreground/30">Phase 5</p>
-      </div>
-    </div>
-  )
-}
 
 // ── Top Bar ──────────────────────────────────────────────────────────────
 
@@ -172,7 +160,7 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
           </div>
           {/* Bottom panel — 20% */}
           <div className="flex-1 min-h-0 border-t border-border/10 overflow-hidden">
-            <BottomPanelPlaceholder />
+            <SpotV2BottomPanel pairs={pairs} />
           </div>
         </div>
 
@@ -228,8 +216,8 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         </div>
 
         {/* Bottom panel */}
-        <div className="h-[150px] shrink-0">
-          <BottomPanelPlaceholder />
+        <div className="h-[200px] shrink-0">
+          <SpotV2BottomPanel pairs={pairs} />
         </div>
       </div>
 
