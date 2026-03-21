@@ -28,7 +28,6 @@ import {
   isCallEventMessage,
   MessageContextMenu,
   VideoCall,
-  IncomingCallProvider,
 } from "@/components/community"
 import type { Conversation } from "@/components/community"
 import type { MessageType } from "@/components/community/message-bubble"
@@ -500,7 +499,7 @@ export default function CommunityPage() {
   }, [loadConversations, router])
 
   return (
-    <IncomingCallProvider>
+    <>
       {/* Hide bottom nav when mobile chat is open */}
       {showMobileChat && (
         <style>{`@media (max-width: 767px) { nav.fixed.bottom-0 { display: none !important; } }`}</style>
@@ -872,6 +871,6 @@ export default function CommunityPage() {
           onRestore={() => setIsCallMinimized(false)}
         />
       )}
-    </IncomingCallProvider>
+    </>
   )
 }

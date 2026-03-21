@@ -513,6 +513,80 @@ export async function rejoinCall(callId: string): Promise<{
   }
 }
 
+// ── Recent calls for activity pill ──
+
+export type RecentCallItem = {
+  id: string
+  participantId: string
+  participantName: string
+  participantAvatar: string | null
+  type: CallType
+  status: ICall["status"]
+  duration: number
+  isCaller: boolean
+  createdAt: Date
+  conversationId: string
+}
+
+export async function getRecentCalls(limit = 10): Promise<{
+  success: boolean
+  calls: RecentCallItem[]
+}> {
+  try {
+    const user = await initAction()
+    if (!user) return { success: false, calls: [] }
+
+    const calls = await Call.find({
+      $or: [{ callerId: user.userId }, { receiverId: user.userId }],
+      status: { $in: ["completed", "missed", "declined", "failed"] },
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean()
+
+    if (calls.length === 0) return { success: true, calls: [] }
+
+    // Collect unique participant IDs
+    const participantIds = [
+      ...new Set(
+        calls.map((c) =>
+          c.callerId === user.userId ? c.receiverId : c.callerId
+        )
+      ),
+    ]
+
+    const profiles = await DashboardProfile.find({
+      authUserId: { $in: participantIds },
+    }).lean()
+
+    const profileMap = new Map(profiles.map((p) => [p.authUserId, p]))
+
+    const items: RecentCallItem[] = calls.map((c) => {
+      const isCaller = c.callerId === user.userId
+      const otherId = isCaller ? c.receiverId : c.callerId
+      const profile = profileMap.get(otherId)
+
+      return {
+        id: c._id.toString(),
+        participantId: otherId,
+        participantName: profile?.displayName || "User",
+        participantAvatar: profile?.avatarUrl || null,
+        type: c.type,
+        status: c.status,
+        duration: c.duration,
+        isCaller,
+        createdAt: c.createdAt,
+        conversationId: c.conversationId.toString(),
+      }
+    })
+
+    return { success: true, calls: items }
+  } catch (error) {
+    console.error("Error fetching recent calls:", error)
+    return { success: false, calls: [] }
+  }
+}
+
 // ── Cleanup orphaned calls ──
 
 export async function cleanupOrphanedCalls(): Promise<{ cleaned: number }> {
