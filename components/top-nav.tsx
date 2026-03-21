@@ -53,13 +53,7 @@ const navItems: NavItem[] = [
           icon: BarChartIcon,
         },
         {
-          name: "Spot",
-          description: "Spot trading markets",
-          href: "/spot",
-          icon: Exchange01Icon,
-        },
-        {
-          name: "Spot V2",
+          name: "Spot Trading",
           description: "Multi-chain DEX trading",
           href: "/spotv2",
           icon: Exchange01Icon,

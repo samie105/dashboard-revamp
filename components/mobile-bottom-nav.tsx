@@ -89,7 +89,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     icon: Activity01Icon,
     items: [
       { name: "Markets", url: "/trading/markets", icon: BarChartIcon },
-      { name: "Spot Trading", url: "/spot", icon: Activity01Icon },
+      { name: "Spot Trading", url: "/spotv2", icon: Activity01Icon },
       { name: "Futures", url: "/futures", icon: Chart01Icon },
       { name: "Forex", url: "/forex", icon: GlobeIcon },
       { name: "Binary", url: "/binary", icon: Exchange01Icon },

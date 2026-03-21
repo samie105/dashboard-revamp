@@ -32,8 +32,7 @@ interface TradingRoute {
 }
 
 const TRADING_ROUTES: TradingRoute[] = [
-  { name: "Spot", description: "Buy & sell crypto instantly", href: "/spot", icon: Exchange01Icon },
-  { name: "Spot V2", description: "Multi-chain DEX trading", href: "/spotv2", icon: Exchange01Icon },
+  { name: "Spot Trading", description: "Multi-chain DEX trading", href: "/spotv2", icon: Exchange01Icon },
   { name: "Futures", description: "Perpetual futures trading", href: "/futures", icon: ChartLineData02Icon },
   { name: "Forex", description: "Currency pair trading", href: "/forex", icon: GlobeIcon },
   { name: "Binary", description: "Binary options trading", href: "/binary", icon: BinaryCodeIcon },
