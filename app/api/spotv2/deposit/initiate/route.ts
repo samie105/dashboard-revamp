@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
         depositToken,
         depositAmount,
         depositFromAddress,
+        skipDisbursement: true,
       }),
     })
 
