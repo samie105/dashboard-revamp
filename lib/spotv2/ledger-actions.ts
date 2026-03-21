@@ -105,13 +105,13 @@ export async function placeSpotV2Order(
       if (lockAmount < MIN_ORDER_VALUE)
         return { success: false, error: `Min order $${MIN_ORDER_VALUE}` }
 
-      const ledger = await SpotV2Ledger.findOne({ userId, token: QUOTE_TOKEN })
-      if (!ledger || ledger.available < lockAmount)
+      const ledger = await SpotV2Ledger.findOneAndUpdate(
+        { userId, token: QUOTE_TOKEN, available: { $gte: lockAmount } },
+        { $inc: { available: -lockAmount, locked: lockAmount } },
+        { new: true },
+      )
+      if (!ledger)
         return { success: false, error: "Insufficient USDC balance" }
-
-      ledger.available -= lockAmount
-      ledger.locked += lockAmount
-      await ledger.save()
 
       const order = await SpotV2Order.create({
         userId,
@@ -130,12 +130,13 @@ export async function placeSpotV2Order(
       return { success: true, orderId: order._id.toString() }
     } else {
       // Sell limit: lock token quantity from position
-      const position = await SpotV2Position.findOne({ userId, token })
-      if (!position || position.quantity < quantity)
+      const position = await SpotV2Position.findOneAndUpdate(
+        { userId, token, quantity: { $gte: quantity } },
+        { $inc: { quantity: -quantity } },
+        { new: true },
+      )
+      if (!position)
         return { success: false, error: `Insufficient ${token} balance` }
-
-      position.quantity -= quantity
-      await position.save()
 
       const order = await SpotV2Order.create({
         userId,
@@ -167,13 +168,13 @@ export async function placeSpotV2Order(
       if (lockAmount < MIN_ORDER_VALUE)
         return { success: false, error: `Min order $${MIN_ORDER_VALUE}` }
 
-      const ledger = await SpotV2Ledger.findOne({ userId, token: QUOTE_TOKEN })
-      if (!ledger || ledger.available < lockAmount)
+      const ledger = await SpotV2Ledger.findOneAndUpdate(
+        { userId, token: QUOTE_TOKEN, available: { $gte: lockAmount } },
+        { $inc: { available: -lockAmount, locked: lockAmount } },
+        { new: true },
+      )
+      if (!ledger)
         return { success: false, error: "Insufficient USDC balance" }
-
-      ledger.available -= lockAmount
-      ledger.locked += lockAmount
-      await ledger.save()
 
       const order = await SpotV2Order.create({
         userId,
@@ -192,12 +193,13 @@ export async function placeSpotV2Order(
 
       return { success: true, orderId: order._id.toString() }
     } else {
-      const position = await SpotV2Position.findOne({ userId, token })
-      if (!position || position.quantity < quantity)
+      const position = await SpotV2Position.findOneAndUpdate(
+        { userId, token, quantity: { $gte: quantity } },
+        { $inc: { quantity: -quantity } },
+        { new: true },
+      )
+      if (!position)
         return { success: false, error: `Insufficient ${token} balance` }
-
-      position.quantity -= quantity
-      await position.save()
 
       const order = await SpotV2Order.create({
         userId,
@@ -234,26 +236,30 @@ async function executeBuy(
   if (cost < MIN_ORDER_VALUE)
     return { success: false, error: `Min order $${MIN_ORDER_VALUE}. Yours: $${cost.toFixed(2)}` }
 
-  // Debit USDC
-  const ledger = await SpotV2Ledger.findOne({ userId, token: QUOTE_TOKEN })
-  if (!ledger || ledger.available < cost)
+  // Debit USDC atomically
+  const ledger = await SpotV2Ledger.findOneAndUpdate(
+    { userId, token: QUOTE_TOKEN, available: { $gte: cost } },
+    { $inc: { available: -cost } },
+    { new: true },
+  )
+  if (!ledger)
     return { success: false, error: "Insufficient USDC balance" }
 
-  ledger.available -= cost
-  await ledger.save()
-
-  // Update position (average cost basis)
-  const position = await SpotV2Position.findOneAndUpdate(
+  // Update position: atomically increment quantity, then update avgEntryPrice
+  const oldPosition = await SpotV2Position.findOneAndUpdate(
     { userId, token },
-    {},
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { $inc: { quantity: quantity } },
+    { upsert: true, setDefaultsOnInsert: true },
   )
 
-  const oldTotal = position.quantity * position.avgEntryPrice
-  const newTotal = oldTotal + cost
-  position.quantity += quantity
-  position.avgEntryPrice = position.quantity > 0 ? newTotal / position.quantity : price
-  await position.save()
+  const oldQty = oldPosition?.quantity ?? 0
+  const oldAvg = oldPosition?.avgEntryPrice ?? 0
+  const newQty = oldQty + quantity
+  const newAvg = newQty > 0 ? (oldQty * oldAvg + cost) / newQty : price
+  await SpotV2Position.updateOne(
+    { userId, token },
+    { $set: { avgEntryPrice: newAvg } },
+  )
 
   // Create order record
   const order = await SpotV2Order.create({
@@ -301,21 +307,25 @@ async function executeSell(
   if (proceeds < MIN_ORDER_VALUE)
     return { success: false, error: `Min order $${MIN_ORDER_VALUE}. Yours: $${proceeds.toFixed(2)}` }
 
-  // Validate position
-  const position = await SpotV2Position.findOne({ userId, token })
-  if (!position || position.quantity < quantity)
+  // Atomically debit position (returns OLD doc for PnL calculation)
+  const position = await SpotV2Position.findOneAndUpdate(
+    { userId, token, quantity: { $gte: quantity } },
+    { $inc: { quantity: -quantity } },
+  )
+  if (!position)
     return { success: false, error: `Insufficient ${token} balance` }
 
-  // Compute realized PnL
+  // Compute realized PnL from pre-debit avgEntryPrice
   const realizedPnl = (price - position.avgEntryPrice) * quantity
 
-  // Debit position
-  position.quantity -= quantity
-  if (position.quantity < 1e-12) {
-    position.quantity = 0
-    position.avgEntryPrice = 0
+  // If position is now fully closed, reset avgEntryPrice
+  const remainingQty = position.quantity - quantity
+  if (remainingQty < 1e-12) {
+    await SpotV2Position.updateOne(
+      { userId, token },
+      { $set: { quantity: 0, avgEntryPrice: 0 } },
+    )
   }
-  await position.save()
 
   // Credit USDC
   const ledger = await SpotV2Ledger.findOneAndUpdate(
@@ -489,18 +499,21 @@ export async function fillLimitBuy(
   order.quoteAmount = actualCost
   await order.save()
 
-  // Update position (average cost basis)
-  const position = await SpotV2Position.findOneAndUpdate(
+  // Update position: atomically increment quantity, then update avgEntryPrice
+  const oldPosition = await SpotV2Position.findOneAndUpdate(
     { userId, token },
-    {},
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { $inc: { quantity: quantity } },
+    { upsert: true, setDefaultsOnInsert: true },
   )
 
-  const oldTotal = position.quantity * position.avgEntryPrice
-  const newTotal = oldTotal + actualCost
-  position.quantity += quantity
-  position.avgEntryPrice = position.quantity > 0 ? newTotal / position.quantity : fillPrice
-  await position.save()
+  const oldQty = oldPosition?.quantity ?? 0
+  const oldAvg = oldPosition?.avgEntryPrice ?? 0
+  const newQty = oldQty + quantity
+  const newAvg = newQty > 0 ? (oldQty * oldAvg + actualCost) / newQty : fillPrice
+  await SpotV2Position.updateOne(
+    { userId, token },
+    { $set: { avgEntryPrice: newAvg } },
+  )
 
   // Create trade record
   await SpotV2Trade.create({

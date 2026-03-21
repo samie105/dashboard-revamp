@@ -134,7 +134,7 @@ Wire up the center and right-top panels with live data. TradingView Advanced Cha
 
 ---
 
-## Phase 3: Ledger Models + Market Order Execution
+## Phase 3: Ledger Models + Market Order Execution ✅
 
 ### What to build
 
@@ -150,23 +150,23 @@ No on-chain transaction at trade time. Deposits and withdrawals are separate pha
 
 ### Acceptance criteria
 
-- [ ] `SpotV2Ledger` model: userId, token, available, locked — with compound unique index on (userId, token)
-- [ ] `SpotV2Position` model: userId, token, quantity, avgEntryPrice, unrealizedPnl computed at read time
-- [ ] `SpotV2Order` model: userId, pair, side, orderType, quantity, limitPrice, stopPrice, status, fillPrice, filledAt, lockedAmount
-- [ ] `SpotV2Trade` model: userId, orderId, pair, side, quantity, price, quoteAmount, realizedPnl, fee
-- [ ] Buy order: debit USDC from ledger, credit token position, fill at Binance price
-- [ ] Sell order: debit token from position, credit USDC to ledger, compute realized PnL
-- [ ] Partial sell: sell portion of position, update remaining quantity and avg entry price
-- [ ] Quick-fill percentage slider (0–100%) populates amount from available balance
-- [ ] Bidirectional amount/total inputs (typing in one updates the other)
-- [ ] Balance validation prevents orders exceeding available funds
-- [ ] Minimum order value enforced ($10)
-- [ ] Success/error feedback messages after execution
-- [ ] Price fetched from Binance REST API at execution time
+- [x] `SpotV2Ledger` model: userId, token, available, locked — with compound unique index on (userId, token)
+- [x] `SpotV2Position` model: userId, token, quantity, avgEntryPrice, unrealizedPnl computed at read time
+- [x] `SpotV2Order` model: userId, pair, side, orderType, quantity, limitPrice, stopPrice, status, fillPrice, filledAt, lockedAmount
+- [x] `SpotV2Trade` model: userId, orderId, pair, side, quantity, price, quoteAmount, realizedPnl, fee
+- [x] Buy order: debit USDC from ledger, credit token position, fill at Binance price
+- [x] Sell order: debit token from position, credit USDC to ledger, compute realized PnL
+- [x] Partial sell: sell portion of position, update remaining quantity and avg entry price
+- [x] Quick-fill percentage slider (0–100%) populates amount from available balance
+- [x] Bidirectional amount/total inputs (typing in one updates the other)
+- [x] Balance validation prevents orders exceeding available funds
+- [x] Minimum order value enforced ($10)
+- [x] Success/error feedback messages after execution
+- [x] Price fetched from Binance REST API at execution time
 
 ---
 
-## Phase 4: Limit + Stop-Limit Orders + Cron Monitor
+## Phase 4: Limit + Stop-Limit Orders + Cron Monitor ✅
 
 ### What to build
 
@@ -180,20 +180,20 @@ Extend the order form with limit and stop-limit order types. A Vercel cron job (
 
 ### Acceptance criteria
 
-- [ ] Limit buy: locks USDC, fills when price ≤ limitPrice
-- [ ] Limit sell: locks token position quantity, fills when price ≥ limitPrice
-- [ ] Stop-limit: stop triggers first, then limit fills
-- [ ] Cron endpoint (`/api/spotv2/cron/fill-orders`) checks prices every ~10s
-- [ ] Open orders visible in a tab below the chart
-- [ ] Cancel order: unlocks funds, sets status to CANCELLED
-- [ ] Order expiration: GTC (good till cancelled) — no auto-expiry
-- [ ] Multiple concurrent orders supported per user
-- [ ] Available balance = total - locked across all open orders
-- [ ] Fill latency ≤ ~10s from price reaching target
+- [x] Limit buy: locks USDC, fills when price ≤ limitPrice
+- [x] Limit sell: locks token position quantity, fills when price ≥ limitPrice
+- [x] Stop-limit: stop triggers first, then limit fills
+- [x] Cron endpoint (`/api/spotv2/cron/fill-orders`) checks prices every ~10s
+- [x] Open orders visible in a tab below the chart
+- [x] Cancel order: unlocks funds, sets status to CANCELLED
+- [x] Order expiration: GTC (good till cancelled) — no auto-expiry
+- [x] Multiple concurrent orders supported per user
+- [x] Available balance = total - locked across all open orders
+- [x] Fill latency ≤ ~10s from price reaching target
 
 ---
 
-## Phase 5: Deposit + Withdraw (Funding the Ledger)
+## Phase 5: Deposit + Withdraw (Funding the Ledger) ✅
 
 ### What to build
 
@@ -201,18 +201,18 @@ Users can deposit USDC/USDT from their Privy wallets (Ethereum, Solana, Tron) in
 
 ### Acceptance criteria
 
-- [ ] Deposit modal: select source chain (ETH/SOL/TRON), enter amount, confirm
-- [ ] On-chain transfer to treasury wallet via Privy server-side signing
-- [ ] Ledger credited after on-chain confirmation
+- [x] Deposit modal: select source chain (ETH/SOL/TRON), enter amount, confirm
+- [x] On-chain transfer to treasury wallet via Privy server-side signing
+- [x] Ledger credited after on-chain confirmation
 - [ ] Deposit history visible in SpotV2 page
-- [ ] Withdraw modal: select destination chain, enter amount, confirm
-- [ ] Ledger debited, treasury sends USDC/USDT to user's Privy wallet
-- [ ] Withdraw fails gracefully if treasury has insufficient balance
-- [ ] Both deposit and withdraw require auth
+- [x] Withdraw modal: select destination chain, enter amount, confirm
+- [x] Ledger debited, treasury sends USDC/USDT to user's Privy wallet
+- [x] Withdraw fails gracefully if treasury has insufficient balance
+- [x] Both deposit and withdraw require auth
 
 ---
 
-## Phase 6: Positions + PnL Dashboard
+## Phase 6: Positions + PnL Dashboard ✅
 
 ### What to build
 
@@ -228,18 +228,18 @@ Aggregate PnL stats shown at the top: total PnL, realized, unrealized, win rate.
 
 ### Acceptance criteria
 
-- [ ] Positions tab: token, quantity, avg entry, current value, unrealized PnL
-- [ ] Unrealized PnL = (current_price - avg_entry) × quantity
-- [ ] Open Orders tab: order type, pair, side, price target, quantity, cancel button
-- [ ] Trade History tab: date, pair, side, quantity, fill price, realized PnL
-- [ ] Realized PnL = (sell_price - avg_entry) × quantity
-- [ ] Aggregate stats: total PnL, realized, unrealized, win rate, ROI
-- [ ] Win rate = profitable sells / total sells
-- [ ] All data server-side (persists across sessions)
+- [x] Positions tab: token, quantity, avg entry, current value, unrealized PnL
+- [x] Unrealized PnL = (current_price - avg_entry) × quantity
+- [x] Open Orders tab: order type, pair, side, price target, quantity, cancel button
+- [x] Trade History tab: date, pair, side, quantity, fill price, realized PnL
+- [x] Realized PnL = (sell_price - avg_entry) × quantity
+- [x] Aggregate stats: total PnL, realized, unrealized, win rate, ROI
+- [x] Win rate = profitable sells / total sells
+- [x] All data server-side (persists across sessions)
 
 ---
 
-## Phase 7: Polish + Edge Cases
+## Phase 7: Polish + Edge Cases ✅
 
 ### What to build
 
@@ -247,9 +247,9 @@ Harden edge cases and quality-of-life features. Ensure existing `/spot` (Hyperli
 
 ### Acceptance criteria
 
-- [ ] `/spot` (Hyperliquid) loads and functions identically
-- [ ] No shared state leaks between `/spot` and `/spotv2`
-- [ ] Failed deposits/withdrawals have retry options
-- [ ] Loading and error states handled gracefully
-- [ ] Order form resets properly after execution
-- [ ] Concurrent order placement handles race conditions (atomic ledger updates)
+- [x] `/spot` (Hyperliquid) loads and functions identically
+- [x] No shared state leaks between `/spot` and `/spotv2`
+- [x] Failed deposits/withdrawals have retry options
+- [x] Loading and error states handled gracefully
+- [x] Order form resets properly after execution
+- [x] Concurrent order placement handles race conditions (atomic ledger updates)

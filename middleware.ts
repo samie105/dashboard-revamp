@@ -24,10 +24,11 @@ const isProtectedApi = createRouteMatcher([
   "/api/withdraw(.*)",
 ])
 
-// Webhook routes that should NOT require auth (called by external services)
+// Webhook/cron routes that should NOT require auth (called by external services)
 const isWebhookRoute = createRouteMatcher([
   "/api/webhooks(.*)",
   "/api/deposit/webhook",
+  "/api/spotv2/cron(.*)",
 ])
 
 export default clerkMiddleware(async (auth, req) => {

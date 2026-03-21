@@ -42,6 +42,7 @@ function SpotV2TopBar({
   onOpenMarkets,
   usdcBalance,
   balanceLoading,
+  balanceError,
   onOpenDeposit,
   onOpenWithdraw,
 }: {
@@ -49,6 +50,7 @@ function SpotV2TopBar({
   onOpenMarkets: () => void
   usdcBalance: number
   balanceLoading: boolean
+  balanceError: boolean
   onOpenDeposit: () => void
   onOpenWithdraw: () => void
 }) {
@@ -113,8 +115,8 @@ function SpotV2TopBar({
               <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary shrink-0" />
               <div className="flex flex-col items-end">
                 <span className="text-[9px] text-muted-foreground leading-none">Spot Balance</span>
-                <span className="text-xs font-bold tabular-nums text-foreground">
-                  ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <span className={cn("text-xs font-bold tabular-nums", balanceError ? "text-red-400" : "text-foreground")}>
+                  {balanceError ? "Error" : `$${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </span>
               </div>
             </div>
@@ -143,9 +145,11 @@ function SpotV2TopBar({
               className="flex flex-col items-end rounded-lg px-2 py-1 transition-colors hover:bg-accent active:scale-95"
             >
               <span className="text-[9px] text-muted-foreground leading-none">Balance</span>
-              <span className="text-xs font-bold tabular-nums text-foreground">
+              <span className={cn("text-xs font-bold tabular-nums", balanceError ? "text-red-400" : "text-foreground")}>
                 {balanceLoading
                   ? "···"
+                  : balanceError
+                  ? "Error"
                   : `$${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               </span>
             </button>
@@ -228,6 +232,7 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
   const [ledgerBalances, setLedgerBalances] = React.useState<LedgerBalance[]>([])
   const [positions, setPositions] = React.useState<PositionInfo[]>([])
   const [balanceLoading, setBalanceLoading] = React.useState(false)
+  const [balanceError, setBalanceError] = React.useState(false)
 
   // Lifted deposit/withdraw modal state
   const [depositOpen, setDepositOpen] = React.useState(false)
@@ -253,8 +258,9 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
       ])
       setLedgerBalances(bal)
       setPositions(pos)
+      setBalanceError(false)
     } catch {
-      // silently ignore
+      setBalanceError(true)
     } finally {
       setBalanceLoading(false)
     }
@@ -299,6 +305,7 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         onOpenMarkets={() => setMobileMarketsOpen(true)}
         usdcBalance={usdcBalance}
         balanceLoading={balanceLoading}
+        balanceError={balanceError}
         onOpenDeposit={() => setDepositOpen(true)}
         onOpenWithdraw={() => setWithdrawOpen(true)}
       />

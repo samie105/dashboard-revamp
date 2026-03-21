@@ -64,6 +64,7 @@ export function SpotV2BottomPanel({ pairs }: SpotV2BottomPanelProps) {
   const { isSignedIn } = useAuth()
   const [tab, setTab] = React.useState<Tab>("positions")
   const [loading, setLoading] = React.useState(false)
+  const [fetchError, setFetchError] = React.useState(false)
 
   // Data
   const [positions, setPositions] = React.useState<PositionInfo[]>([])
@@ -115,8 +116,9 @@ export function SpotV2BottomPanel({ pairs }: SpotV2BottomPanelProps) {
       setPositions(pos)
       setOpenOrders(orders as OpenOrder[])
       setTrades(hist as TradeRecord[])
+      setFetchError(false)
     } catch {
-      // silently ignore
+      setFetchError(true)
     } finally {
       setLoading(false)
     }
@@ -197,6 +199,9 @@ export function SpotV2BottomPanel({ pairs }: SpotV2BottomPanelProps) {
 
         {loading && (
           <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin text-muted-foreground" />
+        )}
+        {fetchError && !loading && (
+          <span className="text-[9px] text-red-400">Failed to load</span>
         )}
       </div>
 

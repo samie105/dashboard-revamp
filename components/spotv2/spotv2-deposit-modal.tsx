@@ -301,7 +301,7 @@ export function SpotV2DepositModal({ isOpen, onClose, onDepositComplete }: SpotV
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-white transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading && <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin" />}
-                {loading ? "Processing…" : isTerminal ? "New Deposit" : `Deposit ${token}`}
+                {loading ? "Processing…" : isTerminal ? (isSuccess ? "New Deposit" : "Try Again") : `Deposit ${token}`}
               </button>
             </div>
           )}
