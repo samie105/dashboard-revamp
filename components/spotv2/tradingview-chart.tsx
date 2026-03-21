@@ -30,7 +30,7 @@ function TradingViewChartInner({ symbol }: TradingViewChartProps) {
     script.async = true
     script.textContent = JSON.stringify({
       autosize: true,
-      symbol: `BINANCE:${symbol.toUpperCase()}USDT`,
+      symbol: `${symbol.toUpperCase()}USDT`,
       interval: "60",
       timezone: "Etc/UTC",
       theme: "dark",
