@@ -16,7 +16,7 @@ import {
   type PositionInfo,
 } from "@/lib/spotv2/ledger-actions"
 
-const MIN_ORDER_VALUE = 10
+const MIN_ORDER_VALUE = 3
 
 type OrderType = "MARKET" | "LIMIT" | "STOP_LIMIT"
 

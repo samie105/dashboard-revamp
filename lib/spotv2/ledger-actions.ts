@@ -96,7 +96,7 @@ async function requireUserId(): Promise<string> {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-const MIN_ORDER_VALUE = 10
+const MIN_ORDER_VALUE = 3
 const QUOTE_TOKEN = "USDC"
 
 // ── Place Order (market, limit, stop-limit) ──────────────────────────────

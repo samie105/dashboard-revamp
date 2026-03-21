@@ -10,7 +10,7 @@ const ADMIN_KEY = process.env.ADMIN_BACKEND_API_KEY
 
 const VALID_CHAINS = ["ethereum", "solana", "tron"] as const
 const VALID_TOKENS = ["USDT", "USDC"] as const
-const MIN_DEPOSIT = 5
+const MIN_DEPOSIT = 2
 
 export async function POST(request: NextRequest) {
   try {

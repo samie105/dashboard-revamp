@@ -80,9 +80,12 @@ export function SpotV2DepositModal({ isOpen, onClose, onDepositComplete }: SpotV
 
   const parsedAmount = parseFloat(amount) || 0
 
+  const insufficientBalance = !balancesLoading && parsedAmount > 0 && parsedAmount > onChainBalance
+
   const handleInitiate = async () => {
-    if (parsedAmount < 5) return
+    if (parsedAmount < 2) return
     if (!fromAddress) return
+    if (insufficientBalance) return
     await initiate({
       depositChain: chain,
       depositAmount: parsedAmount,
@@ -205,7 +208,7 @@ export function SpotV2DepositModal({ isOpen, onClose, onDepositComplete }: SpotV
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[11px] font-medium text-muted-foreground">Amount</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-muted-foreground">Min 5 {token}</span>
+                    <span className="text-[11px] text-muted-foreground">Min 2 {token}</span>
                     {onChainBalance > 0 && (
                       <button
                         onClick={() => setAmount(onChainBalance.toFixed(2))}
@@ -247,8 +250,13 @@ export function SpotV2DepositModal({ isOpen, onClose, onDepositComplete }: SpotV
                     </button>
                   ))}
                 </div>
-                {parsedAmount > 0 && parsedAmount < 5 && (
-                  <p className="text-[10px] text-red-500 mt-2">Minimum deposit is 5 {token}</p>
+                {parsedAmount > 0 && parsedAmount < 2 && (
+                  <p className="text-[10px] text-red-500 mt-2">Minimum deposit is 2 {token}</p>
+                )}
+                {insufficientBalance && (
+                  <p className="text-[10px] text-red-500 mt-2">
+                    Insufficient {token} balance (have {onChainBalance.toFixed(2)}, need {parsedAmount.toFixed(2)})
+                  </p>
                 )}
               </div>
 
@@ -297,7 +305,7 @@ export function SpotV2DepositModal({ isOpen, onClose, onDepositComplete }: SpotV
 
               <button
                 onClick={isTerminal ? handleNewDeposit : handleInitiate}
-                disabled={loading || (!isTerminal && (parsedAmount < 5 || !fromAddress))}
+                disabled={loading || (!isTerminal && (parsedAmount < 2 || !fromAddress || insufficientBalance))}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-white transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading && <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin" />}

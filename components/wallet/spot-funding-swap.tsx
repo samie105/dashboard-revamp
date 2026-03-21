@@ -108,8 +108,11 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
     }
   }, [depositStatus, fetchSpotBalance, onTransferComplete])
 
+  const parsedAmount = parseFloat(amount) || 0
+  const insufficientBalance = !balancesLoading && parsedAmount > 0 && parsedAmount > usdtBalance
+
   const handleInitiate = async () => {
-    if (!amount || parseFloat(amount) < 5 || !fromAddress) return
+    if (!amount || parsedAmount < 2 || !fromAddress || insufficientBalance) return
     await initiate({
       depositChain: chain,
       depositAmount: parseFloat(amount),
@@ -210,7 +213,7 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  min={5}
+                  min={2}
                   className="min-w-0 flex-1 bg-transparent text-sm font-medium placeholder:text-muted-foreground/50 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <div className="flex items-center gap-2 shrink-0">
@@ -225,8 +228,13 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
                 </div>
               </div>
 
-              {amount && parseFloat(amount) < 5 && (
-                <p className="text-[10px] text-red-500">Minimum transfer is 5 USDT</p>
+              {amount && parsedAmount < 2 && (
+                <p className="text-[10px] text-red-500">Minimum transfer is 2 USDT</p>
+              )}
+              {insufficientBalance && (
+                <p className="text-[10px] text-red-500">
+                  Insufficient USDT balance (have {usdtBalance.toFixed(2)}, need {parsedAmount.toFixed(2)})
+                </p>
               )}
             </div>
 
@@ -255,8 +263,8 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
 
               <div className="flex items-center gap-2 rounded-lg bg-card border border-border/60 px-3 py-2.5">
                 <span className="min-w-0 flex-1 text-sm font-medium">
-                  {amount && parseFloat(amount) >= 5
-                    ? `≈ ${parseFloat(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  {amount && parsedAmount >= 2
+                    ? `≈ ${parsedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                     : "0.00"}
                 </span>
                 <span className="text-xs font-medium shrink-0">USDC</span>
@@ -276,7 +284,7 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
             {/* Submit */}
             <button
               onClick={isTerminal ? handleNewTransfer : handleInitiate}
-              disabled={loading || (!isTerminal && (!amount || parseFloat(amount) < 5 || !fromAddress))}
+              disabled={loading || (!isTerminal && (!amount || parsedAmount < 2 || !fromAddress || insufficientBalance))}
               className="w-full py-3 bg-primary hover:bg-primary/90 disabled:bg-accent disabled:text-muted-foreground text-primary-foreground font-semibold text-sm rounded-xl transition-colors"
             >
               {loading ? (
