@@ -39,10 +39,11 @@ import {
 import { useGlobalCall } from "@/components/community/incoming-call-provider"
 
 /* ─── Types ─── */
-type ActiveSection = "wallet" | "community" | "notifications" | null
-type CommunityTab = "messages" | "calls"
+type ActiveSection = "wallet" | "video-call" | "voice-call" | "messages" | "notifications" | null
+type CallTab = "suggestions" | "recents"
+type MessagesTab = "messages" | "people"
 
-const SECTIONS: ActiveSection[] = ["wallet", "community", "notifications"]
+const SECTIONS: ActiveSection[] = ["wallet", "video-call", "voice-call", "messages", "notifications"]
 
 /* ─── Helpers ─── */
 function formatLastMessage(c: ConversationWithDetails): string {
@@ -116,6 +117,8 @@ export function NavbarActions() {
   const [convos, setConvos] = useState<ConversationWithDetails[]>([])
   const [calls, setCalls] = useState<RecentCallItem[]>([])
   const [users, setUsers] = useState<UserSearchResult[]>([])
+  const videoCalls = useMemo(() => calls.filter(c => c.type === "video"), [calls])
+  const audioCalls = useMemo(() => calls.filter(c => c.type === "audio"), [calls])
 
   /* ── Notification data ── */
   const [notifs, setNotifs] = useState(INITIAL_ANNOUNCEMENTS)
@@ -123,7 +126,8 @@ export function NavbarActions() {
 
   /* ── UI state ── */
   const [section, setSection] = useState<ActiveSection>(null)
-  const [comTab, setComTab] = useState<CommunityTab>("messages")
+  const [callTab, setCallTab] = useState<CallTab>("suggestions")
+  const [msgTab, setMsgTab] = useState<MessagesTab>("messages")
   const containerRef = useRef<HTMLDivElement>(null)
   const pillRef = useRef<HTMLDivElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
@@ -180,9 +184,10 @@ export function NavbarActions() {
 
   /* ── Tab content fade ── */
   useEffect(() => {
-    if (!tabContentRef.current || section !== "community") return
+    if (!tabContentRef.current) return
+    if (section !== "video-call" && section !== "voice-call" && section !== "messages") return
     gsap.fromTo(tabContentRef.current, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: 0.15, ease: "power2.out" })
-  }, [comTab, section])
+  }, [callTab, msgTab, section])
 
   /* ── Desktop hover ── */
   const enter = useCallback((s: ActiveSection) => {
@@ -234,17 +239,43 @@ export function NavbarActions() {
           </button>
         )}
 
-        {/* Community */}
+        {/* Video Call */}
         <div className="relative border-l border-border/30">
           {isMobile ? (
-            <button onClick={() => tap("community")} className={cn("flex items-center justify-center h-8 w-8 transition-colors relative", section === "community" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
+            <button onClick={() => tap("video-call")} className={cn("flex items-center justify-center h-8 w-8 transition-colors", section === "video-call" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
+              <HugeiconsIcon icon={Video01Icon} size={14} />
+            </button>
+          ) : (
+            <button onMouseEnter={() => enter("video-call")} className={cn("flex items-center justify-center h-8 w-9 transition-colors", section === "video-call" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 hover:text-foreground hover:bg-muted/50")}>
+              <HugeiconsIcon icon={Video01Icon} size={15} />
+            </button>
+          )}
+        </div>
+
+        {/* Voice Call */}
+        <div className="relative border-l border-border/30">
+          {isMobile ? (
+            <button onClick={() => tap("voice-call")} className={cn("flex items-center justify-center h-8 w-8 transition-colors", section === "voice-call" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
+              <HugeiconsIcon icon={Call02Icon} size={14} />
+            </button>
+          ) : (
+            <button onMouseEnter={() => enter("voice-call")} className={cn("flex items-center justify-center h-8 w-9 transition-colors", section === "voice-call" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 hover:text-foreground hover:bg-muted/50")}>
+              <HugeiconsIcon icon={Call02Icon} size={15} />
+            </button>
+          )}
+        </div>
+
+        {/* Messages */}
+        <div className="relative border-l border-border/30">
+          {isMobile ? (
+            <button onClick={() => tap("messages")} className={cn("flex items-center justify-center h-8 w-8 transition-colors relative", section === "messages" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
               <HugeiconsIcon icon={Message01Icon} size={14} />
               {unread > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 h-3 min-w-3 px-0.5 rounded-full bg-primary text-primary-foreground text-[7px] flex items-center justify-center font-bold">{unread > 9 ? "9+" : unread}</div>
               )}
             </button>
           ) : (
-            <Link href="/community" onMouseEnter={() => enter("community")} className={cn("flex items-center justify-center h-8 w-9 transition-colors relative", section === "community" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 hover:text-foreground hover:bg-muted/50")}>
+            <Link href="/community" onMouseEnter={() => enter("messages")} className={cn("flex items-center justify-center h-8 w-9 transition-colors relative", section === "messages" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 hover:text-foreground hover:bg-muted/50")}>
               <HugeiconsIcon icon={Message01Icon} size={15} />
               {unread > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-primary text-primary-foreground text-[8px] flex items-center justify-center font-bold">{unread > 9 ? "9+" : unread}</div>
@@ -285,7 +316,7 @@ export function NavbarActions() {
             {/* Header */}
             <div className="flex items-center justify-between px-3.5 py-2 border-b border-border/15">
               <span className="text-xs font-semibold text-foreground/90">
-                {section === "wallet" ? "Wallet" : section === "community" ? "Community" : "Notifications"}
+                {section === "wallet" ? "Wallet" : section === "video-call" ? "Video Call" : section === "voice-call" ? "Voice Call" : section === "messages" ? "Messages" : "Notifications"}
               </span>
               {isMobile && (
                 <button onClick={() => setSection(null)} className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted/50 transition-colors">
@@ -332,28 +363,184 @@ export function NavbarActions() {
                 </div>
               )}
 
-              {/* ══════ Community ══════ */}
-              {section === "community" && (
+              {/* ══════ Video Call ══════ */}
+              {section === "video-call" && (
                 <div>
-                  {/* Tabs */}
                   <div className="flex items-center gap-0.5 p-0.5 bg-muted/40 rounded-lg mx-3 mt-2.5 mb-1.5">
-                    {(["messages", "calls"] as CommunityTab[]).map(t => (
+                    {(["suggestions", "recents"] as CallTab[]).map(t => (
                       <button
                         key={t}
-                        onClick={() => setComTab(t)}
+                        onClick={() => setCallTab(t)}
                         className={cn(
                           "flex-1 text-[11px] font-medium py-1 rounded-md transition-all duration-150",
-                          comTab === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground/60 hover:text-muted-foreground"
+                          callTab === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground/60 hover:text-muted-foreground"
                         )}
                       >
-                        {t === "messages" ? "Messages" : "Calls"}
+                        {t === "suggestions" ? "Suggestions" : "Recents"}
                       </button>
                     ))}
                   </div>
 
                   <div ref={tabContentRef} className="max-h-72 overflow-y-auto">
-                    {/* ── Messages Tab ── */}
-                    {comTab === "messages" && (
+                    {callTab === "suggestions" && (
+                      <>
+                        {users.length === 0 ? (
+                          <div className="px-4 py-8 text-center text-xs text-muted-foreground/50">No suggestions</div>
+                        ) : (
+                          <div className="py-0.5">
+                            {users.map(u => (
+                              <div key={u.id} className="flex items-center gap-2.5 px-3.5 py-2 hover:bg-muted/40 transition-colors">
+                                <Avatar className="h-8 w-8 shrink-0">
+                                  <AvatarImage src={avatarUrl(u.avatar, u.name)} />
+                                  <AvatarFallback className="text-[10px] bg-muted">{u.name[0]?.toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                                <span className="text-xs font-medium text-foreground/80 truncate flex-1 min-w-0">{u.name}</span>
+                                <button onClick={() => doCall(u.id, "video", u.name, u.avatar)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-blue-500 hover:bg-blue-500/10 transition-all active:scale-90" title="Video call">
+                                  <HugeiconsIcon icon={Video01Icon} size={13} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {callTab === "recents" && (
+                      <>
+                        {videoCalls.length === 0 ? (
+                          <div className="px-4 py-8 text-center text-xs text-muted-foreground/50">No recent video calls</div>
+                        ) : (
+                          <div className="py-0.5">
+                            {videoCalls.slice(0, 5).map(call => {
+                              const lbl = callLabel(call)
+                              return (
+                                <div key={call.id} className="flex items-center gap-2.5 px-3.5 py-2 border-b border-border/8 last:border-b-0">
+                                  <Avatar className="h-8 w-8 shrink-0">
+                                    <AvatarImage src={avatarUrl(call.participantAvatar, call.participantName)} />
+                                    <AvatarFallback className="text-[10px] bg-muted">{call.participantName[0]?.toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-xs font-medium text-foreground/80 truncate block">{call.participantName}</span>
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                      <HugeiconsIcon icon={call.isCaller ? CallOutgoing04Icon : CallIncoming04Icon} size={10} className={lbl.negative ? "text-destructive" : "text-muted-foreground/50"} />
+                                      <HugeiconsIcon icon={Video01Icon} size={10} className="text-muted-foreground/40" />
+                                      <span className={cn("text-[10px]", lbl.negative ? "text-destructive" : "text-muted-foreground/50")}>{lbl.text}</span>
+                                      <span className="text-[10px] text-muted-foreground/30 ml-auto shrink-0">{timeAgo(new Date(call.createdAt))}</span>
+                                    </div>
+                                  </div>
+                                  <button onClick={() => doCall(call.participantId, "video", call.participantName, call.participantAvatar)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-blue-500 hover:bg-blue-500/10 transition-all active:scale-90 shrink-0" title="Video call">
+                                    <HugeiconsIcon icon={Video01Icon} size={13} />
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ══════ Voice Call ══════ */}
+              {section === "voice-call" && (
+                <div>
+                  <div className="flex items-center gap-0.5 p-0.5 bg-muted/40 rounded-lg mx-3 mt-2.5 mb-1.5">
+                    {(["suggestions", "recents"] as CallTab[]).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setCallTab(t)}
+                        className={cn(
+                          "flex-1 text-[11px] font-medium py-1 rounded-md transition-all duration-150",
+                          callTab === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground/60 hover:text-muted-foreground"
+                        )}
+                      >
+                        {t === "suggestions" ? "Suggestions" : "Recents"}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div ref={tabContentRef} className="max-h-72 overflow-y-auto">
+                    {callTab === "suggestions" && (
+                      <>
+                        {users.length === 0 ? (
+                          <div className="px-4 py-8 text-center text-xs text-muted-foreground/50">No suggestions</div>
+                        ) : (
+                          <div className="py-0.5">
+                            {users.map(u => (
+                              <div key={u.id} className="flex items-center gap-2.5 px-3.5 py-2 hover:bg-muted/40 transition-colors">
+                                <Avatar className="h-8 w-8 shrink-0">
+                                  <AvatarImage src={avatarUrl(u.avatar, u.name)} />
+                                  <AvatarFallback className="text-[10px] bg-muted">{u.name[0]?.toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                                <span className="text-xs font-medium text-foreground/80 truncate flex-1 min-w-0">{u.name}</span>
+                                <button onClick={() => doCall(u.id, "audio", u.name, u.avatar)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-emerald-500 hover:bg-emerald-500/10 transition-all active:scale-90" title="Voice call">
+                                  <HugeiconsIcon icon={Call02Icon} size={13} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {callTab === "recents" && (
+                      <>
+                        {audioCalls.length === 0 ? (
+                          <div className="px-4 py-8 text-center text-xs text-muted-foreground/50">No recent voice calls</div>
+                        ) : (
+                          <div className="py-0.5">
+                            {audioCalls.slice(0, 5).map(call => {
+                              const lbl = callLabel(call)
+                              return (
+                                <div key={call.id} className="flex items-center gap-2.5 px-3.5 py-2 border-b border-border/8 last:border-b-0">
+                                  <Avatar className="h-8 w-8 shrink-0">
+                                    <AvatarImage src={avatarUrl(call.participantAvatar, call.participantName)} />
+                                    <AvatarFallback className="text-[10px] bg-muted">{call.participantName[0]?.toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-xs font-medium text-foreground/80 truncate block">{call.participantName}</span>
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                      <HugeiconsIcon icon={call.isCaller ? CallOutgoing04Icon : CallIncoming04Icon} size={10} className={lbl.negative ? "text-destructive" : "text-muted-foreground/50"} />
+                                      <HugeiconsIcon icon={Call02Icon} size={10} className="text-muted-foreground/40" />
+                                      <span className={cn("text-[10px]", lbl.negative ? "text-destructive" : "text-muted-foreground/50")}>{lbl.text}</span>
+                                      <span className="text-[10px] text-muted-foreground/30 ml-auto shrink-0">{timeAgo(new Date(call.createdAt))}</span>
+                                    </div>
+                                  </div>
+                                  <button onClick={() => doCall(call.participantId, "audio", call.participantName, call.participantAvatar)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-emerald-500 hover:bg-emerald-500/10 transition-all active:scale-90 shrink-0" title="Voice call">
+                                    <HugeiconsIcon icon={Call02Icon} size={13} />
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ══════ Messages ══════ */}
+              {section === "messages" && (
+                <div>
+                  <div className="flex items-center gap-0.5 p-0.5 bg-muted/40 rounded-lg mx-3 mt-2.5 mb-1.5">
+                    {(["messages", "people"] as MessagesTab[]).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setMsgTab(t)}
+                        className={cn(
+                          "flex-1 text-[11px] font-medium py-1 rounded-md transition-all duration-150",
+                          msgTab === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground/60 hover:text-muted-foreground"
+                        )}
+                      >
+                        {t === "messages" ? "Messages" : "People"}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div ref={tabContentRef} className="max-h-72 overflow-y-auto">
+                    {msgTab === "messages" && (
                       <>
                         {convos.length === 0 ? (
                           <div className="px-4 py-8 text-center text-xs text-muted-foreground/50">No conversations yet</div>
@@ -391,90 +578,42 @@ export function NavbarActions() {
                             ))}
                           </div>
                         )}
-                        <div className="border-t border-border/10 px-3.5 py-2">
-                          <Link href="/community" onClick={() => setSection(null)} className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
-                            View all messages →
-                          </Link>
-                        </div>
                       </>
                     )}
 
-                    {/* ── Calls Tab ── */}
-                    {comTab === "calls" && (
+                    {msgTab === "people" && (
                       <>
-                        {calls.length > 0 && (
-                          <>
-                            <div className="px-3.5 pt-2 pb-1">
-                              <span className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Recent</span>
-                            </div>
-                            {calls.slice(0, 5).map(call => {
-                              const lbl = callLabel(call)
-                              return (
-                                <div key={call.id} className="flex items-center gap-2.5 px-3.5 py-2 border-b border-border/8 last:border-b-0">
-                                  <Avatar className="h-8 w-8 shrink-0">
-                                    <AvatarImage src={avatarUrl(call.participantAvatar, call.participantName)} />
-                                    <AvatarFallback className="text-[10px] bg-muted">{call.participantName[0]?.toUpperCase()}</AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex-1 min-w-0">
-                                    <span className="text-xs font-medium text-foreground/80 truncate block">{call.participantName}</span>
-                                    <div className="flex items-center gap-1 mt-0.5">
-                                      <HugeiconsIcon icon={call.isCaller ? CallOutgoing04Icon : CallIncoming04Icon} size={10} className={lbl.negative ? "text-destructive" : "text-muted-foreground/50"} />
-                                      <span className={cn("text-[10px]", lbl.negative ? "text-destructive" : "text-muted-foreground/50")}>
-                                        {call.type === "video" ? "Video" : "Voice"} · {lbl.text}
-                                      </span>
-                                      <span className="text-[10px] text-muted-foreground/30 ml-auto shrink-0">{timeAgo(new Date(call.createdAt))}</span>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-0.5 shrink-0">
-                                    <button onClick={() => doCall(call.participantId, "audio", call.participantName, call.participantAvatar)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-emerald-500 hover:bg-emerald-500/10 transition-all active:scale-90" title="Voice call">
-                                      <HugeiconsIcon icon={Call02Icon} size={13} />
-                                    </button>
-                                    <button onClick={() => doCall(call.participantId, "video", call.participantName, call.participantAvatar)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-blue-500 hover:bg-blue-500/10 transition-all active:scale-90" title="Video call">
-                                      <HugeiconsIcon icon={Video01Icon} size={13} />
-                                    </button>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </>
-                        )}
-
-                        {users.length > 0 && (
-                          <>
-                            <div className={cn("px-3.5 pt-2 pb-1", calls.length > 0 && "border-t border-border/15")}>
-                              <span className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">People</span>
-                            </div>
-                            {users.slice(0, 5).map(u => (
-                              <div key={u.id} className="flex items-center gap-2.5 px-3.5 py-2 border-b border-border/8 last:border-b-0">
-                                <Avatar className="h-7 w-7 shrink-0">
+                        {users.length === 0 ? (
+                          <div className="px-4 py-8 text-center text-xs text-muted-foreground/50">No users found</div>
+                        ) : (
+                          <div className="py-0.5">
+                            {users.map(u => (
+                              <Link
+                                key={u.id}
+                                href={`/community?user=${u.id}`}
+                                onClick={() => setSection(null)}
+                                className="flex items-center gap-2.5 px-3.5 py-2 hover:bg-muted/40 transition-colors"
+                              >
+                                <Avatar className="h-8 w-8 shrink-0">
                                   <AvatarImage src={avatarUrl(u.avatar, u.name)} />
-                                  <AvatarFallback className="text-[9px] bg-muted">{u.name[0]?.toUpperCase()}</AvatarFallback>
+                                  <AvatarFallback className="text-[10px] bg-muted">{u.name[0]?.toUpperCase()}</AvatarFallback>
                                 </Avatar>
                                 <span className="text-xs font-medium text-foreground/80 truncate flex-1 min-w-0">{u.name}</span>
-                                <div className="flex items-center gap-0.5 shrink-0">
-                                  <button onClick={() => doCall(u.id, "audio", u.name, u.avatar)} className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-emerald-500 hover:bg-emerald-500/10 transition-all active:scale-90">
-                                    <HugeiconsIcon icon={Call02Icon} size={12} />
-                                  </button>
-                                  <button onClick={() => doCall(u.id, "video", u.name, u.avatar)} className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-blue-500 hover:bg-blue-500/10 transition-all active:scale-90">
-                                    <HugeiconsIcon icon={Video01Icon} size={12} />
-                                  </button>
+                                <div className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground/40 shrink-0">
+                                  <HugeiconsIcon icon={Message01Icon} size={13} />
                                 </div>
-                              </div>
+                              </Link>
                             ))}
-                          </>
+                          </div>
                         )}
-
-                        {calls.length === 0 && users.length === 0 && (
-                          <div className="px-4 py-8 text-center text-xs text-muted-foreground/50">No recent calls</div>
-                        )}
-
-                        <div className="border-t border-border/10 px-3.5 py-2">
-                          <Link href="/community" onClick={() => setSection(null)} className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
-                            View all →
-                          </Link>
-                        </div>
                       </>
                     )}
+                  </div>
+
+                  <div className="border-t border-border/10 px-3.5 py-2">
+                    <Link href="/community" onClick={() => setSection(null)} className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
+                      View all messages →
+                    </Link>
                   </div>
                 </div>
               )}
