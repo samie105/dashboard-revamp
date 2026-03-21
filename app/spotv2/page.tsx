@@ -44,8 +44,15 @@ function SpotV2Skeleton() {
 
       {/* Mobile skeleton */}
       <div className="flex flex-col gap-2 p-2 lg:hidden">
-        <Skeleton className="h-10 rounded-xl" />
-        <Skeleton className="h-[300px] rounded-xl" />
+        {/* Toggle bar skeleton */}
+        <div className="flex items-center gap-1">
+          <Skeleton className="h-8 w-16 rounded-lg" />
+          <Skeleton className="h-8 w-20 rounded-lg" />
+          <Skeleton className="h-8 w-18 rounded-lg" />
+        </div>
+        {/* Chart skeleton */}
+        <Skeleton className="h-[55vh] min-h-[300px] rounded-xl" />
+        {/* Order form skeleton */}
         <Skeleton className="h-[200px] rounded-xl" />
       </div>
     </div>

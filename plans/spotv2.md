@@ -6,7 +6,7 @@
 
 Durable decisions that apply across all phases:
 
-- **Route**: `/spotv2` — new page, parallel to existing `/spot` (Hyperliquid). No shared state between them.
+- **Route**: `/spotv2` — the primary spot trading page. The original `/spot` (Hyperliquid) has been **hidden from the UI** — navigation, sidebar, and all entry points now point to `/spotv2` only, branded as **"Spot Trading"** (no "v2" label visible to users).
 - **Trade engine**: Ledger-based (CFD model). Trades are instant database writes — no on-chain swaps per trade. Platform records entry/exit prices and computes PnL from price deltas.
 - **Order types**: Market, Limit, Stop-Limit. Limit and stop-limit orders are monitored by a cron job that checks Binance prices every ~10s.
 - **Price source**: Binance spot prices via REST (for order fills and cron) + TradingView chart widget (for display). CoinMarketCap for pair registry. No markup (v1).

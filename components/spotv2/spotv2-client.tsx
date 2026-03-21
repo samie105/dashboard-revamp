@@ -25,6 +25,9 @@ import {
   Wallet01Icon,
   Download04Icon,
   Upload04Icon,
+  BookOpen01Icon,
+  Clock01Icon,
+  ChartCandleIcon,
 } from "@hugeicons/core-free-icons"
 import {
   Sheet,
@@ -182,7 +185,7 @@ function SpotV2TopBar({
             <div className="h-1 w-10 rounded-full bg-foreground/10" />
           </div>
           <SheetHeader className="px-4 pb-2 pt-0">
-            <SheetTitle className="text-sm">SpotV2 Balance</SheetTitle>
+            <SheetTitle className="text-sm">Spot Balance</SheetTitle>
           </SheetHeader>
           <div className="px-4 pb-6 space-y-4">
             <div className="rounded-xl bg-accent/30 p-3 space-y-2">
@@ -225,6 +228,9 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
     () => initialPairs[0]?.symbol ?? "BTC",
   )
   const [mobileMarketsOpen, setMobileMarketsOpen] = React.useState(false)
+  const [mobileBookOpen, setMobileBookOpen] = React.useState(false)
+  const [mobileOrdersOpen, setMobileOrdersOpen] = React.useState(false)
+  const [mobileBookTab, setMobileBookTab] = React.useState<"book" | "trades">("book")
 
   // Lifted balance state
   const { isSignedIn } = useAuth()
@@ -371,58 +377,152 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         </div>
       </div>
 
-      {/* ── Mobile: stacked layout ────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-1 lg:hidden">
-        {/* Chart */}
-        <div className="h-[300px] shrink-0">
-          {selectedPair ? (
-            <TradingViewChart symbol={selectedPair.symbol} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground/50">
-              Select a pair
-            </div>
-          )}
+      {/* ── Mobile: SpotV1-style responsive layout ───────────────────── */}
+      <div className="flex flex-1 flex-col overflow-hidden lg:hidden">
+        {/* Sticky toggle bar */}
+        <div className="shrink-0 flex items-center gap-1 border-b border-border/10 bg-background/90 backdrop-blur-lg px-2 py-1.5">
+          {([
+            { key: "book" as const, icon: BookOpen01Icon, label: "Book" },
+            { key: "markets" as const, icon: ChartCandleIcon, label: "Markets" },
+            { key: "orders" as const, icon: Clock01Icon, label: "Orders" },
+          ]).map((item) => (
+            <button
+              key={item.key}
+              onClick={() => {
+                if (item.key === "book") setMobileBookOpen(true)
+                else if (item.key === "markets") setMobileMarketsOpen(true)
+                else setMobileOrdersOpen(true)
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground bg-accent/30 transition-all active:scale-95 hover:bg-accent/50 hover:text-foreground"
+            >
+              <HugeiconsIcon icon={item.icon} className="h-3.5 w-3.5" />
+              {item.label}
+            </button>
+          ))}
         </div>
 
-        {/* Order form */}
-        <div className="shrink-0">
-          <SpotV2OrderForm
-            pair={selectedPair}
-            ledgerBalances={ledgerBalances}
-            positions={positions}
-            balanceLoading={balanceLoading}
-            onBalanceRefresh={fetchBalances}
-          />
-        </div>
+        {/* Scrollable content: chart + order form */}
+        <div className="flex-1 min-h-0 overflow-y-auto pb-20">
+          {/* Chart — viewport-relative height */}
+          <div className="h-[55vh] min-h-[300px]">
+            {selectedPair ? (
+              <TradingViewChart symbol={selectedPair.symbol} />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground/50">
+                Select a pair
+              </div>
+            )}
+          </div>
 
-        {/* Order book + recent trades side by side */}
-        <div className="grid h-[280px] grid-cols-2 gap-1 shrink-0">
-          <SpotV2OrderBook
-            bids={bids}
-            asks={asks}
-            connected={connected}
-            unavailable={unavailable}
-          />
-          <SpotV2RecentTrades
-            trades={trades}
-            connected={connected}
-            unavailable={unavailable}
-          />
-        </div>
-
-        {/* Bottom panel */}
-        <div className="h-[200px] shrink-0">
-          <SpotV2BottomPanel pairs={pairs} />
+          {/* Inline Buy/Sell order form */}
+          <div className="bg-card">
+            <SpotV2OrderForm
+              pair={selectedPair}
+              ledgerBalances={ledgerBalances}
+              positions={positions}
+              balanceLoading={balanceLoading}
+              onBalanceRefresh={fetchBalances}
+            />
+          </div>
         </div>
       </div>
 
+      {/* ── Mobile Sheets ─────────────────────────────────────────────── */}
+
+      {/* Order Book / Recent Trades sheet */}
+      <Sheet open={mobileBookOpen} onOpenChange={setMobileBookOpen}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[75vh] rounded-t-3xl border-t border-border/15 bg-background/98 backdrop-blur-2xl p-0 shadow-2xl"
+          showCloseButton={false}
+        >
+          {/* Drag handle */}
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="h-1 w-10 rounded-full bg-foreground/10" />
+          </div>
+          {/* Tab bar */}
+          <div className="flex items-center gap-1 mx-3 mb-2 rounded-xl bg-accent/20 p-1">
+            <button
+              onClick={() => setMobileBookTab("book")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all",
+                mobileBookTab === "book"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <HugeiconsIcon icon={BookOpen01Icon} className="h-3.5 w-3.5" />
+              Order Book
+            </button>
+            <button
+              onClick={() => setMobileBookTab("trades")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all",
+                mobileBookTab === "trades"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <HugeiconsIcon icon={Clock01Icon} className="h-3.5 w-3.5" />
+              Trades
+            </button>
+          </div>
+          <div className="h-[55vh] overflow-hidden">
+            {mobileBookTab === "book" ? (
+              <SpotV2OrderBook
+                bids={bids}
+                asks={asks}
+                connected={connected}
+                unavailable={unavailable}
+              />
+            ) : (
+              <SpotV2RecentTrades
+                trades={trades}
+                connected={connected}
+                unavailable={unavailable}
+              />
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Orders / Positions sheet */}
+      <Sheet open={mobileOrdersOpen} onOpenChange={setMobileOrdersOpen}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[65vh] rounded-t-3xl border-t border-border/15 bg-background/98 backdrop-blur-2xl p-0 shadow-2xl"
+          showCloseButton={false}
+        >
+          {/* Drag handle */}
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="h-1 w-10 rounded-full bg-foreground/10" />
+          </div>
+          <SheetHeader className="px-4 pb-2 pt-0">
+            <SheetTitle className="flex items-center gap-2 text-sm">
+              <HugeiconsIcon icon={Clock01Icon} className="h-4 w-4 text-primary" />
+              Positions & Orders
+            </SheetTitle>
+          </SheetHeader>
+          <div className="h-[55vh] overflow-hidden">
+            <SpotV2BottomPanel pairs={pairs} />
+          </div>
+        </SheetContent>
+      </Sheet>
+
       {/* ── Mobile markets sheet ──────────────────────────────────────── */}
       <Sheet open={mobileMarketsOpen} onOpenChange={setMobileMarketsOpen}>
-        <SheetContent side="left" className="w-[280px] p-0">
-          <SheetHeader className="px-3 pt-3">
-            <SheetTitle className="text-sm">Markets</SheetTitle>
+        <SheetContent
+          side="left"
+          className="flex flex-col h-full w-[min(88vw,360px)] max-w-[88vw] border-r border-border/15 bg-background/98 backdrop-blur-2xl p-0 shadow-2xl"
+          showCloseButton={false}
+        >
+          <SheetHeader className="px-4 pt-4 pb-2 shrink-0">
+            <SheetTitle className="flex items-center gap-2 text-sm">
+              <HugeiconsIcon icon={ChartCandleIcon} className="h-4 w-4 text-primary" />
+              Markets
+            </SheetTitle>
           </SheetHeader>
-          <div className="h-[calc(100dvh-48px)]">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <PairSidebar
               pairs={pairs}
               selectedPair={selectedSymbol}
