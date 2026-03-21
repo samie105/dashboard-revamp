@@ -12,13 +12,9 @@ import { useWallet } from "@/components/wallet-provider"
 import type { SpotV2Pair } from "./spotv2-types"
 import {
   placeSpotV2Order,
-  getSpotV2Balance,
-  getSpotV2Positions,
   type LedgerBalance,
   type PositionInfo,
 } from "@/lib/spotv2/ledger-actions"
-import { SpotV2DepositModal } from "./spotv2-deposit-modal"
-import { SpotV2WithdrawModal } from "./spotv2-withdraw-modal"
 
 const MIN_ORDER_VALUE = 10
 
@@ -26,7 +22,15 @@ type OrderType = "MARKET" | "LIMIT" | "STOP_LIMIT"
 
 // ── Component ────────────────────────────────────────────────────────────
 
-export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
+interface SpotV2OrderFormProps {
+  pair: SpotV2Pair | undefined
+  ledgerBalances: LedgerBalance[]
+  positions: PositionInfo[]
+  balanceLoading: boolean
+  onBalanceRefresh: () => void
+}
+
+export function SpotV2OrderForm({ pair, ledgerBalances, positions, balanceLoading, onBalanceRefresh }: SpotV2OrderFormProps) {
   const { isSignedIn } = useAuth()
   const { walletsGenerated } = useWallet()
 
@@ -45,21 +49,12 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
   const [editingField, setEditingField] = React.useState<"amount" | "total">("amount")
   const [pct, setPct] = React.useState(0)
 
-  // Ledger balance
-  const [ledgerBalances, setLedgerBalances] = React.useState<LedgerBalance[]>([])
-  const [positions, setPositions] = React.useState<PositionInfo[]>([])
-  const [balanceLoading, setBalanceLoading] = React.useState(false)
-
   // Execution
   const [isExecuting, setIsExecuting] = React.useState(false)
   const [feedback, setFeedback] = React.useState<{
     type: "success" | "error"
     message: string
   } | null>(null)
-
-  // Modals
-  const [depositOpen, setDepositOpen] = React.useState(false)
-  const [withdrawOpen, setWithdrawOpen] = React.useState(false)
 
   const numericAmount = parseFloat(amount) || 0
   const numericLimitPrice = parseFloat(limitPriceInput) || 0
@@ -69,29 +64,6 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
   // The effective price used for calculations
   const effectivePrice =
     orderType === "MARKET" ? price : numericLimitPrice > 0 ? numericLimitPrice : price
-
-  // ── Fetch ledger balance ───────────────────────────────────────────────
-
-  const fetchBalances = React.useCallback(async () => {
-    if (!isSignedIn) return
-    setBalanceLoading(true)
-    try {
-      const [bal, pos] = await Promise.all([
-        getSpotV2Balance(),
-        getSpotV2Positions(),
-      ])
-      setLedgerBalances(bal)
-      setPositions(pos)
-    } catch {
-      // silently ignore
-    } finally {
-      setBalanceLoading(false)
-    }
-  }, [isSignedIn])
-
-  React.useEffect(() => {
-    fetchBalances()
-  }, [fetchBalances])
 
   // ── Reset on pair change ───────────────────────────────────────────────
 
@@ -275,7 +247,7 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
         setAmount("")
         setTotalInput("")
         setPct(0)
-        fetchBalances()
+        onBalanceRefresh()
       } else {
         setFeedback({ type: "error", message: result.error || "Order failed" })
       }
@@ -601,38 +573,8 @@ export function SpotV2OrderForm({ pair }: { pair: SpotV2Pair | undefined }) {
                   : `$${usdcBalance.toFixed(2)}`}
             </span>
           </div>
-          {/* Deposit / Withdraw buttons */}
-          {isSignedIn && walletsGenerated && (
-            <div className="flex gap-1.5 mt-1 pt-1 border-t border-border/20">
-              <button
-                onClick={() => setDepositOpen(true)}
-                className="flex-1 rounded-md bg-emerald-500/10 py-1 text-[10px] font-semibold text-emerald-500 transition-colors hover:bg-emerald-500/20"
-              >
-                Deposit
-              </button>
-              <button
-                onClick={() => setWithdrawOpen(true)}
-                className="flex-1 rounded-md bg-orange-500/10 py-1 text-[10px] font-semibold text-orange-500 transition-colors hover:bg-orange-500/20"
-              >
-                Withdraw
-              </button>
-            </div>
-          )}
         </div>
       </div>
-
-      {/* Deposit / Withdraw modals */}
-      <SpotV2DepositModal
-        isOpen={depositOpen}
-        onClose={() => setDepositOpen(false)}
-        onDepositComplete={fetchBalances}
-      />
-      <SpotV2WithdrawModal
-        isOpen={withdrawOpen}
-        onClose={() => setWithdrawOpen(false)}
-        usdcBalance={usdcBalance}
-        onWithdrawComplete={fetchBalances}
-      />
     </div>
   )
 }

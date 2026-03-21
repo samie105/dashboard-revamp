@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
 import SpotV2Ledger from "@/models/SpotV2Ledger"
+import SpotV2Withdrawal from "@/models/SpotV2Withdrawal"
+import SpotV2LedgerTx from "@/models/SpotV2LedgerTx"
 import { ensureUserWallet } from "@/lib/ensureUserWallet"
 
 const ADMIN_URL = process.env.ADMIN_BACKEND_URL
@@ -100,7 +102,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Debit ledger first (atomic decrement)
+    // Debit ledger atomically
     const updated = await SpotV2Ledger.findOneAndUpdate(
       {
         userId: clerkUserId,
@@ -118,10 +120,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create a deposit request on admin to trigger disbursement to user's wallet
-    // The admin uses the deposit flow: we create a "completed" deposit that triggers disbursement
+    // Create local withdrawal record
+    const withdrawal = await SpotV2Withdrawal.create({
+      userId: clerkUserId,
+      amount,
+      token,
+      chain,
+      destinationAddress,
+      status: "pending",
+    })
+
+    // Write audit trail for the debit
+    await SpotV2LedgerTx.create({
+      userId: clerkUserId,
+      type: "withdraw",
+      token: "USDC",
+      amount: -amount,
+      balanceAfter: updated.available,
+      ref: withdrawal._id.toString(),
+      refModel: "SpotV2Withdrawal",
+    })
+
+    // Call admin backend to send tokens to user's wallet
+    // Uses POST /api/withdrawals (API-key authenticated send endpoint)
     try {
-      const adminRes = await fetch(`${ADMIN_URL}/api/deposits`, {
+      const adminRes = await fetch(`${ADMIN_URL}/api/withdrawals`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -129,24 +152,34 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           userId: clerkUserId,
-          userWalletAddress: destinationAddress,
-          walletType: "spot",
+          toAddress: destinationAddress,
           chain,
-          requestedToken: token,
-          requestedAmount: amount,
-          depositChain: chain,
-          depositToken: token,
-          depositAmount: amount,
-          depositFromAddress: "platform-withdrawal",
+          token,
+          amount,
         }),
       })
 
       if (!adminRes.ok) {
-        // Rollback ledger debit
+        // Rollback: re-credit ledger and update withdrawal status
         await SpotV2Ledger.findOneAndUpdate(
           { userId: clerkUserId, token: "USDC" },
           { $inc: { available: amount } },
         )
+
+        // Reverse the audit entry
+        await SpotV2LedgerTx.create({
+          userId: clerkUserId,
+          type: "withdraw",
+          token: "USDC",
+          amount, // positive = rollback credit
+          balanceAfter: (updated.available + amount),
+          ref: withdrawal._id.toString(),
+          refModel: "SpotV2Withdrawal",
+        })
+
+        withdrawal.status = "failed"
+        withdrawal.errorMessage = "Admin failed to process withdrawal"
+        await withdrawal.save()
 
         const errData = await adminRes.json().catch(() => ({}))
         console.error("[SpotV2 Withdraw] Admin error:", errData)
@@ -158,23 +191,43 @@ export async function POST(request: NextRequest) {
 
       const adminData = await adminRes.json()
 
+      withdrawal.status = "processing"
+      withdrawal.txHash = adminData.txHash || null
+      await withdrawal.save()
+
       return NextResponse.json({
         success: true,
         withdrawal: {
+          id: withdrawal._id,
           amount,
           token,
           chain,
           destination: destinationAddress,
-          adminDepositId: adminData.deposit?._id || adminData.depositId,
+          txHash: adminData.txHash,
+          status: "processing",
           newBalance: updated.available,
         },
       })
     } catch (adminError) {
-      // Rollback ledger debit on admin call failure
+      // Rollback ledger on admin call failure
       await SpotV2Ledger.findOneAndUpdate(
         { userId: clerkUserId, token: "USDC" },
         { $inc: { available: amount } },
       )
+
+      await SpotV2LedgerTx.create({
+        userId: clerkUserId,
+        type: "withdraw",
+        token: "USDC",
+        amount,
+        balanceAfter: (updated.available + amount),
+        ref: withdrawal._id.toString(),
+        refModel: "SpotV2Withdrawal",
+      })
+
+      withdrawal.status = "failed"
+      withdrawal.errorMessage = "Network error contacting admin"
+      await withdrawal.save()
 
       console.error("[SpotV2 Withdraw] Admin call failed:", adminError)
       return NextResponse.json(

@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server"
 import { ensureUserWallet } from "@/lib/ensureUserWallet"
 import { connectDB } from "@/lib/mongodb"
 import SpotV2Ledger from "@/models/SpotV2Ledger"
+import SpotV2Deposit from "@/models/SpotV2Deposit"
 
 const ADMIN_URL = process.env.ADMIN_BACKEND_URL
 const ADMIN_KEY = process.env.ADMIN_BACKEND_API_KEY
@@ -81,7 +82,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // The user's wallet address on the target chain for future disbursement reference
     const userWalletAddress =
       depositChain === "solana"
         ? userWallet.wallets.solana?.address
@@ -107,8 +107,8 @@ export async function POST(request: NextRequest) {
         userId: clerkUserId,
         userWalletAddress,
         walletType: "spot",
-        chain: "arbitrum", // requested chain for disbursement
-        requestedToken: "USDC",
+        chain: depositChain,
+        requestedToken: depositToken,
         requestedAmount: depositAmount,
         depositChain,
         depositToken,
@@ -127,26 +127,46 @@ export async function POST(request: NextRequest) {
     }
 
     const adminData = await adminRes.json()
+    const adminDepositId = adminData.deposit?._id || adminData.depositId
+    const treasuryAddress =
+      adminData.treasuryAddress || adminData.deposit?.treasuryAddress
+    const treasuryChain = adminData.treasuryChain || depositChain
+
+    await connectDB()
 
     // Ensure ledger entry exists for USDC
-    await connectDB()
     await SpotV2Ledger.findOneAndUpdate(
       { userId: clerkUserId, token: "USDC" },
       { $setOnInsert: { available: 0, locked: 0 } },
       { upsert: true },
     )
 
+    // Save local deposit record for status tracking + double-credit prevention
+    const localDeposit = await SpotV2Deposit.create({
+      userId: clerkUserId,
+      adminDepositId,
+      depositChain,
+      depositToken,
+      depositAmount,
+      depositFromAddress,
+      treasuryAddress,
+      treasuryChain,
+      status: "initiated",
+      credited: false,
+      creditedAmount: 0,
+    })
+
     return NextResponse.json({
       success: true,
       deposit: {
-        adminDepositId: adminData.deposit?._id || adminData.depositId,
-        treasuryAddress:
-          adminData.treasuryAddress || adminData.deposit?.treasuryAddress,
-        treasuryChain: adminData.treasuryChain || depositChain,
+        id: localDeposit._id,
+        adminDepositId,
+        treasuryAddress,
+        treasuryChain,
         depositChain,
         depositToken,
         depositAmount,
-        status: "pending",
+        status: "initiated",
       },
     })
   } catch (error: unknown) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
 import { UserWallet } from "@/models/UserWallet"
+import SpotV2Deposit from "@/models/SpotV2Deposit"
 import { privyClient } from "@/lib/privy/client"
 import {
   createAuthorizationContext,
@@ -279,14 +280,19 @@ async function sendTokenTron(
 // ── Route handler ────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  let parsedAdminDepositId: string | undefined
+  let parsedUserId: string | undefined
+
   try {
     const { userId: clerkUserId, getToken } = await auth()
     if (!clerkUserId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    parsedUserId = clerkUserId
 
     const body = await request.json()
-    const { treasuryAddress, depositChain, depositToken, depositAmount } = body
+    const { treasuryAddress, depositChain, depositToken, depositAmount, adminDepositId } = body
+    parsedAdminDepositId = adminDepositId
 
     if (!treasuryAddress || !depositChain || !depositToken || !depositAmount) {
       return NextResponse.json(
@@ -346,6 +352,14 @@ export async function POST(request: NextRequest) {
 
     const authContext = await createAuthorizationContext(clerkJwt)
 
+    // Update local deposit record to "sending"
+    if (adminDepositId) {
+      await SpotV2Deposit.findOneAndUpdate(
+        { adminDepositId, userId: clerkUserId },
+        { $set: { status: "sending" } },
+      )
+    }
+
     let txHash: string
 
     if (depositChain === "solana") {
@@ -382,6 +396,19 @@ export async function POST(request: NextRequest) {
       txHash = result.txHash
     }
 
+    // Update local deposit record with txHash and status
+    if (adminDepositId) {
+      await SpotV2Deposit.findOneAndUpdate(
+        { adminDepositId, userId: clerkUserId },
+        {
+          $set: {
+            depositTxHash: txHash,
+            status: "awaiting_confirmation",
+          },
+        },
+      )
+    }
+
     return NextResponse.json({
       success: true,
       txHash,
@@ -408,6 +435,14 @@ export async function POST(request: NextRequest) {
     } else if (userMessage.includes("insufficient funds")) {
       userMessage =
         "Insufficient balance to complete this deposit. Check your wallet balance."
+    }
+
+    // Mark local deposit as failed
+    if (parsedAdminDepositId && parsedUserId) {
+      await SpotV2Deposit.findOneAndUpdate(
+        { adminDepositId: parsedAdminDepositId, userId: parsedUserId },
+        { $set: { status: "failed", errorMessage: userMessage } },
+      ).catch(() => {}) // Don't fail on cleanup
     }
 
     return NextResponse.json({ error: userMessage }, { status: 500 })

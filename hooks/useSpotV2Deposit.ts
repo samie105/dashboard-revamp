@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 
 export interface SpotV2DepositInfo {
+  id?: string
   adminDepositId: string
   treasuryAddress: string
   treasuryChain: string
@@ -9,7 +10,8 @@ export interface SpotV2DepositInfo {
   depositAmount: number
   status: string
   depositTxHash?: string
-  disburseTxHash?: string
+  credited?: boolean
+  creditedAmount?: number
 }
 
 export type DepositPhase = "idle" | "initiating" | "sending" | "polling"
@@ -92,6 +94,7 @@ export function useSpotV2Deposit() {
             depositChain: depositInfo.depositChain,
             depositToken: depositInfo.depositToken,
             depositAmount: depositInfo.depositAmount,
+            adminDepositId: depositInfo.adminDepositId,
           }),
         })
 

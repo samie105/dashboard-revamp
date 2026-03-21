@@ -2,10 +2,12 @@ import { useState, useCallback } from "react"
 
 export interface SpotV2WithdrawResult {
   success: boolean
+  id?: string
   amount?: number
   token?: string
   chain?: string
   destination?: string
+  txHash?: string
   newBalance?: number
   error?: string
 }
@@ -36,10 +38,12 @@ export function useSpotV2Withdraw() {
 
         const outcome: SpotV2WithdrawResult = {
           success: true,
+          id: data.withdrawal.id,
           amount: data.withdrawal.amount,
           token: data.withdrawal.token,
           chain: data.withdrawal.chain,
           destination: data.withdrawal.destination,
+          txHash: data.withdrawal.txHash,
           newBalance: data.withdrawal.newBalance,
         }
         setResult(outcome)
