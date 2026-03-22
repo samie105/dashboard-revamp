@@ -121,7 +121,7 @@ const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Tron: "tron"
 
 const WALLET_VIEWS = [
   { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain wallet" },
-  { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot holdings" },
+  { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "SpotV2 ledger balance" },
   { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Perpetual positions" },
 ] as const
 
@@ -556,7 +556,7 @@ export default function AssetsClient() {
         {/* Balance display */}
         <div>
           <span className="text-3xl font-bold tracking-tight tabular-nums">
-            {(activeView === "spot" && balancesLoading && onChainBalances.length === 0) ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {(activeView === "spot" ? spotV2Loading : activeView === "futures" ? hlPositionsLoading : (balancesLoading && onChainBalances.length === 0)) ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span>
           <p className="text-[10px] text-muted-foreground mt-1">
             {WALLET_VIEWS.find((v) => v.key === activeView)?.sub}

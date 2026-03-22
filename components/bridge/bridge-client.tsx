@@ -347,6 +347,10 @@ export function BridgeClient() {
     )
     return match?.balance ?? 0
   }, [balances, fromToken.symbol, fromChain])
+
+  // Gas buffer for native token sends (ETH on various chains)
+  const GAS_BUFFER: Record<number, number> = { 1: 0.005, 42161: 0.0003, 137: 0.1, 10: 0.0003, 56: 0.005, 8453: 0.0003 }
+
   const [amount, setAmount] = React.useState("")
   const [isDollarMode, setIsDollarMode] = React.useState(false)
   const [quote, setQuote] = React.useState<BridgeQuote | null>(null)
@@ -395,6 +399,26 @@ export function BridgeClient() {
     if (tokenPrice > 0) return String(+(num / tokenPrice).toFixed(6))
     return "" // can't convert without price
   }, [amount, isDollarMode, tokenPrice])
+
+  const handleMax = React.useCallback(() => {
+    if (fromTokenBalance <= 0) return
+    const isNativeToken = fromToken.address === "0x0000000000000000000000000000000000000000"
+    let maxAmount = fromTokenBalance
+    if (isNativeToken) {
+      const buffer = GAS_BUFFER[fromChain.id] ?? 0.005
+      maxAmount = Math.max(0, fromTokenBalance - buffer)
+    }
+    if (isDollarMode && tokenPrice > 0) {
+      setAmount(String(+(maxAmount * tokenPrice).toFixed(2)))
+    } else {
+      setAmount(String(+(maxAmount).toFixed(6)))
+    }
+  }, [fromTokenBalance, fromToken.address, fromChain.id, isDollarMode, tokenPrice])
+
+  const insufficientBalance = React.useMemo(() => {
+    const num = parseFloat(tokenAmount)
+    return num > 0 && num > fromTokenBalance
+  }, [tokenAmount, fromTokenBalance])
 
   const fetchQuoteAction = React.useCallback(async () => {
     const num = parseFloat(tokenAmount)
@@ -478,14 +502,15 @@ export function BridgeClient() {
   const buttonText = React.useMemo(() => {
     if (!addresses?.ethereum) return "Connect wallet"
     if (!amount || parseFloat(amount) <= 0) return "Enter amount"
+    if (insufficientBalance) return "Insufficient balance"
     if (isLoadingQuote) return "Fetching quote…"
     if (status === "approving") return "Approving…"
     if (isExecuting) return "Bridging…"
     if (status === "success") return "Bridge Successful"
     return "Bridge"
-  }, [addresses?.ethereum, amount, isLoadingQuote, isExecuting, status])
+  }, [addresses?.ethereum, amount, insufficientBalance, isLoadingQuote, isExecuting, status])
 
-  const canBridge = Boolean(quote && !isLoadingQuote && !isExecuting && status !== "success" && parseFloat(amount) > 0)
+  const canBridge = Boolean(quote && !isLoadingQuote && !isExecuting && status !== "success" && parseFloat(amount) > 0 && !insufficientBalance)
 
   // Explorer link helper
   const explorerUrl = React.useMemo(() => {
@@ -547,7 +572,9 @@ export function BridgeClient() {
               <div data-onboarding="from-section" className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[11px] font-medium text-muted-foreground">You send</span>
-                  <span className="text-[11px] text-muted-foreground">Balance: {fromTokenBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
+                  <button onClick={handleMax} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+                    Balance: <span className="font-medium">{fromTokenBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
+                  </button>
                 </div>
 
                 {/* Chain + Token row */}
@@ -591,6 +618,44 @@ export function BridgeClient() {
                     {isDollarMode
                       ? tokenPrice > 0 ? `≈ ${(parseFloat(amount) / tokenPrice).toFixed(6)} ${fromToken.symbol}` : ""
                       : tokenPrice > 0 ? `≈ $${(parseFloat(amount) * tokenPrice).toFixed(2)}` : ""}
+                  </p>
+                )}
+
+                {/* Percentage shortcuts */}
+                <div className="mt-2 flex gap-1.5">
+                  {[25, 50, 75].map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => {
+                        if (fromTokenBalance <= 0) return
+                        const isNative = fromToken.address === "0x0000000000000000000000000000000000000000"
+                        const base = isNative ? Math.max(0, fromTokenBalance - (GAS_BUFFER[fromChain.id] ?? 0.005)) : fromTokenBalance
+                        const val = base * pct / 100
+                        if (isDollarMode && tokenPrice > 0) {
+                          setAmount(String(+(val * tokenPrice).toFixed(2)))
+                        } else {
+                          setAmount(String(+(val).toFixed(6)))
+                        }
+                      }}
+                      disabled={fromTokenBalance <= 0}
+                      className="flex-1 rounded-lg bg-accent/50 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 transition-colors"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                  <button
+                    onClick={handleMax}
+                    disabled={fromTokenBalance <= 0}
+                    className="flex-1 rounded-lg bg-accent/50 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 transition-colors"
+                  >
+                    MAX
+                  </button>
+                </div>
+
+                {/* Insufficient balance warning */}
+                {insufficientBalance && (
+                  <p className="mt-1.5 text-[10px] text-red-500">
+                    Insufficient balance (have {fromTokenBalance.toLocaleString(undefined, { maximumFractionDigits: 6 })})
                   </p>
                 )}
               </div>
