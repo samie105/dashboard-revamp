@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import type { SpotV2ClientProps, SpotV2Pair } from "./spotv2-types"
 import { PairSidebar } from "./pair-sidebar"
@@ -223,14 +224,25 @@ function SpotV2TopBar({
 // ── Main Client ──────────────────────────────────────────────────────────
 
 export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
+  const searchParams = useSearchParams()
   const [pairs, setPairs] = React.useState<SpotV2Pair[]>(initialPairs)
-  const [selectedSymbol, setSelectedSymbol] = React.useState(
-    () => initialPairs[0]?.symbol ?? "BTC",
-  )
+  const [selectedSymbol, setSelectedSymbol] = React.useState(() => {
+    const pairParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("pair") : null
+    if (pairParam && initialPairs.some((p) => p.symbol === pairParam.toUpperCase())) return pairParam.toUpperCase()
+    return initialPairs[0]?.symbol ?? "BTC"
+  })
   const [mobileMarketsOpen, setMobileMarketsOpen] = React.useState(false)
   const [mobileBookOpen, setMobileBookOpen] = React.useState(false)
   const [mobileOrdersOpen, setMobileOrdersOpen] = React.useState(false)
   const [mobileBookTab, setMobileBookTab] = React.useState<"book" | "trades">("book")
+
+  // Sync selected pair with URL ?pair= param
+  React.useEffect(() => {
+    const pairParam = searchParams.get("pair")
+    if (pairParam && pairs.some((p) => p.symbol === pairParam.toUpperCase())) {
+      setSelectedSymbol(pairParam.toUpperCase())
+    }
+  }, [searchParams, pairs])
 
   // Lifted balance state
   const { isSignedIn } = useAuth()

@@ -29,7 +29,6 @@ import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
 import { getSpotV2Balance, getSpotV2Positions, getTokenPrices } from "@/lib/spotv2/ledger-actions"
 import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
-import { fetchSpotV2Pairs } from "@/lib/spotv2/pairs"
 import type { SpotV2Pair } from "@/components/spotv2/spotv2-types"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
 import { SpotFundingSwap, FundingHistory } from "@/components/wallet"
@@ -335,8 +334,8 @@ export default function AssetsClient() {
     if (activeView !== "spot" || spotMarketsLoaded) return
     let cancelled = false
     setSpotMarketsLoading(true)
-    fetchSpotV2Pairs().then((pairs) => {
-      if (!cancelled) { setSpotMarkets(pairs); setSpotMarketsLoading(false); setSpotMarketsLoaded(true) }
+    fetch("/api/spotv2/pairs").then((r) => r.json()).then((data) => {
+      if (!cancelled && data.success && Array.isArray(data.pairs)) { setSpotMarkets(data.pairs); setSpotMarketsLoading(false); setSpotMarketsLoaded(true) }
     }).catch(() => { if (!cancelled) setSpotMarketsLoading(false) })
     return () => { cancelled = true }
   }, [activeView, spotMarketsLoaded])

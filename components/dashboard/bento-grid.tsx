@@ -19,7 +19,6 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { CoinData, TradeResult, FuturesMarket } from "@/lib/actions"
 import { getFuturesMarkets } from "@/lib/actions"
-import { fetchSpotV2Pairs } from "@/lib/spotv2/pairs"
 import type { SpotV2Pair } from "@/components/spotv2/spotv2-types"
 import { getSpotV2Balance, getSpotV2Positions, getTokenPrices, getSpotV2TradeHistory } from "@/lib/spotv2/ledger-actions"
 import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
@@ -173,8 +172,8 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
     if (tab !== "Spot" || hasFetchedSpot.current) return
     hasFetchedSpot.current = true
     setSpotLoading(true)
-    fetchSpotV2Pairs()
-      .then((pairs) => { setSpotMarkets(pairs) })
+    fetch("/api/spotv2/pairs").then((r) => r.json())
+      .then((data) => { if (data.success && Array.isArray(data.pairs)) setSpotMarkets(data.pairs) })
       .catch(() => {})
       .finally(() => setSpotLoading(false))
   }, [tab])
