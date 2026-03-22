@@ -45,6 +45,7 @@ function SpotV2TopBar({
   pair,
   onOpenMarkets,
   usdcBalance,
+  totalSpotValue,
   balanceLoading,
   balanceError,
   onOpenDeposit,
@@ -53,6 +54,7 @@ function SpotV2TopBar({
   pair: SpotV2Pair | undefined
   onOpenMarkets: () => void
   usdcBalance: number
+  totalSpotValue: number
   balanceLoading: boolean
   balanceError: boolean
   onOpenDeposit: () => void
@@ -120,7 +122,7 @@ function SpotV2TopBar({
               <div className="flex flex-col items-end">
                 <span className="text-[9px] text-muted-foreground leading-none">Spot Balance</span>
                 <span className={cn("text-xs font-bold tabular-nums", balanceError ? "text-red-400" : "text-foreground")}>
-                  {balanceError ? "Error" : `$${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  {balanceError ? "Error" : `$${totalSpotValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </span>
               </div>
             </div>
@@ -154,7 +156,7 @@ function SpotV2TopBar({
                   ? "···"
                   : balanceError
                   ? "Error"
-                  : `$${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  : `$${totalSpotValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               </span>
             </button>
             <div className="flex items-stretch divide-x divide-border/40 rounded-lg border border-border/40 overflow-hidden text-[11px] font-bold">
@@ -195,7 +197,10 @@ function SpotV2TopBar({
                 <span className="text-xs font-medium">Spot Balance</span>
               </div>
               <p className="text-xl font-bold tabular-nums">
-                ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${totalSpotValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Available: ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div className="flex gap-3">
@@ -293,6 +298,17 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
     return entry?.available ?? 0
   }, [ledgerBalances])
 
+  // Total spot portfolio value = USDC (available + locked) + positions at market price
+  const totalSpotValue = React.useMemo(() => {
+    const usdcTotal = ledgerBalances.reduce((sum, b) => sum + b.available + b.locked, 0)
+    const posTotal = positions.reduce((sum, p) => {
+      const pairData = pairs.find((pr) => pr.symbol.toUpperCase() === p.token.toUpperCase())
+      const price = pairData?.price ?? 0
+      return sum + p.quantity * price
+    }, 0)
+    return usdcTotal + posTotal
+  }, [ledgerBalances, positions, pairs])
+
   // Refresh prices every 60 seconds
   React.useEffect(() => {
     const interval = setInterval(async () => {
@@ -322,6 +338,7 @@ export function SpotV2Client({ initialPairs }: SpotV2ClientProps) {
         pair={selectedPair}
         onOpenMarkets={() => setMobileMarketsOpen(true)}
         usdcBalance={usdcBalance}
+        totalSpotValue={totalSpotValue}
         balanceLoading={balanceLoading}
         balanceError={balanceError}
         onOpenDeposit={() => setDepositOpen(true)}

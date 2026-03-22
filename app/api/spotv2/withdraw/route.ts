@@ -166,14 +166,14 @@ export async function POST(request: NextRequest) {
           { $inc: { available: amount } },
         )
 
-        // Reverse the audit entry
+        // Reverse the audit entry (use _rollback suffix to avoid duplicate key on {ref, type})
         await SpotV2LedgerTx.create({
           userId: clerkUserId,
-          type: "withdraw",
+          type: "deposit",
           token: "USDC",
-          amount, // positive = rollback credit
+          amount,
           balanceAfter: (updated.available + amount),
-          ref: withdrawal._id.toString(),
+          ref: `${withdrawal._id.toString()}_rollback`,
           refModel: "SpotV2Withdrawal",
         })
 
@@ -217,11 +217,11 @@ export async function POST(request: NextRequest) {
 
       await SpotV2LedgerTx.create({
         userId: clerkUserId,
-        type: "withdraw",
+        type: "deposit",
         token: "USDC",
         amount,
         balanceAfter: (updated.available + amount),
-        ref: withdrawal._id.toString(),
+        ref: `${withdrawal._id.toString()}_rollback`,
         refModel: "SpotV2Withdrawal",
       })
 
