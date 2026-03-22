@@ -338,14 +338,17 @@ export function BridgeClient() {
   const [fromToken, setFromToken] = React.useState<Token>(BRIDGE_TOKENS[0])
   const [toToken, setToToken] = React.useState<Token>(BRIDGE_TOKENS[0])
 
-  // Look up on-chain balance for the selected "from" token on Ethereum
+  // Look up on-chain balance for the selected "from" token on the selected chain
   const fromTokenBalance = React.useMemo(() => {
+    // Map bridge chain IDs to wallet balance chain names
+    const chainName = fromChain.id === 42161 ? "arbitrum" : fromChain.id === 1 ? "ethereum" : fromChain.name.toLowerCase()
     const match = balances.find(
-      (b) => b.symbol.toUpperCase() === fromToken.symbol.toUpperCase() && b.chain.toLowerCase() === "ethereum"
+      (b) => b.symbol.toUpperCase() === fromToken.symbol.toUpperCase() && b.chain.toLowerCase() === chainName
     )
     return match?.balance ?? 0
-  }, [balances, fromToken.symbol])
+  }, [balances, fromToken.symbol, fromChain])
   const [amount, setAmount] = React.useState("")
+  const [isDollarMode, setIsDollarMode] = React.useState(false)
   const [quote, setQuote] = React.useState<BridgeQuote | null>(null)
   const [isLoadingQuote, setIsLoadingQuote] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -374,9 +377,28 @@ export function BridgeClient() {
 
   // ── Quote fetching (debounced) ──
 
-  const fetchQuoteAction = React.useCallback(async () => {
+  // Derive token price from latest quote, default to $1 for stablecoins
+  const tokenPrice = React.useMemo(() => {
+    if (fromToken.symbol === "USDC" || fromToken.symbol === "USDT") return 1
+    if (quote?.estimate?.fromAmountUSD) {
+      const parsedAmt = parseFloat(amount)
+      if (parsedAmt > 0) return parseFloat(quote.estimate.fromAmountUSD) / parsedAmt
+    }
+    return 0 // unknown until quote resolves
+  }, [fromToken.symbol, quote, amount])
+
+  // Convert amount to token amount (for quote API) when in dollar mode
+  const tokenAmount = React.useMemo(() => {
     const num = parseFloat(amount)
-    if (!amount || num <= 0 || !addresses?.ethereum) {
+    if (!amount || num <= 0) return ""
+    if (!isDollarMode) return amount
+    if (tokenPrice > 0) return String(+(num / tokenPrice).toFixed(6))
+    return "" // can't convert without price
+  }, [amount, isDollarMode, tokenPrice])
+
+  const fetchQuoteAction = React.useCallback(async () => {
+    const num = parseFloat(tokenAmount)
+    if (!tokenAmount || num <= 0 || !addresses?.ethereum) {
       setQuote(null)
       return
     }
@@ -389,7 +411,7 @@ export function BridgeClient() {
       toChainId: toChain.id,
       fromTokenSymbol: fromToken.symbol,
       toTokenSymbol: toToken.symbol,
-      amount,
+      amount: tokenAmount,
       fromTokenDecimals: fromToken.decimals,
     })
 
@@ -400,7 +422,7 @@ export function BridgeClient() {
       setQuote(null)
     }
     setIsLoadingQuote(false)
-  }, [amount, fromChain.id, toChain.id, fromToken, toToken, addresses?.ethereum])
+  }, [tokenAmount, fromChain.id, toChain.id, fromToken, toToken, addresses?.ethereum])
 
   // Debounce
   React.useEffect(() => {
@@ -410,11 +432,11 @@ export function BridgeClient() {
 
   // Auto-refresh every 30s
   React.useEffect(() => {
-    const num = parseFloat(amount)
-    if (!amount || num <= 0) return
+    const num = parseFloat(tokenAmount)
+    if (!tokenAmount || num <= 0) return
     const interval = setInterval(fetchQuoteAction, 30000)
     return () => clearInterval(interval)
-  }, [fetchQuoteAction, amount])
+  }, [fetchQuoteAction, tokenAmount])
 
   // ── Execute bridge ──
 
@@ -535,6 +557,21 @@ export function BridgeClient() {
 
                 {/* Amount input */}
                 <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      if (!isDollarMode && tokenPrice > 0) {
+                        const num = parseFloat(amount)
+                        if (num > 0) setAmount(String(+(num * tokenPrice).toFixed(2)))
+                      } else if (isDollarMode && tokenPrice > 0) {
+                        const num = parseFloat(amount)
+                        if (num > 0) setAmount(String(+(num / tokenPrice).toFixed(6)))
+                      }
+                      setIsDollarMode((prev) => !prev)
+                    }}
+                    className={`shrink-0 rounded-md px-1.5 py-0.5 text-xs font-bold transition-colors ${isDollarMode ? "bg-primary/15 text-primary" : "bg-accent/60 text-muted-foreground hover:text-foreground"}`}
+                  >
+                    $
+                  </button>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -548,6 +585,14 @@ export function BridgeClient() {
                   />
                   <TokenSelect value={fromToken} onChange={setFromToken} />
                 </div>
+                {/* Equivalent display */}
+                {amount && parseFloat(amount) > 0 && (
+                  <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                    {isDollarMode
+                      ? tokenPrice > 0 ? `≈ ${(parseFloat(amount) / tokenPrice).toFixed(6)} ${fromToken.symbol}` : ""
+                      : tokenPrice > 0 ? `≈ $${(parseFloat(amount) * tokenPrice).toFixed(2)}` : ""}
+                  </p>
+                )}
               </div>
 
               {/* ── Flip button ── */}

@@ -130,8 +130,17 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
 
   function handleContinue() {
     setError("")
+    if (!asset) return
     if (!isValidRecipient) { setError("Enter a valid recipient address"); return }
     if (!isValidAmount) { setError("Enter a valid amount within your balance"); return }
+    // Pre-flight gas check for native token sends
+    if (!asset.contractAddress) {
+      const buffer = GAS_BUFFER[asset.chain] ?? 0.01
+      if (amountNum + buffer > asset.balance) {
+        setError(`Insufficient balance for gas fees. Leave at least ${buffer} ${asset.symbol} for transaction fees.`)
+        return
+      }
+    }
     setStep("confirm")
   }
 
@@ -276,6 +285,28 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
                   <button
                     onClick={handleMax}
                     className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/20 transition-colors"
+                  >
+                    MAX
+                  </button>
+                </div>
+                {/* Percentage shortcuts */}
+                <div className="mt-2 flex gap-2">
+                  {[25, 50, 75].map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => {
+                        if (!asset) return
+                        const base = !asset.contractAddress ? Math.max(0, asset.balance - (GAS_BUFFER[asset.chain] ?? 0.01)) : asset.balance
+                        setAmount(String(+(base * pct / 100).toFixed(6)))
+                      }}
+                      className="flex-1 rounded-lg bg-accent/50 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                  <button
+                    onClick={handleMax}
+                    className="flex-1 rounded-lg bg-accent/50 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                   >
                     MAX
                   </button>

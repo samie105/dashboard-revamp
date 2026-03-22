@@ -18,17 +18,20 @@ import {
   Cancel01Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData, TradeResult, FuturesMarket } from "@/lib/actions"
-import { getFuturesMarkets, getSpotMarkets } from "@/lib/actions"
+import { getFuturesMarkets } from "@/lib/actions"
+import { fetchSpotV2Pairs } from "@/lib/spotv2/pairs"
+import type { SpotV2Pair } from "@/components/spotv2/spotv2-types"
+import { getSpotV2Balance, getSpotV2Positions, getTokenPrices, getSpotV2TradeHistory } from "@/lib/spotv2/ledger-actions"
+import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
 import { ErrorState } from "@/components/error-state"
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
-import { useTradeSelector } from "@/components/trade-selector"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
-import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useAuth } from "@/components/auth-provider"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
 
 const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
+const USDC_IMAGE = "https://coin-images.coingecko.com/coins/images/6319/small/usdc.png"
 
 /* ========== Trade Confirm Dialog (mobile) ========== */
 type TradeConfirmItem =
@@ -85,7 +88,7 @@ function TradeConfirmDialog({
           )}
           <div className="flex flex-col">
             <span className="text-base font-bold">
-              {item.symbol}{isFutures ? "-PERP" : "/USDT"}
+              {item.symbol}{isFutures ? "-PERP" : "/USDC"}
             </span>
             <span className="text-xs text-muted-foreground">{item.name}</span>
           </div>
@@ -143,12 +146,11 @@ type MarketTab = (typeof MARKET_TABS)[number]
 function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
   const [tab, setTab] = React.useState<MarketTab>("Spot")
   const [search, setSearch] = React.useState("")
-  const { openTradeSelector } = useTradeSelector()
   const [visibleCount, setVisibleCount] = React.useState(8)
   const [futuresMarkets, setFuturesMarkets] = React.useState<FuturesMarket[]>([])
   const [futuresLoading, setFuturesLoading] = React.useState(false)
   const hasFetchedFutures = React.useRef(false)
-  const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
+  const [spotMarkets, setSpotMarkets] = React.useState<SpotV2Pair[]>([])
   const [spotLoading, setSpotLoading] = React.useState(false)
   const hasFetchedSpot = React.useRef(false)
   const [tradeItem, setTradeItem] = React.useState<TradeConfirmItem | null>(null)
@@ -171,8 +173,8 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
     if (tab !== "Spot" || hasFetchedSpot.current) return
     hasFetchedSpot.current = true
     setSpotLoading(true)
-    getSpotMarkets()
-      .then((res) => { setSpotMarkets(res.markets) })
+    fetchSpotV2Pairs()
+      .then((pairs) => { setSpotMarkets(pairs) })
       .catch(() => {})
       .finally(() => setSpotLoading(false))
   }, [tab])
@@ -394,12 +396,12 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                             </span>
                           )}
                           <img
-                            src={USDT_IMAGE}
+                            src={USDC_IMAGE}
                             alt=""
                             className="h-4 w-4 rounded-full ring-1 ring-card -ml-1.5"
                           />
                         </div>
-                        <span className="font-medium">{coin.symbol}/USDT</span>
+                        <span className="font-medium">{coin.displaySymbol}</span>
                       </div>
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 text-right font-semibold tabular-nums">
@@ -415,13 +417,14 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                       </span>
                     </td>
                     <td className="hidden sm:table-cell px-4 py-2.5 text-right">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openTradeSelector(coin.symbol) }}
+                      <a
+                        href={`/spotv2?pair=${coin.symbol}`}
+                        onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       >
                         Trade
                         <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-                      </button>
+                      </a>
                     </td>
                   </tr>
                 ))}
@@ -449,67 +452,48 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
 
 /* ========== Recent Trades ========== */
 
-function RecentTrades({ coins, initialTrades, error }: { coins: CoinData[]; initialTrades: TradeResult[]; error?: string }) {
-  const [activePair, setActivePair] = React.useState("BTC")
-  const [trades, setTrades] = React.useState<TradeResult[]>(initialTrades)
-  const [tradesLoading, setTradesLoading] = React.useState(false)
-  const [showSearch, setShowSearch] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-  const searchRef = React.useRef<HTMLInputElement>(null)
-  const tradeCache = React.useRef<Record<string, TradeResult[]>>({ BTC: initialTrades })
+function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
+  const { user } = useAuth()
+  const [tab, setTab] = React.useState<"spot" | "futures">("spot")
 
-  // Fetch trades for a given pair
-  const fetchTrades = React.useCallback(async (pair: string) => {
-    if (tradeCache.current[pair]) {
-      setTrades(tradeCache.current[pair])
-      return
-    }
-    setTradesLoading(true)
-    try {
-      const r = await fetch(`/api/trades?symbol=${encodeURIComponent(pair + "USDT")}&limit=8`)
-      const d = await r.json()
-      const data: TradeResult[] = d.success ? d.data : []
-      tradeCache.current[pair] = data
-      setTrades(data)
-    } catch {
-      setTrades([])
-    } finally {
-      setTradesLoading(false)
-    }
-  }, [])
+  // SpotV2 trades
+  type SpotV2TradeItem = { id: string; pair: string; token: string; side: string; quantity: number; price: number; quoteAmount: number; realizedPnl: number; fee: number; createdAt: Date }
+  const [spotTrades, setSpotTrades] = React.useState<SpotV2TradeItem[]>([])
+  const [spotTradesLoading, setSpotTradesLoading] = React.useState(true)
 
-  const handleSelectPair = React.useCallback((pair: string) => {
-    setActivePair(pair)
-    setShowSearch(false)
-    setSearch("")
-    fetchTrades(pair)
-  }, [fetchTrades])
+  // Futures fills
+  const [futuresFills, setFuturesFills] = React.useState<Array<{ coin: string; px: string; sz: string; side: "B" | "A"; time: number; closedPnl: string }>>([])
+  const [futuresLoading, setFuturesLoading] = React.useState(true)
 
+  // Fetch SpotV2 trades
   React.useEffect(() => {
-    if (showSearch && searchRef.current) searchRef.current.focus()
-  }, [showSearch])
+    if (!user) { setSpotTradesLoading(false); return }
+    let cancelled = false
+    getSpotV2TradeHistory(10).then((trades) => {
+      if (!cancelled) setSpotTrades(trades as SpotV2TradeItem[])
+    }).catch(() => {}).finally(() => { if (!cancelled) setSpotTradesLoading(false) })
+    return () => { cancelled = true }
+  }, [user])
 
-  const pairCoin = React.useMemo(
-    () => coins.find((c) => c.symbol === activePair),
-    [coins, activePair],
-  )
+  // Fetch Hyperliquid fills
+  React.useEffect(() => {
+    if (!user) { setFuturesLoading(false); return }
+    let cancelled = false
+    fetch("/api/hyperliquid/fills").then(r => r.json()).then((d) => {
+      if (!cancelled) setFuturesFills(d.success ? (d.data || []).slice(0, 10) : [])
+    }).catch(() => {}).finally(() => { if (!cancelled) setFuturesLoading(false) })
+    return () => { cancelled = true }
+  }, [user])
 
-  // Tradeable coins for the dropdown (only coins that exist in our market data)
-  const availableCoins = React.useMemo(() => {
-    const filtered = coins.filter((c) =>
-      c.symbol !== "USDT" && c.symbol !== "USDC" &&
-      (search === "" || c.symbol.toLowerCase().includes(search.toLowerCase()) || c.name.toLowerCase().includes(search.toLowerCase()))
-    )
-    return filtered.slice(0, 20)
-  }, [coins, search])
-
-  function formatTime(ts: number) {
-    const diff = Date.now() - ts
+  function formatTime(ts: number | Date) {
+    const diff = Date.now() - (typeof ts === "number" ? ts : new Date(ts).getTime())
     if (diff < 60_000) return "Just now"
     if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
     if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
     return `${Math.floor(diff / 86400_000)}d ago`
   }
+
+  const loading = tab === "spot" ? spotTradesLoading : futuresLoading
 
   return (
     <div data-onboarding="dash-trades" className="flex h-full flex-col rounded-2xl bg-card">
@@ -518,116 +502,115 @@ function RecentTrades({ coins, initialTrades, error }: { coins: CoinData[]; init
           <HugeiconsIcon icon={Activity01Icon} className="h-4 w-4 text-primary" />
           <h3 className="text-base font-semibold">Recent Trades</h3>
         </div>
-        <div className="relative">
+        <div className="flex items-center gap-0.5">
           <button
-            onClick={() => setShowSearch(!showSearch)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+            onClick={() => setTab("spot")}
+            className={`rounded-lg px-2 py-1 text-xs font-medium transition-colors ${
+              tab === "spot" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
           >
-            {pairCoin?.image && <img src={pairCoin.image} alt="" className="h-3.5 w-3.5 rounded-full" />}
-            {activePair}/USDT
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
+            Spot
           </button>
-          {showSearch && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-xl border border-border/40 bg-card shadow-lg">
-              <div className="p-2">
-                <input
-                  ref={searchRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search pair…"
-                  className="w-full rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5 text-xs outline-none placeholder:text-muted-foreground/40 focus:border-primary/40"
-                />
-              </div>
-              <div className="max-h-48 overflow-y-auto">
-                {availableCoins.map((c) => (
-                  <button
-                    key={c.symbol}
-                    onClick={() => handleSelectPair(c.symbol)}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors hover:bg-accent/50 ${
-                      c.symbol === activePair ? "bg-primary/5 text-primary" : "text-foreground"
-                    }`}
-                  >
-                    {c.image ? (
-                      <img src={c.image} alt="" className="h-4 w-4 rounded-full" />
-                    ) : (
-                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary/10 text-[7px] font-bold text-primary">
-                        {c.symbol.slice(0, 2)}
-                      </span>
-                    )}
-                    <span className="font-medium">{c.symbol}</span>
-                    <span className="text-muted-foreground">/USDT</span>
-                    {c.symbol === activePair && <span className="ml-auto text-primary">✓</span>}
-                  </button>
-                ))}
-                {availableCoins.length === 0 && (
-                  <p className="px-3 py-3 text-center text-[11px] text-muted-foreground">No coins found</p>
-                )}
-              </div>
-            </div>
-          )}
+          <button
+            onClick={() => setTab("futures")}
+            className={`rounded-lg px-2 py-1 text-xs font-medium transition-colors ${
+              tab === "futures" ? "bg-amber-500/10 text-amber-600" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
+          >
+            Futures
+          </button>
         </div>
       </div>
-      {error && trades.length === 0 && !tradesLoading ? (
-        <ErrorState message={error} />
-      ) : tradesLoading ? (
+      {loading ? (
         <div className="flex flex-1 items-center justify-center py-12">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
-      ) : trades.length === 0 ? (
-        <EmptyState
-          icon={Exchange01Icon}
-          title="No recent trades"
-          description={`Market trades for ${activePair}/USDT will appear here`}
-          cta={{ label: "Start trading", href: "/spotv2" }}
-        />
-      ) : (
-        <div className="flex flex-1 flex-col divide-y divide-border/30">
-          {trades.slice(0, 8).map((trade) => (
-            <div key={trade.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/30">
-              <span
-                className={`text-xs font-bold ${
-                  trade.side === "buy" ? "text-emerald-500" : "text-red-500"
-                }`}
-              >
-                {trade.side === "buy" ? "B" : "S"}
-              </span>
-              <div className="flex flex-1 flex-col">
-                <span className="flex items-center gap-2 text-sm font-medium">
-                  <span className="flex items-center shrink-0">
-                    {pairCoin?.image ? (
-                      <img src={pairCoin.image} alt="" className="h-4.5 w-4.5 rounded-full ring-1 ring-card" />
-                    ) : (
-                      <span className="inline-flex h-4.5 w-4.5 items-center justify-center rounded-full bg-primary/10 text-[8px] font-bold text-primary ring-1 ring-card">
-                        {activePair.slice(0, 2)}
-                      </span>
-                    )}
-                    <img
-                      src={USDT_IMAGE}
-                      alt=""
-                      className="h-3.5 w-3.5 rounded-full ring-1 ring-card -ml-1.5"
-                    />
+      ) : tab === "spot" ? (
+        spotTrades.length === 0 ? (
+          <EmptyState
+            icon={Exchange01Icon}
+            title="No spot trades yet"
+            description="Your SpotV2 trades will appear here"
+            cta={{ label: "Start trading", href: "/spotv2" }}
+          />
+        ) : (
+          <div className="flex flex-1 flex-col divide-y divide-border/30">
+            {spotTrades.map((trade) => {
+              const isBuy = trade.side === "buy"
+              return (
+                <div key={trade.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/30">
+                  <span className={`text-xs font-bold ${isBuy ? "text-emerald-500" : "text-red-500"}`}>
+                    {isBuy ? "B" : "S"}
                   </span>
-                  {activePair}/USDT
-                </span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {parseFloat(trade.amount).toFixed(activePair === "BTC" ? 5 : 4)} {activePair}
-                </span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="text-sm font-semibold tabular-nums">
-                  ${parseFloat(trade.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                </span>
-                <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-                  <HugeiconsIcon icon={Clock01Icon} className="h-3 w-3" />
-                  {formatTime(trade.time)}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+                  <div className="flex flex-1 flex-col">
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      <span className="flex items-center shrink-0">
+                        {getCoinImage(trade.token) ? (
+                          <img src={getCoinImage(trade.token)} alt="" className="h-4.5 w-4.5 rounded-full ring-1 ring-card" onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(trade.token) }} />
+                        ) : (
+                          <span className="inline-flex h-4.5 w-4.5 items-center justify-center rounded-full bg-primary/10 text-[8px] font-bold text-primary ring-1 ring-card">
+                            {trade.token.slice(0, 2)}
+                          </span>
+                        )}
+                        <img src={USDC_IMAGE} alt="" className="h-3.5 w-3.5 rounded-full ring-1 ring-card -ml-1.5" />
+                      </span>
+                      {trade.pair}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {trade.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })} {trade.token}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-sm font-semibold tabular-nums">
+                      ${trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+                      <HugeiconsIcon icon={Clock01Icon} className="h-3 w-3" />
+                      {formatTime(trade.createdAt)}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      ) : (
+        futuresFills.length === 0 ? (
+          <EmptyState
+            icon={Exchange01Icon}
+            title="No futures trades yet"
+            description="Your futures fills will appear here"
+            cta={{ label: "Trade Futures", href: "/futures" }}
+          />
+        ) : (
+          <div className="flex flex-1 flex-col divide-y divide-border/30">
+            {futuresFills.map((fill, i) => {
+              const isBuy = fill.side === "B"
+              return (
+                <div key={`${fill.coin}-${fill.time}-${i}`} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/30">
+                  <span className={`text-xs font-bold ${isBuy ? "text-emerald-500" : "text-red-500"}`}>
+                    {isBuy ? "B" : "S"}
+                  </span>
+                  <div className="flex flex-1 flex-col">
+                    <span className="text-sm font-medium">{fill.coin}-PERP</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {parseFloat(fill.sz).toLocaleString(undefined, { maximumFractionDigits: 4 })} {fill.coin}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-sm font-semibold tabular-nums">
+                      ${parseFloat(fill.px).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+                      <HugeiconsIcon icon={Clock01Icon} className="h-3 w-3" />
+                      {formatTime(fill.time)}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
       )}
     </div>
   )
@@ -766,7 +749,44 @@ function EmptyState({
 function MyPositions() {
   const { user } = useAuth()
   const { positions, loading: posLoading } = useHyperliquidPositions()
-  const { balances: spotHoldings, loading: spotLoading } = useHyperliquidBalance(user?.userId, !!user)
+
+  // SpotV2 data
+  const [spotBalances, setSpotBalances] = React.useState<LedgerBalance[]>([])
+  const [spotPositions, setSpotPositions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
+  const [spotLoading, setSpotLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    if (!user) { setSpotLoading(false); return }
+    let cancelled = false
+
+    async function load() {
+      try {
+        const [balances, positions] = await Promise.all([
+          getSpotV2Balance(),
+          getSpotV2Positions(),
+        ])
+        // Get current prices for all position tokens
+        const tokens = positions.map((p) => p.token)
+        const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
+
+        if (cancelled) return
+        setSpotBalances(balances)
+        setSpotPositions(
+          positions.map((p) => ({
+            ...p,
+            currentPrice: priceMap.get(p.token) ?? 0,
+          })),
+        )
+      } catch {
+        // silently fail — empty state will show
+      } finally {
+        if (!cancelled) setSpotLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [user])
+
   const [view, setView] = React.useState<"positions" | "spot">("positions")
 
   const loading = view === "positions" ? posLoading : spotLoading
@@ -855,7 +875,7 @@ function MyPositions() {
           </div>
         )
       ) : (
-        spotHoldings.length === 0 ? (
+        spotBalances.length === 0 && spotPositions.length === 0 ? (
           <EmptyState
             icon={Chart01Icon}
             title="No spot holdings"
@@ -864,42 +884,64 @@ function MyPositions() {
           />
         ) : (
           <div className="flex flex-1 flex-col divide-y divide-border/30">
-            {spotHoldings.slice(0, 6).map((b) => {
-              const isProfit = b.unrealizedPnl >= 0
+            {/* USDC balance row */}
+            {spotBalances.filter((b) => b.available + b.locked > 0).map((b) => (
+              <div key={b.token} className="flex items-center gap-3 px-3 py-1.5 transition-colors hover:bg-accent/30">
+                <img src={USDC_IMAGE} alt="USDC" className="h-5 w-5 shrink-0 rounded-full object-contain" />
+                <div className="flex flex-1 flex-col">
+                  <span className="text-sm font-medium">{b.token}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {b.locked > 0 ? `${b.available.toLocaleString(undefined, { maximumFractionDigits: 2 })} avail · ${b.locked.toLocaleString(undefined, { maximumFractionDigits: 2 })} locked` : `${(b.available + b.locked).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                  </span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-sm font-semibold tabular-nums">
+                    ${(b.available + b.locked).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {/* Token positions */}
+            {spotPositions.slice(0, 5).map((p) => {
+              const currentValue = p.quantity * p.currentPrice
+              const costBasis = p.quantity * p.avgEntryPrice
+              const pnl = currentValue - costBasis
+              const pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0
+              const isProfit = pnl >= 0
               return (
-                <div key={b.coin} className="flex items-center gap-3 px-3 py-1.5 transition-colors hover:bg-accent/30">
-                  {getCoinImage(b.coin) ? (
+                <div key={p.token} className="flex items-center gap-3 px-3 py-1.5 transition-colors hover:bg-accent/30">
+                  {getCoinImage(p.token) ? (
                     <img
-                      src={getCoinImage(b.coin)}
-                      alt={b.coin}
+                      src={getCoinImage(p.token)}
+                      alt={p.token}
                       className="h-5 w-5 shrink-0 rounded-full object-contain"
-                      onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(b.coin) }}
+                      onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(p.token) }}
                     />
                   ) : (
                     <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">
-                      {b.coin.slice(0, 2)}
+                      {p.token.slice(0, 2)}
                     </div>
                   )}
                   <div className="flex flex-1 flex-col">
-                    <span className="text-sm font-medium">{b.coin}</span>
-                    <span className="text-xs text-muted-foreground tabular-nums">{b.total.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                    <span className="text-sm font-medium">{p.token}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{p.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="text-sm font-semibold tabular-nums">
-                      ${b.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ${currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    {b.unrealizedPnl !== 0 && (
+                    {pnl !== 0 && (
                       <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
-                        {isProfit ? "+" : ""}{b.unrealizedPnlPercent.toFixed(2)}%
+                        {isProfit ? "+" : ""}{pnlPercent.toFixed(2)}%
                       </span>
                     )}
                   </div>
                 </div>
               )
             })}
-            {spotHoldings.length > 6 && (
+            {spotPositions.length > 5 && (
               <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-primary hover:underline">
-                View all {spotHoldings.length} assets
+                View all {spotPositions.length} assets
               </a>
             )}
           </div>
@@ -923,7 +965,7 @@ export function DashboardGrid({ coins, initialTrades, prices, error }: Dashboard
       {/* Column 1: Markets + Recent Trades stacked */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-span-3">
         <MarketsTable coins={coins} error={error} />
-        <RecentTrades coins={coins} initialTrades={initialTrades} error={error} />
+        <RecentTrades coins={coins} error={error} />
       </div>
 
       {/* Column 2: Swap + My Holdings + Watchlist */}

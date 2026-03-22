@@ -17,7 +17,7 @@ import {
   ChartLineData01Icon,
   Coins01Icon,
 } from "@hugeicons/core-free-icons"
-import { getPrices, getSpotMarkets, getFuturesMarkets, type CoinData, type FuturesMarket } from "@/lib/actions"
+import { getPrices, getFuturesMarkets, type CoinData, type FuturesMarket } from "@/lib/actions"
 import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
 import { WalletSetupLoader } from "@/components/wallet-setup-loader"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
@@ -25,9 +25,12 @@ import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { useTradeSelector } from "@/components/trade-selector"
 import { useWalletBalances, type TokenBalance } from "@/hooks/useWalletBalances"
-import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
+import { getSpotV2Balance, getSpotV2Positions, getTokenPrices } from "@/lib/spotv2/ledger-actions"
+import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
+import { fetchSpotV2Pairs } from "@/lib/spotv2/pairs"
+import type { SpotV2Pair } from "@/components/spotv2/spotv2-types"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
 import { SpotFundingSwap, FundingHistory } from "@/components/wallet"
 import { useRouter } from "next/navigation"
@@ -270,8 +273,28 @@ export default function AssetsClient() {
   const { profile } = useProfile()
   const { user } = useAuth()
   const { balances: onChainBalances, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances()
-  const { balances: hlBalances, accountValue: hlAccountValue, loading: hlLoading } = useHyperliquidBalance(user?.userId, !!user)
   const { positions: hlPositions, loading: hlPositionsLoading } = useHyperliquidPositions()
+
+  // SpotV2 data
+  const [spotLedger, setSpotLedger] = React.useState<LedgerBalance[]>([])
+  const [spotV2Positions, setSpotV2Positions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
+  const [spotV2Loading, setSpotV2Loading] = React.useState(true)
+
+  React.useEffect(() => {
+    if (!user) { setSpotV2Loading(false); return }
+    let cancelled = false
+    Promise.all([getSpotV2Balance(), getSpotV2Positions()])
+      .then(async ([balances, positions]) => {
+        if (cancelled) return
+        setSpotLedger(balances)
+        const tokens = positions.map((p) => p.token)
+        const pm = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
+        if (!cancelled) setSpotV2Positions(positions.map((p) => ({ ...p, currentPrice: pm.get(p.token) ?? 0 })))
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSpotV2Loading(false) })
+    return () => { cancelled = true }
+  }, [user])
   const [prices, setPrices] = React.useState<Record<string, number>>({})
   const [activeView, setActiveView] = React.useState<WalletView>("spot")
   const [selectedChain, setSelectedChain] = React.useState<string>(CHAINS[0].key)
@@ -283,7 +306,7 @@ export default function AssetsClient() {
   const [chainTab, setChainTab] = React.useState<ChainTab>("All")
   const [search, setSearch] = React.useState("")
   const [sendModal, setSendModal] = React.useState<{ open: boolean; asset?: SendableAsset }>({ open: false })
-  const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
+  const [spotMarkets, setSpotMarkets] = React.useState<SpotV2Pair[]>([])
   const [spotMarketsLoading, setSpotMarketsLoading] = React.useState(false)
   const [spotMarketsLoaded, setSpotMarketsLoaded] = React.useState(false)
   const [spotSearch, setSpotSearch] = React.useState("")
@@ -312,8 +335,8 @@ export default function AssetsClient() {
     if (activeView !== "spot" || spotMarketsLoaded) return
     let cancelled = false
     setSpotMarketsLoading(true)
-    getSpotMarkets().then((data) => {
-      if (!cancelled) { setSpotMarkets(data.markets); setSpotMarketsLoading(false); setSpotMarketsLoaded(true) }
+    fetchSpotV2Pairs().then((pairs) => {
+      if (!cancelled) { setSpotMarkets(pairs); setSpotMarketsLoading(false); setSpotMarketsLoaded(true) }
     }).catch(() => { if (!cancelled) setSpotMarketsLoading(false) })
     return () => { cancelled = true }
   }, [activeView, spotMarketsLoaded])
@@ -377,14 +400,18 @@ export default function AssetsClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [balanceMap, prices])
 
-  // Spot balance = sum of all Hyperliquid spot holdings at current prices
-  const spotBalance = React.useMemo(
-    () => hlBalances.reduce((sum, b) => sum + (b.currentValue || 0), 0),
-    [hlBalances],
-  )
+  // Spot balance = sum of SpotV2 USDC (available + locked) + positions value
+  const spotBalance = React.useMemo(() => {
+    const usdcTotal = spotLedger.reduce((sum, b) => sum + b.available + b.locked, 0)
+    const posTotal = spotV2Positions.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0)
+    return usdcTotal + posTotal
+  }, [spotLedger, spotV2Positions])
 
-  // Futures balance = Hyperliquid perps account value
-  const futuresBalance = hlAccountValue
+  // Futures balance = sum of absolute position notional values
+  const futuresBalance = React.useMemo(
+    () => hlPositions.reduce((sum, p) => sum + Math.abs(parseFloat(p.positionValue || "0")), 0),
+    [hlPositions],
+  )
 
   // Per-view displayed balance
   const displayedBalance = React.useMemo(() => {
@@ -719,9 +746,9 @@ export default function AssetsClient() {
               <div className="flex items-center gap-2">
                 <HugeiconsIcon icon={Chart01Icon} className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold">Spot Holdings</h3>
-                {hlBalances.length > 0 && (
+                {(spotLedger.length + spotV2Positions.length) > 0 && (
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                    {hlBalances.length}
+                    {spotLedger.filter((b) => b.available + b.locked > 0).length + spotV2Positions.length}
                   </span>
                 )}
               </div>
@@ -732,12 +759,12 @@ export default function AssetsClient() {
               </div>
             </div>
 
-            {hlLoading ? (
+            {spotV2Loading ? (
               <div className="flex flex-col items-center justify-center py-14">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 <p className="mt-2 text-xs text-muted-foreground">Loading spot holdings...</p>
               </div>
-            ) : hlBalances.length === 0 ? (
+            ) : spotLedger.length === 0 && spotV2Positions.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-14">
                 <HugeiconsIcon icon={Wallet01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
                 <p className="text-xs font-medium text-muted-foreground">No spot holdings</p>
@@ -757,49 +784,81 @@ export default function AssetsClient() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/20">
-                    {hlBalances.filter((b) => !spotSearch || b.coin.toLowerCase().includes(spotSearch.toLowerCase())).map((b) => {
-                      const isProfit = b.unrealizedPnl >= 0
+                    {/* USDC balance rows */}
+                    {spotLedger.filter((b) => (b.available + b.locked > 0) && (!spotSearch || b.token.toLowerCase().includes(spotSearch.toLowerCase()))).map((b) => (
+                      <tr key={b.token} className="transition-colors hover:bg-accent/30">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2.5">
+                            <img src="https://coin-images.coingecko.com/coins/images/6319/small/usdc.png" alt="USDC" className="h-7 w-7 shrink-0 rounded-full object-contain" />
+                            <div>
+                              <span className="font-medium">{b.token}</span>
+                              <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Spot Balance</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                          {(b.available + b.locked).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                          {b.available.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden sm:table-cell">$1.00</td>
+                        <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                          ${(b.available + b.locked).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className="text-xs text-muted-foreground">—</span>
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Token position rows */}
+                    {spotV2Positions.filter((p) => !spotSearch || p.token.toLowerCase().includes(spotSearch.toLowerCase())).map((p) => {
+                      const currentValue = p.quantity * p.currentPrice
+                      const costBasis = p.quantity * p.avgEntryPrice
+                      const pnl = currentValue - costBasis
+                      const pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0
+                      const isProfit = pnl >= 0
                       return (
-                        <tr key={b.coin} className="transition-colors hover:bg-accent/30">
+                        <tr key={p.token} className="transition-colors hover:bg-accent/30">
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2.5">
-                              {getCoinImage(b.coin) ? (
+                              {getCoinImage(p.token) ? (
                                 <img
-                                  src={getCoinImage(b.coin)}
-                                  alt={b.coin}
+                                  src={getCoinImage(p.token)}
+                                  alt={p.token}
                                   className="h-7 w-7 shrink-0 rounded-full object-contain"
-                                  onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(b.coin) }}
+                                  onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(p.token) }}
                                 />
                               ) : (
                                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
-                                  {b.coin.slice(0, 3)}
+                                  {p.token.slice(0, 3)}
                                 </div>
                               )}
                               <div>
-                                <span className="font-medium">{b.coin}</span>
+                                <span className="font-medium">{p.token}</span>
                                 <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Spot</p>
                               </div>
                             </div>
                           </td>
                           <td className="px-4 py-2.5 text-right font-medium tabular-nums">
-                            {b.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                            {p.quantity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
                           </td>
                           <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
-                            {b.available.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                            {p.quantity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
                           </td>
                           <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
-                            ${b.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: b.entryPrice < 1 ? 6 : 2 })}
+                            ${p.avgEntryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: p.avgEntryPrice < 1 ? 6 : 2 })}
                           </td>
                           <td className="px-4 py-2.5 text-right font-medium tabular-nums">
-                            ${b.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ${currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className="px-4 py-2.5 text-right">
                             <div className="flex flex-col items-end">
                               <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
-                                {isProfit ? "+" : ""}${b.unrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {isProfit ? "+" : ""}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                               <span className={`text-[10px] tabular-nums ${isProfit ? "text-emerald-500/70" : "text-red-500/70"}`}>
-                                {isProfit ? "+" : ""}{b.unrealizedPnlPercent.toFixed(2)}%
+                                {isProfit ? "+" : ""}{pnlPercent.toFixed(2)}%
                               </span>
                             </div>
                           </td>
@@ -860,7 +919,7 @@ export default function AssetsClient() {
                                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/50 text-[10px] font-bold">{m.symbol.slice(0, 2)}</div>
                               )}
                               <div>
-                                <span className="font-medium">{m.symbol}/{m.quoteAsset || "USDC"}</span>
+                                <span className="font-medium">{m.displaySymbol || `${m.symbol}/USDC`}</span>
                                 <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{m.name}</p>
                               </div>
                             </div>

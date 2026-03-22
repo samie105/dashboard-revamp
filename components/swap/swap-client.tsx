@@ -355,6 +355,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const [fromChain, setFromChain] = React.useState("solana")
   const [toChain, setToChain] = React.useState("ethereum")
   const [quoteLoading, setQuoteLoading] = React.useState(false)
+  const [isDollarMode, setIsDollarMode] = React.useState(false)
 
   // Initialize from URL / defaults
   React.useEffect(() => {
@@ -372,7 +373,12 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
 
   const fromPrice = fromCoin ? (prices[fromCoin.symbol] ?? fromCoin.price) : 0
   const toPrice = toCoin ? (prices[toCoin.symbol] ?? toCoin.price) : 0
-  const numericFrom = parseFloat(fromAmount) || 0
+
+  // In dollar mode, fromAmount is USD; convert to token quantity for calculations
+  const tokenAmount = isDollarMode && fromPrice > 0
+    ? (parseFloat(fromAmount) || 0) / fromPrice
+    : parseFloat(fromAmount) || 0
+  const numericFrom = tokenAmount
   const estimatedTo = toPrice > 0 ? (numericFrom * fromPrice) / toPrice : 0
   const usdValue = numericFrom * fromPrice
 
@@ -400,6 +406,17 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     setFromChain(toChain)
     setToChain(tmpChain)
     setFromAmount("")
+    setIsDollarMode(false)
+  }
+
+  function setPercentage(pct: number) {
+    if (fromCoinBalance <= 0) return
+    const tokenAmt = fromCoinBalance * pct
+    if (isDollarMode && fromPrice > 0) {
+      setFromAmount((tokenAmt * fromPrice).toFixed(2))
+    } else {
+      setFromAmount(tokenAmt.toPrecision(6).replace(/\.?0+$/, ""))
+    }
   }
 
   const canSwap = numericFrom > 0 && fromCoin && toCoin && !quoteLoading
@@ -439,6 +456,28 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                   <span className="text-[11px] text-muted-foreground">Balance: {fromCoinBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
                 </div>
                 <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      setIsDollarMode(!isDollarMode)
+                      // Convert current amount when toggling
+                      const raw = parseFloat(fromAmount) || 0
+                      if (raw > 0 && fromPrice > 0) {
+                        if (!isDollarMode) {
+                          // switching TO dollar mode: token → USD
+                          setFromAmount((raw * fromPrice).toFixed(2))
+                        } else {
+                          // switching TO token mode: USD → token
+                          setFromAmount((raw / fromPrice).toPrecision(6).replace(/\.?0+$/, ""))
+                        }
+                      }
+                    }}
+                    className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold transition-colors ${
+                      isDollarMode ? "bg-primary text-white" : "bg-accent/50 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    }`}
+                    title={isDollarMode ? "Switch to token amount" : "Switch to USD amount"}
+                  >
+                    $
+                  </button>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -447,7 +486,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                       const v = e.target.value
                       if (/^[0-9]*\.?[0-9]*$/.test(v)) setFromAmount(v)
                     }}
-                    placeholder="0.00"
+                    placeholder={isDollarMode ? "$0.00" : "0.00"}
                     className="flex-1 min-w-0 bg-transparent text-xl font-semibold outline-none tabular-nums placeholder:text-muted-foreground/40"
                   />
                   <button
@@ -465,12 +504,32 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                     <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground" />
                   </button>
                 </div>
+                {/* Percentage buttons */}
+                <div className="flex items-center gap-1.5 mt-2.5">
+                  {[0.25, 0.5, 0.75, 1].map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => setPercentage(pct)}
+                      className="flex-1 rounded-lg bg-accent/50 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                    >
+                      {pct === 1 ? "MAX" : `${pct * 100}%`}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-border/20">
-                  {usdValue > 0 ? (
-                    <p className="text-[11px] text-muted-foreground tabular-nums">
-                      ≈ ${usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </p>
-                  ) : <span />}
+                  {isDollarMode ? (
+                    numericFrom > 0 ? (
+                      <p className="text-[11px] text-muted-foreground tabular-nums">
+                        ≈ {numericFrom.toLocaleString(undefined, { maximumFractionDigits: 6 })} {fromCoin?.symbol}
+                      </p>
+                    ) : <span />
+                  ) : (
+                    usdValue > 0 ? (
+                      <p className="text-[11px] text-muted-foreground tabular-nums">
+                        ≈ ${usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </p>
+                    ) : <span />
+                  )}
                   <button
                     onClick={() => setFromChain(fromChain === "solana" ? "ethereum" : "solana")}
                     className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"

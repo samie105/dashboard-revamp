@@ -228,6 +228,29 @@ export function SpotFundingSwap({ onTransferComplete }: { onTransferComplete?: (
                 </div>
               </div>
 
+              {/* Percentage shortcuts */}
+              <div className="flex gap-2">
+                {[25, 50, 75].map((pct) => (
+                  <button
+                    key={pct}
+                    onClick={() => {
+                      if (usdtBalance > 0) setAmount(String(+(usdtBalance * pct / 100).toFixed(2)))
+                    }}
+                    disabled={usdtBalance <= 0}
+                    className="flex-1 rounded-lg bg-accent/50 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 transition-colors"
+                  >
+                    {pct}%
+                  </button>
+                ))}
+                <button
+                  onClick={handleMax}
+                  disabled={usdtBalance <= 0}
+                  className="flex-1 rounded-lg bg-accent/50 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 transition-colors"
+                >
+                  MAX
+                </button>
+              </div>
+
               {amount && parsedAmount < 2 && (
                 <p className="text-[10px] text-red-500">Minimum transfer is 2 USDT</p>
               )}

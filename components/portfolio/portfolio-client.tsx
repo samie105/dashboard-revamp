@@ -32,6 +32,8 @@ import { getUserBalances } from "@/lib/actions"
 import type { CoinData, UserBalance } from "@/lib/actions"
 import { useTradeSelector } from "@/components/trade-selector"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { getSpotV2Balance, getSpotV2Positions, getTokenPrices } from "@/lib/spotv2/ledger-actions"
+import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -362,23 +364,40 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
   const [accountBalances, setAccountBalances] = React.useState<UserBalance[]>([])
   const [accountTotal, setAccountTotal] = React.useState(0)
 
+  // SpotV2 ledger data
+  const [spotBalances, setSpotBalances] = React.useState<LedgerBalance[]>([])
+  const [spotPositions, setSpotPositions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
+
   React.useEffect(() => {
     const uid = user?.userId
     if (!uid) return
+    // Fetch legacy balances for funding account
     getUserBalances(uid).then((r) => {
       if (r.success) {
         setAccountBalances(r.balances)
-        setAccountTotal(r.totalUsd)
       }
     })
+    // Fetch SpotV2 balances for trading account
+    Promise.all([getSpotV2Balance(), getSpotV2Positions()])
+      .then(async ([balances, positions]) => {
+        setSpotBalances(balances)
+        const tokens = positions.map((p) => p.token)
+        const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
+        setSpotPositions(positions.map((p) => ({ ...p, currentPrice: priceMap.get(p.token) ?? 0 })))
+      })
+      .catch(() => {})
   }, [user?.userId])
 
+  // SpotV2-sourced trading account values
+  const usdcEntry = spotBalances.find((b) => b.token === "USDC")
+  const availableUsdc = usdcEntry?.available ?? 0
+  const lockedUsdc = usdcEntry?.locked ?? 0
+  const positionsValue = spotPositions.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0)
+  const tradingValue = availableUsdc + lockedUsdc + positionsValue
+  const inOrders = lockedUsdc
+  const totalNetWorth = tradingValue
+
   const isOnboardingDone = profile?.onboardingCompleted?.includes("portfolio")
-  const usdcBal = accountBalances.find((b) => b.asset === "USDC" || b.asset === "USDT")
-  const tradingValue = accountTotal
-  const availableUsdc = usdcBal ? usdcBal.available : 0
-  const inOrders = accountBalances.reduce((sum, b) => sum + b.locked, 0)
-  const totalNetWorth = accountTotal
 
   const copyAddr = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -560,7 +579,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                             </div>
                             <div>
                               <p className="text-xs font-semibold">Trading Wallet</p>
-                              <p className="text-[10px] text-muted-foreground">Hyperliquid · Arbitrum</p>
+                              <p className="text-[10px] text-muted-foreground">SpotV2 Trading Wallet</p>
                             </div>
                           </div>
                           <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
