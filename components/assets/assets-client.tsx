@@ -121,7 +121,7 @@ const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Tron: "tron"
 
 const WALLET_VIEWS = [
   { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain wallet" },
-  { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "SpotV2 ledger balance" },
+  { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot balance" },
   { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Perpetual positions" },
 ] as const
 

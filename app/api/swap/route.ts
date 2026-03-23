@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth, currentUser } from "@clerk/nextjs/server"
+import { createPublicClient, http, parseAbi, formatUnits, formatEther, type Chain } from "viem"
+import { mainnet, arbitrum } from "viem/chains"
 import { connectDB } from "@/lib/mongodb"
 import { UserWallet } from "@/models/UserWallet"
 import SwapTransaction from "@/models/SwapTransaction"
@@ -17,6 +19,11 @@ const CHAIN_NAME_TO_ID: Record<string, number> = {
   base: 8453,
 }
 
+const VIEM_CHAINS: Record<number, { chain: Chain; rpc: string }> = {
+  1: { chain: mainnet, rpc: process.env.NEXT_PUBLIC_ETH_RPC || "https://cloudflare-eth.com" },
+  42161: { chain: arbitrum, rpc: process.env.NEXT_PUBLIC_ARB_RPC || "https://arb1.arbitrum.io/rpc" },
+}
+
 // Token address lookups per chain
 const TOKEN_ADDRESSES: Record<number, Record<string, { address: string; decimals: number }>> = {
   1: {
@@ -31,10 +38,68 @@ const TOKEN_ADDRESSES: Record<number, Record<string, { address: string; decimals
   },
 }
 
+const ERC20_ABI = parseAbi([
+  "function balanceOf(address owner) view returns (uint256)",
+])
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+
 function parseUnits(value: string, decimals: number): string {
   const [intPart = "0", fracPart = ""] = value.split(".")
   const padded = fracPart.padEnd(decimals, "0").slice(0, decimals)
   return (BigInt(intPart) * BigInt(10) ** BigInt(decimals) + BigInt(padded || "0")).toString()
+}
+
+// ── Balance checking ─────────────────────────────────────────────────────
+
+async function getOnChainBalance(
+  walletAddress: string,
+  tokenAddress: string,
+  chainId: number,
+  decimals: number,
+): Promise<number> {
+  const chainConfig = VIEM_CHAINS[chainId]
+  if (!chainConfig) return 0
+  const client = createPublicClient({ chain: chainConfig.chain, transport: http(chainConfig.rpc) })
+
+  if (tokenAddress === ZERO_ADDRESS) {
+    const wei = await client.getBalance({ address: walletAddress as `0x${string}` })
+    return parseFloat(formatEther(wei))
+  }
+
+  const raw = await client.readContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [walletAddress as `0x${string}`],
+  })
+  return parseFloat(formatUnits(raw, decimals))
+}
+
+// ── Receipt polling ──────────────────────────────────────────────────────
+
+async function waitForReceipt(
+  txHash: string,
+  chainId: number,
+  maxAttempts = 60,
+  intervalMs = 3000,
+): Promise<{ confirmed: boolean; success: boolean }> {
+  const chainConfig = VIEM_CHAINS[chainId]
+  if (!chainConfig) return { confirmed: false, success: false }
+  const client = createPublicClient({ chain: chainConfig.chain, transport: http(chainConfig.rpc) })
+
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` })
+      if (receipt) {
+        return { confirmed: true, success: receipt.status === "success" }
+      }
+    } catch {
+      // Receipt not available yet — keep polling
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  return { confirmed: false, success: false }
 }
 
 function toHex(val?: string | number): string | undefined {
@@ -182,6 +247,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing execution data" }, { status: 400 })
     }
 
+    // ── Server-side balance check ────────────────────────────────────────
+    const fromTokenInfo = TOKEN_ADDRESSES[fromToken.chainId]?.[fromToken.symbol]
+    if (!fromTokenInfo) {
+      return NextResponse.json({ error: `Token ${fromToken.symbol} not supported on chain ${fromToken.chainId}` }, { status: 400 })
+    }
+
+    const numericAmount = parseFloat(fromAmount)
+    if (!numericAmount || numericAmount <= 0) {
+      return NextResponse.json({ error: "Invalid amount" }, { status: 400 })
+    }
+
+    try {
+      const balance = await getOnChainBalance(wallet.address, fromTokenInfo.address, fromToken.chainId, fromTokenInfo.decimals)
+      if (balance < numericAmount) {
+        return NextResponse.json(
+          { error: `Insufficient ${fromToken.symbol} balance. You have ${balance.toFixed(6)} but need ${numericAmount}` },
+          { status: 400 },
+        )
+      }
+    } catch (balanceErr) {
+      console.error("[Swap] Balance check failed:", balanceErr)
+      // If balance check fails due to RPC issues, don't block — the tx will fail on-chain anyway
+    }
+
     // Build tx params
     const txParams: Record<string, unknown> = {
       to: executionData.to,
@@ -206,9 +295,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No transaction hash returned" }, { status: 500 })
     }
 
-    // Record in DB
+    // Record in DB as PENDING
     await connectDB()
-    await SwapTransaction.create({
+    const swapRecord = await SwapTransaction.create({
       userId: clerkUserId,
       txHash: hash,
       fromChain: Object.entries(CHAIN_NAME_TO_ID).find(([, v]) => v === fromToken.chainId)?.[0] ?? "ethereum",
@@ -227,7 +316,32 @@ export async function POST(request: NextRequest) {
       toolLogoURI,
     })
 
-    return NextResponse.json({ success: true, txHash: hash })
+    // ── Wait for on-chain confirmation ───────────────────────────────────
+    const { confirmed, success } = await waitForReceipt(hash, executionData.chainId)
+
+    if (confirmed) {
+      const finalStatus = success ? "DONE" : "FAILED"
+      await SwapTransaction.updateOne(
+        { _id: swapRecord._id },
+        { status: finalStatus, completedAt: new Date() },
+      )
+      if (success) {
+        return NextResponse.json({ success: true, txHash: hash, status: "DONE" })
+      } else {
+        return NextResponse.json(
+          { error: "Swap transaction reverted on-chain", txHash: hash, status: "FAILED" },
+          { status: 400 },
+        )
+      }
+    }
+
+    // Timed out waiting — return pending (rare edge case)
+    return NextResponse.json({
+      success: true,
+      txHash: hash,
+      status: "PENDING",
+      message: "Transaction submitted but confirmation is taking longer than expected. Check your transaction history.",
+    })
   } catch (error) {
     console.error("[Swap Execute] Error:", error)
     const msg = error instanceof Error ? error.message : "Swap execution failed"

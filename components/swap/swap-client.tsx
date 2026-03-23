@@ -410,7 +410,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const [quoteData, setQuoteData] = React.useState<QuoteData | null>(null)
   const [quoteError, setQuoteError] = React.useState<string | null>(null)
   const [swapLoading, setSwapLoading] = React.useState(false)
-  const [swapResult, setSwapResult] = React.useState<{ success: boolean; txHash?: string; error?: string } | null>(null)
+  const [swapResult, setSwapResult] = React.useState<{ success: boolean; txHash?: string; error?: string; status?: string } | null>(null)
 
   const fromPrice = fromCoin ? (prices[fromCoin.symbol] ?? fromCoin.price) : 0
   const toPrice = toCoin ? (prices[toCoin.symbol] ?? toCoin.price) : 0
@@ -513,12 +513,16 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         }),
       })
       const data = await res.json()
-      if (data.success) {
-        setSwapResult({ success: true, txHash: data.txHash })
+      if (data.success && data.status === "DONE") {
+        setSwapResult({ success: true, txHash: data.txHash, status: "DONE" })
+        setFromAmount("")
+        setQuoteData(null)
+      } else if (data.success && data.status === "PENDING") {
+        setSwapResult({ success: true, txHash: data.txHash, status: "PENDING" })
         setFromAmount("")
         setQuoteData(null)
       } else {
-        setSwapResult({ success: false, error: data.error || "Swap failed" })
+        setSwapResult({ success: false, error: data.error || "Swap failed", txHash: data.txHash, status: data.status })
       }
     } catch {
       setSwapResult({ success: false, error: "Network error. Please try again." })
@@ -555,7 +559,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     if (!fromCoin || !toCoin) return "Select tokens"
     if (!fromAmount || numericFrom <= 0) return "Enter amount"
     if (insufficientBalance) return "Insufficient balance"
-    if (swapLoading) return "Swapping..."
+    if (swapLoading) return "Confirming swap..."
     if (quoteLoading) return "Fetching quote..."
     if (quoteError) return "Quote unavailable"
     if (canQuote && !quoteData?.executionData && numericFrom > 0) return "No route found"
@@ -761,10 +765,16 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
               {/* Swap result banner */}
               {swapResult && (
                 <div className={`mt-3 rounded-xl p-3 text-xs font-medium ${
-                  swapResult.success ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                  swapResult.success && swapResult.status === "DONE"
+                    ? "bg-emerald-500/10 text-emerald-500"
+                    : swapResult.success && swapResult.status === "PENDING"
+                    ? "bg-amber-500/10 text-amber-500"
+                    : "bg-red-500/10 text-red-500"
                 }`}>
-                  {swapResult.success
-                    ? `Swap submitted! Tx: ${swapResult.txHash?.slice(0, 10)}...${swapResult.txHash?.slice(-6)}`
+                  {swapResult.success && swapResult.status === "DONE"
+                    ? `Swap confirmed! Tx: ${swapResult.txHash?.slice(0, 10)}...${swapResult.txHash?.slice(-6)}`
+                    : swapResult.success && swapResult.status === "PENDING"
+                    ? `Swap submitted — awaiting confirmation. Tx: ${swapResult.txHash?.slice(0, 10)}...${swapResult.txHash?.slice(-6)}`
                     : swapResult.error}
                 </div>
               )}

@@ -20,6 +20,8 @@ import { ErrorState } from "@/components/error-state"
 import type { CoinData } from "@/lib/actions"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { getSpotV2Balance, getSpotV2Positions, getTokenPrices } from "@/lib/spotv2/ledger-actions"
+import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
 
 function truncAddr(addr: string) {
   if (!addr || addr.length < 14) return addr
@@ -82,6 +84,30 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const [activeView, setActiveView] = React.useState<WalletView>("total")
   const [selectedWallet, setSelectedWallet] = React.useState<"tron" | "solana" | "ethereum">("tron")
 
+  // SpotV2 ledger data (same source as assets page)
+  const [spotLedger, setSpotLedger] = React.useState<LedgerBalance[]>([])
+  const [spotV2Positions, setSpotV2Positions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
+
+  React.useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    async function load() {
+      try {
+        const [balances, positions] = await Promise.all([
+          getSpotV2Balance(),
+          getSpotV2Positions(),
+        ])
+        const tokens = positions.map((p) => p.token)
+        const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
+        if (cancelled) return
+        setSpotLedger(balances)
+        setSpotV2Positions(positions.map((p) => ({ ...p, currentPrice: priceMap.get(p.token) ?? 0 })))
+      } catch { /* empty state */ }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [user])
+
   // On-chain balance: sum of all on-chain tokens valued in USD
   const onChainTotal = React.useMemo(() => {
     if (!walletsGenerated) return 0
@@ -93,8 +119,12 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     return total
   }, [onChainBalances, prices, walletsGenerated])
 
-  // Spot trading balance = sum of all spot holdings (USDC + tokens at current prices)
-  const spotBalance = hlBalances.reduce((sum, b) => sum + (b.currentValue || 0), 0)
+  // Spot balance = SpotV2 ledger (available + locked) + positions value (matches assets page)
+  const spotBalance = React.useMemo(() => {
+    const usdcTotal = spotLedger.reduce((sum, b) => sum + b.available + b.locked, 0)
+    const posTotal = spotV2Positions.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0)
+    return usdcTotal + posTotal
+  }, [spotLedger, spotV2Positions])
 
   // Futures balance (Hyperliquid perps account value)
   const futuresBalance = accountValue
