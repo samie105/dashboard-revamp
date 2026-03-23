@@ -40,6 +40,7 @@ const TOKEN_ADDRESSES: Record<number, Record<string, { address: string; decimals
 
 const ERC20_ABI = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
 ])
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
@@ -100,6 +101,68 @@ async function waitForReceipt(
     await new Promise((r) => setTimeout(r, intervalMs))
   }
   return { confirmed: false, success: false }
+}
+
+// ── ERC-20 approval helpers ──────────────────────────────────────────────
+
+const MAX_UINT256 = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+// Standard ERC-20 approve(address,uint256) function selector + ABI encoding
+function encodeApproveData(spender: string, amount: string = MAX_UINT256): string {
+  // approve(address,uint256) selector = 0x095ea7b3
+  const paddedSpender = spender.toLowerCase().replace("0x", "").padStart(64, "0")
+  const paddedAmount = amount.replace("0x", "").padStart(64, "0")
+  return `0x095ea7b3${paddedSpender}${paddedAmount}`
+}
+
+async function checkAndApprove(
+  walletAddress: string,
+  tokenAddress: string,
+  spender: string,
+  requiredAmount: bigint,
+  chainId: number,
+  walletId: string,
+  clerkJwt: string,
+): Promise<void> {
+  // Native ETH doesn't need approval
+  if (tokenAddress === ZERO_ADDRESS) return
+
+  const chainConfig = VIEM_CHAINS[chainId]
+  if (!chainConfig) return
+
+  const client = createPublicClient({ chain: chainConfig.chain, transport: http(chainConfig.rpc) })
+
+  // Check current allowance
+  const currentAllowance = await client.readContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: [walletAddress as `0x${string}`, spender as `0x${string}`],
+  })
+
+  if (currentAllowance >= requiredAmount) return // Already approved
+
+  // Send approve transaction
+  const approveTx: Record<string, unknown> = {
+    to: tokenAddress,
+    value: "0x0",
+    data: encodeApproveData(spender),
+    chain_id: chainId,
+  }
+
+  const approveResult = await privyClient.wallets().rpc(walletId, {
+    method: "eth_sendTransaction",
+    caip2: `eip155:${chainId}`,
+    params: { transaction: approveTx },
+    authorization_context: { user_jwts: [clerkJwt] },
+  })
+
+  const approveHash = (approveResult as unknown as Record<string, Record<string, string>>).data?.hash
+  if (!approveHash) throw new Error("Approval transaction failed — no hash returned")
+
+  // Wait for approval to confirm
+  const { confirmed, success } = await waitForReceipt(approveHash, chainId, 40, 3000)
+  if (!confirmed) throw new Error("Approval transaction timed out")
+  if (!success) throw new Error("Approval transaction reverted on-chain")
 }
 
 function toHex(val?: string | number): string | undefined {
@@ -269,6 +332,24 @@ export async function POST(request: NextRequest) {
     } catch (balanceErr) {
       console.error("[Swap] Balance check failed:", balanceErr)
       // If balance check fails due to RPC issues, don't block — the tx will fail on-chain anyway
+    }
+
+    // ── ERC-20 approval (required for non-native tokens) ─────────────────
+    try {
+      const rawAmount = BigInt(parseUnits(String(numericAmount), fromTokenInfo.decimals))
+      await checkAndApprove(
+        wallet.address,
+        fromTokenInfo.address,
+        executionData.to, // the LI.FI router contract
+        rawAmount,
+        executionData.chainId,
+        wallet.walletId,
+        clerkJwt,
+      )
+    } catch (approveErr) {
+      console.error("[Swap] Approval failed:", approveErr)
+      const msg = approveErr instanceof Error ? approveErr.message : "Token approval failed"
+      return NextResponse.json({ error: msg }, { status: 400 })
     }
 
     // Build tx params
