@@ -211,6 +211,7 @@ function QuoteCard({
   fromPrice,
   toPrice,
   slippage,
+  quoteData,
 }: {
   fromSymbol: string
   toSymbol: string
@@ -219,10 +220,12 @@ function QuoteCard({
   fromPrice: number
   toPrice: number
   slippage: number
+  quoteData?: QuoteData | null
 }) {
   const rate = fromPrice / toPrice
   const minReceived = toAmount * (1 - slippage / 100)
-  const priceImpact = fromAmount * fromPrice > 100000 ? 0.15 : fromAmount * fromPrice > 10000 ? 0.05 : 0.01
+  const priceImpact = quoteData?.priceImpact ?? (fromAmount * fromPrice > 100000 ? 0.15 : fromAmount * fromPrice > 10000 ? 0.05 : 0.01)
+  const gasCost = quoteData?.gasCostUSD ?? "0.50"
 
   return (
     <div className="rounded-xl border border-border/30 bg-accent/20 p-3 space-y-2">
@@ -250,8 +253,14 @@ function QuoteCard({
       </div>
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Network Fee</span>
-        <span className="font-medium text-muted-foreground">~$0.50</span>
+        <span className="font-medium text-muted-foreground">~${parseFloat(gasCost).toFixed(2)}</span>
       </div>
+      {quoteData?.tool && (
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Route</span>
+          <span className="font-medium">{quoteData.tool}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -318,9 +327,35 @@ function HowItWorks() {
 
 /* ── Chains ── */
 const CHAINS = [
-  { id: "solana", label: "Solana", icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
   { id: "ethereum", label: "Ethereum", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
+  { id: "arbitrum", label: "Arbitrum", icon: "https://coin-images.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg" },
 ]
+
+// Map swap chain id → balance API chain names
+const CHAIN_BALANCE_MAP: Record<string, string[]> = {
+  ethereum: ["ethereum"],
+  arbitrum: ["arbitrum"],
+}
+
+// Supported tokens per chain for LI.FI quotes
+const SUPPORTED_SWAP_TOKENS: Record<string, string[]> = {
+  ethereum: ["ETH", "USDT", "USDC"],
+  arbitrum: ["ETH", "USDT", "USDC"],
+}
+
+interface QuoteData {
+  toAmount: string
+  toAmountMin: string
+  toAmountUSD: string
+  fromAmountUSD: string
+  priceImpact: number
+  gasCostUSD: string
+  tool: string
+  toolLogoURI?: string
+  executionData: { to: string; data: string; value: string; chainId: number; gasLimit?: string } | null
+  fromToken: { chainId: number; address: string; symbol: string; decimals: number }
+  toToken: { chainId: number; address: string; symbol: string; decimals: number }
+}
 
 /* ── Main SwapClient ── */
 interface SwapClientProps {
@@ -340,7 +375,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     setSearchParams(new URLSearchParams(window.location.search))
   }, [])
 
-  const initFrom = searchParams?.get("from") || "SOL"
+  const initFrom = searchParams?.get("from") || "USDT"
   const initTo = searchParams?.get("to") || "ETH"
   const initAmount = searchParams?.get("amount") || ""
 
@@ -352,7 +387,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const [showSettings, setShowSettings] = React.useState(false)
   const [showFromModal, setShowFromModal] = React.useState(false)
   const [showToModal, setShowToModal] = React.useState(false)
-  const [fromChain, setFromChain] = React.useState("solana")
+  const [fromChain, setFromChain] = React.useState("ethereum")
   const [toChain, setToChain] = React.useState("ethereum")
   const [quoteLoading, setQuoteLoading] = React.useState(false)
   const [isDollarMode, setIsDollarMode] = React.useState(false)
@@ -371,6 +406,12 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     }
   }, [available, initFrom, initTo, fromCoin, toCoin])
 
+  // Real quote from LI.FI
+  const [quoteData, setQuoteData] = React.useState<QuoteData | null>(null)
+  const [quoteError, setQuoteError] = React.useState<string | null>(null)
+  const [swapLoading, setSwapLoading] = React.useState(false)
+  const [swapResult, setSwapResult] = React.useState<{ success: boolean; txHash?: string; error?: string } | null>(null)
+
   const fromPrice = fromCoin ? (prices[fromCoin.symbol] ?? fromCoin.price) : 0
   const toPrice = toCoin ? (prices[toCoin.symbol] ?? toCoin.price) : 0
 
@@ -379,24 +420,112 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     ? (parseFloat(fromAmount) || 0) / fromPrice
     : parseFloat(fromAmount) || 0
   const numericFrom = tokenAmount
-  const estimatedTo = toPrice > 0 ? (numericFrom * fromPrice) / toPrice : 0
+  // Use real LI.FI quote output when available, fall back to price-based estimate
+  const estimatedToFallback = toPrice > 0 ? (numericFrom * fromPrice) / toPrice : 0
+  const estimatedTo = quoteData?.toAmount
+    ? parseFloat(quoteData.toAmount) / Math.pow(10, quoteData.toToken.decimals)
+    : estimatedToFallback
   const usdValue = numericFrom * fromPrice
 
-  // Look up on-chain balance for the "from" coin
+  // Look up on-chain balance for the "from" coin (chain-aware)
   const fromCoinBalance = React.useMemo(() => {
     if (!fromCoin) return 0
-    const match = balances.find((b) => b.symbol.toUpperCase() === fromCoin.symbol.toUpperCase())
-    return match?.balance ?? 0
-  }, [balances, fromCoin])
+    const chainNames = CHAIN_BALANCE_MAP[fromChain] ?? [fromChain]
+    // Sum balances across matching chain names for the symbol
+    return balances
+      .filter((b) => b.symbol.toUpperCase() === fromCoin.symbol.toUpperCase() && chainNames.includes(b.chain))
+      .reduce((sum, b) => sum + b.balance, 0)
+  }, [balances, fromCoin, fromChain])
 
-  // Simulate quote loading on amount change
+  // Check if the from/to tokens are supported for real swap
+  const fromSupported = SUPPORTED_SWAP_TOKENS[fromChain]?.includes(fromCoin?.symbol ?? "") ?? false
+  const toSupported = SUPPORTED_SWAP_TOKENS[toChain]?.includes(toCoin?.symbol ?? "") ?? false
+  const canQuote = fromSupported && toSupported
+
+  // Fetch real LI.FI quote on amount/token/chain change
   React.useEffect(() => {
-    if (numericFrom > 0 && fromCoin && toCoin) {
+    if (numericFrom <= 0 || !fromCoin || !toCoin || !canQuote) {
+      setQuoteData(null)
+      setQuoteError(null)
+      setQuoteLoading(false)
+      return
+    }
+    setQuoteLoading(true)
+    setQuoteError(null)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => {
+      const qs = new URLSearchParams({
+        fromChain,
+        toChain,
+        fromToken: fromCoin.symbol,
+        toToken: toCoin.symbol,
+        amount: numericFrom.toString(),
+        slippage: (slippage / 100).toString(),
+      })
+      fetch(`/api/swap?${qs}`, { signal: controller.signal })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && data.quote) {
+            setQuoteData(data.quote)
+            setQuoteError(null)
+          } else {
+            setQuoteData(null)
+            setQuoteError(data.error || "Failed to get quote")
+          }
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") setQuoteError("Quote request failed")
+        })
+        .finally(() => setQuoteLoading(false))
+    }, 600) // debounce
+    return () => { clearTimeout(timeout); controller.abort() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromAmount, fromCoin?.symbol, toCoin?.symbol, fromChain, toChain, slippage, numericFrom, canQuote])
+
+  // For non-supported pairs, fall back to client-side estimate
+  React.useEffect(() => {
+    if (!canQuote && numericFrom > 0 && fromCoin && toCoin) {
       setQuoteLoading(true)
-      const t = setTimeout(() => setQuoteLoading(false), 400)
+      const t = setTimeout(() => setQuoteLoading(false), 300)
       return () => clearTimeout(t)
     }
-  }, [fromAmount, fromCoin?.symbol, toCoin?.symbol, numericFrom])
+  }, [canQuote, numericFrom, fromCoin, toCoin, fromAmount])
+
+  // Execute swap
+  const handleSwap = React.useCallback(async () => {
+    if (!quoteData?.executionData || swapLoading) return
+    setSwapLoading(true)
+    setSwapResult(null)
+    try {
+      const res = await fetch("/api/swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          executionData: quoteData.executionData,
+          fromToken: quoteData.fromToken,
+          toToken: quoteData.toToken,
+          fromAmount: numericFrom.toString(),
+          toAmount: quoteData.toAmount,
+          toAmountMin: quoteData.toAmountMin,
+          slippage,
+          tool: quoteData.tool,
+          toolLogoURI: quoteData.toolLogoURI,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSwapResult({ success: true, txHash: data.txHash })
+        setFromAmount("")
+        setQuoteData(null)
+      } else {
+        setSwapResult({ success: false, error: data.error || "Swap failed" })
+      }
+    } catch {
+      setSwapResult({ success: false, error: "Network error. Please try again." })
+    } finally {
+      setSwapLoading(false)
+    }
+  }, [quoteData, swapLoading, numericFrom, slippage])
 
   function flipPair() {
     const tmpCoin = fromCoin
@@ -419,14 +548,19 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     }
   }
 
-  const canSwap = numericFrom > 0 && fromCoin && toCoin && !quoteLoading
+  const insufficientBalance = numericFrom > 0 && fromCoinBalance > 0 && numericFrom > fromCoinBalance
+  const canSwap = numericFrom > 0 && fromCoin && toCoin && !quoteLoading && !swapLoading && !insufficientBalance && (canQuote ? !!quoteData?.executionData : true)
 
   const buttonText = React.useMemo(() => {
     if (!fromCoin || !toCoin) return "Select tokens"
     if (!fromAmount || numericFrom <= 0) return "Enter amount"
+    if (insufficientBalance) return "Insufficient balance"
+    if (swapLoading) return "Swapping..."
     if (quoteLoading) return "Fetching quote..."
+    if (quoteError) return "Quote unavailable"
+    if (canQuote && !quoteData?.executionData && numericFrom > 0) return "No route found"
     return "Swap"
-  }, [fromCoin, toCoin, fromAmount, numericFrom, quoteLoading])
+  }, [fromCoin, toCoin, fromAmount, numericFrom, quoteLoading, swapLoading, insufficientBalance, quoteError, canQuote, quoteData])
 
   const swapCard = (
     <>
@@ -531,7 +665,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                     ) : <span />
                   )}
                   <button
-                    onClick={() => setFromChain(fromChain === "solana" ? "ethereum" : "solana")}
+                    onClick={() => { const idx = CHAINS.findIndex((c) => c.id === fromChain); setFromChain(CHAINS[(idx + 1) % CHAINS.length].id) }}
                     className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <img src={CHAINS.find((c) => c.id === fromChain)!.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
@@ -588,7 +722,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                     </p>
                   ) : <span />}
                   <button
-                    onClick={() => setToChain(toChain === "solana" ? "ethereum" : "solana")}
+                    onClick={() => { const idx = CHAINS.findIndex((c) => c.id === toChain); setToChain(CHAINS[(idx + 1) % CHAINS.length].id) }}
                     className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <img src={CHAINS.find((c) => c.id === toChain)!.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
@@ -609,6 +743,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                     fromPrice={fromPrice}
                     toPrice={toPrice}
                     slippage={slippage}
+                    quoteData={quoteData}
                   />
                 </div>
               )}
@@ -623,12 +758,31 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                 </div>
               )}
 
+              {/* Swap result banner */}
+              {swapResult && (
+                <div className={`mt-3 rounded-xl p-3 text-xs font-medium ${
+                  swapResult.success ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                }`}>
+                  {swapResult.success
+                    ? `Swap submitted! Tx: ${swapResult.txHash?.slice(0, 10)}...${swapResult.txHash?.slice(-6)}`
+                    : swapResult.error}
+                </div>
+              )}
+
+              {/* Quote error */}
+              {quoteError && !quoteLoading && numericFrom > 0 && (
+                <p className="mt-2 text-xs text-amber-500">{quoteError}</p>
+              )}
+
               {/* ── Swap button ── */}
               <button
                 disabled={!canSwap}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-white transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleSwap}
+                className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed ${
+                  insufficientBalance ? "bg-red-500" : "bg-primary hover:bg-primary/90"
+                }`}
               >
-                {quoteLoading && <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin" />}
+                {(quoteLoading || swapLoading) && <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin" />}
                 {buttonText}
               </button>
               </>
