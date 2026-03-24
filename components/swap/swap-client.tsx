@@ -265,8 +265,59 @@ function QuoteCard({
   )
 }
 
-/* ── Swap History (Empty state — no mock data) ── */
+/* ── Swap History ── */
+interface SwapTx {
+  id: string
+  fromToken?: string
+  toToken?: string
+  amount: number
+  toAmount?: string
+  fromChain?: string
+  toChain?: string
+  status: string
+  txHash?: string
+  createdAt: string
+}
+
 function SwapHistory() {
+  const [swaps, setSwaps] = React.useState<SwapTx[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch("/api/transactions/unified?type=swap&limit=10")
+        if (!res.ok) throw new Error("Failed to fetch")
+        const data = await res.json()
+        if (!cancelled) setSwaps(data.transactions ?? [])
+      } catch {
+        // silent — show empty state
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  const statusColor = (s: string) => {
+    switch (s) {
+      case "completed": return "text-emerald-500"
+      case "failed": return "text-red-500"
+      default: return "text-amber-500"
+    }
+  }
+
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case "completed": return "Completed"
+      case "failed": return "Failed"
+      case "pending": return "Pending"
+      default: return "Processing"
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-border/40 bg-card">
       <div className="flex items-center justify-between border-b border-border/30 px-4 py-3">
@@ -275,13 +326,52 @@ function SwapHistory() {
           <h3 className="text-xs font-semibold">Recent Swaps</h3>
         </div>
       </div>
-      <div className="flex flex-col items-center justify-center gap-2 px-4 py-8">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50">
-          <HugeiconsIcon icon={Exchange01Icon} className="h-5 w-5 text-muted-foreground/40" />
+
+      {loading ? (
+        <div className="space-y-3 px-4 py-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-12 w-full rounded-lg" />
+          ))}
         </div>
-        <p className="text-xs font-medium text-muted-foreground">No swap history yet</p>
-        <p className="text-[10px] text-muted-foreground/60">Your completed swaps will appear here</p>
-      </div>
+      ) : swaps.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 px-4 py-8">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50">
+            <HugeiconsIcon icon={Exchange01Icon} className="h-5 w-5 text-muted-foreground/40" />
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">No swap history yet</p>
+          <p className="text-[10px] text-muted-foreground/60">Your completed swaps will appear here</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border/30">
+          {swaps.map((tx) => (
+            <div key={tx.id} className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/50">
+                  <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium truncate">
+                    {tx.fromToken ?? "?"} → {tx.toToken ?? "?"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {tx.fromChain} → {tx.toChain}
+                    {" · "}
+                    {new Date(tx.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right shrink-0 ml-2">
+                <p className="text-xs font-medium tabular-nums">
+                  {tx.amount} → {tx.toAmount ? parseFloat(tx.toAmount).toFixed(4) : "—"}
+                </p>
+                <p className={`text-[10px] font-medium ${statusColor(tx.status)}`}>
+                  {statusLabel(tx.status)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -329,18 +419,30 @@ function HowItWorks() {
 const CHAINS = [
   { id: "ethereum", label: "Ethereum", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
   { id: "arbitrum", label: "Arbitrum", icon: "https://coin-images.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg" },
+  { id: "polygon", label: "Polygon", icon: "https://coin-images.coingecko.com/coins/images/4713/small/polygon.png" },
+  { id: "optimism", label: "Optimism", icon: "https://coin-images.coingecko.com/coins/images/25244/small/Optimism.png" },
+  { id: "bsc", label: "BNB Chain", icon: "https://coin-images.coingecko.com/coins/images/825/small/bnb-icon2_2x.png" },
+  { id: "base", label: "Base", icon: "https://coin-images.coingecko.com/coins/images/31164/small/base.png" },
 ]
 
 // Map swap chain id → balance API chain names
 const CHAIN_BALANCE_MAP: Record<string, string[]> = {
   ethereum: ["ethereum"],
   arbitrum: ["arbitrum"],
+  polygon: ["polygon"],
+  optimism: ["optimism"],
+  bsc: ["bsc"],
+  base: ["base"],
 }
 
 // Supported tokens per chain for LI.FI quotes
 const SUPPORTED_SWAP_TOKENS: Record<string, string[]> = {
   ethereum: ["ETH", "USDT", "USDC"],
   arbitrum: ["ETH", "USDT", "USDC"],
+  polygon: ["MATIC", "USDT", "USDC"],
+  optimism: ["ETH", "USDT", "USDC"],
+  bsc: ["BNB", "USDT", "USDC"],
+  base: ["ETH", "USDC"],
 }
 
 interface QuoteData {
