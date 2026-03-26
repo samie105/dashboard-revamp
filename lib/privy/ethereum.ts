@@ -1,5 +1,6 @@
 import { toHex } from "viem"
 import { privyClient } from "./client"
+import { shouldSponsor } from "./sponsorship"
 import { mainnet, arbitrum, polygon, optimism, bsc, base } from "viem/chains"
 
 export interface EthereumTransactionParams {
@@ -10,7 +11,6 @@ export interface EthereumTransactionParams {
   gasPrice?: string | number | bigint
   nonce?: number
   chain_id?: number
-  sponsor?: boolean
 }
 
 export const getChain = (chainId: number) => {
@@ -87,7 +87,7 @@ export async function sendEthereumTransaction(
       throw new Error("No authorization context available - JWT required")
 
     const chainId = params.chain_id || 1
-    const sponsor = params.sponsor ?? false
+    const sponsor = shouldSponsor("ethereum")
 
     console.log(
       `[Privy Ethereum] Execution on chain ${chainId} (Sponsor: ${sponsor}). Target: ${params.to}`,
@@ -142,7 +142,6 @@ export async function sendEth(
       to: toAddress,
       value: valueInWei,
       chain_id: 1,
-      sponsor: false,
     },
     clerkJwt,
   )

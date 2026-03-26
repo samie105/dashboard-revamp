@@ -195,7 +195,6 @@ function QuoteDetails({ quote, toDecimals, toSymbol }: { quote: BridgeQuote; toD
   const toAmount = parseFloat(formatUnits(quote.estimate.toAmount, toDecimals))
   const toAmountMin = parseFloat(formatUnits(quote.estimate.toAmountMin, toDecimals))
   const fees = quote.estimate.feeCosts?.reduce((sum, f) => sum + parseFloat(f.amountUSD || "0"), 0) ?? 0
-  const gas = quote.estimate.gasCosts?.reduce((sum, g) => sum + parseFloat(g.amountUSD || "0"), 0) ?? 0
   const estMinutes = Math.ceil(quote.estimate.executionDuration / 60)
 
   return (
@@ -227,10 +226,7 @@ function QuoteDetails({ quote, toDecimals, toSymbol }: { quote: BridgeQuote; toD
         <span className="text-muted-foreground">Protocol Fees</span>
         <span className="font-medium tabular-nums">${fees.toFixed(4)}</span>
       </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">Gas Cost (Est.)</span>
-        <span className="font-medium tabular-nums">${gas.toFixed(4)}</span>
-      </div>
+
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Est. Time</span>
         <span className="font-medium">{estMinutes} min{estMinutes !== 1 ? "s" : ""}</span>
@@ -348,8 +344,6 @@ export function BridgeClient() {
     return match?.balance ?? 0
   }, [balances, fromToken.symbol, fromChain])
 
-  // Gas buffer for native token sends (ETH on various chains)
-  const GAS_BUFFER: Record<number, number> = { 1: 0.005, 42161: 0.0003, 137: 0.1, 10: 0.0003, 56: 0.005, 8453: 0.0003 }
 
   const [amount, setAmount] = React.useState("")
   const [isDollarMode, setIsDollarMode] = React.useState(false)
@@ -402,18 +396,12 @@ export function BridgeClient() {
 
   const handleMax = React.useCallback(() => {
     if (fromTokenBalance <= 0) return
-    const isNativeToken = fromToken.address === "0x0000000000000000000000000000000000000000"
-    let maxAmount = fromTokenBalance
-    if (isNativeToken) {
-      const buffer = GAS_BUFFER[fromChain.id] ?? 0.005
-      maxAmount = Math.max(0, fromTokenBalance - buffer)
-    }
     if (isDollarMode && tokenPrice > 0) {
-      setAmount(String(+(maxAmount * tokenPrice).toFixed(2)))
+      setAmount(String(+(fromTokenBalance * tokenPrice).toFixed(2)))
     } else {
-      setAmount(String(+(maxAmount).toFixed(6)))
+      setAmount(String(+(fromTokenBalance).toFixed(6)))
     }
-  }, [fromTokenBalance, fromToken.address, fromChain.id, isDollarMode, tokenPrice])
+  }, [fromTokenBalance, isDollarMode, tokenPrice])
 
   const insufficientBalance = React.useMemo(() => {
     const num = parseFloat(tokenAmount)
@@ -628,8 +616,7 @@ export function BridgeClient() {
                       key={pct}
                       onClick={() => {
                         if (fromTokenBalance <= 0) return
-                        const isNative = fromToken.address === "0x0000000000000000000000000000000000000000"
-                        const base = isNative ? Math.max(0, fromTokenBalance - (GAS_BUFFER[fromChain.id] ?? 0.005)) : fromTokenBalance
+                        const base = fromTokenBalance
                         const val = base * pct / 100
                         if (isDollarMode && tokenPrice > 0) {
                           setAmount(String(+(val * tokenPrice).toFixed(2)))

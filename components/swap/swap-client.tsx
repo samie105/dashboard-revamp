@@ -225,7 +225,6 @@ function QuoteCard({
   const rate = fromPrice / toPrice
   const minReceived = toAmount * (1 - slippage / 100)
   const priceImpact = quoteData?.priceImpact ?? (fromAmount * fromPrice > 100000 ? 0.15 : fromAmount * fromPrice > 10000 ? 0.05 : 0.01)
-  const gasCost = quoteData?.gasCostUSD ?? "0.50"
 
   return (
     <div className="rounded-xl border border-border/30 bg-accent/20 p-3 space-y-2">
@@ -251,10 +250,7 @@ function QuoteCard({
         <span className="text-muted-foreground">Slippage</span>
         <span className="font-medium">{slippage}%</span>
       </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">Network Fee</span>
-        <span className="font-medium text-muted-foreground">~${parseFloat(gasCost).toFixed(2)}</span>
-      </div>
+
       {quoteData?.tool && (
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Route</span>

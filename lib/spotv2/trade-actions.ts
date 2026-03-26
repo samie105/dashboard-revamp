@@ -1,6 +1,7 @@
 "use server"
 
 import { PrivyClient } from "@privy-io/node"
+import { shouldSponsor } from "@/lib/privy/sponsorship"
 import { UserWallet } from "@/models/UserWallet"
 import { connectDB } from "@/lib/mongodb"
 import { auth, currentUser } from "@clerk/nextjs/server"
@@ -242,6 +243,7 @@ export async function executeSpotV2Trade(params: {
     const result = await privy.wallets().rpc(wallet.walletId, {
       method: "eth_sendTransaction",
       caip2: `eip155:${params.executionData.chainId}`,
+      sponsor: shouldSponsor("ethereum"),
       params: { transaction: txParams },
       authorization_context: { user_jwts: [clerkJwt] },
     })

@@ -6,6 +6,7 @@ import { connectDB } from "@/lib/mongodb"
 import { UserWallet } from "@/models/UserWallet"
 import SwapTransaction from "@/models/SwapTransaction"
 import { privyClient } from "@/lib/privy/client"
+import { shouldSponsor } from "@/lib/privy/sponsorship"
 
 // ── Chain mapping ────────────────────────────────────────────────────────
 
@@ -175,6 +176,7 @@ async function checkAndApprove(
   const approveResult = await privyClient.wallets().rpc(walletId, {
     method: "eth_sendTransaction",
     caip2: `eip155:${chainId}`,
+    sponsor: shouldSponsor("ethereum"),
     params: { transaction: approveTx },
     authorization_context: { user_jwts: [clerkJwt] },
   })
@@ -390,6 +392,7 @@ export async function POST(request: NextRequest) {
     const result = await privyClient.wallets().rpc(wallet.walletId, {
       method: "eth_sendTransaction",
       caip2: `eip155:${executionData.chainId}`,
+      sponsor: shouldSponsor("ethereum"),
       params: { transaction: txParams },
       authorization_context: { user_jwts: [clerkJwt] },
     })

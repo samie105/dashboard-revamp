@@ -724,7 +724,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                   <div className="flex items-start gap-2.5 rounded-xl bg-blue-500/5 border border-blue-500/10 px-3 py-2.5">
                     <HugeiconsIcon icon={InformationCircleIcon} className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-px" />
                     <div className="text-[10px] text-blue-400 space-y-0.5">
-                      <p>Minimum deposit: 5 USDC. Requires ETH on Arbitrum for gas.</p>
+                      <p>Minimum deposit: 5 USDC.</p>
                     </div>
                   </div>
 

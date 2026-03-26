@@ -1,8 +1,14 @@
 import { privyClient } from "./client"
-import { Connection, PublicKey } from "@solana/web3.js"
+import { shouldSponsor } from "./sponsorship"
+import {
+  Connection,
+  PublicKey,
+  Transaction,
+  SystemProgram,
+} from "@solana/web3.js"
 
 /**
- * Send SOL to an address using Privy's Solana Kit integration
+ * Send SOL to an address using Privy's RPC with gas sponsorship
  */
 export async function sendSol(
   walletId: string,
@@ -25,90 +31,54 @@ export async function sendSol(
       toAddress,
     )
 
-    const lamports = BigInt(Math.floor(parseFloat(amountInSol) * 1e9))
-
-    const authorizationContext = clerkJwt
-      ? { user_jwts: [clerkJwt] }
-      : undefined
-
-    if (!authorizationContext) {
+    if (!clerkJwt) {
       throw new Error("No authorization context available - JWT required")
     }
 
-    console.log("[Privy Solana] Authorization context created with user JWT")
-
-    const { createSolanaKitSigner } = await import("@privy-io/node/solana-kit")
-    const {
-      address,
-      createTransactionMessage,
-      pipe,
-      setTransactionMessageFeePayerSigner,
-      signAndSendTransactionMessageWithSigners,
-      appendTransactionMessageInstruction,
-    } = await import("@solana/kit")
-
-    const signer = createSolanaKitSigner(privyClient, {
-      walletId,
-      address: address(wallet.address),
-      caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-      authorizationContext,
-    })
+    const lamports = BigInt(Math.floor(parseFloat(amountInSol) * 1e9))
 
     const connection = new Connection(
       process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
-        "https://api.mainnet-beta.solana.net",
+        "https://api.mainnet-beta.solana.com",
     )
 
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash()
+    const fromPubkey = new PublicKey(wallet.address)
+    const toPubkey = new PublicKey(toAddress)
 
-    const systemProgramId = address("11111111111111111111111111111111")
+    const tx = new Transaction()
+    tx.feePayer = fromPubkey
+    tx.recentBlockhash = (
+      await connection.getLatestBlockhash("finalized")
+    ).blockhash
 
-    // Create transfer instruction data (instruction index 2 = transfer)
-    const instructionData = new Uint8Array(12)
-    instructionData[0] = 2 // Transfer instruction
-    instructionData[1] = 0
-    instructionData[2] = 0
-    instructionData[3] = 0
-    const lamportsArray = new BigUint64Array([lamports])
-    instructionData.set(new Uint8Array(lamportsArray.buffer), 4)
-
-    const transactionMessage = pipe(
-      createTransactionMessage({ version: 0 }),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (m: any) => setTransactionMessageFeePayerSigner(signer, m),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (m: any) => ({
-        ...m,
-        lifetimeConstraint: {
-          blockhash,
-          lastValidBlockHeight,
-        },
+    tx.add(
+      SystemProgram.transfer({
+        fromPubkey,
+        toPubkey,
+        lamports,
       }),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (m: any) =>
-        appendTransactionMessageInstruction(
-          {
-            programAddress: systemProgramId,
-            accounts: [
-              {
-                address: address(wallet.address),
-                role: 3, // AccountRole.WRITABLE_SIGNER
-              },
-              {
-                address: address(toAddress),
-                role: 1, // AccountRole.WRITABLE
-              },
-            ],
-            data: instructionData,
-          },
-          m,
-        ),
     )
 
-    const signature =
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await signAndSendTransactionMessageWithSigners(transactionMessage as any)
+    const serialized = tx
+      .serialize({ requireAllSignatures: false })
+      .toString("base64")
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (privyClient.wallets() as any).rpc(walletId, {
+      method: "signAndSendTransaction",
+      caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      chain_type: "solana",
+      sponsor: shouldSponsor("solana"),
+      params: {
+        encoding: "base64",
+        transaction: serialized,
+      },
+      authorization_context: {
+        user_jwts: [clerkJwt],
+      },
+    })
+
+    const signature = result.data?.hash
 
     return {
       signature,

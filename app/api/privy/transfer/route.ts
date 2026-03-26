@@ -5,6 +5,7 @@ import { UserWallet } from "@/models/UserWallet"
 import WalletTransfer from "@/models/WalletTransfer"
 import { createAuthorizationContext } from "@/lib/privy/authorization"
 import { privyClient } from "@/lib/privy/client"
+import { shouldSponsor } from "@/lib/privy/sponsorship"
 import { parseUnits, encodeFunctionData, toHex } from "viem"
 import { arbitrum } from "viem/chains"
 
@@ -199,7 +200,7 @@ export async function POST(request: NextRequest) {
       method: "eth_sendTransaction",
       caip2: "eip155:42161",
       chain_type: "ethereum",
-      sponsor: true,
+      sponsor: shouldSponsor("ethereum"),
       params: {
         transaction: txParams,
       },

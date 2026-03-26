@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb"
 import { UserWallet } from "@/models/UserWallet"
 import SpotV2Deposit from "@/models/SpotV2Deposit"
 import { privyClient } from "@/lib/privy/client"
+import { shouldSponsor } from "@/lib/privy/sponsorship"
 import {
   createAuthorizationContext,
   type AuthorizationContext,
@@ -79,6 +80,7 @@ async function sendTokenEthereum(
     method: "eth_sendTransaction",
     caip2: "eip155:1",
     chain_type: "ethereum",
+    sponsor: shouldSponsor("ethereum"),
     params: {
       transaction: {
         to: tokenContract,
@@ -108,16 +110,6 @@ async function sendTokenSolana(
   )
 
   const fromPubkey = new PublicKey(fromAddress)
-
-  const solBalance = await connection.getBalance(fromPubkey)
-  const MIN_SOL_LAMPORTS = 10_000_000
-  if (solBalance < MIN_SOL_LAMPORTS) {
-    const solAmount = (solBalance / 1e9).toFixed(6)
-    throw new Error(
-      `Insufficient SOL for fees. Need ≥0.01 SOL, have ${solAmount} SOL.`,
-    )
-  }
-
   const toPubkey = new PublicKey(treasuryAddress)
   const mintPubkey = new PublicKey(mintAddress)
 
@@ -168,6 +160,7 @@ async function sendTokenSolana(
     method: "signAndSendTransaction",
     caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
     chain_type: "solana",
+    sponsor: shouldSponsor("solana"),
     params: {
       encoding: "base64",
       transaction: serialized,
@@ -426,12 +419,6 @@ export async function POST(request: NextRequest) {
       error instanceof Error ? error.message : "Failed to send funds"
 
     if (
-      userMessage.includes("insufficient lamports") ||
-      userMessage.includes("Attempt to debit")
-    ) {
-      userMessage =
-        "Insufficient SOL for fees. You need at least 0.01 SOL in your Solana wallet."
-    } else if (
       userMessage.includes("bandwidth") ||
       userMessage.includes("energy") ||
       userMessage.includes("AccountResourceInsufficient")

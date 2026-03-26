@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb"
 import { UserWallet } from "@/models/UserWallet"
 import SpotDeposit from "@/models/SpotDeposit"
 import { privyClient } from "@/lib/privy/client"
+import { shouldSponsor } from "@/lib/privy/sponsorship"
 import {
   createAuthorizationContext,
   type AuthorizationContext,
@@ -60,6 +61,7 @@ async function sendUsdtEthereum(
     method: "eth_sendTransaction",
     caip2: "eip155:1",
     chain_type: "ethereum",
+    sponsor: shouldSponsor("ethereum"),
     params: {
       transaction: {
         to: ETH_USDT_ADDRESS,
@@ -87,16 +89,6 @@ async function sendUsdtSolana(
   )
 
   const fromPubkey = new PublicKey(fromAddress)
-
-  const solBalance = await connection.getBalance(fromPubkey)
-  const MIN_SOL_LAMPORTS = 10_000_000
-  if (solBalance < MIN_SOL_LAMPORTS) {
-    const solAmount = (solBalance / 1e9).toFixed(6)
-    throw new Error(
-      `Insufficient SOL for transaction fees. You need at least 0.01 SOL but your wallet only has ${solAmount} SOL.`,
-    )
-  }
-
   const toPubkey = new PublicKey(treasuryAddress)
   const mintPubkey = new PublicKey(SOL_USDT_MINT)
 
@@ -148,6 +140,7 @@ async function sendUsdtSolana(
     method: "signAndSendTransaction",
     caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
     chain_type: "solana",
+    sponsor: shouldSponsor("solana"),
     params: {
       encoding: "base64",
       transaction: serialized,
@@ -400,13 +393,6 @@ export async function POST(request: NextRequest) {
 
     let userMessage = error.message || "Failed to send USDT"
     if (
-      userMessage.includes("no record of a prior credit") ||
-      userMessage.includes("insufficient lamports") ||
-      userMessage.includes("Attempt to debit")
-    ) {
-      userMessage =
-        "Insufficient SOL for transaction fees. You need at least 0.01 SOL in your Solana wallet. Please fund your wallet with SOL and try again."
-    } else if (
       userMessage.includes("bandwidth") ||
       userMessage.includes("energy") ||
       userMessage.includes("AccountResourceInsufficient")

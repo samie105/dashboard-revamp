@@ -51,12 +51,11 @@ const CHAIN_LABELS: Record<string, string> = {
   tron: "Tron",
 }
 
-// ── Gas buffers for native tokens ────────────────────────────────────────
+// ── Gas buffers for unsponsored chains only ─────────────────────────────
+
+const SPONSORED_CHAINS = new Set(["ethereum", "arbitrum", "solana"])
 
 const GAS_BUFFER: Record<string, number> = {
-  ethereum: 0.001,
-  arbitrum: 0.0002,
-  solana: 0.01,
   sui: 0.02,
   tron: 1,
   ton: 0.05,
@@ -71,8 +70,7 @@ function sanitizeError(msg: string): string {
     return "Network error. Please check your connection and try again."
   if (msg.includes("invalid address") || msg.includes("Invalid address"))
     return "Invalid recipient address. Please verify and try again."
-  if (msg.includes("gas") && (msg.includes("too low") || msg.includes("insufficient")))
-    return "Insufficient funds for transaction fees."
+
   if (msg.includes("timeout") || msg.includes("timed out"))
     return "Transaction timed out. Please try again."
   if (msg.includes("rejected") || msg.includes("denied"))
@@ -120,7 +118,7 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
 
   function handleMax() {
     if (!asset) return
-    if (!asset.contractAddress) {
+    if (!asset.contractAddress && !SPONSORED_CHAINS.has(asset.chain)) {
       const buffer = GAS_BUFFER[asset.chain] ?? 0.01
       setAmount(Math.max(0, asset.balance - buffer).toString())
     } else {
@@ -133,11 +131,11 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
     if (!asset) return
     if (!isValidRecipient) { setError("Enter a valid recipient address"); return }
     if (!isValidAmount) { setError("Enter a valid amount within your balance"); return }
-    // Pre-flight gas check for native token sends
-    if (!asset.contractAddress) {
+    // Pre-flight gas check for native token sends on unsponsored chains
+    if (!asset.contractAddress && !SPONSORED_CHAINS.has(asset.chain)) {
       const buffer = GAS_BUFFER[asset.chain] ?? 0.01
       if (amountNum + buffer > asset.balance) {
-        setError(`Insufficient balance for gas fees. Leave at least ${buffer} ${asset.symbol} for transaction fees.`)
+        setError(`Insufficient balance to complete this transaction. Leave at least ${buffer} ${asset.symbol}.`)
         return
       }
     }
@@ -296,7 +294,7 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
                       key={pct}
                       onClick={() => {
                         if (!asset) return
-                        const base = !asset.contractAddress ? Math.max(0, asset.balance - (GAS_BUFFER[asset.chain] ?? 0.01)) : asset.balance
+                        const base = (!asset.contractAddress && !SPONSORED_CHAINS.has(asset.chain)) ? Math.max(0, asset.balance - (GAS_BUFFER[asset.chain] ?? 0.01)) : asset.balance
                         setAmount(String(+(base * pct / 100).toFixed(6)))
                       }}
                       className="flex-1 rounded-lg bg-accent/50 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"

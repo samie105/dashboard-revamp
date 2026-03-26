@@ -33,7 +33,6 @@ export async function POST(request: NextRequest) {
       data,
       chainId,
       gasLimit,
-      sponsor: requestSponsor,
     } = await request.json()
 
     if (!to || !chainId) {
@@ -79,12 +78,9 @@ export async function POST(request: NextRequest) {
     }
 
     const activeChainId = Number(chainId)
-    const isL2 = [42161, 8453, 10, 137].includes(activeChainId)
-    const shouldSponsor =
-      requestSponsor !== undefined ? !!requestSponsor : isL2
 
     console.log(
-      `[Execute Transaction] Routing from ${userWallet.tradingWallet?.address || "main"} on chain ${activeChainId} (Sponsor: ${shouldSponsor})`,
+      `[Execute Transaction] Routing from ${userWallet.tradingWallet?.address || "main"} on chain ${activeChainId}`,
     )
 
     const result = await sendEthereumTransaction(
@@ -95,7 +91,6 @@ export async function POST(request: NextRequest) {
         data: data,
         chain_id: activeChainId,
         gas: gasLimit,
-        sponsor: shouldSponsor,
       },
       clerkJwt,
     )

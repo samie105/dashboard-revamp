@@ -9,6 +9,7 @@
  */
 
 import { encodeFunctionData, parseUnits } from "viem"
+import { shouldSponsor } from "@/lib/privy/sponsorship"
 
 const HL_BRIDGE_ADDRESS =
   "0x2Df1c51E09aECF9cacB7bc98cB1742757f163dF7" as const
@@ -76,7 +77,7 @@ export async function bridgeToHyperliquid({
     method: "eth_sendTransaction",
     caip2: "eip155:42161",
     chain_type: "ethereum",
-    sponsor: true,
+    sponsor: shouldSponsor("ethereum"),
     params: { transaction: txParams },
     authorization_context: authorizationContext,
   })

@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
 import { UserWallet } from "@/models/UserWallet"
 import { privyClient } from "@/lib/privy/client"
+import { shouldSponsor } from "@/lib/privy/sponsorship"
 import { Connection, PublicKey, Transaction } from "@solana/web3.js"
 import {
   getAssociatedTokenAddress,
@@ -139,6 +140,7 @@ export async function POST(request: NextRequest) {
       method: "signAndSendTransaction",
       caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
       chain_type: "solana",
+      sponsor: shouldSponsor("solana"),
       params: {
         encoding: "base64",
         transaction: serialized,
