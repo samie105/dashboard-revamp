@@ -118,7 +118,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: "Academy", url: "https://academy.worldstreetgold.com", icon: Book01Icon, external: true },
       { name: "Social", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon, external: true },
       { name: "Xstream", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon, external: true },
-      { name: "Forex Trading", url: "https://trader.worldstreetgold.com", icon: DollarCircleIcon, external: true },
+      { name: "Forex Trading", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon, external: true },
       { name: "Vivid AI", url: "/vivid", icon: Brain01Icon },
     ],
   },

@@ -17,7 +17,7 @@ const EXTERNAL_SECTIONS = [
   { name: "Academy", url: "https://academy.worldstreetgold.com", icon: Book01Icon },
   { name: "Social", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon },
   { name: "Xstream", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
-  { name: "Forex Trading", url: "https://trader.worldstreetgold.com", icon: DollarCircleIcon },
+  { name: "Forex Trading", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
 ] as const
 
 export function WorldStreetSections() {

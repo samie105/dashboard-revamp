@@ -118,7 +118,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Academy", description: "Learn trading & crypto", url: "https://academy.worldstreetgold.com", icon: Book01Icon },
       { name: "Social", description: "Community hub", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon },
       { name: "Xstream", description: "Live streaming", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
-      { name: "Forex Trading", description: "Currency pairs", url: "https://trader.worldstreetgold.com", icon: DollarCircleIcon },
+      { name: "Forex Trading", description: "Currency pairs", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
       { name: "Vivid AI", description: "AI-powered insights", url: "/vivid", icon: Brain01Icon },
     ],
   },
