@@ -613,11 +613,11 @@ export function DepositClient() {
                       <div className="mt-3 rounded-xl border border-border/30 bg-accent/20 p-3 space-y-2">
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Exchange Rate</span>
-                          <span className="font-medium tabular-nums">1 USDT = ₦{buyRate.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <span className="font-medium tabular-nums">1 USDT = {CURRENCY_SYM[fiatCurrency]}{buyRate.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Market Rate</span>
-                          <span className="font-medium tabular-nums text-muted-foreground">₦{ngnRate?.marketRate.toLocaleString()}</span>
+                          <span className="font-medium tabular-nums text-muted-foreground">{CURRENCY_SYM[fiatCurrency]}{rate?.marketRate.toLocaleString()}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Platform Fee</span>
