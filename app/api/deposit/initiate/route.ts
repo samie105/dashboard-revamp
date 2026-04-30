@@ -70,6 +70,15 @@ function getFallbackRate(fiatCurrency: string): { buyRate: number; marketRate: n
 
 export async function POST(request: NextRequest) {
   try {
+    // Check required env vars early
+    if (!process.env.FLUTTERWAVE_SECRET_KEY) {
+      console.error("FLUTTERWAVE_SECRET_KEY is not set")
+      return NextResponse.json(
+        { success: false, message: "Payment provider not configured" },
+        { status: 503 },
+      )
+    }
+
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
@@ -155,38 +164,47 @@ export async function POST(request: NextRequest) {
     const txRef = `WS-DEP-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`
 
     // ── Call Flutterwave first, then save deposit ──
-    const flutterwaveCharge = await flutterwaveFetch<{
-      id: string
-      tx_ref: string
-      amount: number
-      currency: string
-      status: string
-      link: string
-    }>("/charges", {
-      method: "POST",
-      body: JSON.stringify({
-        tx_ref: txRef,
-        amount: fiatAmount,
-        currency: fiatCurrency,
-        redirect_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.worldstreetgold.com"}/deposit?depositId=`,
-        customer: {
-          email,
-          name: `${user?.firstName || "WorldStreet"} ${user?.lastName || "Customer"}`.trim(),
-        },
-        customizations: {
-          title: "WorldStreet Deposit",
-          description: `Buy ${amount} USDT`,
-          logo: "https://www.worldstreetgold.com/logo.png",
-        },
-        meta: {
-          userId,
-          usdtAmount: amount,
-          network,
-          walletAddress,
-        },
-      }),
-      idempotencyKey: txRef,
-    })
+    let flutterwaveCharge
+    try {
+      flutterwaveCharge = await flutterwaveFetch<{
+        id: string
+        tx_ref: string
+        amount: number
+        currency: string
+        status: string
+        link: string
+      }>("/payments", {
+        method: "POST",
+        body: JSON.stringify({
+          tx_ref: txRef,
+          amount: fiatAmount,
+          currency: fiatCurrency,
+          redirect_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.worldstreetgold.com"}/deposit?depositId=`,
+          customer: {
+            email,
+            name: `${user?.firstName || "WorldStreet"} ${user?.lastName || "Customer"}`.trim(),
+          },
+          customizations: {
+            title: "WorldStreet Deposit",
+            description: `Buy ${amount} USDT`,
+            logo: "https://www.worldstreetgold.com/logo.png",
+          },
+          meta: {
+            userId,
+            usdtAmount: amount,
+            network,
+            walletAddress,
+          },
+        }),
+        idempotencyKey: txRef,
+      })
+    } catch (fwError) {
+      console.error("Flutterwave API error:", fwError)
+      return NextResponse.json(
+        { success: false, message: "Payment provider error. Please try again later." },
+        { status: 502 },
+      )
+    }
 
     if (!flutterwaveCharge.link) {
       console.error("Flutterwave charge created but no checkout link returned:", flutterwaveCharge)

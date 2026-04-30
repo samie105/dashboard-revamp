@@ -1,9 +1,8 @@
 // ── Flutterwave Configuration ─────────────────────────────────────────────
 
-export const FLUTTERWAVE_BASE_URL =
-  process.env.NODE_ENV === "production"
-    ? "https://api.flutterwave.com"
-    : "https://developersandbox-api.flutterwave.com"
+// Flutterwave uses the same base URL for test and production.
+// The environment is determined by the key (test keys start with FLWSECK_TEST-)
+export const FLUTTERWAVE_BASE_URL = "https://api.flutterwave.com/v3"
 
 export const FLUTTERWAVE_TIMEOUT_MS = 30_000
 

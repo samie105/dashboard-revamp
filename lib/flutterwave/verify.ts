@@ -16,8 +16,9 @@ export interface FlutterwaveCharge {
 }
 
 /**
- * Verify a charge by its ID via Flutterwave API.
+ * Verify a transaction by its ID via Flutterwave API.
+ * Uses GET /transactions/{id}/verify (standard Flutterwave verification endpoint).
  */
 export async function verifyCharge(chargeId: string): Promise<FlutterwaveCharge> {
-  return flutterwaveFetch<FlutterwaveCharge>(`/charges/${chargeId}`)
+  return flutterwaveFetch<FlutterwaveCharge>(`/transactions/${chargeId}/verify`)
 }

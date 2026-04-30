@@ -50,6 +50,7 @@ export function extractWebhookEventId(payload: unknown): string | null {
 
 /**
  * Extract the tx_ref (reference) from a webhook payload.
+ * Flutterwave uses `tx_ref` in standard checkout webhooks.
  */
 export function extractWebhookReference(payload: unknown): string | null {
   if (
@@ -57,11 +58,15 @@ export function extractWebhookReference(payload: unknown): string | null {
     typeof payload === "object" &&
     "data" in payload &&
     payload.data &&
-    typeof payload.data === "object" &&
-    "reference" in payload.data &&
-    typeof payload.data.reference === "string"
+    typeof payload.data === "object"
   ) {
-    return payload.data.reference
+    const data = payload.data as Record<string, unknown>
+    if (typeof data.tx_ref === "string") {
+      return data.tx_ref
+    }
+    if (typeof data.reference === "string") {
+      return data.reference
+    }
   }
   return null
 }
