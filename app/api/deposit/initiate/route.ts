@@ -3,15 +3,17 @@ import { auth, currentUser } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
 import Deposit from "@/models/Deposit"
 import { UserWallet } from "@/models/UserWallet"
+import { flutterwaveFetch } from "@/lib/flutterwave/client"
+import { FALLBACK_RATES } from "@/lib/flutterwave/config"
 import { randomUUID } from "crypto"
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const GLOBALPAY_BASE = "https://paygw.globalpay.com.ng/globalpay-paymentgateway/api"
-const GLOBALPAY_API_KEY = process.env.NEXT_PUBLIC_GLOBALPAY_API_KEY || ""
 const MIN_USDT = 1
 const MAX_USDT = 5000
 const PLATFORM_MARKUP = 5
+const VALID_CURRENCIES = ["NGN", "GHS"]
+const VALID_NETWORKS = ["solana", "ethereum"]
 
 // ── Inline rate fetcher ────────────────────────────────────────────────────
 
@@ -20,21 +22,27 @@ async function fetchBuyRate(
 ): Promise<{ buyRate: number; marketRate: number } | null> {
   try {
     const geckoRes = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd,ngn,gbp",
+      `https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd,ngn,ghs`,
       { signal: AbortSignal.timeout(10_000) },
     )
-    if (!geckoRes.ok) return null
+    if (!geckoRes.ok) {
+      console.warn("CoinGecko API returned non-OK status, using fallback rates")
+      return getFallbackRate(fiatCurrency)
+    }
 
     const geckoData = await geckoRes.json()
     const tether = geckoData.tether || {}
     const fiatMap: Record<string, number> = {
-      NGN: tether.ngn || 1580,
-      USD: tether.usd || 1,
-      GBP: tether.gbp || 0.79,
+      NGN: tether.ngn,
+      GHS: tether.ghs,
+      USD: tether.usd,
     }
 
     const marketRate = fiatMap[fiatCurrency]
-    if (!marketRate) return null
+    if (!marketRate) {
+      console.warn(`CoinGecko missing rate for ${fiatCurrency}, using fallback`)
+      return getFallbackRate(fiatCurrency)
+    }
 
     const buyRate = marketRate * (1 + PLATFORM_MARKUP / 100)
     return {
@@ -43,7 +51,18 @@ async function fetchBuyRate(
     }
   } catch (err) {
     console.error("Rate fetch error in deposit/initiate:", err)
-    return null
+    return getFallbackRate(fiatCurrency)
+  }
+}
+
+function getFallbackRate(fiatCurrency: string): { buyRate: number; marketRate: number } | null {
+  const fallback = FALLBACK_RATES[fiatCurrency]
+  if (!fallback) return null
+
+  const buyRate = fallback * (1 + PLATFORM_MARKUP / 100)
+  return {
+    buyRate: Math.round(buyRate * 100) / 100,
+    marketRate: fallback,
   }
 }
 
@@ -62,8 +81,20 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { usdtAmount, fiatCurrency = "NGN", network = "solana" } = body
 
-    if (!["solana", "ethereum"].includes(network)) {
-      return NextResponse.json({ success: false, message: "Invalid network." }, { status: 400 })
+    // Validate currency
+    if (!VALID_CURRENCIES.includes(fiatCurrency)) {
+      return NextResponse.json(
+        { success: false, message: `Invalid currency. Supported: ${VALID_CURRENCIES.join(", ")}` },
+        { status: 400 },
+      )
+    }
+
+    // Validate network
+    if (!VALID_NETWORKS.includes(network)) {
+      return NextResponse.json(
+        { success: false, message: `Invalid network. Supported: ${VALID_NETWORKS.join(", ")}` },
+        { status: 400 },
+      )
     }
 
     const amount = parseFloat(usdtAmount)
@@ -75,6 +106,30 @@ export async function POST(request: NextRequest) {
     }
 
     await connectDB()
+
+    // ── Idempotency: check for existing pending deposit ──
+    const existingPending = await Deposit.findOne({
+      userId,
+      status: { $in: ["pending", "awaiting_verification", "verifying"] },
+    }).sort({ createdAt: -1 })
+
+    if (existingPending) {
+      return NextResponse.json({
+        success: true,
+        deposit: {
+          _id: existingPending._id,
+          usdtAmount: existingPending.usdtAmount,
+          fiatAmount: existingPending.fiatAmount,
+          fiatCurrency: existingPending.fiatCurrency,
+          exchangeRate: existingPending.exchangeRate,
+          network: existingPending.network,
+          status: existingPending.status,
+          createdAt: existingPending.createdAt,
+        },
+        checkoutUrl: existingPending.checkoutUrl,
+        message: "You already have a pending deposit. Please complete it or cancel before creating a new one.",
+      })
+    }
 
     // Get wallet address from UserWallet (Privy-generated wallets)
     const userWallet = await UserWallet.findOne({
@@ -97,41 +152,51 @@ export async function POST(request: NextRequest) {
     }
 
     const fiatAmount = Math.round(amount * rate.buyRate * 100) / 100
-    const merchantTxRef = `WS-DEP-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`
+    const txRef = `WS-DEP-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`
 
-    // Call GlobalPay
-    const gpRes = await fetch(`${GLOBALPAY_BASE}/paymentgateway/generate-payment-link`, {
+    // ── Call Flutterwave first, then save deposit ──
+    const flutterwaveCharge = await flutterwaveFetch<{
+      id: string
+      tx_ref: string
+      amount: number
+      currency: string
+      status: string
+      link: string
+    }>("/charges", {
       method: "POST",
-      headers: {
-        apiKey: GLOBALPAY_API_KEY,
-        "Content-Type": "application/json",
-        language: "en",
-      },
       body: JSON.stringify({
+        tx_ref: txRef,
         amount: fiatAmount,
-        merchantTransactionReference: merchantTxRef,
+        currency: fiatCurrency,
+        redirect_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.worldstreetgold.com"}/deposit?depositId=`,
         customer: {
-          firstName: user?.firstName || "WorldStreet",
-          lastName: user?.lastName || "Customer",
-          currency: fiatCurrency,
-          phoneNumber: "08000000000",
-          address: "Lagos, Nigeria",
-          emailAddress: email,
+          email,
+          name: `${user?.firstName || "WorldStreet"} ${user?.lastName || "Customer"}`.trim(),
+        },
+        customizations: {
+          title: "WorldStreet Deposit",
+          description: `Buy ${amount} USDT`,
+          logo: "https://www.worldstreetgold.com/logo.png",
+        },
+        meta: {
+          userId,
+          usdtAmount: amount,
+          network,
+          walletAddress,
         },
       }),
+      idempotencyKey: txRef,
     })
 
-    const gpData = await gpRes.json()
-
-    if (!gpData.isSuccessful || !gpData.data?.checkoutUrl) {
-      console.error("GlobalPay generate-payment-link failed:", gpData)
+    if (!flutterwaveCharge.link) {
+      console.error("Flutterwave charge created but no checkout link returned:", flutterwaveCharge)
       return NextResponse.json(
-        { success: false, message: gpData.successMessage || "Failed to create payment link." },
+        { success: false, message: "Failed to create payment link. Please try again." },
         { status: 502 },
       )
     }
 
-    // Create deposit record
+    // ── Only save deposit after successful Flutterwave response ──
     const deposit = await Deposit.create({
       userId,
       email,
@@ -139,12 +204,14 @@ export async function POST(request: NextRequest) {
       fiatAmount,
       fiatCurrency,
       exchangeRate: rate.buyRate,
-      merchantTransactionReference: merchantTxRef,
-      globalPayTransactionReference: gpData.data.transactionReference || "",
-      checkoutUrl: gpData.data.checkoutUrl,
+      merchantTransactionReference: txRef,
       network,
       userWalletAddress: walletAddress,
       status: "pending",
+      paymentProvider: "flutterwave",
+      flutterwaveChargeId: flutterwaveCharge.id,
+      flutterwaveReference: flutterwaveCharge.tx_ref,
+      checkoutUrl: flutterwaveCharge.link,
     })
 
     return NextResponse.json({
@@ -156,14 +223,14 @@ export async function POST(request: NextRequest) {
         fiatCurrency: deposit.fiatCurrency,
         exchangeRate: deposit.exchangeRate,
         network: deposit.network,
-        merchantTransactionReference: deposit.merchantTransactionReference,
         status: deposit.status,
         createdAt: deposit.createdAt,
       },
-      checkoutUrl: gpData.data.checkoutUrl,
+      checkoutUrl: flutterwaveCharge.link,
     })
   } catch (error) {
     console.error("POST /api/deposit/initiate error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    const message = error instanceof Error ? error.message : "Internal server error"
+    return NextResponse.json({ success: false, message }, { status: 500 })
   }
 }

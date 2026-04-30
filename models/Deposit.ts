@@ -34,6 +34,12 @@ export interface IDeposit extends Document {
     note?: string
     timestamp: Date
   }>
+  // ── Flutterwave fields ──
+  paymentProvider?: "globalpay" | "flutterwave"
+  flutterwaveChargeId?: string
+  flutterwaveReference?: string
+  webhookEventId?: string
+  webhookProcessedAt?: Date
   createdAt: Date
   updatedAt: Date
   completedAt?: Date
@@ -86,6 +92,12 @@ const DepositSchema = new Schema<IDeposit>(
         timestamp: { type: Date, default: Date.now },
       },
     ],
+    // ── Flutterwave fields ──
+    paymentProvider: { type: String, enum: ["globalpay", "flutterwave"] },
+    flutterwaveChargeId: { type: String, sparse: true },
+    flutterwaveReference: { type: String, sparse: true },
+    webhookEventId: { type: String, sparse: true },
+    webhookProcessedAt: { type: Date },
     completedAt: { type: Date },
   },
   { timestamps: true },

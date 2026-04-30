@@ -39,13 +39,18 @@ interface DepositRecord {
   status: string
   txHash?: string
   deliveryError?: string
-  network?: "solana" | "ethereum" | "tron"
+  network?: "solana" | "ethereum"
   checkoutUrl?: string
   createdAt: string
   completedAt?: string
 }
 
-const CURRENCY_SYM: Record<string, string> = { NGN: "₦", USD: "$", GBP: "£" }
+const CURRENCY_SYM: Record<string, string> = { NGN: "₦", GHS: "GH₵", USD: "$", GBP: "£" }
+
+const VALID_CURRENCIES = [
+  { id: "NGN" as const, label: "Nigerian Naira", symbol: "₦" },
+  { id: "GHS" as const, label: "Ghanaian Cedi", symbol: "GH₵" },
+]
 
 // ── Onboarding steps ─────────────────────────────────────────────────────
 
@@ -53,25 +58,31 @@ const DEPOSIT_ONBOARDING: OnboardingStep[] = [
   {
     target: '[data-onboarding="deposit-network"]',
     title: "Choose your network",
-    description: "Select which blockchain you want to receive USDT on — Tron (TRC-20), Solana (fast, low fees), or Ethereum.",
+    description: "Select which blockchain you want to receive USDT on — Solana (fast, low fees) or Ethereum.",
+    placement: "bottom",
+  },
+  {
+    target: '[data-onboarding="deposit-currency"]',
+    title: "Choose your currency",
+    description: "Select NGN (Nigerian Naira) or GHS (Ghanaian Cedi) to pay with.",
     placement: "bottom",
   },
   {
     target: '[data-onboarding="deposit-amount"]',
     title: "Enter the amount",
-    description: "Type how much USDT you'd like to deposit. You'll pay the NGN equivalent via bank transfer.",
+    description: "Type how much USDT you'd like to deposit. You'll pay the equivalent in your chosen currency.",
     placement: "bottom",
   },
   {
     target: '[data-onboarding="deposit-rate"]',
     title: "Live exchange rate",
-    description: "This shows the current USDT → NGN rate including a small 5% platform fee.",
+    description: "This shows the current USDT rate including a small 5% platform fee.",
     placement: "top",
   },
   {
     target: '[data-onboarding="deposit-cta"]',
     title: "Start your deposit",
-    description: "Click to pay. Your USDT usually arrives within 1–3 minutes.",
+    description: "Click to pay via Flutterwave. Your USDT will be sent after payment confirmation.",
     placement: "top",
   },
 ]
@@ -98,9 +109,10 @@ function StatusLabel({ status }: { status: string }) {
 
 const STEPS = [
   { title: "Choose network", desc: "Solana or Ethereum" },
+  { title: "Choose currency", desc: "NGN or GHS" },
   { title: "Enter amount", desc: "Set the USDT you need" },
-  { title: "Pay securely", desc: "Redirected to payment page" },
-  { title: "Receive USDT", desc: "Arrives in 1–3 minutes" },
+  { title: "Pay securely", desc: "Redirected to Flutterwave" },
+  { title: "Receive USDT", desc: "Sent after confirmation" },
 ]
 
 function HowItWorks() {
@@ -182,7 +194,7 @@ function RecentDeposits({ refreshKey }: { refreshKey: number }) {
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="text-xs font-semibold tabular-nums">{d.usdtAmount} USDT</span>
                   <span className="text-[10px] text-muted-foreground">
-                    {CURRENCY_SYM[d.fiatCurrency] ?? ""}{d.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {d.network === "ethereum" ? "ERC-20" : d.network === "tron" ? "TRC-20" : "SPL"}
+                    {CURRENCY_SYM[d.fiatCurrency] ?? ""}{d.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {d.network === "ethereum" ? "ERC-20" : "SPL"}
                   </span>
                 </div>
                 <div className="flex flex-col items-end gap-0.5">
@@ -203,7 +215,6 @@ function RecentDeposits({ refreshKey }: { refreshKey: number }) {
 // ── Chains ───────────────────────────────────────────────────────────────
 
 const CHAINS = [
-  { id: "tron" as const,     label: "Tron",     tag: "TRC-20", icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
   { id: "solana" as const,   label: "Solana",   tag: "SPL",    icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
   { id: "ethereum" as const, label: "Ethereum", tag: "ERC-20", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
 ]
@@ -215,7 +226,8 @@ export function DepositClient() {
   const { profile } = useProfile()
   const searchParams = useSearchParams()
 
-  const [network, setNetwork] = React.useState<"solana" | "ethereum" | "tron">("tron")
+  const [network, setNetwork] = React.useState<"solana" | "ethereum">("solana")
+  const [fiatCurrency, setFiatCurrency] = React.useState<"NGN" | "GHS">("NGN")
   const [usdtAmount, setUsdtAmount] = React.useState(() => {
     const v = searchParams.get("amount")
     return v && !isNaN(parseFloat(v)) ? v : ""
@@ -335,8 +347,8 @@ export function DepositClient() {
 
   // ── Derived ──────────────────────────────────────────────────────────
 
-  const ngnRate = rates["NGN"]
-  const buyRate = ngnRate?.buyRate
+  const rate = rates[fiatCurrency]
+  const buyRate = rate?.buyRate
   const amount = parseFloat(usdtAmount) || 0
   const fiat = amount * (buyRate || 0)
   const isValid = amount >= 1 && amount <= 5000
@@ -347,7 +359,7 @@ export function DepositClient() {
     if (!isValid || !buyRate) return
     setError(""); setLoading(true)
     try {
-      const r = await fetch("/api/deposit/initiate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ usdtAmount: amount, fiatCurrency: "NGN", network }) })
+      const r = await fetch("/api/deposit/initiate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ usdtAmount: amount, fiatCurrency, network }) })
       const d = await r.json()
       if (!d.success) { setError(d.message || "Failed to create deposit."); return }
       setResumeBanner(null)
@@ -386,7 +398,8 @@ export function DepositClient() {
 
   function openPay() {
     if (!paymentUrl) { setError("Payment link unavailable."); return }
-    window.open(paymentUrl, "_blank", "noopener,noreferrer")
+    // Same-tab redirect to avoid popup blockers
+    window.location.href = paymentUrl
   }
 
   function dismissBanner() { setResumeBanner(null) }
@@ -483,9 +496,9 @@ export function DepositClient() {
                   <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-primary" />
                   <h2 className="text-sm font-semibold">Buy USDT</h2>
                 </div>
-                {ngnRate && (
+                {rate && (
                   <span data-onboarding="deposit-rate" className="text-[11px] tabular-nums text-muted-foreground">
-                    1 USDT = {ngnRate.symbol}{ngnRate.buyRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    1 USDT = {rate.symbol}{rate.buyRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 )}
               </div>
@@ -497,6 +510,25 @@ export function DepositClient() {
                   </div>
                 ) : (
                   <>
+                    {/* Currency */}
+                    <div data-onboarding="deposit-currency" className="mb-4">
+                      <span className="mb-2 block text-[11px] font-medium text-muted-foreground">Pay with</span>
+                      <div className="relative">
+                        <select
+                          value={fiatCurrency}
+                          onChange={(e) => setFiatCurrency(e.target.value as "NGN" | "GHS")}
+                          className="w-full appearance-none rounded-xl border border-border/30 bg-accent/20 py-3 pl-4 pr-10 text-sm font-medium text-foreground outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-colors cursor-pointer"
+                        >
+                          {VALID_CURRENCIES.map((c) => (
+                            <option key={c.id} value={c.id}>{c.label} ({c.symbol})</option>
+                          ))}
+                        </select>
+                        <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+
                     {/* Network */}
                     <div data-onboarding="deposit-network" className="mb-4">
                       <span className="mb-2 block text-[11px] font-medium text-muted-foreground">Receive on</span>
@@ -508,7 +540,7 @@ export function DepositClient() {
                         />
                         <select
                           value={network}
-                          onChange={(e) => setNetwork(e.target.value as "tron" | "solana" | "ethereum")}
+                          onChange={(e) => setNetwork(e.target.value as "solana" | "ethereum")}
                           className="w-full appearance-none rounded-xl border border-border/30 bg-accent/20 py-3 pl-10 pr-10 text-sm font-medium text-foreground outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-colors cursor-pointer"
                         >
                           {CHAINS.map((c) => (
@@ -567,12 +599,11 @@ export function DepositClient() {
                       <div className="flex items-center gap-3">
                         <div className="flex-1 min-w-0 text-xl font-semibold tabular-nums">
                           {amount > 0 && buyRate
-                            ? `₦${fiat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                            : <span className="text-muted-foreground/40">₦0.00</span>}
+                            ? `${CURRENCY_SYM[fiatCurrency]}${fiat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : <span className="text-muted-foreground/40">{CURRENCY_SYM[fiatCurrency]}0.00</span>}
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-card border border-border/40 px-2.5 py-1.5">
-                          <span className="text-sm font-bold text-emerald-600">₦</span>
-                          <span className="text-xs font-semibold">NGN</span>
+                          <span className="text-xs font-semibold">{fiatCurrency}</span>
                         </div>
                       </div>
                     </div>
@@ -594,16 +625,20 @@ export function DepositClient() {
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Network</span>
-                          <span className="font-medium">{network === "tron" ? "Tron (TRC-20)" : network === "solana" ? "Solana (SPL)" : "Ethereum (ERC-20)"}</span>
+                          <span className="font-medium">{network === "solana" ? "Solana (SPL)" : "Ethereum (ERC-20)"}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Currency</span>
+                          <span className="font-medium">{fiatCurrency}</span>
                         </div>
                       </div>
                     )}
 
                     {/* Inline rate */}
-                    {ngnRate && amount > 0 && (
+                    {rate && amount > 0 && (
                       <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
                         <HugeiconsIcon icon={Exchange01Icon} className="h-3 w-3" />
-                        <span className="tabular-nums">{amount} USDT = ₦{fiat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        <span className="tabular-nums">{amount} USDT = {CURRENCY_SYM[fiatCurrency]}{fiat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                       </div>
                     )}
 
@@ -655,6 +690,10 @@ export function DepositClient() {
                   <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3.5 w-3.5" />
                 </button>
 
+                <p className="text-[10px] text-muted-foreground text-center">
+                  You will be redirected to Flutterwave to complete your payment securely.
+                </p>
+
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-border/30" />
                   <span className="text-[10px] text-muted-foreground">after paying</span>
@@ -695,9 +734,9 @@ export function DepositClient() {
                   <HugeiconsIcon icon={Loading03Icon} className="h-5 w-5 animate-spin text-primary" />
                 </div>
                 <p className="text-sm font-medium">
-                  {activeDeposit.status === "verifying" ? "Verifying your payment…" : activeDeposit.status === "payment_confirmed" ? `Sending ${activeDeposit.usdtAmount} USDT to your wallet…` : `Sending ${activeDeposit.usdtAmount} USDT to your wallet…`}
+                  {activeDeposit.status === "verifying" ? "Verifying your payment…" : activeDeposit.status === "payment_confirmed" ? `Payment confirmed! ${activeDeposit.usdtAmount} USDT will be sent to your wallet shortly.` : `Sending ${activeDeposit.usdtAmount} USDT to your wallet…`}
                 </p>
-                <p className="text-[10px] text-muted-foreground">This usually takes 1–3 minutes</p>
+                <p className="text-[10px] text-muted-foreground">An admin will process your USDT delivery shortly</p>
               </div>
             </div>
           )}
@@ -713,7 +752,8 @@ export function DepositClient() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
                   <HugeiconsIcon icon={CheckmarkCircle01Icon} className="h-5 w-5 text-emerald-500" />
                 </div>
-                <p className="text-sm font-medium"><span className="font-bold">{activeDeposit.usdtAmount} USDT</span> sent to your {activeDeposit.network === "ethereum" ? "Ethereum" : "Solana"} wallet</p>
+                <p className="text-sm font-medium"><span className="font-bold">{activeDeposit.usdtAmount} USDT</span> will be sent to your {activeDeposit.network === "ethereum" ? "Ethereum" : "Solana"} wallet</p>
+                <p className="text-[10px] text-muted-foreground">An admin will process the delivery shortly</p>
                 {activeDeposit.txHash && (
                   <a href={activeDeposit.network === "ethereum" ? `https://etherscan.io/tx/${activeDeposit.txHash}` : `https://solscan.io/tx/${activeDeposit.txHash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                     View on {activeDeposit.network === "ethereum" ? "Etherscan" : "Solscan"} <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />

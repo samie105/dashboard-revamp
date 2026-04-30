@@ -46,7 +46,7 @@ A full-stack crypto trading dashboard built with Next.js, Clerk authentication, 
 | State | React Context + Zustand |
 | Charts | `lightweight-charts`, `recharts` |
 | Animation | `gsap` |
-| Payments | GlobalPay |
+| Payments | Flutterwave |
 | Market Data | CoinGecko API |
 | PDF Export | `jspdf` + `jspdf-autotable` |
 
@@ -291,10 +291,13 @@ Spot orders are placed from the user's dedicated **Hyperliquid trading wallet** 
 
 **Page**: `app/deposit/page.tsx` → `components/deposit/deposit-client.tsx`
 
-This is the **P2P fiat ramp** — users pay NGN via bank transfer and receive USDT on-chain.
+This is the **P2P fiat ramp** — users pay NGN or GHS via Flutterwave and receive USDT on-chain.
+
+### Currency support
+NGN (Nigerian Naira) · GHS (Ghanaian Cedi)
 
 ### Chain support
-Tron (TRC-20) · Solana (SPL) · Ethereum (ERC-20) — Tron is pre-selected by default.
+Solana (SPL) · Ethereum (ERC-20) — Solana is pre-selected by default.
 
 ### Status progression
 ```
@@ -305,20 +308,26 @@ pending → awaiting_verification → verifying
 
 ### Step-by-step flow
 
-1. **User selects network** — dropdown select (Tron pre-selected)
-2. **Enters USDT amount** — 1 to 5,000
-3. **Exchange rate fetched** — `GET /api/p2p/rates` → CoinGecko + 5% platform fee
-4. **Clicks "Buy USDT"** → `POST /api/deposit/initiate`
+1. **User selects network** — dropdown select (Solana pre-selected)
+2. **User selects currency** — NGN or GHS
+3. **Enters USDT amount** — 1 to 5,000
+4. **Exchange rate fetched** — `GET /api/p2p/rates` → CoinGecko + 5% platform fee (with hardcoded fallback rates)
+5. **Clicks "Buy USDT"** → `POST /api/deposit/initiate`
+   - Validates no existing pending deposit (idempotency)
    - Creates a `Deposit` record in MongoDB (`status: "pending"`)
-   - Creates a GlobalPay checkout session
-   - Returns `checkoutUrl` + `merchantTransactionReference`
-5. **Redirected to GlobalPay** — user pays NGN via bank transfer on GlobalPay's hosted page
-6. **Verification** — `POST /api/deposit/verify` polls GlobalPay for payment status
-   - On bank transfer confirmed → `status: "payment_confirmed"`
-7. **USDT delivery** — `POST /api/deposit/webhook` (GlobalPay webhook)
-   - Calls `sendUsdtTron()` / `sendUsdtSolana()` / `sendUsdtEthereum()` from `app/api/spot/deposit/send-usdt/route.ts`
-   - Uses Privy to sign and broadcast the USDT transfer from treasury wallet to user's address
-   - `status: "completed"`, `txHash` saved
+   - Calls Flutterwave `POST /charges` to create a standard checkout
+   - Returns `checkoutUrl` + `flutterwaveReference`
+6. **Redirected to Flutterwave** — user pays via card, bank transfer, or mobile money on Flutterwave's hosted checkout page
+7. **Webhook notification** — `POST /api/deposit/webhook` (Flutterwave callback)
+   - Verifies HMAC-SHA256 signature (`flutterwave-signature` header)
+   - Re-verifies charge via `GET /charges/{id}`
+   - Amount tolerance check (≤ 1.0 difference)
+   - On payment confirmed → `status: "payment_confirmed"`
+   - USDT delivery is manual — admin sends USDT after confirmation
+8. **Manual verification fallback** — `POST /api/deposit/verify`
+   - User can manually poll for payment status
+   - Calls `GET /charges/{id}` directly
+   - Handles successful / failed / cancelled / pending statuses
 
 ### Exchange rate caching
 `/api/p2p/rates` queries CoinGecko, caches for 2 minutes, applies markup:
@@ -486,9 +495,9 @@ app/layout.tsx
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/deposit/initiate` | Create deposit, get GlobalPay checkout URL |
-| `POST` | `/api/deposit/verify` | Poll GlobalPay for payment confirmation |
-| `POST` | `/api/deposit/webhook` | GlobalPay callback — deliver USDT on-chain |
+| `POST` | `/api/deposit/initiate` | Create deposit, get Flutterwave checkout URL |
+| `POST` | `/api/deposit/verify` | Verify Flutterwave charge status |
+| `POST` | `/api/deposit/webhook` | Flutterwave callback — confirm payment |
 | `GET` | `/api/deposit/history` | User's deposit history |
 | `GET` | `/api/deposit/pending` | Fetch latest pending deposit |
 | `GET` | `/api/deposit/status/:id` | Single deposit status |
@@ -584,10 +593,14 @@ All models live in `models/` and connect to MongoDB database `user-account`.
   userId: string
   usdtAmount: number
   fiatAmount: number
-  fiatCurrency: "NGN"
-  network: "tron" | "solana" | "ethereum"
-  merchantTransactionReference: string
-  globalPayTransactionReference?: string
+  fiatCurrency: "NGN" | "GHS"
+  network: "solana" | "ethereum"
+  flutterwaveChargeId?: string
+  flutterwaveReference?: string
+  globalPayTransactionReference?: string   // legacy — kept for old deposits
+  paymentProvider?: "globalpay" | "flutterwave"
+  webhookEventId?: string
+  webhookProcessedAt?: Date
   checkoutUrl: string
   txHash?: string
   status: "pending" | "payment_confirmed" | "sending_usdt" | "completed" | "payment_failed" | ...
@@ -710,8 +723,9 @@ CLERK_SECRET_KEY=sk_...
 PRIVY_APP_ID=...
 PRIVY_APP_SECRET=...
 
-# GlobalPay (fiat payments)
-NEXT_PUBLIC_GLOBALPAY_API_KEY=...
+# Flutterwave (fiat payments)
+FLUTTERWAVE_SECRET_KEY=FLWSECK_TEST-...
+FLUTTERWAVE_WEBHOOK_SECRET_HASH=your_webhook_secret_hash
 
 # Node environment
 NODE_ENV=development
@@ -732,7 +746,7 @@ NODE_ENV=development
 └──────────────────────────────────────────────────────────────────┘
                         │ HTTPS + Clerk JWT
 ┌────────────── Next.js API Routes ───────────────────────────────┐
-│  /api/deposit/*   → GlobalPay payment gateway                   │
+│  /api/deposit/*   → Flutterwave payment gateway                │
 │  /api/withdraw/*  → On-chain tx verification                    │
 │  /api/spot/*      → Treasury bridge + Hyperliquid funding       │
 │  /api/p2p/rates   → CoinGecko exchange rates                    │
@@ -744,7 +758,7 @@ NODE_ENV=development
 │  Privy           — Multi-chain wallet generation & signing      │
 │  MongoDB         — User data, deposits, trades, profiles        │
 │  Hyperliquid     — Spot/futures exchange (orders + WebSocket)   │
-│  GlobalPay       — Fiat bank transfer processing (NGN)          │
+│  Flutterwave    — Fiat payment processing (NGN, GHS)           │
 │  Solana RPC      — SPL token balance & transfer queries         │
 │  Ethereum RPC    — ERC-20 balance & transfer queries            │
 │  Tron RPC        — TRC-20 balance & transfer queries            │

@@ -3,7 +3,7 @@
 
 export type UnifiedTransactionType =
   | "p2p"           // P2P buy/sell orders
-  | "deposit"       // GlobalPay fiat→USDT deposits
+  | "deposit"       // Flutterwave fiat→USDT deposits
   | "withdrawal"    // USDT→fiat bank withdrawals
   | "spot_deposit"  // Spot trading deposits
   | "spot_trade"    // Executed spot trades (LI.FI swaps)

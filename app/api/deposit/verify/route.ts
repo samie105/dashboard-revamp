@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
 import Deposit from "@/models/Deposit"
-
-// ── Constants ──────────────────────────────────────────────────────────────
-
-const GLOBALPAY_BASE = "https://paygw.globalpay.com.ng/globalpay-paymentgateway/api"
-const GLOBALPAY_API_KEY = process.env.NEXT_PUBLIC_GLOBALPAY_API_KEY || ""
+import { verifyCharge } from "@/lib/flutterwave/verify"
+import { normalizeFlutterwaveStatus } from "@/lib/flutterwave/webhook"
 
 // ── POST /api/deposit/verify ───────────────────────────────────────────────
 
@@ -40,66 +37,64 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // If no flutterwave charge ID yet, payment is still being set up
+    if (!deposit.flutterwaveChargeId) {
+      return NextResponse.json({
+        success: true,
+        deposit: deposit.toObject(),
+        message: "Payment still processing. Please wait a moment and try again.",
+      })
+    }
+
     // Update status to verifying
     deposit.status = "verifying"
     await deposit.save()
 
-    // Requery GlobalPay
-    const refToQuery = deposit.globalPayTransactionReference || deposit.merchantTransactionReference
+    // ── Re-verify via Flutterwave API ──
+    const charge = await verifyCharge(deposit.flutterwaveChargeId)
+    const normalizedStatus = normalizeFlutterwaveStatus(charge.status)
 
-    if (!refToQuery) {
+    // Validate amount/currency with tolerance
+    const amountDiff = Math.abs(charge.amount - deposit.fiatAmount)
+    if (amountDiff > 1.0 || charge.currency !== deposit.fiatCurrency) {
+      console.error("Amount/currency mismatch on verify:", {
+        depositId: deposit._id,
+        expected: { amount: deposit.fiatAmount, currency: deposit.fiatCurrency },
+        actual: { amount: charge.amount, currency: charge.currency },
+      })
       deposit.status = "payment_failed"
       await deposit.save()
       return NextResponse.json({
         success: false,
         deposit: deposit.toObject(),
-        message: "No transaction reference available. Please contact support.",
+        message: "Payment amount or currency mismatch detected. Please contact support.",
       })
     }
 
-    const gpRes = await fetch(
-      `${GLOBALPAY_BASE}/paymentgateway/query-single-transaction/${refToQuery}`,
-      {
-        method: "POST",
-        headers: { apiKey: GLOBALPAY_API_KEY, "Content-Type": "application/json", language: "en" },
-      },
-    )
-
-    const gpData = await gpRes.json()
-
-    if (!gpData.isSuccessful) {
-      deposit.status = "awaiting_verification"
-      await deposit.save()
-      return NextResponse.json({
-        success: false,
-        deposit: deposit.toObject(),
-        message: gpData.successMessage || "Payment has not been confirmed yet. Please wait and try again.",
-      })
-    }
-
-    const txStatus = (gpData.data?.transactionStatus || "").toLowerCase()
-
-    if (txStatus === "successful" || txStatus === "completed" || txStatus === "approved") {
+    if (normalizedStatus === "successful") {
       deposit.status = "payment_confirmed"
-      await deposit.save()
-
-      // USDT delivery is handled server-side by webhook or admin action
-      // For now mark as payment_confirmed — the webhook or cron will deliver USDT
-      deposit.status = "sending_usdt"
       await deposit.save()
 
       return NextResponse.json({
         success: true,
         deposit: deposit.toObject(),
-        message: "Payment confirmed! USDT is being sent to your wallet.",
+        message: "Payment confirmed! Your USDT will be sent shortly.",
       })
-    } else if (txStatus === "failed" || txStatus === "declined") {
+    } else if (normalizedStatus === "failed") {
       deposit.status = "payment_failed"
       await deposit.save()
       return NextResponse.json({
         success: false,
         deposit: deposit.toObject(),
         message: "Payment was not successful. Please try again.",
+      })
+    } else if (normalizedStatus === "cancelled") {
+      deposit.status = "cancelled"
+      await deposit.save()
+      return NextResponse.json({
+        success: false,
+        deposit: deposit.toObject(),
+        message: "Payment was cancelled.",
       })
     } else {
       deposit.status = "awaiting_verification"
@@ -112,6 +107,7 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error("POST /api/deposit/verify error:", error)
-    return NextResponse.json({ success: false, message: "Failed to verify deposit" }, { status: 500 })
+    const message = error instanceof Error ? error.message : "Failed to verify deposit"
+    return NextResponse.json({ success: false, message }, { status: 500 })
   }
 }
