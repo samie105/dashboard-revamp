@@ -242,6 +242,7 @@ export function DepositClient() {
   const [verifying, setVerifying] = React.useState(false)
   const [verifyMsg, setVerifyMsg] = React.useState("")
   const [historyKey, setHistoryKey] = React.useState(0)
+  const [justPaid, setJustPaid] = React.useState(false)
   // Banner for a silently-detected pending deposit that we don't want to block the form
   const [resumeBanner, setResumeBanner] = React.useState<DepositRecord | null>(null)
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
@@ -294,6 +295,7 @@ export function DepositClient() {
           if (d.success && d.deposit) {
             setActiveDeposit(d.deposit)
             setPaymentUrl(d.deposit.checkoutUrl || null)
+            setJustPaid(true)
             // Trigger a verify to refresh status
             try {
               await fetch("/api/deposit/verify", {
@@ -690,7 +692,7 @@ export function DepositClient() {
               <div className="flex items-center justify-between border-b border-border/30 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-primary" />
-                  <h2 className="text-sm font-semibold">Complete Payment</h2>
+                  <h2 className="text-sm font-semibold">{justPaid ? "Payment Received" : "Complete Payment"}</h2>
                 </div>
                 <StatusLabel status={activeDeposit.status} />
               </div>
@@ -701,7 +703,7 @@ export function DepositClient() {
                     <span className="font-medium tabular-nums">{activeDeposit.usdtAmount} USDT</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Total to Pay</span>
+                    <span className="text-muted-foreground">Total Paid</span>
                     <span className="font-semibold tabular-nums">{CURRENCY_SYM[activeDeposit.fiatCurrency]}{activeDeposit.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
@@ -710,34 +712,57 @@ export function DepositClient() {
                   </div>
                 </div>
 
-                <button onClick={openPay} disabled={!paymentUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-white hover:bg-primary/90 hover:shadow-md disabled:opacity-50">
-                  Pay {CURRENCY_SYM[activeDeposit.fiatCurrency]}{activeDeposit.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3.5 w-3.5" />
-                </button>
+                {justPaid ? (
+                  <>
+                    <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-3">
+                      <HugeiconsIcon icon={CheckmarkCircle01Icon} className="h-5 w-5 text-emerald-500 shrink-0" />
+                      <div className="flex flex-col">
+                        <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Payment Received!</p>
+                        <p className="text-[11px] text-muted-foreground">Your {activeDeposit.usdtAmount} USDT deposit is being processed.</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      An admin will send your USDT shortly. You can check the status in Recent Deposits.
+                    </p>
+                    <button
+                      onClick={() => { setJustPaid(false); reset() }}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/30 py-3 text-sm font-semibold hover:bg-accent transition-colors"
+                    >
+                      Make Another Deposit
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={openPay} disabled={!paymentUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-white hover:bg-primary/90 hover:shadow-md disabled:opacity-50">
+                      Pay {CURRENCY_SYM[activeDeposit.fiatCurrency]}{activeDeposit.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3.5 w-3.5" />
+                    </button>
 
-                <p className="text-[10px] text-muted-foreground text-center">
-                  You will be redirected to Flutterwave to complete your payment securely.
-                </p>
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      You will be redirected to Flutterwave to complete your payment securely.
+                    </p>
 
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-border/30" />
-                  <span className="text-[10px] text-muted-foreground">after paying</span>
-                  <div className="h-px flex-1 bg-border/30" />
-                </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-border/30" />
+                      <span className="text-[10px] text-muted-foreground">after paying</span>
+                      <div className="h-px flex-1 bg-border/30" />
+                    </div>
 
-                {verifyMsg && <p className="text-xs text-amber-500">{verifyMsg} — wait 30s then retry.</p>}
-                {activeDeposit.status === "payment_failed" && <p className="text-xs text-red-500">Previous verification failed. Pay again or retry.</p>}
-                {error && <p className="text-xs text-red-500">{error}</p>}
+                    {verifyMsg && <p className="text-xs text-amber-500">{verifyMsg} — wait 30s then retry.</p>}
+                    {activeDeposit.status === "payment_failed" && <p className="text-xs text-red-500">Previous verification failed. Pay again or retry.</p>}
+                    {error && <p className="text-xs text-red-500">{error}</p>}
 
-                <div className="flex gap-2">
-                  <button onClick={cancel} disabled={loading || verifying} className="flex-1 rounded-xl border border-border/30 py-2.5 text-xs font-medium hover:bg-accent disabled:opacity-50 transition-colors">
-                    Cancel
-                  </button>
-                  <button onClick={verify} disabled={verifying} className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-                    {verifying && <HugeiconsIcon icon={Loading03Icon} className="h-3.5 w-3.5 animate-spin" />}
-                    {verifying ? "Verifying…" : "I've Paid"}
-                  </button>
-                </div>
+                    <div className="flex gap-2">
+                      <button onClick={cancel} disabled={loading || verifying} className="flex-1 rounded-xl border border-border/30 py-2.5 text-xs font-medium hover:bg-accent disabled:opacity-50 transition-colors">
+                        Cancel
+                      </button>
+                      <button onClick={verify} disabled={verifying} className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                        {verifying && <HugeiconsIcon icon={Loading03Icon} className="h-3.5 w-3.5 animate-spin" />}
+                        {verifying ? "Verifying…" : "I've Paid"}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
