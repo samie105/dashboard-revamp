@@ -1,8 +1,11 @@
 import { FLUTTERWAVE_BASE_URL, FLUTTERWAVE_TIMEOUT_MS, FLUTTERWAVE_RETRY_CONFIG } from "./config"
 
-const FLW_SECRET_KEY = process.env.FLUTTERWAVE_SECRET_KEY
-if (!FLW_SECRET_KEY) {
-  throw new Error("FLUTTERWAVE_SECRET_KEY is not set")
+function getSecretKey(): string {
+  const key = process.env.FLUTTERWAVE_SECRET_KEY
+  if (!key) {
+    throw new Error("FLUTTERWAVE_SECRET_KEY is not set")
+  }
+  return key
 }
 
 /**
@@ -16,9 +19,10 @@ export async function flutterwaveFetch<T>(
   options: RequestInit & { idempotencyKey?: string } = {},
 ): Promise<T> {
   const url = `${FLUTTERWAVE_BASE_URL}${endpoint}`
+  const secretKey = getSecretKey()
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${FLW_SECRET_KEY}`,
+    Authorization: `Bearer ${secretKey}`,
     "Content-Type": "application/json",
     Accept: "application/json",
     ...((options.headers as Record<string, string>) || {}),
