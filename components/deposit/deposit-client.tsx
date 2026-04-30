@@ -268,6 +268,8 @@ export function DepositClient() {
 
   React.useEffect(() => {
     const did = searchParams.get("depositId")
+    const txRef = searchParams.get("tx_ref")
+
     if (did) {
       // Explicit resume via URL param — always show payment step
       ;(async () => {
@@ -277,6 +279,29 @@ export function DepositClient() {
           if (d.success && d.deposit) {
             setActiveDeposit(d.deposit)
             setPaymentUrl(d.deposit.checkoutUrl || null)
+          }
+        } catch { /* ignore */ }
+      })()
+      return
+    }
+
+    if (txRef) {
+      // Resume from Flutterwave redirect — look up by tx_ref
+      ;(async () => {
+        try {
+          const r = await fetch(`/api/deposit/lookup?tx_ref=${encodeURIComponent(txRef)}`)
+          const d = await r.json()
+          if (d.success && d.deposit) {
+            setActiveDeposit(d.deposit)
+            setPaymentUrl(d.deposit.checkoutUrl || null)
+            // Trigger a verify to refresh status
+            try {
+              await fetch("/api/deposit/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ depositId: d.deposit._id }),
+              })
+            } catch { /* ignore */ }
           }
         } catch { /* ignore */ }
       })()
