@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
           tx_ref: txRef,
           amount: fiatAmount,
           currency: fiatCurrency,
-          redirect_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.worldstreetgold.com"}/deposit?tx_ref=${txRef}`,
+          redirect_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://dashboard.worldstreetgold.com"}/deposit?tx_ref=${txRef}`,
           customer: {
             email,
             name: `${user?.firstName || "WorldStreet"} ${user?.lastName || "Customer"}`.trim(),
