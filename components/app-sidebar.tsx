@@ -121,7 +121,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Xstream", description: "Live streaming", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
       { name: "Forex Trading", description: "Currency pairs", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
       { name: "Vivid AI", description: "AI-powered insights", url: "/vivid", icon: Brain01Icon },
-      { name: "Vision", description: "Market intelligence", url: "https://vision.worldstreetgold.com", icon: EyeIcon },
+      { name: "Vision", description: "Vision broadcast", url: "https://vision.worldstreetgold.com", icon: EyeIcon },
     ],
   },
 ]
