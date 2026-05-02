@@ -92,7 +92,6 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: "Spot Trading", url: "/spotv2", icon: Activity01Icon },
       { name: "Futures", url: "/futures", icon: Chart01Icon },
       { name: "Forex", url: "/forex", icon: GlobeIcon },
-      { name: "Binary", url: "/binary", icon: Exchange01Icon },
       { name: "Swap", url: "/swap", icon: RepeatIcon },
       { name: "Bridge", url: "/bridge", icon: Link01Icon },
       { name: "Copy Trading", url: "/copy-trading", icon: Copy01Icon },
@@ -106,8 +105,6 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: "Profile", url: "/profile", icon: UserIcon },
       { name: "Security", url: "/security", icon: Shield01Icon },
       { name: "Verification", url: "/verification", icon: File01Icon },
-      { name: "API Management", url: "/api-management", icon: ComputerTerminal01Icon },
-      { name: "Referrals", url: "/referrals", icon: UserGroup02Icon },
     ],
   },
   {

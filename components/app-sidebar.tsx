@@ -93,7 +93,6 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Spot Trading", description: "Multi-chain DEX trading", url: "/spotv2", icon: Exchange01Icon },
       { name: "Futures", description: "Perpetual contracts", url: "/futures", icon: Chart01Icon },
       { name: "Forex", description: "Currency pair trading", url: "/forex", icon: GlobeIcon },
-      { name: "Binary", description: "Binary options trading", url: "/binary", icon: Exchange01Icon },
       { name: "Swap", description: "One-tap conversion", url: "/swap", icon: RepeatIcon },
       { name: "Bridge", description: "Cross-chain transfers", url: "/bridge", icon: Link01Icon },
       { name: "Copy Trading", description: "Mirror top traders", url: "/copy-trading", icon: Copy01Icon },
@@ -107,8 +106,6 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Profile", description: "Personal details", url: "/profile", icon: UserIcon },
       { name: "Security", description: "2FA and password", url: "/security", icon: Shield01Icon },
       { name: "Verification", description: "KYC Status", url: "/verification", icon: File01Icon },
-      { name: "API Management", description: "Keys and access", url: "/api-management", icon: ComputerTerminal01Icon },
-      { name: "Referrals", description: "Invite and earn", url: "/referrals", icon: UserGroup02Icon },
     ],
   },
   {

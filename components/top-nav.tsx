@@ -12,7 +12,6 @@ import {
   Store01Icon,
   BarChartIcon,
   GlobeIcon,
-  BinaryCodeIcon,
 } from "@hugeicons/core-free-icons"
 import {
   NavigationMenu,
@@ -69,12 +68,6 @@ const navItems: NavItem[] = [
           description: "Currency pair trading",
           href: "/forex",
           icon: GlobeIcon,
-        },
-        {
-          name: "Binary",
-          description: "Binary options trading",
-          href: "/binary",
-          icon: BinaryCodeIcon,
         },
         {
           name: "Swap",
