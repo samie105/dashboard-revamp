@@ -43,6 +43,7 @@ interface FuturesClientProps {
 type Side = "long" | "short"
 type FuturesOrderType = "market" | "limit"
 type MobileTab = "chart" | "book" | "markets"
+type Backend = "hyperliquid" | "gmx"
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -191,8 +192,10 @@ function FuturesOrderBook({
 
 function FuturesOrderForm({
   market,
+  backend = "hyperliquid",
 }: {
   market: FuturesMarket
+  backend?: Backend
 }) {
   const { user, isSignedIn } = useAuth()
   const { walletsGenerated } = useWallet()
@@ -225,19 +228,44 @@ function FuturesOrderForm({
     setIsExecuting(true)
     setFeedback(null)
     try {
-      const result = await executeTrade({
-        userId: user.userId,
-        fromChain: 1,
-        tokenIn: "USDT",
-        tokenOut: `${market.symbol}-PERP-${side.toUpperCase()}`,
-        amountIn: sizeUsd,
-        slippage: 0.005,
-      })
-      if (result.success) {
-        setFeedback({ type: "success", message: result.txHash ? `Opened • ${result.txHash.slice(0, 10)}…` : "Position opened" })
-        setSizeUsd("")
+      if (backend === "gmx") {
+        // GMX order execution via local API route
+        const sizeDeltaUsd = BigInt(Math.floor(numSize * 1e30))
+        const collateralDeltaAmount = BigInt(Math.floor(margin * 1e6)) // USDC has 6 decimals
+        const res = await fetch("/api/gmx/order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            marketTokenAddress: market.symbol, // GMX uses marketTokenAddress
+            isLong: side === "long",
+            sizeDeltaUsd: sizeDeltaUsd.toString(),
+            collateralDeltaAmount: collateralDeltaAmount.toString(),
+            orderType,
+            acceptablePrice: orderType === "limit" ? BigInt(Math.floor(parseFloat(limitPrice) * 1e30)).toString() : undefined,
+          }),
+        })
+        const json = await res.json()
+        if (json.success) {
+          setFeedback({ type: "success", message: json.data?.txHash ? `Opened • ${json.data.txHash.slice(0, 10)}…` : "Position opened" })
+          setSizeUsd("")
+        } else {
+          setFeedback({ type: "error", message: json.error || "Failed" })
+        }
       } else {
-        setFeedback({ type: "error", message: result.error || "Failed" })
+        const result = await executeTrade({
+          userId: user.userId,
+          fromChain: 1,
+          tokenIn: "USDT",
+          tokenOut: `${market.symbol}-PERP-${side.toUpperCase()}`,
+          amountIn: sizeUsd,
+          slippage: 0.005,
+        })
+        if (result.success) {
+          setFeedback({ type: "success", message: result.txHash ? `Opened • ${result.txHash.slice(0, 10)}…` : "Position opened" })
+          setSizeUsd("")
+        } else {
+          setFeedback({ type: "error", message: result.error || "Failed" })
+        }
       }
     } catch {
       setFeedback({ type: "error", message: "Network error" })
@@ -474,6 +502,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
   const [selected, setSelected] = React.useState(markets[0]?.symbol ?? "BTC")
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("chart")
   const [liveMarkets, setLiveMarkets] = React.useState(markets)
+  const [backend, setBackend] = React.useState<Backend>("hyperliquid")
 
   const [orderBookAsks, setOrderBookAsks] = React.useState<OrderBookLevel[]>(initialOrderBook?.asks ?? [])
   const [orderBookBids, setOrderBookBids] = React.useState<OrderBookLevel[]>(initialOrderBook?.bids ?? [])
@@ -543,6 +572,20 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
           <span>OI <span className="text-foreground font-medium">{fmtVol(market.openInterest)}</span></span>
           <span>Funding <span className="text-foreground font-medium">{fmtFunding(market.fundingRate)}</span></span>
           <span>Max <span className="text-foreground font-medium">{market.maxLeverage}x</span></span>
+          {/* Backend toggle */}
+          <div className="flex items-center gap-1 rounded-md bg-accent/40 p-0.5">
+            {(["hyperliquid", "gmx"] as const).map((b) => (
+              <button
+                key={b}
+                onClick={() => setBackend(b)}
+                className={`rounded px-2 py-0.5 text-[10px] font-medium capitalize transition-colors ${
+                  backend === b ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {b === "hyperliquid" ? "HL" : "GMX"}
+              </button>
+            ))}
+          </div>
         </div>
         {!hlBalanceLoading && (
           <div className="flex items-center gap-3 rounded-lg bg-accent/50 px-2.5 py-1 ml-2">
@@ -605,6 +648,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
                 symbol={selected}
                 markPrice={market.markPrice}
                 change24h={market.change24h}
+                backend={backend}
               />
             </div>
             {collapsed.order ? (
@@ -625,7 +669,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
                 >
                   <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 text-muted-foreground" />
                 </button>
-                <FuturesOrderForm market={market} />
+                <FuturesOrderForm market={market} backend={backend} />
               </div>
             )}
           </div>
@@ -709,6 +753,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
                 symbol={selected}
                 markPrice={market.markPrice}
                 change24h={market.change24h}
+                backend={backend}
               />
             </div>
           )}
@@ -720,7 +765,7 @@ export function FuturesClient({ markets, prices, initialOrderBook }: FuturesClie
           )}
         </div>
 
-        <FuturesOrderForm market={market} />
+        <FuturesOrderForm market={market} backend={backend} />
         <PositionsPanel />
       </div>
 
