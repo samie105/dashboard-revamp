@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       clerkUserId: userId,
       privyUserId: userWallet.privyUserId,
       wallets: userWallet.wallets,
+      privy_type: userWallet.privy_type,
     })
   } catch (error: any) {
     console.error("Link Clerk error:", error)

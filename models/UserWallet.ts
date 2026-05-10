@@ -5,6 +5,7 @@ const UserWalletSchema = new mongoose.Schema(
     clerkUserId: { type: String, index: true },
     email: { type: String, required: true, unique: true, index: true },
     privyUserId: { type: String, required: true, unique: true },
+    privy_type: { type: Number, enum: [0, 1], default: 1 }, // 0 = old privy, 1 = new privy
     wallets: {
       ethereum: { walletId: String, address: String, publicKey: String },
       solana: { walletId: String, address: String, publicKey: String },

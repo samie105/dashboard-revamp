@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
           ethereum: userWallet.wallets.ethereum.address,
           solana: userWallet.wallets.solana.address,
         },
+        privy_type: userWallet.privy_type,
         message: "Wallets already exist",
       })
     }
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest) {
     userWallet = await UserWallet.create({
       clerkUserId: userId,
       privyUserId,
+      privy_type: 1, // new privy user
       wallets: {
         ethereum: {
           walletId: wallets.ethereum.id,
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
         ethereum: wallets.ethereum.address,
         solana: wallets.solana.address,
       },
+      privy_type: userWallet.privy_type,
     })
   } catch (error: unknown) {
     console.error("Onboarding error:", error)

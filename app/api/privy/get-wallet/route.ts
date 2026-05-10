@@ -127,6 +127,7 @@ export async function GET(request: NextRequest) {
         clerkUserId,
         privyUserId: privyUser.id,
         wallets,
+        ...(userWallet ? {} : { privy_type: 1 }), // Set privy_type: 1 for new users only
       },
       { upsert: true, new: true },
     )
@@ -139,6 +140,7 @@ export async function GET(request: NextRequest) {
       wallets: userWallet.wallets,
       tradingWallet: userWallet.tradingWallet || null,
       clerkUserId: userWallet.clerkUserId,
+      privy_type: userWallet.privy_type,
     })
   } catch (error: unknown) {
     console.error("[Privy] Error in get-wallet:", error)

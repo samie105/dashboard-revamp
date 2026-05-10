@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       privyUserId: user.id,
       wallets,
       tradingWallet: userWallet.tradingWallet ?? null,
+      privy_type: userWallet.privy_type,
     })
   } catch (error: unknown) {
     console.error("[Privy] Error refreshing wallet:", error)

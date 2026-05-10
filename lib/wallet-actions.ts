@@ -5,10 +5,33 @@ import { UserWallet } from "@/models/UserWallet"
 import { connectDB } from "@/lib/mongodb"
 import { auth } from "@clerk/nextjs/server"
 
-const privy = new PrivyClient({
-  appId: process.env.PRIVY_APP_ID!,
-  appSecret: process.env.PRIVY_APP_SECRET!,
-})
+function createPrivyClient(privyType: number = 0) {
+  if (privyType === 1) {
+    if (!process.env.NEW_PRIVY_APP_ID) {
+      throw new Error("NEW_PRIVY_APP_ID is not set")
+    }
+    if (!process.env.NEW_PRIVY_APP_SECRET) {
+      throw new Error("NEW_PRIVY_APP_SECRET is not set")
+    }
+
+    return new PrivyClient({
+      appId: process.env.NEW_PRIVY_APP_ID,
+      appSecret: process.env.NEW_PRIVY_APP_SECRET,
+    })
+  }
+
+  if (!process.env.PRIVY_APP_ID) {
+    throw new Error("PRIVY_APP_ID is not set")
+  }
+  if (!process.env.PRIVY_APP_SECRET) {
+    throw new Error("PRIVY_APP_SECRET is not set")
+  }
+
+  return new PrivyClient({
+    appId: process.env.PRIVY_APP_ID!,
+    appSecret: process.env.PRIVY_APP_SECRET!,
+  })
+}
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -21,6 +44,7 @@ export type WalletInfo = {
 export type WalletResult = {
   success: boolean
   privyUserId?: string
+  privy_type?: number
   wallets?: Record<string, WalletInfo>
   tradingWallet?: { walletId: string; address: string; chainType: string } | null
   error?: string
@@ -88,6 +112,9 @@ export async function pregenerateWallet(email: string): Promise<WalletResult> {
       }
     }
 
+    const selectedPrivyType = existing ? existing.privy_type ?? 0 : 1
+    const privy = createPrivyClient(selectedPrivyType)
+
     // 2. Create Privy user + wallets (only for first-time users or corrupt DB records)
     let privyUser
     try {
@@ -135,6 +162,7 @@ export async function pregenerateWallet(email: string): Promise<WalletResult> {
         email,
         clerkUserId,
         privyUserId: (privyUser as { id: string }).id,
+        privy_type: selectedPrivyType,
         wallets,
       },
       { upsert: true, new: true },
@@ -142,6 +170,7 @@ export async function pregenerateWallet(email: string): Promise<WalletResult> {
 
     return {
       success: true,
+      privy_type: selectedPrivyType,
       privyUserId: (privyUser as { id: string }).id,
       wallets: userWallet.wallets,
       tradingWallet: userWallet.tradingWallet ?? null,
@@ -216,6 +245,14 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
 
     await connectDB()
 
+    const existing = await UserWallet.findOne({ email }).lean()
+    if (!existing) {
+      return { success: false, error: "User record not found" }
+    }
+
+    const selectedPrivyType = existing.privy_type ?? 0
+    const privy = createPrivyClient(selectedPrivyType)
+
     // Fetch fresh data from Privy using the public SDK method
     let user
     try {
@@ -233,7 +270,7 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
     // Upsert DB — preserve tradingWallet
     const userWallet = await UserWallet.findOneAndUpdate(
       { email },
-      { $set: { privyUserId: user.id, wallets } },
+      { $set: { privyUserId: user.id, wallets, privy_type: existing.privy_type } },
       { upsert: true, new: true },
     ).lean()
 
@@ -241,6 +278,7 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
       success: true,
       privyUserId: user.id,
       wallets,
+      privy_type: existing.privy_type,
       tradingWallet: userWallet.tradingWallet ?? null,
     }
   } catch (error: unknown) {

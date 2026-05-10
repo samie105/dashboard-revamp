@@ -47,6 +47,7 @@ interface WalletContextType {
   setupStatus: string | null
   tradingWallet: TradingWallet | null
   hasTradingWallet: boolean
+  privyType: number | null
   fetchWallets: () => Promise<void>
   refreshWallets: () => Promise<void>
 }
@@ -66,6 +67,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [setupStatus, setSetupStatus] = React.useState<string | null>(null)
   const [tradingWallet, setTradingWallet] = React.useState<TradingWallet | null>(null)
   const [hasTradingWallet, setHasTradingWallet] = React.useState(false)
+  const [privyType, setPrivyType] = React.useState<number | null>(null)
 
   const checkTradingWallet = React.useCallback(async () => {
     if (!user?.email) return
@@ -111,6 +113,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             tron: data.wallets.tron?.address ?? "",
           })
           if (data.tradingWallet) setTradingWallet(data.tradingWallet)
+          setPrivyType(data.privy_type ?? null)
           setSetupStatus("Wallets ready")
           setWalletsGenerated(true)
           setError(null)
@@ -155,6 +158,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           tron: data.wallets.tron?.address ?? "",
         })
         if (data.tradingWallet) setTradingWallet(data.tradingWallet)
+        setPrivyType(data.privy_type ?? null)
         setWalletsGenerated(true)
       }
     } catch (err) {
@@ -185,10 +189,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setupStatus,
       tradingWallet,
       hasTradingWallet,
+      privyType,
       fetchWallets,
       refreshWallets,
     }),
-    [wallets, addresses, walletsGenerated, isLoading, error, setupStatus, tradingWallet, hasTradingWallet, fetchWallets, refreshWallets],
+    [wallets, addresses, walletsGenerated, isLoading, error, setupStatus, tradingWallet, hasTradingWallet, privyType, fetchWallets, refreshWallets],
   )
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>

@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
       privyUserId: userWallet.privyUserId,
       email: userWallet.email,
       wallets: userWallet.wallets,
+      privy_type: userWallet.privy_type,
     })
   } catch (error: unknown) {
     console.error("[Privy] Error fetching wallets:", error)
