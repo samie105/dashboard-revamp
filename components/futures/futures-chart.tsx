@@ -120,6 +120,19 @@ const FIB_COLORS: Record<number, string> = {
 }
 
 type ChartType = "candles" | "line" | "area"
+
+function getIntervalMs(interval: string): number {
+  const num = parseInt(interval) || 1
+  const unit = interval.replace(/[0-9]/g, "")
+  switch (unit) {
+    case "m": return num * 60 * 1000
+    case "h": return num * 60 * 60 * 1000
+    case "d": return num * 24 * 60 * 60 * 1000
+    case "w": return num * 7 * 24 * 60 * 60 * 1000
+    default: return 60 * 60 * 1000 // default 1h
+  }
+}
+
 type IndicatorKey =
   | "ma9" | "ma20" | "ma50" | "ma100" | "ma200"
   | "ema9" | "ema21" | "ema50" | "ema100" | "ema200"
@@ -681,9 +694,11 @@ interface FuturesChartProps {
   symbol: string
   markPrice: number
   change24h: number
+  backend?: "hyperliquid" | "gmx"
+  marketTokenAddress?: string
 }
 
-export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps) {
+export function FuturesChart({ symbol, markPrice, change24h, backend = "hyperliquid", marketTokenAddress }: FuturesChartProps) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<IChartApi | null>(null)
   const mainSeriesRef = React.useRef<ISeriesApi<any> | null>(null)
@@ -728,20 +743,39 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     isLoadingHistoryRef.current = true
     try {
       const oldestTime = existing[0].time // ms
-      const base = symbol.replace(/-PERP$/i, "").replace(/[\/_-]/g, "").toUpperCase()
-      const res = await fetch(
-        `/api/hyperliquid/candles?coin=${encodeURIComponent(base)}&interval=${intervalRef.current}&limit=500&endTime=${oldestTime}`
-      )
-      const json = await res.json()
-      if (!json.success || !json.data?.length) {
-        historyExhaustedRef.current = true
-        return
+      let older: Kline[]
+
+      if (backend === "gmx" && marketTokenAddress) {
+        const res = await fetch(
+          `/api/gmx/candles?marketToken=${encodeURIComponent(marketTokenAddress)}&interval=${intervalRef.current}&start=${Math.floor(oldestTime / 1000) - getIntervalMs(intervalRef.current) * 500 / 1000}&end=${Math.floor(oldestTime / 1000)}`
+        )
+        const json = await res.json()
+        if (!json.success || !json.data?.length) {
+          historyExhaustedRef.current = true
+          return
+        }
+        older = json.data
+          .filter((c: { timestamp: number }) => c.timestamp * 1000 < oldestTime)
+          .map((c: { timestamp: number; open: number; high: number; low: number; close: number; volume: number }) => ({
+            time: c.timestamp * 1000, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume,
+          }))
+      } else {
+        const base = symbol.replace(/-PERP$/i, "").replace(/[\/_-]/g, "").toUpperCase()
+        const res = await fetch(
+          `/api/hyperliquid/candles?coin=${encodeURIComponent(base)}&interval=${intervalRef.current}&limit=500&endTime=${oldestTime}`
+        )
+        const json = await res.json()
+        if (!json.success || !json.data?.length) {
+          historyExhaustedRef.current = true
+          return
+        }
+        older = json.data
+          .filter((c: { time: number }) => c.time * 1000 < oldestTime)
+          .map((c: { time: number; open: number; high: number; low: number; close: number; volume: number }) => ({
+            time: c.time * 1000, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume,
+          }))
       }
-      const older: Kline[] = json.data
-        .filter((c: { time: number }) => c.time * 1000 < oldestTime)
-        .map((c: { time: number; open: number; high: number; low: number; close: number; volume: number }) => ({
-          time: c.time * 1000, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume,
-        }))
+
       if (older.length === 0) {
         historyExhaustedRef.current = true
         return
@@ -755,7 +789,7 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
     } finally {
       isLoadingHistoryRef.current = false
     }
-  }, [symbol])
+  }, [symbol, backend, marketTokenAddress])
 
   // Reactive dark mode detection
   const [isDark, setIsDark] = React.useState(() => {
@@ -1042,22 +1076,35 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
       if (hasData) setIntervalLoading(true)
       else setLoading(true)
       try {
-        const res = await getFuturesKlines(symbol, interval)
-        if (cancelled) return
-        if (res.success && res.data.length > 0) {
-          klinesRef.current = res.data
-          applyMainData(res.data)
-          applyVolumeData(res.data)
-          refreshIndicatorsRef.current()
-          // Set initial viewport only on first load or interval change
-          if (chartRef.current && res.data.length > 80) {
-            chartRef.current.timeScale().setVisibleLogicalRange({
-              from: res.data.length - 80,
-              to: res.data.length + 5,
-            })
-          }
-          setHasData(true)
+        let klines: Kline[]
+        if (backend === "gmx" && marketTokenAddress) {
+          const now = Date.now()
+          const start = now - getIntervalMs(interval) * 500
+          const res = await fetch(
+            `/api/gmx/candles?marketToken=${encodeURIComponent(marketTokenAddress)}&interval=${interval}&start=${Math.floor(start / 1000)}&end=${Math.floor(now / 1000)}`
+          )
+          const json = await res.json()
+          if (!json.success || !json.data?.length) return
+          klines = json.data.map((c: { timestamp: number; open: number; high: number; low: number; close: number; volume: number }) => ({
+            time: c.timestamp * 1000, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume,
+          }))
+        } else {
+          const res = await getFuturesKlines(symbol, interval)
+          if (!res.success || res.data.length === 0) return
+          klines = res.data
         }
+        if (cancelled) return
+        klinesRef.current = klines
+        applyMainData(klines)
+        applyVolumeData(klines)
+        refreshIndicatorsRef.current()
+        if (chartRef.current && klines.length > 80) {
+          chartRef.current.timeScale().setVisibleLogicalRange({
+            from: klines.length - 80,
+            to: klines.length + 5,
+          })
+        }
+        setHasData(true)
       } catch {
         // keep previous data
       } finally {
@@ -1067,21 +1114,35 @@ export function FuturesChart({ symbol, markPrice, change24h }: FuturesChartProps
 
     async function poll() {
       try {
-        const res = await getFuturesKlines(symbol, interval)
-        if (cancelled) return
-        if (res.success && res.data.length > 0) {
-          klinesRef.current = res.data
-          applyMainData(res.data)
-          applyVolumeData(res.data)
-          refreshIndicatorsRef.current()
+        let klines: Kline[]
+        if (backend === "gmx" && marketTokenAddress) {
+          const now = Date.now()
+          const start = now - getIntervalMs(interval) * 500
+          const res = await fetch(
+            `/api/gmx/candles?marketToken=${encodeURIComponent(marketTokenAddress)}&interval=${interval}&start=${Math.floor(start / 1000)}&end=${Math.floor(now / 1000)}`
+          )
+          const json = await res.json()
+          if (!json.success || !json.data?.length) return
+          klines = json.data.map((c: { timestamp: number; open: number; high: number; low: number; close: number; volume: number }) => ({
+            time: c.timestamp * 1000, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume,
+          }))
+        } else {
+          const res = await getFuturesKlines(symbol, interval)
+          if (!res.success || res.data.length === 0) return
+          klines = res.data
         }
+        if (cancelled) return
+        klinesRef.current = klines
+        applyMainData(klines)
+        applyVolumeData(klines)
+        refreshIndicatorsRef.current()
       } catch {}
     }
 
     fetchKlines()
     const id = window.setInterval(poll, 5_000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [symbol, interval])
+  }, [symbol, interval, backend, marketTokenAddress])
 
   // ── Data helpers ──
   function applyMainData(klines: Kline[]) {
