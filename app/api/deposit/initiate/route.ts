@@ -6,6 +6,12 @@ import { UserWallet } from "@/models/UserWallet"
 import { flutterwaveFetch } from "@/lib/flutterwave/client"
 import { FALLBACK_RATES } from "@/lib/flutterwave/config"
 import { randomUUID } from "crypto"
+import {
+  cancelAdminFiatReservation,
+  getAdminFiatAvailability,
+  reserveAdminFiatDeposit,
+  type FiatDepositNetwork,
+} from "@/lib/deposit/admin-fiat"
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -13,7 +19,7 @@ const MIN_USDT = 1
 const MAX_USDT = 5000
 const PLATFORM_MARKUP = 5
 const VALID_CURRENCIES = ["NGN", "GHS"]
-const VALID_NETWORKS = ["solana", "ethereum"]
+const VALID_NETWORKS = ["solana", "ethereum", "tron"] as const
 
 // ── Inline rate fetcher ────────────────────────────────────────────────────
 
@@ -66,6 +72,12 @@ function getFallbackRate(fiatCurrency: string): { buyRate: number; marketRate: n
   }
 }
 
+function networkLabel(network: string) {
+  if (network === "ethereum") return "Ethereum"
+  if (network === "tron") return "Tron"
+  return "Solana"
+}
+
 // ── POST /api/deposit/initiate ─────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
@@ -105,6 +117,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
+    const depositNetwork = network as FiatDepositNetwork
 
     const amount = parseFloat(usdtAmount)
     if (!amount || amount < MIN_USDT || amount > MAX_USDT) {
@@ -123,21 +136,31 @@ export async function POST(request: NextRequest) {
     }).sort({ createdAt: -1 })
 
     if (existingPending) {
-      return NextResponse.json({
-        success: true,
-        deposit: {
-          _id: existingPending._id,
-          usdtAmount: existingPending.usdtAmount,
-          fiatAmount: existingPending.fiatAmount,
-          fiatCurrency: existingPending.fiatCurrency,
-          exchangeRate: existingPending.exchangeRate,
-          network: existingPending.network,
-          status: existingPending.status,
-          createdAt: existingPending.createdAt,
-        },
-        checkoutUrl: existingPending.checkoutUrl,
-        message: "You already have a pending deposit. Please complete it or cancel before creating a new one.",
-      })
+      const reservationExpired =
+        existingPending.reservationExpiresAt && existingPending.reservationExpiresAt.getTime() <= Date.now()
+
+      if (reservationExpired) {
+        await cancelAdminFiatReservation(existingPending.merchantTransactionReference, "Local pending deposit expired")
+        existingPending.status = "cancelled"
+        existingPending.deliveryError = "Reservation expired before payment"
+        await existingPending.save()
+      } else {
+        return NextResponse.json({
+          success: true,
+          deposit: {
+            _id: existingPending._id,
+            usdtAmount: existingPending.usdtAmount,
+            fiatAmount: existingPending.fiatAmount,
+            fiatCurrency: existingPending.fiatCurrency,
+            exchangeRate: existingPending.exchangeRate,
+            network: existingPending.network,
+            status: existingPending.status,
+            createdAt: existingPending.createdAt,
+          },
+          checkoutUrl: existingPending.checkoutUrl,
+          message: "You already have a pending deposit. Please complete it or cancel before creating a new one.",
+        })
+      }
     }
 
     // Get wallet address from UserWallet (Privy-generated wallets)
@@ -146,10 +169,10 @@ export async function POST(request: NextRequest) {
     }).lean()
 
     const walletData = userWallet?.wallets as Record<string, { address?: string }> | undefined
-    const walletAddress = walletData?.[network]?.address
+    const walletAddress = walletData?.[depositNetwork]?.address
     if (!walletAddress) {
       return NextResponse.json(
-        { success: false, message: `${network === "solana" ? "Solana" : "Ethereum"} wallet not set up. Go to Assets first.` },
+        { success: false, message: `${networkLabel(depositNetwork)} wallet not set up. Go to Assets first.` },
         { status: 400 },
       )
     }
@@ -163,7 +186,57 @@ export async function POST(request: NextRequest) {
     const fiatAmount = Math.round(amount * rate.buyRate * 100) / 100
     const txRef = `WS-DEP-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`
 
-    // ── Call Flutterwave first, then save deposit ──
+    // Reserve treasury capacity before creating a checkout link.
+    const availability = await getAdminFiatAvailability()
+    const networkAvailability = availability.chains?.[depositNetwork]
+    if (!networkAvailability?.enabled) {
+      return NextResponse.json(
+        { success: false, message: networkAvailability?.reason || "This network is temporarily unavailable." },
+        { status: 503 },
+      )
+    }
+    if (networkAvailability.available < amount) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Only ${networkAvailability.available.toFixed(2)} USDT is currently available on ${networkLabel(depositNetwork)}.`,
+        },
+        { status: 409 },
+      )
+    }
+
+    const reservation = await reserveAdminFiatDeposit({
+      externalReference: txRef,
+      userId,
+      userWalletAddress: walletAddress,
+      chain: depositNetwork,
+      amount,
+      fiatCurrency,
+      fiatAmount,
+    })
+
+    let deposit
+    try {
+      deposit = await Deposit.create({
+        userId,
+        email,
+        usdtAmount: amount,
+        fiatAmount,
+        fiatCurrency,
+        exchangeRate: rate.buyRate,
+        merchantTransactionReference: txRef,
+        network: depositNetwork,
+        userWalletAddress: walletAddress,
+        status: "pending",
+        paymentProvider: "flutterwave",
+        adminDepositId: reservation.adminDepositId,
+        reservationExpiresAt: new Date(reservation.reservationExpiresAt),
+      })
+    } catch (dbError) {
+      await cancelAdminFiatReservation(txRef, "Dashboard failed to create local deposit")
+      throw dbError
+    }
+
     let flutterwaveCharge
     try {
       flutterwaveCharge = await flutterwaveFetch<{
@@ -192,14 +265,19 @@ export async function POST(request: NextRequest) {
           meta: {
             userId,
             usdtAmount: amount,
-            network,
+            network: depositNetwork,
             walletAddress,
+            adminDepositId: reservation.adminDepositId,
           },
         }),
         idempotencyKey: txRef,
       })
     } catch (fwError) {
       console.error("Flutterwave API error:", fwError)
+      await cancelAdminFiatReservation(txRef, "Flutterwave checkout creation failed")
+      deposit.status = "cancelled"
+      deposit.deliveryError = "Payment provider error before checkout"
+      await deposit.save()
       return NextResponse.json(
         { success: false, message: "Payment provider error. Please try again later." },
         { status: 502 },
@@ -208,29 +286,20 @@ export async function POST(request: NextRequest) {
 
     if (!flutterwaveCharge.link) {
       console.error("Flutterwave charge created but no checkout link returned:", flutterwaveCharge)
+      await cancelAdminFiatReservation(txRef, "Flutterwave checkout returned no payment link")
+      deposit.status = "cancelled"
+      deposit.deliveryError = "Payment provider returned no checkout link"
+      await deposit.save()
       return NextResponse.json(
         { success: false, message: "Failed to create payment link. Please try again." },
         { status: 502 },
       )
     }
 
-    // ── Only save deposit after successful Flutterwave response ──
-    const deposit = await Deposit.create({
-      userId,
-      email,
-      usdtAmount: amount,
-      fiatAmount,
-      fiatCurrency,
-      exchangeRate: rate.buyRate,
-      merchantTransactionReference: txRef,
-      network,
-      userWalletAddress: walletAddress,
-      status: "pending",
-      paymentProvider: "flutterwave",
-      flutterwaveChargeId: flutterwaveCharge.id,
-      flutterwaveReference: flutterwaveCharge.tx_ref,
-      checkoutUrl: flutterwaveCharge.link,
-    })
+    deposit.flutterwaveChargeId = flutterwaveCharge.id
+    deposit.flutterwaveReference = flutterwaveCharge.tx_ref
+    deposit.checkoutUrl = flutterwaveCharge.link
+    await deposit.save()
 
     return NextResponse.json({
       success: true,

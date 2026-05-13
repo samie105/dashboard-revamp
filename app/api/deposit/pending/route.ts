@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
 import Deposit from "@/models/Deposit"
+import { repairFiatDisbursementIfNeeded } from "@/lib/deposit/admin-fiat"
 
 // GET /api/deposit/pending — return user's most recent in-progress deposit
 
@@ -28,13 +29,13 @@ export async function GET() {
       },
     })
       .sort({ createdAt: -1 })
-      .lean()
 
     if (!deposit) {
       return NextResponse.json({ success: false, message: "No pending deposit" })
     }
 
-    return NextResponse.json({ success: true, deposit })
+    const updated = await repairFiatDisbursementIfNeeded(deposit)
+    return NextResponse.json({ success: true, deposit: updated.toObject() })
   } catch (error) {
     console.error("GET /api/deposit/pending error:", error)
     return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })

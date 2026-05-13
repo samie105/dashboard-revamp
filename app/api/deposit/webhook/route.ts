@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Deposit from "@/models/Deposit"
 import { verifyCharge } from "@/lib/flutterwave/verify"
+import { cancelAdminFiatReservation, requestAdminDisbursement } from "@/lib/deposit/admin-fiat"
 import {
   verifyWebhookSignature,
   extractChargeIdFromWebhook,
@@ -58,6 +59,9 @@ export async function POST(request: NextRequest) {
     if (eventId) {
       const alreadyProcessed = await Deposit.findOne({ webhookEventId: eventId })
       if (alreadyProcessed) {
+        if (["payment_confirmed", "sending_usdt"].includes(alreadyProcessed.status)) {
+          await requestAdminDisbursement(alreadyProcessed)
+        }
         console.log(`Webhook event ${eventId} already processed`)
         return NextResponse.json({ success: true, message: "Event already processed" })
       }
@@ -77,7 +81,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Deposit not found" }, { status: 404 })
     }
 
-    if (["completed", "cancelled", "payment_confirmed", "payment_failed"].includes(deposit.status)) {
+    if (["payment_confirmed", "sending_usdt"].includes(deposit.status)) {
+      await requestAdminDisbursement(deposit)
+      return NextResponse.json({ success: true, message: `Deposit already ${deposit.status}` })
+    }
+
+    if (["completed", "payment_failed", "delivery_failed"].includes(deposit.status)) {
       return NextResponse.json({ success: true, message: `Deposit already ${deposit.status}` })
     }
 
@@ -93,6 +102,12 @@ export async function POST(request: NextRequest) {
         expected: { amount: deposit.fiatAmount, currency: deposit.fiatCurrency },
         actual: { amount: charge.amount, currency: charge.currency },
       })
+      deposit.status = "payment_failed"
+      deposit.flutterwaveChargeId = chargeId
+      deposit.webhookEventId = eventId || undefined
+      deposit.webhookProcessedAt = new Date()
+      await cancelAdminFiatReservation(deposit.merchantTransactionReference, "Flutterwave webhook amount/currency mismatch")
+      await deposit.save()
       return NextResponse.json({ success: false, message: "Amount/currency mismatch" }, { status: 400 })
     }
 
@@ -102,6 +117,7 @@ export async function POST(request: NextRequest) {
       deposit.webhookEventId = eventId || undefined
       deposit.webhookProcessedAt = new Date()
       await deposit.save()
+      await requestAdminDisbursement(deposit)
 
       return NextResponse.json({ success: true, message: "Payment confirmed" })
     } else if (normalizedStatus === "failed") {
@@ -109,6 +125,7 @@ export async function POST(request: NextRequest) {
       deposit.flutterwaveChargeId = chargeId
       deposit.webhookEventId = eventId || undefined
       deposit.webhookProcessedAt = new Date()
+      await cancelAdminFiatReservation(deposit.merchantTransactionReference, "Flutterwave webhook payment failed")
       await deposit.save()
       return NextResponse.json({ success: true, message: "Payment failure recorded" })
     } else if (normalizedStatus === "cancelled") {
@@ -116,6 +133,7 @@ export async function POST(request: NextRequest) {
       deposit.flutterwaveChargeId = chargeId
       deposit.webhookEventId = eventId || undefined
       deposit.webhookProcessedAt = new Date()
+      await cancelAdminFiatReservation(deposit.merchantTransactionReference, "Flutterwave webhook payment cancelled")
       await deposit.save()
       return NextResponse.json({ success: true, message: "Payment cancelled" })
     } else {

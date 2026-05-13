@@ -23,11 +23,16 @@ export interface IDeposit extends Document {
   merchantTransactionReference: string
   globalPayTransactionReference?: string
   checkoutUrl?: string
-  network: "solana" | "ethereum"
+  network: "solana" | "ethereum" | "tron"
   userWalletAddress: string
   status: DepositStatus
   txHash?: string
   deliveryError?: string
+  adminDepositId?: string
+  reservationExpiresAt?: Date
+  disbursementRequestedAt?: Date
+  adminWebhookEventId?: string
+  adminWebhookProcessedAt?: Date
   adminActions?: Array<{
     action: string
     adminEmail: string
@@ -60,7 +65,7 @@ const DepositSchema = new Schema<IDeposit>(
     checkoutUrl: { type: String },
     network: {
       type: String,
-      enum: ["solana", "ethereum"],
+      enum: ["solana", "ethereum", "tron"],
       default: "solana",
       index: true,
     },
@@ -84,6 +89,11 @@ const DepositSchema = new Schema<IDeposit>(
     },
     txHash: { type: String, sparse: true },
     deliveryError: { type: String },
+    adminDepositId: { type: String, sparse: true },
+    reservationExpiresAt: { type: Date },
+    disbursementRequestedAt: { type: Date },
+    adminWebhookEventId: { type: String, sparse: true },
+    adminWebhookProcessedAt: { type: Date },
     adminActions: [
       {
         action: { type: String, required: true },

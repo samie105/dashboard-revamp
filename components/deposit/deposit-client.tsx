@@ -39,10 +39,18 @@ interface DepositRecord {
   status: string
   txHash?: string
   deliveryError?: string
-  network?: "solana" | "ethereum"
+  network?: DepositNetwork
   checkoutUrl?: string
   createdAt: string
   completedAt?: string
+}
+
+type DepositNetwork = "solana" | "ethereum" | "tron"
+
+interface NetworkAvailability {
+  enabled: boolean
+  available: number
+  reason?: string
 }
 
 const CURRENCY_SYM: Record<string, string> = { NGN: "₦", GHS: "GH₵", USD: "$", GBP: "£" }
@@ -108,11 +116,11 @@ function StatusLabel({ status }: { status: string }) {
 // ── Side panels ──────────────────────────────────────────────────────────
 
 const STEPS = [
-  { title: "Choose network", desc: "Solana or Ethereum" },
+  { title: "Choose network", desc: "Solana, Ethereum, or Tron" },
   { title: "Choose currency", desc: "NGN or GHS" },
   { title: "Enter amount", desc: "Set the USDT you need" },
   { title: "Pay securely", desc: "Redirected to Flutterwave" },
-  { title: "Receive USDT", desc: "Sent after confirmation" },
+  { title: "Receive USDT", desc: "Delivered after confirmation" },
 ]
 
 function HowItWorks() {
@@ -149,12 +157,21 @@ function RecentDeposits({ refreshKey }: { refreshKey: number }) {
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
-    setLoading(true)
-    fetch("/api/deposit/history")
-      .then((r) => r.json())
-      .then((d) => { if (d.success) setDeposits(d.deposits ?? []) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    let cancelled = false
+    async function loadDeposits() {
+      setLoading(true)
+      try {
+        const r = await fetch("/api/deposit/history")
+        const d = await r.json()
+        if (!cancelled && d.success) setDeposits(d.deposits ?? [])
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void loadDeposits()
+    return () => { cancelled = true }
   }, [refreshKey])
 
   return (
@@ -180,7 +197,6 @@ function RecentDeposits({ refreshKey }: { refreshKey: number }) {
           {deposits.map((d) => {
             const isUp = d.status === "completed"
             const isFailed = ["payment_failed", "delivery_failed", "cancelled"].includes(d.status)
-            const isPending = !isUp && !isFailed
             return (
               <div key={d._id} className="flex items-center gap-3 px-4 py-3">
                 <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
@@ -194,7 +210,7 @@ function RecentDeposits({ refreshKey }: { refreshKey: number }) {
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="text-xs font-semibold tabular-nums">{d.usdtAmount} USDT</span>
                   <span className="text-[10px] text-muted-foreground">
-                    {CURRENCY_SYM[d.fiatCurrency] ?? ""}{d.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {d.network === "ethereum" ? "ERC-20" : "SPL"}
+                    {CURRENCY_SYM[d.fiatCurrency] ?? ""}{d.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {chainTag(d.network)}
                   </span>
                 </div>
                 <div className="flex flex-col items-end gap-0.5">
@@ -217,16 +233,37 @@ function RecentDeposits({ refreshKey }: { refreshKey: number }) {
 const CHAINS = [
   { id: "solana" as const,   label: "Solana",   tag: "SPL",    icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
   { id: "ethereum" as const, label: "Ethereum", tag: "ERC-20", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
+  { id: "tron" as const,     label: "Tron",     tag: "TRC-20", icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
 ]
+
+function chainLabel(network?: DepositNetwork) {
+  return CHAINS.find((c) => c.id === network)?.label ?? "Solana"
+}
+
+function chainTag(network?: DepositNetwork) {
+  return CHAINS.find((c) => c.id === network)?.tag ?? "SPL"
+}
+
+function explorerUrl(network: DepositNetwork | undefined, txHash: string) {
+  if (network === "ethereum") return `https://etherscan.io/tx/${txHash}`
+  if (network === "tron") return `https://tronscan.org/#/transaction/${txHash}`
+  return `https://solscan.io/tx/${txHash}`
+}
+
+function explorerName(network?: DepositNetwork) {
+  if (network === "ethereum") return "Etherscan"
+  if (network === "tron") return "Tronscan"
+  return "Solscan"
+}
 
 // ── Main Component ───────────────────────────────────────────────────────
 
 export function DepositClient() {
-  const { walletsGenerated } = useWallet()
+  const { walletsGenerated, addresses, isLoading: walletsLoading } = useWallet()
   const { profile } = useProfile()
   const searchParams = useSearchParams()
 
-  const [network, setNetwork] = React.useState<"solana" | "ethereum">("solana")
+  const [network, setNetwork] = React.useState<DepositNetwork>("solana")
   const [fiatCurrency, setFiatCurrency] = React.useState<"NGN" | "GHS">("NGN")
   const [usdtAmount, setUsdtAmount] = React.useState(() => {
     const v = searchParams.get("amount")
@@ -234,6 +271,12 @@ export function DepositClient() {
   })
   const [rates, setRates] = React.useState<Record<string, Rate>>({})
   const [ratesLoading, setRatesLoading] = React.useState(true)
+  const [availability, setAvailability] = React.useState<Record<DepositNetwork, NetworkAvailability>>({
+    solana: { enabled: false, available: 0 },
+    ethereum: { enabled: false, available: 0 },
+    tron: { enabled: false, available: 0 },
+  })
+  const [availabilityLoading, setAvailabilityLoading] = React.useState(true)
 
   const [activeDeposit, setActiveDeposit] = React.useState<DepositRecord | null>(null)
   const [paymentUrl, setPaymentUrl] = React.useState<string | null>(null)
@@ -258,10 +301,40 @@ export function DepositClient() {
   }, [])
 
   React.useEffect(() => {
-    fetchRates()
+    const first = setTimeout(fetchRates, 0)
     const id = setInterval(fetchRates, 120_000)
-    return () => clearInterval(id)
+    return () => {
+      clearTimeout(first)
+      clearInterval(id)
+    }
   }, [fetchRates])
+
+  const fetchAvailability = React.useCallback(async () => {
+    try {
+      setAvailabilityLoading(true)
+      const r = await fetch("/api/deposit/availability")
+      const d = await r.json()
+      if (d.chains) setAvailability(d.chains)
+    } catch {
+      setAvailability({
+        solana: { enabled: false, available: 0, reason: "Temporarily unavailable" },
+        ethereum: { enabled: false, available: 0, reason: "Temporarily unavailable" },
+        tron: { enabled: false, available: 0, reason: "Temporarily unavailable" },
+      })
+    } finally {
+      setAvailabilityLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (!walletsGenerated) return
+    const first = setTimeout(fetchAvailability, 0)
+    const id = setInterval(fetchAvailability, 60_000)
+    return () => {
+      clearTimeout(first)
+      clearInterval(id)
+    }
+  }, [walletsGenerated, fetchAvailability])
 
   // ── Auto-resume ──────────────────────────────────────────────────────
 
@@ -298,11 +371,13 @@ export function DepositClient() {
             setJustPaid(true)
             // Trigger a verify to refresh status
             try {
-              await fetch("/api/deposit/verify", {
+              const vr = await fetch("/api/deposit/verify", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ depositId: d.deposit._id }),
               })
+              const vd = await vr.json()
+              if (vd.deposit) setActiveDeposit(vd.deposit)
             } catch { /* ignore */ }
           }
         } catch { /* ignore */ }
@@ -374,11 +449,27 @@ export function DepositClient() {
 
   // ── Derived ──────────────────────────────────────────────────────────
 
+  const eligibleChains = React.useMemo(
+    () => CHAINS.filter((c) => Boolean(addresses?.[c.id])),
+    [addresses],
+  )
+  const selectedChain = CHAINS.find((c) => c.id === network) ?? eligibleChains[0] ?? CHAINS[0]
+  const currentAvailability = availability[network]
+  const networkMax = Math.min(5000, Math.max(0, currentAvailability?.available ?? 0))
+
+  React.useEffect(() => {
+    if (eligibleChains.length === 0) return
+    if (!eligibleChains.some((c) => c.id === network)) {
+      const id = setTimeout(() => setNetwork(eligibleChains[0].id), 0)
+      return () => clearTimeout(id)
+    }
+  }, [eligibleChains, network])
+
   const rate = rates[fiatCurrency]
   const buyRate = rate?.buyRate
   const amount = parseFloat(usdtAmount) || 0
   const fiat = amount * (buyRate || 0)
-  const isValid = amount >= 1 && amount <= 5000
+  const isValid = eligibleChains.length > 0 && Boolean(currentAvailability?.enabled) && amount >= 1 && amount <= networkMax
 
   // ── Actions ──────────────────────────────────────────────────────────
 
@@ -457,6 +548,23 @@ export function DepositClient() {
     )
   }
 
+  if (!walletsLoading && eligibleChains.length === 0) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
+        <div className="flex flex-col items-center justify-center gap-3 py-20">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50">
+            <HugeiconsIcon icon={Wallet01Icon} className="h-5 w-5 text-muted-foreground/40" />
+          </div>
+          <p className="text-sm font-medium">USDT wallet setup required</p>
+          <p className="text-xs text-muted-foreground">Create a Solana, Ethereum, or Tron wallet before depositing with fiat.</p>
+          <a href="/assets" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
+            Go to Assets <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3" />
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   // ── Render ───────────────────────────────────────────────────────────
 
   return (
@@ -476,9 +584,9 @@ export function DepositClient() {
           <p className="text-xs text-muted-foreground">Buy USDT instantly · Usually arrives in 1–3 minutes</p>
         </div>
         <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-border/40 bg-accent/30 px-2.5 py-1">
-          <img src={CHAINS.find((c) => c.id === network)!.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
-          <span className="text-[10px] font-medium">{CHAINS.find((c) => c.id === network)!.label}</span>
-          <span className="text-[10px] text-muted-foreground">{CHAINS.find((c) => c.id === network)!.tag}</span>
+          <img src={selectedChain.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
+          <span className="text-[10px] font-medium">{selectedChain.label}</span>
+          <span className="text-[10px] text-muted-foreground">{selectedChain.tag}</span>
         </div>
       </div>
 
@@ -561,17 +669,19 @@ export function DepositClient() {
                       <span className="mb-2 block text-[11px] font-medium text-muted-foreground">Receive on</span>
                       <div className="relative">
                         <img
-                          src={CHAINS.find((c) => c.id === network)!.icon}
+                          src={selectedChain.icon}
                           alt=""
                           className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full"
                         />
                         <select
                           value={network}
-                          onChange={(e) => setNetwork(e.target.value as "solana" | "ethereum")}
+                          onChange={(e) => setNetwork(e.target.value as DepositNetwork)}
                           className="w-full appearance-none rounded-xl border border-border/30 bg-accent/20 py-3 pl-10 pr-10 text-sm font-medium text-foreground outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-colors cursor-pointer"
                         >
-                          {CHAINS.map((c) => (
-                            <option key={c.id} value={c.id}>{c.label} · {c.tag} USDT</option>
+                          {eligibleChains.map((c) => (
+                            <option key={c.id} value={c.id} disabled={!availability[c.id]?.enabled}>
+                              {c.label} · {c.tag} USDT{availability[c.id]?.enabled ? "" : " · Temporarily unavailable"}
+                            </option>
                           ))}
                         </select>
                         <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -580,11 +690,24 @@ export function DepositClient() {
                       </div>
                     </div>
 
+                    {!availabilityLoading && !currentAvailability?.enabled && (
+                      <p className="-mt-2 mb-4 text-[11px] text-amber-500">
+                        {chainLabel(network)} deposits are temporarily unavailable.
+                      </p>
+                    )}
+                    {!availabilityLoading && currentAvailability?.enabled && amount > networkMax && (
+                      <p className="-mt-2 mb-4 text-[11px] text-amber-500">
+                        Current {chainLabel(network)} liquidity supports up to {networkMax.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT.
+                      </p>
+                    )}
+
                     {/* You deposit */}
                     <div data-onboarding="deposit-amount" className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
                       <div className="flex items-center justify-between mb-2.5">
                         <span className="text-[11px] font-medium text-muted-foreground">You deposit</span>
-                        <span className="text-[11px] text-muted-foreground">Min 1 · Max 5,000</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          Min 1 · Max {availabilityLoading ? "..." : networkMax.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </span>
                       </div>
                       <div className="flex items-center gap-3">
                         <input
@@ -609,11 +732,12 @@ export function DepositClient() {
                           ))}
                         </div>
                         <button
-                          onClick={() => { const idx = CHAINS.findIndex((c) => c.id === network); setNetwork(CHAINS[(idx + 1) % CHAINS.length].id) }}
+                          onClick={() => { const idx = eligibleChains.findIndex((c) => c.id === network); setNetwork(eligibleChains[(idx + 1) % eligibleChains.length].id) }}
+                          disabled={eligibleChains.length <= 1}
                           className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
                         >
-                          <img src={CHAINS.find((c) => c.id === network)!.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
-                          {CHAINS.find((c) => c.id === network)!.label}
+                          <img src={selectedChain.icon} alt="" className="h-3.5 w-3.5 rounded-full" />
+                          {selectedChain.label}
                         </button>
                       </div>
                     </div>
@@ -652,7 +776,7 @@ export function DepositClient() {
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Network</span>
-                          <span className="font-medium">{network === "solana" ? "Solana (SPL)" : "Ethereum (ERC-20)"}</span>
+                          <span className="font-medium">{chainLabel(network)} ({chainTag(network)})</span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Currency</span>
@@ -674,11 +798,11 @@ export function DepositClient() {
                     <button
                       data-onboarding="deposit-cta"
                       onClick={initiate}
-                      disabled={!isValid || !buyRate || loading}
+                      disabled={!isValid || !buyRate || loading || availabilityLoading}
                       className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-white transition-all hover:bg-primary/90 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loading && <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin" />}
-                      {loading ? "Processing…" : "Deposit USDT"}
+                      {loading ? "Processing…" : availabilityLoading ? "Checking liquidity..." : "Deposit USDT"}
                     </button>
                   </>
                 )}
@@ -722,7 +846,7 @@ export function DepositClient() {
                       </div>
                     </div>
                     <p className="text-[10px] text-muted-foreground text-center">
-                      An admin will send your USDT shortly. You can check the status in Recent Deposits.
+                      Your USDT delivery has been queued automatically. You can check the status in Recent Deposits.
                     </p>
                     <button
                       onClick={() => { setJustPaid(false); reset() }}
@@ -786,7 +910,7 @@ export function DepositClient() {
                 <p className="text-sm font-medium">
                   {activeDeposit.status === "verifying" ? "Verifying your payment…" : activeDeposit.status === "payment_confirmed" ? `Payment confirmed! ${activeDeposit.usdtAmount} USDT will be sent to your wallet shortly.` : `Sending ${activeDeposit.usdtAmount} USDT to your wallet…`}
                 </p>
-                <p className="text-[10px] text-muted-foreground">An admin will process your USDT delivery shortly</p>
+                <p className="text-[10px] text-muted-foreground">Delivery is automatic after Flutterwave confirmation.</p>
               </div>
             </div>
           )}
@@ -802,11 +926,11 @@ export function DepositClient() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
                   <HugeiconsIcon icon={CheckmarkCircle01Icon} className="h-5 w-5 text-emerald-500" />
                 </div>
-                <p className="text-sm font-medium"><span className="font-bold">{activeDeposit.usdtAmount} USDT</span> will be sent to your {activeDeposit.network === "ethereum" ? "Ethereum" : "Solana"} wallet</p>
-                <p className="text-[10px] text-muted-foreground">An admin will process the delivery shortly</p>
+                <p className="text-sm font-medium"><span className="font-bold">{activeDeposit.usdtAmount} USDT</span> was submitted to your {chainLabel(activeDeposit.network)} wallet</p>
+                <p className="text-[10px] text-muted-foreground">Completion means the USDT transaction was submitted on-chain.</p>
                 {activeDeposit.txHash && (
-                  <a href={activeDeposit.network === "ethereum" ? `https://etherscan.io/tx/${activeDeposit.txHash}` : `https://solscan.io/tx/${activeDeposit.txHash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                    View on {activeDeposit.network === "ethereum" ? "Etherscan" : "Solscan"} <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                  <a href={explorerUrl(activeDeposit.network, activeDeposit.txHash)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    View on {explorerName(activeDeposit.network)} <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
                   </a>
                 )}
                 <div className="flex gap-2 mt-2">

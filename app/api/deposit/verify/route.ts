@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb"
 import Deposit from "@/models/Deposit"
 import { verifyCharge } from "@/lib/flutterwave/verify"
 import { normalizeFlutterwaveStatus } from "@/lib/flutterwave/webhook"
+import { cancelAdminFiatReservation, requestAdminDisbursement } from "@/lib/deposit/admin-fiat"
 
 // ── POST /api/deposit/verify ───────────────────────────────────────────────
 
@@ -29,7 +30,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Deposit not found" }, { status: 404 })
     }
 
-    if (!["pending", "awaiting_verification", "payment_failed"].includes(deposit.status)) {
+    if (["payment_confirmed", "sending_usdt"].includes(deposit.status)) {
+      const repaired = await requestAdminDisbursement(deposit)
+      return NextResponse.json({
+        success: true,
+        deposit: repaired.toObject(),
+        message: `Deposit is already ${repaired.status}`,
+      })
+    }
+
+    if (!["pending", "awaiting_verification", "payment_failed", "cancelled"].includes(deposit.status)) {
       return NextResponse.json({
         success: true,
         deposit: deposit.toObject(),
@@ -63,6 +73,7 @@ export async function POST(request: NextRequest) {
         actual: { amount: charge.amount, currency: charge.currency },
       })
       deposit.status = "payment_failed"
+      await cancelAdminFiatReservation(deposit.merchantTransactionReference, "Flutterwave amount/currency mismatch")
       await deposit.save()
       return NextResponse.json({
         success: false,
@@ -74,14 +85,16 @@ export async function POST(request: NextRequest) {
     if (normalizedStatus === "successful") {
       deposit.status = "payment_confirmed"
       await deposit.save()
+      const updated = await requestAdminDisbursement(deposit)
 
       return NextResponse.json({
         success: true,
-        deposit: deposit.toObject(),
-        message: "Payment confirmed! Your USDT will be sent shortly.",
+        deposit: updated.toObject(),
+        message: "Payment confirmed! Your USDT delivery has been queued.",
       })
     } else if (normalizedStatus === "failed") {
       deposit.status = "payment_failed"
+      await cancelAdminFiatReservation(deposit.merchantTransactionReference, "Flutterwave payment failed")
       await deposit.save()
       return NextResponse.json({
         success: false,
@@ -90,6 +103,7 @@ export async function POST(request: NextRequest) {
       })
     } else if (normalizedStatus === "cancelled") {
       deposit.status = "cancelled"
+      await cancelAdminFiatReservation(deposit.merchantTransactionReference, "Flutterwave payment cancelled")
       await deposit.save()
       return NextResponse.json({
         success: false,
