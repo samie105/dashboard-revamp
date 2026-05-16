@@ -69,7 +69,7 @@ export async function getGmxPositions(account: string): Promise<GmxPosition[]> {
     averageEntryPrice: p.averageEntryPrice ?? p.entryPrice,
     liquidationPrice: p.liquidationPrice,
     pnl: p.pnl ?? p.netPnl,
-    pendingPnl: p.pendingPnl ?? 0n,
+    pendingPnl: p.pendingPnl ?? BigInt(0),
     leverage: Number(p.leverage ?? 0),
     unrealizedPnl: p.unrealizedPnl ? Number(p.unrealizedPnl) : undefined,
     returnOnEquity: p.returnOnEquity ? Number(p.returnOnEquity) : undefined,
