@@ -25,6 +25,14 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useAuth } from "@/components/auth-provider"
+import { getPrices } from "@/lib/actions"
+import {
+  getSpotV2Balance,
+  getSpotV2Positions,
+  getTokenPrices,
+  type LedgerBalance,
+  type PositionInfo,
+} from "@/lib/spotv2/ledger-actions"
 import {
   getRecentUsers,
   type UserSearchResult,
@@ -84,14 +92,59 @@ export function NavbarActions() {
 
   /* ── Wallet data ── */
   const { balances: chainBal } = useWalletBalances(60_000)
-  const { accountValue: hlAccountValue, balances: hlBalances } = useHyperliquidBalance(user?.userId, !!user)
+  const { accountValue: hlAccountValue } = useHyperliquidBalance(user?.userId, !!user)
+
+  // Live token prices (for on-chain valuation)
+  const [prices, setPrices] = useState<Record<string, number>>({})
+  // SpotV2 ledger data (same source as dashboard/assets)
+  const [spotLedger, setSpotLedger] = useState<LedgerBalance[]>([])
+  const [spotPositions, setSpotPositions] = useState<(PositionInfo & { currentPrice: number })[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    getPrices()
+      .then((data) => { if (!cancelled && data?.prices) setPrices(data.prices) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    const load = async () => {
+      try {
+        const [balances, positions] = await Promise.all([
+          getSpotV2Balance(),
+          getSpotV2Positions(),
+        ])
+        const tokens = positions.map((p) => p.token)
+        const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
+        if (cancelled) return
+        setSpotLedger(balances)
+        setSpotPositions(positions.map((p) => ({ ...p, currentPrice: priceMap.get(p.token) ?? 0 })))
+      } catch { /* empty state */ }
+    }
+    load()
+    const i = setInterval(load, 60_000)
+    return () => { cancelled = true; clearInterval(i) }
+  }, [user])
+
+  // Total estimated value — on-chain (priced) + spot ledger + futures account value.
+  // Mirrors the dashboard "Total" wallet view so the figures match.
   const estValue = useMemo(() => {
-    let total = 0
-    for (const b of chainBal) if (["USDT", "USDC"].includes(b.symbol)) total += b.balance
-    total += hlBalances.reduce((s, b) => s + (b.currentValue || 0), 0)
-    total += hlAccountValue
-    return total
-  }, [chainBal, hlBalances, hlAccountValue])
+    // On-chain: value every token at its USD price (stablecoins fall back to $1)
+    let onChain = 0
+    for (const b of chainBal) {
+      const p = prices[b.symbol] ?? 0
+      onChain += b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
+    }
+    // Spot: SpotV2 ledger (available + locked) + open positions value
+    const spot =
+      spotLedger.reduce((s, b) => s + b.available + b.locked, 0) +
+      spotPositions.reduce((s, p) => s + p.quantity * p.currentPrice, 0)
+    // Futures: Hyperliquid perps account value
+    return onChain + spot + hlAccountValue
+  }, [chainBal, prices, spotLedger, spotPositions, hlAccountValue])
 
   /* ── Calls + contacts data ── */
   const [calls, setCalls] = useState<RecentCallItem[]>([])

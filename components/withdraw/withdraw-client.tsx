@@ -170,7 +170,7 @@ const CHAINS = [
 // ── Main Component ───────────────────────────────────────────────────────
 
 export function WithdrawClient() {
-  const { walletsGenerated } = useWallet()
+  const { walletsGenerated, addresses } = useWallet()
   const { profile } = useProfile()
 
   // Form state
@@ -187,7 +187,7 @@ export function WithdrawClient() {
   // Withdrawal state
   const [activeWithdrawal, setActiveWithdrawal] = React.useState<WithdrawalRecord | null>(null)
   const [txHash, setTxHash] = React.useState("")
-  const [copied, setCopied] = React.useState(false)
+  const [copiedAddr, setCopiedAddr] = React.useState<string | null>(null)
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(false)
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
@@ -315,9 +315,10 @@ export function WithdrawClient() {
   }
 
   async function copyAddress(addr: string) {
+    if (!addr) return
     await navigator.clipboard.writeText(addr)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setCopiedAddr(addr)
+    setTimeout(() => setCopiedAddr((c) => (c === addr ? null : c)), 2000)
   }
 
   function handleAddBank() {
@@ -428,6 +429,31 @@ export function WithdrawClient() {
                           </button>
                         ))}
                       </div>
+
+                      {/* Your wallet address for the selected chain */}
+                      {addresses?.[chain] && (
+                        <div className="mt-2.5 rounded-xl border border-border/30 bg-accent/20 p-3">
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-[11px] font-medium text-muted-foreground">
+                              Your {CHAINS.find((c) => c.id === chain)!.label} wallet
+                            </span>
+                            <span className="text-[10px] text-muted-foreground/60">{CHAINS.find((c) => c.id === chain)!.tag}</span>
+                          </div>
+                          <div className="flex items-center gap-2 rounded-lg border border-border/30 bg-card p-2.5">
+                            <code className="flex-1 break-all font-mono text-[11px] text-muted-foreground">
+                              {addresses[chain]}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => copyAddress(addresses[chain])}
+                              className="shrink-0 rounded-md p-1.5 transition-colors hover:bg-accent"
+                              title="Copy address"
+                            >
+                              <HugeiconsIcon icon={copiedAddr === addresses[chain] ? CheckmarkCircle01Icon : Copy01Icon} className={`h-3.5 w-3.5 ${copiedAddr === addresses[chain] ? "text-emerald-500" : "text-muted-foreground"}`} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* You sell */}
@@ -662,7 +688,7 @@ export function WithdrawClient() {
                       onClick={() => copyAddress(activeWithdrawal.treasuryWalletAddress)}
                       className="shrink-0 rounded-md p-1.5 hover:bg-accent transition-colors"
                     >
-                      <HugeiconsIcon icon={copied ? CheckmarkCircle01Icon : Copy01Icon} className={`h-3.5 w-3.5 ${copied ? "text-emerald-500" : "text-muted-foreground"}`} />
+                      <HugeiconsIcon icon={copiedAddr === activeWithdrawal.treasuryWalletAddress ? CheckmarkCircle01Icon : Copy01Icon} className={`h-3.5 w-3.5 ${copiedAddr === activeWithdrawal.treasuryWalletAddress ? "text-emerald-500" : "text-muted-foreground"}`} />
                     </button>
                   </div>
                   <p className="text-[10px] text-amber-600/70 dark:text-amber-400/60">

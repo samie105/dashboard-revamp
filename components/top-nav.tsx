@@ -9,9 +9,7 @@ import {
   RepeatIcon,
   Link01Icon,
   Copy01Icon,
-  Store01Icon,
   BarChartIcon,
-  GlobeIcon,
 } from "@hugeicons/core-free-icons"
 import {
   NavigationMenu,
@@ -64,12 +62,6 @@ const navItems: NavItem[] = [
           icon: ChartLineData02Icon,
         },
         {
-          name: "Forex",
-          description: "Currency pair trading",
-          href: "/forex",
-          icon: GlobeIcon,
-        },
-        {
           name: "Swap",
           description: "One-tap conversion",
           href: "/swap",
@@ -86,12 +78,6 @@ const navItems: NavItem[] = [
           description: "Mirror top traders",
           href: "/copy-trading",
           icon: Copy01Icon,
-        },
-        {
-          name: "P2P Trading",
-          description: "Peer-to-peer exchange",
-          href: "/p2p",
-          icon: Store01Icon,
         },
       ],
     },
