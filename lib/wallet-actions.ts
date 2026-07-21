@@ -5,7 +5,25 @@ import { UserWallet } from "@/models/UserWallet"
 import { connectDB } from "@/lib/mongodb"
 import { auth } from "@clerk/nextjs/server"
 
+// The Privy app new signups are created in (0 = old, 1 = second, 2 = third).
+// Bump when the current app hits Privy's account limit.
+const SIGNUP_PRIVY_TYPE = 2
+
 function createPrivyClient(privyType: number = 0) {
+  if (privyType === 2) {
+    if (!process.env.THIRD_PRIVY_APP_ID) {
+      throw new Error("THIRD_PRIVY_APP_ID is not set")
+    }
+    if (!process.env.THIRD_PRIVY_APP_SECRET) {
+      throw new Error("THIRD_PRIVY_APP_SECRET is not set")
+    }
+
+    return new PrivyClient({
+      appId: process.env.THIRD_PRIVY_APP_ID,
+      appSecret: process.env.THIRD_PRIVY_APP_SECRET,
+    })
+  }
+
   if (privyType === 1) {
     if (!process.env.NEW_PRIVY_APP_ID) {
       throw new Error("NEW_PRIVY_APP_ID is not set")
@@ -112,7 +130,7 @@ export async function pregenerateWallet(email: string): Promise<WalletResult> {
       }
     }
 
-    const selectedPrivyType = existing ? existing.privy_type ?? 0 : 1
+    const selectedPrivyType = existing ? existing.privy_type ?? 0 : SIGNUP_PRIVY_TYPE
     const privy = createPrivyClient(selectedPrivyType)
 
     // 2. Create Privy user + wallets (only for first-time users or corrupt DB records)
