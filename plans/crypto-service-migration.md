@@ -1,258 +1,133 @@
-# Plan: Migrate the dashboard backend to worldstreet-crypto
+# Plan: the dashboard becomes a pure client of worldstreet-crypto
 
-> Target: the dashboard stops owning crypto backend logic and becomes a client of
-> `worldstreet-crypto`, matching the mobile app's contract 1:1.
+> **Target**: the dashboard owns no crypto backend. Every crypto call goes to
+> `worldstreet-crypto`, exactly as the mobile app does — including market data,
+> which mobile reads straight from Hyperliquid's public API rather than
+> proxying it.
 >
-> Revised after review. Superseded assumptions are called out where they'd
-> otherwise mislead.
+> Rewritten after the phased draft ran into its own assumptions. Superseded
+> reasoning is called out where it would otherwise mislead.
+
+## The model we're copying
+
+`worldstreet-app` has **no backend of its own**:
+
+- Trading, wallets, balances, buy/sell → `crypto-api.worldstreetgold.com`
+- Order book and candles → `https://api.hyperliquid.xyz/info`, direct from the
+  client, unauthenticated (`src/features/crypto/api/hlPublic.ts`)
+- One typed client (`src/features/crypto/api/index.ts`) over both
+
+The dashboard can reach the same shape for everything crypto. It cannot reach
+zero routes overall — see [Not crypto](#not-crypto-needs-a-home).
 
 ## Architectural decisions
 
-Settled. These apply across all phases.
+- **No crypto logic in the dashboard.** No Privy signing, no chain RPC, no
+  Mongoose models for crypto collections. Those move to (or already exist in)
+  the service.
+- **No data migration.** The service uses the same MongoDB (`user-account`) and
+  the same collections.
+- **Market data is public and goes direct.** No service work, no proxying, no
+  auth. Mirror `hlPublic.ts`.
+- **Transport: proxy now, direct later.** `app/api/[...path]/route.ts` forwards
+  allowlisted paths and swaps the Clerk cookie for a bearer token. It exists so
+  cutover is reversible per endpoint — delete a local route, add its path to
+  `FORWARDED`, restore the file to roll back. It is a **transition mechanism**
+  and gets deleted once nothing needs it (see Phase 5).
+- **Typed client mirrors mobile.** `lib/crypto-api.ts`, types lifted from
+  mobile so both clients share one contract.
+- **spotv2 does not survive.** Spot becomes real Hyperliquid execution.
+- **The NGN ramp does not survive.** Buy/sell run off the Dollar Account.
+- **Unified trading wallet** — the user's Ethereum Privy wallet *is* the
+  trading wallet, as on the service and mobile.
 
-- **One backend.** `worldstreet-crypto` (Hono + `@clerk/backend` + Mongoose, Node 22)
-  owns crypto domain logic. The dashboard keeps UI plus thin forwarding routes.
-- **No data migration.** The service already uses the same MongoDB (`user-account`)
-  and the same collections. `UserWallet` is equivalent on both sides. This moves
-  *which process writes* the collections, not the data.
-- **spotv2 does not survive.** The ledger-CFD engine is deleted, not ported. Spot
-  trading becomes real Hyperliquid execution via `POST /api/trade/spot`.
-- **The NGN ramp is going away.** Buying becomes `POST /api/buy` (Dollar Account),
-  selling `POST /api/sell`. The fiat leg lives in `worldstreet-wallet`.
-- **Unified trading wallet.** The user's Ethereum Privy wallet *is* the trading
-  wallet, matching the service and mobile. See Phase 4 for the balance sweep.
-- **Transport: proxy first, with an allowlist.** One catch-all Next.js route
-  forwards to the service, exchanging the Clerk cookie for a bearer token. It
-  forwards only allowlisted prefixes and 404s otherwise.
-- **Market data goes direct to Hyperliquid, not through the service.** Mobile
-  already does this in `src/features/crypto/api/hlPublic.ts` — order book and
-  candles are public, unauthenticated data. Mirror that file.
-- **Typed client mirrors mobile.** Response types copied from mobile's
-  `src/features/crypto/api/index.ts` so both clients share one contract.
-
-## Already done
-
-Shipped while planning — these are no longer future work.
+## Done
 
 | Change | Where |
 |---|---|
-| Tron sell (`/api/sell` accepts tron, `waitForTronConfirmation`, TRX pre-flight) | `worldstreet-crypto` `d969e5f` |
-| `Withdrawal.chain` + `TreasuryWallet.network` widened to accept tron | `worldstreet-crypto` `d969e5f` |
+| Tron sell end-to-end (`/api/sell` accepts tron, confirmation poller, TRX pre-flight) | `worldstreet-crypto` `d969e5f` |
 | Buy-time TRX top-up on Tron disbursements | `worldstreet-admin` `61526ff` |
-| `Withdrawal.chain` widened dashboard-side | this repo |
-| `SellNetwork` widened + Tron listed first | `worldstreet-app` |
+| `Withdrawal.chain` / `TreasuryWallet.network` accept tron | both repos |
+| Mobile `SellNetwork` widened, Tron listed first | `worldstreet-app` `fb6a807` |
+| Proxy + typed client | this repo `ebfac76` |
+| 21 routes cut over; token-send bug fixed | this repo `f546f0f` |
+| Pending-deposit banner no longer calls a failed deposit "pending" | this repo `650b559` |
 
-## Scale
+**The token-send bug is worth remembering as a pattern.** `send-modal` branched
+on `contractAddress && chain === "solana"`, so every non-Solana token fell
+through to a *native* send with its contract address dropped — "send 100 USDT"
+on Tron broadcast 100 TRX. It was found by verifying contracts before deleting
+routes, not by testing. Verify each contract before its route goes.
 
-| Area | Lines | Fate |
+---
+
+## Route inventory
+
+49 routes remain. Every one has a destination.
+
+### A. Delete — the service already replaces them (26)
+
+| Dashboard | Service | Notes |
 |---|---|---|
-| spotv2 (routes, page, components, lib, 7 models, 2 hooks) | ~6,000 | delete |
-| NGN ramp (deposit + withdraw + flutterwave + lib/deposit) | ~3,500 | delete |
-| spot v1 + lib/hyperliquid | ~9,000 | mostly delete |
+| `deposit/*` (9) | `POST /api/buy` + polling | Payment leg changes: Dollar Account, not NGN checkout |
+| `withdraw/*` (3) | `POST /api/sell` | No bank leg; credits USD |
+| `spot/*` (7) | `/api/trading-wallet/{fund,withdraw,deposit,transfer}` | |
+| `hyperliquid/{order,cancel-order}` | `/api/trade/{spot,futures,cancel,close}` | |
+| `hyperliquid/{balance,positions,open-orders}` | `GET /api/trade/account` | One call returns all three |
+| `privy/setup-trading-wallet` | `POST /api/trading-wallet/setup` | |
+| `privy/migrate-privy-type` | — | One-off migration; just delete |
+| `spotv2/*` (7) | — | Deleted outright, see Phase 2 |
 
----
+### B. Direct to Hyperliquid, no backend (2)
 
-## Phase 0 — Foundations
+`orderbook`, `hyperliquid/candles` → mirror `hlPublic.ts`.
 
-No behaviour change; everything after is reversible per-endpoint.
+This also dissolves most of `lib/actions.ts` (~1,970 lines, 32 exports):
 
-1. **Env.** `CRYPTO_API_URL`, server-only — the proxy runs server-side, so this
-   must *not* be `NEXT_PUBLIC_`.
-2. **Catch-all proxy** at `app/api/[...path]/route.ts`. In the App Router a
-   specific route wins over a catch-all, so deleting a local route file *is* the
-   cutover and restoring it is the rollback. **Verify that precedence holds**
-   before relying on it.
-
-   ```ts
-   import { auth } from "@clerk/nextjs/server"
-
-   const CRYPTO_API = process.env.CRYPTO_API_URL!
-
-   // Explicit allowlist. Without it every 404 silently proxies, and a webhook
-   // whose route was deleted gets a 401 (no Clerk session) instead of a 404 —
-   // which reads to the caller as retriable rather than gone.
-   const FORWARDED = ["wallet/", "transactions/", "wallet-transfers", "swap", "privy/", "tokens/"]
-
-   async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
-     const { path } = await ctx.params
-     const target = path.join("/")
-     if (!FORWARDED.some((p) => target.startsWith(p))) return new Response(null, { status: 404 })
-
-     const { getToken } = await auth()
-     const token = await getToken()
-     if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 })
-
-     const { search } = new URL(req.url)
-     const res = await fetch(`${CRYPTO_API}/api/${target}${search}`, {
-       method: req.method,
-       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-       body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.text(),
-     })
-     // Pass the upstream content-type through rather than forcing JSON, so a
-     // streaming endpoint isn't silently broken later.
-     return new Response(res.body, {
-       status: res.status,
-       headers: { "Content-Type": res.headers.get("content-type") ?? "application/json" },
-     })
-   }
-
-   export { forward as GET, forward as POST, forward as PATCH, forward as DELETE }
-   ```
-
-3. **Typed client** at `lib/crypto-api.ts`, types lifted from mobile. Base path
-   stays `/api/*` so it works through the proxy unchanged.
-4. **Middleware.** Keep proxied paths protected in [middleware.ts](../middleware.ts) —
-   the proxy needs a live Clerk session to mint a token.
-
-**Exit:** proxy deployed, nothing routed through it yet.
-
----
-
-## Phase 1 — Cut over the already-compatible endpoints
-
-Verified as near-verbatim ports with matching shapes (`wallet/balances`,
-`transactions/unified`, and `swap` were diffed line-for-line; the service's
-balances response is a superset — it adds custom tokens and dedupes). Delete the
-local route, let the catch-all take it, verify, move on. No UI changes.
-
-| Delete | Service endpoint |
+| Exports | Destination |
 |---|---|
-| `app/api/wallet/balances/` | `GET /api/wallet/balances` |
-| `app/api/transactions/unified/` | `GET /api/transactions/unified` |
-| `app/api/wallet-transfers/` | `GET/POST /api/wallet-transfers` |
-| `app/api/swap/` | `GET/POST /api/swap` |
-| `app/api/privy/{get-wallet,get-wallet-by-clerk,onboarding,pregenerate-wallet,link-clerk,refresh-wallet,add-wallet-signer}/` | same paths |
-| `app/api/privy/wallet/send/`, `wallet/solana/send-token/` | same paths |
+| `getOrderBook`, `getChartData`, `getSpotKlines`, `getFuturesKlines` | direct to HL |
+| `getSpotMarkets`, `getFuturesMarkets` | `GET /api/trade/markets` |
+| `getPrices` | `GET /api/prices` |
+| `getUserBalances`, `getTradeHistory`, `executeTrade` | `/api/trade/*` |
+| `getQuote` | `/api/swap` |
+| `getForexRates`, `getForexKlines` | likely dead — forex hidden in `99bcfea`. **Confirm.** |
 
-Also fixes a live bug for free: [assets-client.tsx:185](../components/assets/assets-client.tsx:185)
-already calls `/api/tokens/metadata` and `/api/tokens/custom`, which have **no
-local route** — they exist only on the service. Custom-token add is broken on web
-today; adding `tokens/` to the allowlist repairs it.
+### C. Orphans — drop or build (9)
 
-**Exit:** ~15 endpoints served by the crypto service, UI untouched.
+**Nothing to point at. Mobile does not have these.**
 
----
+| Route | Question |
+|---|---|
+| `hyperliquid/fills`, `order-history` | Does the trading UI keep a fill history? If yes, the service needs endpoints. |
+| `hyperliquid/slippage-estimate` | Keep, or accept market orders without an estimate? |
+| `gmx/*` (4) | Is GMX still a product line? No service equivalent, no mobile screen. |
+| `p2p/rates` | FX rates. `worldstreet-wallet` already has `lib/fx-actions.ts` — likely belongs there. |
+| `trades` | Check whether `transactions/unified` already covers it. |
 
-## Phase 2 — Delete spotv2
+### D. Not crypto — needs a home (10)
 
-Pure deletion, ~6,000 lines. Do it before the trading rewrite.
+**These cannot go to the crypto service.** They are why the dashboard can't
+reach zero routes.
 
-**Delete:** `app/spotv2/`, `app/api/spotv2/`, `components/spotv2/`, `lib/spotv2/`,
-`hooks/useSpotV2{Deposit,Withdraw}.ts`, and models `SpotV2Deposit`,
-`SpotV2Ledger`, `SpotV2LedgerTx`, `SpotV2Order`, `SpotV2Position`, `SpotV2Trade`,
-`SpotV2Withdrawal`.
-
-**Referencing files needing edits** — spotv2 reaches further than the route table
-suggests: `app-sidebar.tsx`, `mobile-bottom-nav.tsx`, `top-nav.tsx`,
-`navbar-actions.tsx`, `layout-shell.tsx` (full-bleed route list),
-`trade-selector.tsx`, `assets-client.tsx`, `dashboard/bento-grid.tsx`,
-`dashboard/user-card.tsx`, `portfolio/portfolio-client.tsx`,
-`trading/markets-client.tsx`, `wallet/spot-funding-swap.tsx`,
-`hooks/useMarketDataSSE.ts`, `vivid-provider.tsx`,
-`vivid/ConversationSidebar.tsx`, `lib/vivid-functions.ts`.
-
-**Also:** remove `"/api/spotv2/cron(.*)"` from `isWebhookRoute` in
-[middleware.ts](../middleware.ts), and any external scheduler hitting
-`/api/spotv2/cron/fill-orders`.
-
-**⚠ Blocker — check before deleting:** are there live `SpotV2Ledger` balances or
-open `SpotV2Order`s in production? If users hold ledger balances, that is money
-owed and needs settling. This is a schema drop only if the answer is zero.
-
-`useMarketDataSSE.ts` consumes `/api/spotv2/stream`; its replacement is the
-direct-to-Hyperliquid path in Phase 4.
+| Group | Notes |
+|---|---|
+| `vivid/*` (5) + `lib/vivid-functions.ts` | `worldstreet-wallet` has `/v1/wallet/:userId/vivid`, so there's a plausible home. The conversation store is dashboard-only. Note `vivid-functions.ts` calls `/api/swap/history` and `/api/profile`, **neither of which has ever existed**. |
+| `community` (server actions) | Ably + Cloudflare RealtimeKit. Not crypto. Stays. |
+| `profile` (`lib/profile-actions.ts`) | `DashboardProfile` CRUD. The service has the model but no route. |
 
 ---
 
-## Phase 3 — Replace the NGN ramp with the Dollar Account
+## Phase 1 — Finish the mechanical cutovers
 
-**Ordering matters — build first, delete last.** The original draft had this
-backwards. For a money path you keep the old one standing until the new one is
-proven.
+Everything in group A whose replacement needs no new UI. For each: verify the
+contract, delete the local route, add its path to `FORWARDED`.
 
-1. **Build** Buy and Sell against the service, alongside the existing ramp.
-   Mobile's `BuyScreen.tsx` / `SellScreen.tsx` are the reference implementations —
-   match their state machines rather than inventing new ones.
+Start with `hyperliquid/{order,cancel-order,balance,positions,open-orders}` →
+`/api/trade/*`, since `/api/trade/account` collapses three calls into one.
 
-   | New UI | Endpoint |
-   |---|---|
-   | Availability, fee, limits | `GET /api/buy/availability` |
-   | Place / poll / history | `POST /api/buy`, `GET /api/buy/:reference`, `GET /api/buy` |
-   | Sell info | `GET /api/sell/info` |
-   | Place / poll / history | `POST /api/sell`, `GET /api/sell/:reference`, `GET /api/sell` |
-
-2. **Verify against exit criteria**, not a fixed duration. Calendar time
-   exercises the happy path repeatedly and the failure branches never — and the
-   failure branches are where the money bugs are.
-   - A completed buy on each of solana, ethereum, tron
-   - A **deliberately failed** delivery — confirm the USD hold is released and
-     the liquidity reservation cancelled
-   - A completed sell on each enabled network
-   - A sell interrupted after confirmation, parked at `tx_verified` — confirm
-     `GET /api/sell/:reference` retries the credit
-   - A duplicate/retried request on buy and on sell — confirm no double-charge
-     and no double-credit
-
-3. **Close the front door.** Hide the NGN entry points so no new Flutterwave
-   records are created. Keep every route and the webhook alive. **This is the
-   real cutover moment, and it's reversible** — unhide and you're back.
-
-4. **Drain to zero in-flight.** Non-terminal deposits: `pending`,
-   `awaiting_verification`, `verifying`, `payment_confirmed`, `sending_usdt`.
-   Non-terminal withdrawals: `pending`, `usdt_sent`, `tx_verified`, `processing`,
-   `ngn_sent`. Two are obligations: a deposit at `payment_confirmed` means the
-   user **paid and is owed USDT**; a withdrawal at `usdt_sent`/`tx_verified`
-   means they **sent USDT and are owed NGN**.
-
-   ```bash
-   mongosh "$MONGODB_URI" --eval 'db.deposits.countDocuments({status:{$nin:["completed","payment_failed","delivery_failed","cancelled"]}})'
-   ```
-
-   Same against `withdrawals` with `["completed","failed","cancelled"]`. **That
-   count is the answer to "how long do both run".**
-
-5. **Delete** `app/api/deposit/` (9 routes), `app/api/withdraw/` (3 routes),
-   `lib/flutterwave/`, `lib/deposit/`, and the Flutterwave env vars. Also fix
-   [withdraw-client.tsx:177](../components/withdraw/withdraw-client.tsx:177),
-   which defaults the chain selector to `tron` while
-   [initiate/route.ts:32](../app/api/withdraw/initiate/route.ts:32) rejects it
-   with a 400 — a pre-existing bug that disappears with the flow.
-
-**Behavioural changes to communicate:** no bank details on withdraw (the wallet
-service owns bank payouts now — check whether it reads
-`DashboardProfile.savedBankDetails` before removing that); no NGN/GHS selector;
-no Flutterwave redirect; no manual tx-hash paste. Old NGN records stay in the
-shared collections, so history must render both shapes.
-
-**Touched beyond deposit/withdraw:** `dashboard/pending-deposit.tsx`,
-`dashboard/dashboard-onboarding.tsx`, `dashboard/balance-section.tsx`,
-`dashboard/user-card.tsx`, `mobile-bottom-nav.tsx:297-298`,
-`transactions/transactions-client.tsx`, `lib/transaction-actions.ts`,
-`hooks/use-unified-transactions.ts`, `app/page.tsx`.
-
-### ⚠ Prerequisites for Tron (the primary buy network)
-
-Tron sell code is shipped, but the flow is blocked on operations, not code:
-
-- **A `TreasuryWallet` row with `network: "tron"` must exist in the
-  `treasurywallets` collection.** Note this is a **different collection** from
-  the admin backend's `wallets` registry — the admin client's wallet screen
-  shows `wallets`, not `treasurywallets`. Confirm both point at the same
-  database too. Without the row, `/api/sell/info` reports tron disabled and
-  `POST /api/sell` returns 409.
-- **The Tron disburse wallet needs a TRX float.** `withdrawal-tron-wallet` is
-  empty. It now needs TRX for its own transfer fees, each gas gift, and the fee
-  on each gift — two transactions per Tron buy. Alert on that balance.
-- **Verify `TRON_GAS_TOPUP_AMOUNT_TRX` / `_THRESHOLD_TRX`** against live network
-  parameters. The defaults (30/15) are estimates; TRON governance has changed the
-  energy price before.
-
----
-
-## Phase 4 — Trading: unify the wallet, adopt `/api/trade/*`
-
-**⚠ Answer this first.** The dashboard provisions a trading wallet *distinct*
-from `wallets.ethereum`; the service treats them as one. Query production:
+**⚠ Do the trading-wallet audit first.** The dashboard provisions a trading
+wallet *distinct* from `wallets.ethereum`; the service treats them as one:
 
 ```
 UserWallet.find({ "tradingWallet.initialized": true,
@@ -260,101 +135,171 @@ UserWallet.find({ "tradingWallet.initialized": true,
 ```
 
 Anyone in that set may hold Hyperliquid balances at an address the new model
-never reads. Sweep them before cutover. **Do not ship Phase 4 until this set is
-known and handled.**
-
-**Delete:** `app/api/hyperliquid/` (9 routes), `app/api/spot/` (7 routes),
-`app/api/privy/setup-trading-wallet/`, `lib/hyperliquid/`,
-`hooks/useSpot{Deposit,Withdraw}.ts`, `components/spot/spot-client.old.tsx`.
-
-**Repoint:**
-
-| Old | New |
-|---|---|
-| `POST /api/hyperliquid/order` | `POST /api/trade/spot` \| `/api/trade/futures` |
-| `POST /api/hyperliquid/cancel-order` | `POST /api/trade/cancel` |
-| `GET /api/hyperliquid/{balance,positions,open-orders}` | `GET /api/trade/account` |
-| (close position) | `POST /api/trade/close` |
-| `POST /api/privy/setup-trading-wallet` | `POST /api/trading-wallet/setup` |
-| `app/api/spot/deposit/*` | `POST /api/trading-wallet/{fund,deposit,transfer}` |
-| `POST /api/spot/withdraw` | `POST /api/trading-wallet/withdraw` |
-
-### Market data — mirror mobile, don't port
-
-`lib/actions.ts` is ~1,970 lines and 32 exports, and it decomposes cleanly:
-
-| Exports | Destination |
-|---|---|
-| `getOrderBook`, `getChartData`, `getSpotKlines`, `getFuturesKlines` | direct to `https://api.hyperliquid.xyz/info`, mirroring mobile's `hlPublic.ts` |
-| `getSpotMarkets`, `getFuturesMarkets` | `GET /api/trade/markets` |
-| `getPrices` | `GET /api/prices` |
-| `getUserBalances`, `getTradeHistory`, `executeTrade` | `/api/trade/*` |
-| `getQuote` | `/api/swap` |
-| `getForexRates`, `getForexKlines` | likely dead — forex was hidden in `99bcfea`. **Confirm.** |
-
-This also replaces `app/api/orderbook` and the `hyperliquid/{candles,fills,order-history}`
-routes with no service-side work. `slippage-estimate` needs a decision.
+never reads. Sweep before cutting over.
 
 ---
 
-## Phase 5 — The leftovers
+## Phase 2 — spotv2
 
-Each needs a call: port, keep local, or drop.
+**⚠ Blocked on settling user funds.** The dashboard shows `Spot: $37.67` for at
+least one account, and that figure comes from nowhere but `SpotV2Ledger` +
+spotv2 positions ([user-card.tsx:122](../components/dashboard/user-card.tsx:122)).
+Deleting the routes doesn't delete the collections, but it removes every path a
+user could withdraw through.
 
-| Item | Notes |
-|---|---|
-| `app/api/gmx/*` (4 routes) | Still a product line? No service equivalent, no mobile screen. **Open.** |
-| `app/api/p2p/rates` | FX rates. `worldstreet-wallet` has `lib/fx-actions.ts` — likely belongs there. **Open.** |
-| `app/api/trades` | Check whether `transactions/unified` already covers it. |
-| `app/api/vivid/*` + `lib/vivid-functions.ts` | Wallet service has `/v1/wallet/:userId/vivid`, but the conversation store is dashboard-only. Note `vivid-functions.ts` references both spotv2 and `/api/profile`. **Open.** |
-| `app/community/*` + `lib/community/*` | Ably + RealtimeKit. Not crypto — stays in the dashboard. |
-| `lib/profile-actions.ts` | `DashboardProfile` CRUD. Service has the model, no route. **Open.** Note `/api/profile` is referenced by [vivid-functions.ts:223](../lib/vivid-functions.ts:223) but has no route anywhere. |
-| `lib/bridge-actions.ts`, `app/bridge/` | Overlaps `/api/swap` (LI.FI). Probably folds in. |
-| `lib/wallet-actions.ts`, `lib/ensureUserWallet.ts` | Superseded by `/api/privy/pregenerate-wallet`. |
+```bash
+mongosh "$MONGODB_URI" --eval 'db.spotv2ledgers.find({$or:[{available:{$gt:0}},{locked:{$gt:0}}]}).count()'
+mongosh "$MONGODB_URI" --eval 'db.spotv2positions.countDocuments({quantity:{$gt:0}})'
+```
+
+**The earlier draft called this a pure deletion. That was wrong.**
+`lib/spotv2/ledger-actions` is the data source behind the Spot figure on **six
+surfaces**: `navbar-actions` (wallet popover), `dashboard/user-card`,
+`assets-client`, `portfolio-client`, `dashboard/bento-grid`, and
+`wallet/spot-funding-swap`. Deleting it blanks all of them.
+
+Under the new target that resolves itself: those six read from
+`GET /api/trade/account` instead, so **Phase 1 must land first**. Then spotv2 is
+genuinely a pure deletion.
+
+**Delete:** `app/spotv2/`, `app/api/spotv2/`, `components/spotv2/`,
+`lib/spotv2/`, `hooks/useSpotV2{Deposit,Withdraw}.ts`, and the 7 `SpotV2*`
+models.
+
+**Also:** `/spotv2` nav entries in `app-sidebar`, `mobile-bottom-nav`,
+`top-nav`, `trade-selector`, `vivid/ConversationSidebar`, `layout-shell`
+(full-bleed list), `vivid-provider` (mic-hidden list), `markets-client`,
+`vivid-functions` (navigation prompt); `hooks/useMarketDataSSE.ts` (polls
+`/api/spotv2/stream`); and `"/api/spotv2/cron(.*)"` in
+[middleware.ts](../middleware.ts) plus whatever scheduler hits it.
+
+**Visible effect:** Spot switches from the CFD ledger to real Hyperliquid
+holdings. Different numbers, not a silent refactor.
 
 ---
 
-## Phase 6 — Cleanup
+## Phase 3 — Buy / Sell replace the NGN ramp
 
-- Delete the three dead Privy routes: `privy/transfer` (obsoleted by the unified
-  wallet model — it only moved funds between `wallets.ethereum` and
-  `tradingWallet`), `privy/wallet/sign` (the service has the capability
-  internally, just unexposed), `privy/wallet/ethereum/execute-transaction` (a
-  generic calldata escape hatch the service deliberately replaced with narrow,
-  allowlisted endpoints). All three have zero callers anywhere in the WorldStreet
-  tree.
-- Drop now-unused deps: `@nktkas/hyperliquid`, `@solana/web3.js`,
-  `@solana/spl-token`, `@mysten/sui`, `@mysten/sui.js`, `tronweb`, `viem`,
-  `@privy-io/node`, `@gmx-io/sdk`.
-- Delete models the dashboard no longer writes.
+**Build first, delete last.** The original draft had this backwards.
+
+1. **Build** Buy and Sell against `/api/buy` and `/api/sell`, alongside the
+   existing ramp. Mobile's `BuyScreen.tsx` / `SellScreen.tsx` are the reference
+   — match their state machines.
+
+2. **Verify against exit criteria, not a duration.** Calendar time exercises
+   the happy path repeatedly and the failure branches never, and the failure
+   branches are where the money bugs live.
+   - A completed buy on each of solana, ethereum, tron
+   - A **deliberately failed** delivery — confirm the USD hold is released and
+     the liquidity reservation cancelled
+   - A completed sell on each enabled network
+   - A sell interrupted after confirmation, parked at `tx_verified` — confirm
+     `GET /api/sell/:reference` retries the credit
+   - A duplicate request on buy and on sell — no double-charge, no double-credit
+
+3. **Close the front door.** Hide the NGN entry points so no new Flutterwave
+   records are created; keep every route and the webhook alive. **This is the
+   cutover moment, and it's reversible.**
+
+4. **Drain to zero in-flight.** Two states are obligations: a deposit at
+   `payment_confirmed` means the user **paid and is owed USDT**; a withdrawal at
+   `usdt_sent`/`tx_verified` means they **sent USDT and are owed NGN**.
+
+   ```bash
+   mongosh "$MONGODB_URI" --eval 'db.deposits.countDocuments({status:{$nin:["completed","payment_failed","delivery_failed","cancelled"]}})'
+   ```
+
+   Same for `withdrawals` against `["completed","failed","cancelled"]`. **That
+   count answers "how long do both run".**
+
+5. **Delete** `app/api/deposit/`, `app/api/withdraw/`, `lib/flutterwave/`,
+   `lib/deposit/`, and the Flutterwave env vars. This also removes a
+   pre-existing bug: [withdraw-client.tsx:177](../components/withdraw/withdraw-client.tsx:177)
+   defaults the chain selector to `tron` while
+   [initiate/route.ts:32](../app/api/withdraw/initiate/route.ts:32) rejects it
+   with a 400.
+
+**Communicate:** no bank details on withdraw; no NGN/GHS selector; no
+Flutterwave redirect; no manual tx-hash paste. Old NGN records stay in the
+shared collections, so history must render both shapes.
+
+### ⚠ Tron prerequisites (Tron is the primary buy network)
+
+Code is shipped; the flow is blocked on operations:
+
+- **A `TreasuryWallet` row with `network: "tron"`** must exist in
+  `user-account.treasurywallets`. This is a **different collection** from the
+  admin backend's `wallets` registry — the admin UI's wallet screen shows
+  `wallets`. Without the row, `/api/sell/info` reports tron disabled and
+  `POST /api/sell` returns 409.
+- **The Tron disburse wallet needs a TRX float.** `withdrawal-tron-wallet` is
+  empty. It now needs TRX for its own transfer fees, each gas gift, and the fee
+  on each gift — two transactions per Tron buy. Alert on that balance.
+- **Verify `TRON_GAS_TOPUP_AMOUNT_TRX` / `_THRESHOLD_TRX`** against live network
+  parameters before enabling. Defaults (30/15) are estimates.
+
+**Why the top-up exists:** Privy cannot sponsor Tron. `sponsor?: boolean` is on
+`EthereumSendTransactionRpcInput` and `SolanaSignAndSendTransactionRpcInput`
+only; Tron is a `CurveSigningChainType` — Privy signs raw and we broadcast.
+Tron has no fee-payer field at all, so the sender always pays. The long-term
+answer is **energy delegation** (stake TRX, delegate energy to user wallets) —
+that is Tron's actual equivalent of sponsorship, and it stops burning TRX per
+transfer. The top-up is the bridge to it.
+
+---
+
+## Phase 4 — Market data goes direct
+
+Mirror `hlPublic.ts`: order book and candles straight from
+`https://api.hyperliquid.xyz/info`, no auth, no backend.
+
+Delete `app/api/orderbook`, `app/api/hyperliquid/candles`, and the market-data
+half of `lib/actions.ts`. Repoint `components/spot/chart-area.tsx` (1,877
+lines), `components/futures/futures-chart.tsx` (1,801) and
+`hooks/useMarketDataSSE.ts`.
+
+Decide group C's orphans here — the trading UI's fill history and slippage
+estimate either get service endpoints or get dropped.
+
+---
+
+## Phase 5 — Flatten and clean up
+
+- **Go direct.** Set `CORS_ALLOWED_ORIGINS` on the service, switch
+  `lib/crypto-api.ts` to `getToken()` + absolute URLs, delete
+  `app/api/[...path]/route.ts`. The proxy has done its job by then.
+- Drop dependencies the dashboard no longer needs: `@nktkas/hyperliquid`,
+  `@solana/web3.js`, `@solana/spl-token`, `@mysten/sui`, `@mysten/sui.js`,
+  `tronweb`, `viem`, `@privy-io/node`, `@gmx-io/sdk`.
+- Delete crypto models the dashboard no longer writes.
 - Remove server-side secrets from the dashboard env: Privy app secrets, admin
-  backend key, wallet service token — these belong only in the crypto service.
+  backend key, wallet service token.
 - **Rotate the secrets committed in [.env.example](../.env.example)** —
   `NEW_PRIVY_APP_SECRET` and `PRIV_KEY_ADMIN` are real values in git history.
-  Rotating is the only fix; deleting the file does nothing.
-- Update [PROJECT.md](../PROJECT.md) — it still documents `/spot` as the spot page,
+  Rotation is the only fix; deleting the file does nothing.
+- Update [PROJECT.md](../PROJECT.md) — still documents `/spot` as the spot page,
   predates gmx/community/vivid/spotv2, and claims Tron withdrawals work.
-- Optional: flatten the proxy to direct browser→service calls. Needs
-  `CORS_ALLOWED_ORIGINS` on the service and `getToken()` + absolute URLs in the
-  client. Only worth it if the extra hop shows up in latency.
 
 ---
 
-## Open questions
+## Open decisions
 
-1. **Testing posture.** The crypto service has no test script and zero test
-   files; `worldstreet-wallet` has vitest and ~15. This migration moves money
-   logic into the less-tested repo. Options: (a) rely on staged rollout,
-   (b) smoke tests scoped to the money paths before Phase 3/4, copying the
-   wallet service's pattern, (c) full setup first. **Recommendation: (b).**
-2. **How do web users fund a Dollar Account?** Buy is unusable without a funded
+1. **The nine orphans** (group C) — drop or build? Fills/order-history and
+   slippage-estimate gate Phase 4; GMX gates nothing but bloats the repo.
+2. **vivid, community, profile** (group D) — do they move to the wallet
+   service, get their own, or does the dashboard keep a small backend? This
+   decides whether "no Next.js API routes" is literally achievable.
+3. **How do web users fund a Dollar Account?** Buy is unusable without a funded
    USD balance, and that path lives in the wallet service. If mobile hasn't
-   solved it either, this is a bigger piece of work than the Buy screen.
-3. **Forex** — dead or dormant?
-4. **GMX, `p2p/rates`, vivid, profile** — owners per Phase 5.
+   solved it, this is bigger than the Buy screen.
+4. **Testing posture.** The crypto service has no test script and zero test
+   files; `worldstreet-wallet` has vitest and ~15. This migration moves money
+   logic into the less-tested repo. Recommendation: smoke tests scoped to the
+   money paths, copying the wallet service's pattern, before Phase 3 lands.
+5. **Forex** — dead or dormant?
 
 ## Sequencing
 
-Phases 2 and 3 are deletions and can run alongside Phase 1. Phase 4 follows the
-trading-wallet audit. Phase 5's answers determine how much of `lib/hyperliquid/`
-Phase 4 can delete.
+Phase 1 unblocks Phase 2 (the six Spot surfaces need `/api/trade/account`
+before spotv2 can go). Phase 3 is independent and gated on Tron ops. Phase 4 is
+independent. Phase 5 is last by definition.
