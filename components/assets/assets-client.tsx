@@ -18,6 +18,7 @@ import {
   Coins01Icon,
 } from "@hugeicons/core-free-icons"
 import { getPrices, getFuturesMarkets, type CoinData, type FuturesMarket } from "@/lib/actions"
+import { fetchTokenMetadata, addCustomToken, type CustomTokenChain } from "@/lib/crypto-api"
 import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
 import { WalletSetupLoader } from "@/components/wallet-setup-loader"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
@@ -182,10 +183,11 @@ function AddTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
     if (!contractAddress.trim()) return
     setIsLooking(true); setLookupError(""); setTokenPreview(null)
     try {
-      const res = await fetch(`/api/tokens/metadata?address=${encodeURIComponent(contractAddress.trim())}&chain=${network}`)
-      if (!res.ok) throw new Error("Token not found")
-      const d = await res.json()
-      setTokenPreview({ symbol: d.symbol, name: d.name, icon: d.image || d.logo || "", decimals: d.decimals ?? 18 })
+      const token = await fetchTokenMetadata({
+        address: contractAddress.trim(),
+        chain: network as CustomTokenChain,
+      })
+      setTokenPreview({ symbol: token.symbol, name: token.name, icon: token.image, decimals: token.decimals })
       setStep("preview")
     } catch { setLookupError("Could not find token. Check the address and network.") }
     finally { setIsLooking(false) }
@@ -194,7 +196,9 @@ function AddTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
   async function handleAdd() {
     if (!tokenPreview) return
     try {
-      await fetch("/api/tokens/custom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chain: network, contractAddress: contractAddress.trim(), ...tokenPreview }) })
+      // Only chain + address are sent — the service re-reads symbol/name/
+      // decimals on chain and ignores the rest of the body.
+      await addCustomToken({ chain: network as CustomTokenChain, contractAddress: contractAddress.trim() })
       onClose()
     } catch { setLookupError("Failed to add token.") }
   }

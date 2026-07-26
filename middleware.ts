@@ -22,6 +22,10 @@ const isProtectedApi = createRouteMatcher([
   "/api/admin(.*)",
   "/api/deposit(.*)",
   "/api/withdraw(.*)",
+  // Proxied to worldstreet-crypto — listed so an expired session returns a
+  // JSON 401 the client can handle, not an HTML login redirect. Add each
+  // prefix here as it is added to FORWARDED in app/api/[...path]/route.ts.
+  "/api/tokens(.*)",
 ])
 
 // Webhook/cron routes that should NOT require auth (called by external services)
