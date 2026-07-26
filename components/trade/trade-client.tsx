@@ -26,6 +26,7 @@ import {
   type HlOrderOutcome,
 } from "@/lib/crypto-api"
 import { fetchHlOrderBook, type HlOrderBook } from "@/lib/hl-public"
+import { CandleChart } from "@/components/trade/candle-chart"
 
 type Market = "spot" | "futures"
 type Side = "buy" | "sell"
@@ -228,8 +229,15 @@ export function TradeClient() {
       )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-12">
+        {/* Chart first, order form beside it (form is order-2 below), book and
+            positions on the second row. Same coin id as the book (coinName for
+            spot, bare symbol for futures). */}
+        <div className="rounded-2xl border border-border/30 bg-card p-4 lg:order-1 lg:col-span-8">
+          <CandleChart coin={bookCoin} />
+        </div>
+
         {/* Order book */}
-        <div className="rounded-2xl border border-border/30 bg-card p-4 lg:col-span-4">
+        <div className="rounded-2xl border border-border/30 bg-card p-4 lg:order-3 lg:col-span-8">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Order book</p>
           {!book ? (
             <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
@@ -260,7 +268,7 @@ export function TradeClient() {
         </div>
 
         {/* Order form */}
-        <div className="rounded-2xl border border-border/30 bg-card p-4 lg:col-span-4">
+        <div className="rounded-2xl border border-border/30 bg-card p-4 lg:order-2 lg:col-span-4">
           {!ready ? (
             <div className="py-6 text-center">
               <p className="text-sm font-semibold">Trading account not set up</p>
@@ -327,7 +335,7 @@ export function TradeClient() {
         </div>
 
         {/* Positions + open orders */}
-        <div className="space-y-4 lg:col-span-4">
+        <div className="space-y-4 lg:order-4 lg:col-span-4">
           <div className="rounded-2xl border border-border/30 bg-card p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Positions</p>
             {(account?.positions ?? []).length === 0 ? (
