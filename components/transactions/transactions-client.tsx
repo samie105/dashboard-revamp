@@ -371,10 +371,10 @@ export function TransactionsClient() {
             </p>
             {!filters.type && !filters.status && !filters.search && (
               <div className="mt-2 flex items-center gap-2">
-                <a href="/deposit" className="rounded-lg bg-primary px-3.5 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-primary/90">
+                <a href="/buy" className="rounded-lg bg-primary px-3.5 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-primary/90">
                   Deposit
                 </a>
-                <a href="/withdraw" className="rounded-lg border border-border/50 px-3.5 py-1.5 text-[11px] font-medium transition-colors hover:bg-accent/50">
+                <a href="/sell" className="rounded-lg border border-border/50 px-3.5 py-1.5 text-[11px] font-medium transition-colors hover:bg-accent/50">
                   Withdraw
                 </a>
               </div>

@@ -31,14 +31,13 @@ interface TradingRoute {
 }
 
 const TRADING_ROUTES: TradingRoute[] = [
-  { name: "Spot Trading", description: "Multi-chain DEX trading", href: "/spotv2", icon: Exchange01Icon },
-  { name: "Futures", description: "Perpetual futures trading", href: "/futures", icon: ChartLineData02Icon },
-  { name: "Forex", description: "Currency pair trading", href: "/forex", icon: GlobeIcon },
+  { name: "Buy", description: "Buy USDT with your dollars", href: "/buy", icon: Exchange01Icon },
+  { name: "Sell", description: "Sell USDT back to cash", href: "/sell", icon: Exchange01Icon },
+  { name: "Spot Trading", description: "Hyperliquid spot orderbook", href: "/trade?market=spot", icon: Exchange01Icon },
+  { name: "Futures", description: "Perpetual futures trading", href: "/trade?market=futures", icon: ChartLineData02Icon },
   { name: "Swap", description: "One-tap token conversion", href: "/swap", icon: RepeatIcon },
-  { name: "Bridge", description: "Cross-chain transfers", href: "/bridge", icon: Link01Icon },
-  { name: "Copy Trading", description: "Mirror top traders", href: "/copy-trading", icon: Copy01Icon },
-  { name: "P2P Trading", description: "Peer-to-peer exchange", href: "/p2p", icon: Store01Icon },
   { name: "Markets", description: "Full market screener", href: "/trading/markets", icon: BarChartIcon },
+  { name: "Auto Trading", description: "Let the agent trade for you", href: "/auto-trade", icon: ChartLineData02Icon },
 ]
 
 // ── Context for controlling the selector ─────────────────────────────────
@@ -171,7 +170,7 @@ function UnsupportedTokenModal({
           {/* Actions */}
           <div className="grid grid-cols-2 gap-3 border-t border-border/30 px-5 py-4">
             <button
-              onClick={() => goTo(`/spotv2${token.symbol ? `?pair=${token.symbol}` : ""}`)}
+              onClick={() => goTo(`/trade${token.symbol ? `?symbol=${token.symbol}` : ""}`)}
               className="flex flex-col items-start gap-1.5 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-left transition-colors hover:bg-primary/20"
             >
               <div className="flex items-center gap-2">
@@ -181,7 +180,7 @@ function UnsupportedTokenModal({
               <span className="text-[11px] text-muted-foreground">Buy / Sell tab</span>
             </button>
             <button
-              onClick={() => goTo(`/futures${token.symbol ? `?pair=${token.symbol}` : ""}`)}
+              onClick={() => goTo(`/trade?market=futures${token.symbol ? `&symbol=${token.symbol}` : ""}`)}
               className="flex flex-col items-start gap-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-left transition-colors hover:bg-emerald-500/20"
             >
               <div className="flex items-center gap-2">
@@ -203,8 +202,8 @@ function RouteGrid({ pair, onClose }: { pair?: string; onClose: () => void }) {
   return (
     <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
       {TRADING_ROUTES.map((route) => {
-        const href = pair && (route.href === "/spotv2" || route.href === "/futures")
-          ? `${route.href}?pair=${pair}`
+        const href = pair && route.href.startsWith("/trade")
+          ? `${route.href}${route.href.includes("?") ? "&" : "?"}symbol=${pair}`
           : route.href
 
         return (

@@ -19,9 +19,13 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { CoinData, TradeResult, FuturesMarket } from "@/lib/actions"
 import { getFuturesMarkets } from "@/lib/actions"
-import type { SpotV2Pair } from "@/components/spotv2/spotv2-types"
-import { getSpotV2Balance, getSpotV2Positions, getTokenPrices, getSpotV2TradeHistory } from "@/lib/spotv2/ledger-actions"
-import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
+import { fetchPrices, type Coin } from "@/lib/crypto-api"
+
+// Market rows for the Spot tab — the service's price feed with the display
+// fields the old spotv2 pair registry carried.
+type SpotV2Pair = Coin & { displaySymbol: string; chain: string; contractAddress: string | null }
+import { getSpotBalances, getSpotPositions, getTokenPrices, getSpotTradeHistory } from "@/lib/trade-adapter"
+import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { ErrorState } from "@/components/error-state"
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
@@ -49,7 +53,7 @@ function TradeConfirmDialog({
 
   const isFutures = item.type === "futures"
   const isUp = item.change24h >= 0
-  const href = isFutures ? `/futures?pair=${item.symbol}` : `/spotv2?pair=${item.symbol}`
+  const href = isFutures ? `/trade?market=futures&symbol=${item.symbol}` : `/trade?symbol=${item.symbol}`
 
   function handleTrade() {
     onClose()
@@ -172,8 +176,13 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
     if (tab !== "Spot" || hasFetchedSpot.current) return
     hasFetchedSpot.current = true
     setSpotLoading(true)
-    fetch("/api/spotv2/pairs").then((r) => r.json())
-      .then((data) => { if (data.success && Array.isArray(data.pairs)) setSpotMarkets(data.pairs) })
+    fetchPrices()
+      .then((res) => setSpotMarkets(res.coins.map((c) => ({
+        ...c,
+        displaySymbol: c.symbol.toUpperCase(),
+        chain: "",
+        contractAddress: null,
+      }))))
       .catch(() => {})
       .finally(() => setSpotLoading(false))
   }, [tab])
@@ -317,7 +326,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                       </td>
                       <td className="hidden sm:table-cell px-4 py-2.5 text-right">
                         <a
-                          href={`/futures?pair=${market.symbol}`}
+                          href={`/trade?market=futures&symbol=${market.symbol}`}
                           onClick={(e) => e.stopPropagation()}
                           className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                         >
@@ -417,7 +426,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                     </td>
                     <td className="hidden sm:table-cell px-4 py-2.5 text-right">
                       <a
-                        href={`/spotv2?pair=${coin.symbol}`}
+                        href={`/trade?symbol=${coin.symbol}`}
                         onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       >
@@ -468,20 +477,17 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
   React.useEffect(() => {
     if (!user) { setSpotTradesLoading(false); return }
     let cancelled = false
-    getSpotV2TradeHistory(10).then((trades) => {
+    getSpotTradeHistory(10).then((trades) => {
       if (!cancelled) setSpotTrades(trades as SpotV2TradeItem[])
     }).catch(() => {}).finally(() => { if (!cancelled) setSpotTradesLoading(false) })
     return () => { cancelled = true }
   }, [user])
 
-  // Fetch Hyperliquid fills
+  // Fill history isn't served by the crypto service (mobile has no fill log
+  // either) — the futures tab shows open positions instead of past fills.
   React.useEffect(() => {
-    if (!user) { setFuturesLoading(false); return }
-    let cancelled = false
-    fetch("/api/hyperliquid/fills").then(r => r.json()).then((d) => {
-      if (!cancelled) setFuturesFills(d.success ? (d.data || []).slice(0, 10) : [])
-    }).catch(() => {}).finally(() => { if (!cancelled) setFuturesLoading(false) })
-    return () => { cancelled = true }
+    setFuturesFills([])
+    setFuturesLoading(false)
   }, [user])
 
   function formatTime(ts: number | Date) {
@@ -530,7 +536,7 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
             icon={Exchange01Icon}
             title="No spot trades yet"
             description="Your SpotV2 trades will appear here"
-            cta={{ label: "Start trading", href: "/spotv2" }}
+            cta={{ label: "Start trading", href: "/trade" }}
           />
         ) : (
           <div className="flex flex-1 flex-col divide-y divide-border/30">
@@ -579,7 +585,7 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
             icon={Exchange01Icon}
             title="No futures trades yet"
             description="Your futures fills will appear here"
-            cta={{ label: "Trade Futures", href: "/futures" }}
+            cta={{ label: "Trade Futures", href: "/trade?market=futures" }}
           />
         ) : (
           <div className="flex flex-1 flex-col divide-y divide-border/30">
@@ -644,7 +650,7 @@ function Watchlist({ coins, error }: { coins: CoinData[]; error?: string }) {
           <HugeiconsIcon icon={StarIcon} className="h-4 w-4 text-primary" />
             <h3 className="text-base font-semibold">Watchlist</h3>
         </div>
-        <a href="/spotv2" className="text-xs font-medium text-primary hover:underline">
+        <a href="/trade" className="text-xs font-medium text-primary hover:underline">
           View all
         </a>
       </div>
@@ -671,7 +677,7 @@ function Watchlist({ coins, error }: { coins: CoinData[]; error?: string }) {
           icon={StarIcon}
           title="No favorites yet"
           description="Star assets on the Spot page to build your watchlist"
-          cta={{ label: "Browse markets", href: "/spotv2" }}
+          cta={{ label: "Browse markets", href: "/trade" }}
         />
       ) : (
         <div className="flex flex-1 flex-col divide-y divide-border/30">
@@ -761,8 +767,8 @@ function MyPositions() {
     async function load() {
       try {
         const [balances, positions] = await Promise.all([
-          getSpotV2Balance(),
-          getSpotV2Positions(),
+          getSpotBalances(),
+          getSpotPositions(),
         ])
         // Get current prices for all position tokens
         const tokens = positions.map((p) => p.token)
@@ -827,7 +833,7 @@ function MyPositions() {
             icon={ChartLineData01Icon}
             title="No open positions"
             description="Your futures positions will appear here"
-            cta={{ label: "Trade Futures", href: "/futures" }}
+            cta={{ label: "Trade Futures", href: "/trade?market=futures" }}
           />
         ) : (
           <div className="flex flex-1 flex-col divide-y divide-border/30">
@@ -879,7 +885,7 @@ function MyPositions() {
             icon={Chart01Icon}
             title="No spot holdings"
             description="Your spot assets will appear here"
-            cta={{ label: "Trade Spot", href: "/spotv2" }}
+            cta={{ label: "Trade Spot", href: "/trade" }}
           />
         ) : (
           <div className="flex flex-1 flex-col divide-y divide-border/30">

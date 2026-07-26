@@ -20,8 +20,8 @@ import { ErrorState } from "@/components/error-state"
 import type { CoinData } from "@/lib/actions"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
-import { getSpotV2Balance, getSpotV2Positions, getTokenPrices } from "@/lib/spotv2/ledger-actions"
-import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
+import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
+import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 
 function truncAddr(addr: string) {
   if (!addr || addr.length < 14) return addr
@@ -94,8 +94,8 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     async function load() {
       try {
         const [balances, positions] = await Promise.all([
-          getSpotV2Balance(),
-          getSpotV2Positions(),
+          getSpotBalances(),
+          getSpotPositions(),
         ])
         const tokens = positions.map((p) => p.token)
         const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
@@ -208,14 +208,14 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
 
         <div data-onboarding="dash-actions" className="flex items-center gap-2">
           <a
-            href="/deposit"
+            href="/buy"
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90"
           >
             <HugeiconsIcon icon={Exchange01Icon} className="h-3.5 w-3.5" />
             Deposit
           </a>
           <a
-            href="/withdraw"
+            href="/sell"
             className="inline-flex items-center gap-1.5 rounded-lg border border-border/40 px-4 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-accent"
           >
             <HugeiconsIcon icon={CreditCardIcon} className="h-3.5 w-3.5" />

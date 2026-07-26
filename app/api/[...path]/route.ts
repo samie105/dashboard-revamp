@@ -53,6 +53,16 @@ const FORWARDED = [
   "wallet-transfers",
   "swap",
 
+  // Mobile-parity surfaces (the service is the only implementation).
+  "prices",
+  "trade/",
+  "trading-wallet/",
+  "agent/",
+  "buy",
+  "buy/",
+  "sell",
+  "sell/",
+
   // Privy wallet lifecycle. Zero callers in the dashboard — the frontend never
   // used them; wallets are provisioned server-side.
   "privy/get-wallet",
@@ -77,12 +87,47 @@ function isForwarded(path: string): boolean {
   )
 }
 
+// worldstreet-wallet service (Dollar Account). The dashboard shows the user's
+// USD balance as the Cash row, exactly like mobile's crypto home. Mobile calls
+// the wallet service directly from the client; here the same read goes through
+// this proxy so no CORS coordination is needed. Read-only by design — funding
+// the Dollar Account happens on the Worldstreet home, not this dashboard.
+const WALLET_API = process.env.WALLET_API_URL
+
+async function forwardDollarBalances(userId: string, token: string) {
+  if (!WALLET_API) {
+    console.error("[crypto-proxy] WALLET_API_URL is not set — cannot fetch dollar balances")
+    return Response.json({ error: "Wallet service is not configured" }, { status: 503 })
+  }
+  try {
+    const res = await fetch(`${WALLET_API}/v1/wallet/${encodeURIComponent(userId)}/balances`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    return new Response(res.body, {
+      status: res.status,
+      headers: { "Content-Type": res.headers.get("content-type") ?? "application/json" },
+    })
+  } catch (error) {
+    console.error("[crypto-proxy] dollar balances failed:", error)
+    return Response.json({ error: "Wallet service unreachable" }, { status: 502 })
+  }
+}
+
 async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
   const { path: segments } = await ctx.params
   const path = segments.join("/")
 
-  if (!isForwarded(path)) {
+  const isDollarBalances = path === "dollar/balances" && req.method === "GET"
+
+  if (!isForwarded(path) && !isDollarBalances) {
     return new Response(null, { status: 404 })
+  }
+
+  if (isDollarBalances) {
+    const { userId, getToken } = await auth()
+    const token = await getToken()
+    if (!userId || !token) return Response.json({ error: "Unauthorized" }, { status: 401 })
+    return forwardDollarBalances(userId, token)
   }
 
   if (!CRYPTO_API) {

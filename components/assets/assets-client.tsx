@@ -28,11 +28,21 @@ import { useTradeSelector } from "@/components/trade-selector"
 import { useWalletBalances, type TokenBalance } from "@/hooks/useWalletBalances"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
-import { getSpotV2Balance, getSpotV2Positions, getTokenPrices } from "@/lib/spotv2/ledger-actions"
-import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
-import type { SpotV2Pair } from "@/components/spotv2/spotv2-types"
+import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
+import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
+import { fetchPrices, type Coin } from "@/lib/crypto-api"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
-import { SpotFundingSwap, FundingHistory } from "@/components/wallet"
+
+// Market rows for the Spot tab — the service's price feed plus the display
+// fields the old spotv2 pair registry carried.
+type SpotV2Pair = Coin & { displaySymbol: string; chain: string; contractAddress: string | null }
+
+const coinToPair = (c: Coin): SpotV2Pair => ({
+  ...c,
+  displaySymbol: c.symbol.toUpperCase(),
+  chain: "",
+  contractAddress: null,
+})
 import { useRouter } from "next/navigation"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
 
@@ -286,7 +296,7 @@ export default function AssetsClient() {
   React.useEffect(() => {
     if (!user) { setSpotV2Loading(false); return }
     let cancelled = false
-    Promise.all([getSpotV2Balance(), getSpotV2Positions()])
+    Promise.all([getSpotBalances(), getSpotPositions()])
       .then(async ([balances, positions]) => {
         if (cancelled) return
         setSpotLedger(balances)
@@ -338,8 +348,8 @@ export default function AssetsClient() {
     if (activeView !== "spot" || spotMarketsLoaded) return
     let cancelled = false
     setSpotMarketsLoading(true)
-    fetch("/api/spotv2/pairs").then((r) => r.json()).then((data) => {
-      if (!cancelled && data.success && Array.isArray(data.pairs)) { setSpotMarkets(data.pairs); setSpotMarketsLoading(false); setSpotMarketsLoaded(true) }
+    fetchPrices().then((res) => {
+      if (!cancelled) { setSpotMarkets(res.coins.map(coinToPair)); setSpotMarketsLoading(false); setSpotMarketsLoaded(true) }
     }).catch(() => { if (!cancelled) setSpotMarketsLoading(false) })
     return () => { cancelled = true }
   }, [activeView, spotMarketsLoaded])
@@ -939,7 +949,7 @@ export default function AssetsClient() {
                             {m.volume24h > 0 ? `$${(m.volume24h / 1_000_000).toFixed(2)}M` : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <button onClick={() => router.push(`/spotv2?pair=${m.symbol}`)}
+                            <button onClick={() => router.push(`/trade?symbol=${m.symbol}`)}
                               className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors">
                               Trade <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
                             </button>
@@ -968,7 +978,7 @@ export default function AssetsClient() {
                 )}
               </div>
               <a
-                href="/futures"
+                href="/trade?market=futures"
                 className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
               >
                 Trade Futures
@@ -1154,8 +1164,16 @@ export default function AssetsClient() {
 
         {/* ═══ Funding Sidebar ═══ */}
         <div className="lg:col-span-4 space-y-4">
-          <SpotFundingSwap />
-          <FundingHistory />
+          {/* Spot/perps funding moved to the dedicated /fund flow (Dollar
+              Account → Hyperliquid), matching the mobile app. */}
+          <a href="/fund" className="block rounded-2xl border border-border/30 bg-card p-5 hover:border-primary/40 transition-colors">
+            <p className="text-sm font-semibold">Fund trading account</p>
+            <p className="mt-1 text-xs text-muted-foreground">Move dollars into your Spot or Futures balance to trade.</p>
+          </a>
+          <a href="/trading-withdraw" className="block rounded-2xl border border-border/30 bg-card p-5 hover:border-primary/40 transition-colors">
+            <p className="text-sm font-semibold">Withdraw trading balance</p>
+            <p className="mt-1 text-xs text-muted-foreground">Move funds from trading back to your Dollar Account.</p>
+          </a>
         </div>
       </div>
 

@@ -362,3 +362,417 @@ export async function removeCustomToken(id: string): Promise<CustomToken[]> {
   )
   return res.tokens
 }
+
+// ── Prices ──────────────────────────────────────────────────────────────────
+
+/** Full price feed (server-cached ~5 min on the service). */
+export function fetchPrices(): Promise<PricesResponse> {
+  return get<PricesResponse>("/api/prices")
+}
+
+/** Live on-chain balances across every chain the user has a wallet on. */
+export async function fetchBalances(): Promise<TokenBalance[]> {
+  const res = await get<{ balances: TokenBalance[] }>("/api/wallet/balances")
+  return res.balances
+}
+
+/** The caller's wallet record; null when wallets haven't been created yet. */
+export async function fetchWallet(): Promise<WalletInfo | null> {
+  try {
+    return await get<WalletInfo>("/api/privy/get-wallet-by-clerk")
+  } catch (e) {
+    if (e instanceof CryptoApiError && e.status === 404) return null
+    throw e
+  }
+}
+
+/** Idempotent create-or-fetch of the user's Privy wallets (all 5 chains). */
+export function createWallets(): Promise<WalletInfo> {
+  return post<WalletInfo>("/api/privy/pregenerate-wallet", {})
+}
+
+// ── Buy / Sell endpoints ────────────────────────────────────────────────────
+
+export function fetchBuyAvailability(): Promise<BuyAvailability> {
+  return get<BuyAvailability>("/api/buy/availability")
+}
+
+/** 200 = delivered; 202 = in flight (poll fetchBuy). */
+export async function initiateBuy(input: { usdtAmount: number; network: BuyNetwork }): Promise<Buy> {
+  const res = await post<{ success: boolean; buy: Buy }>("/api/buy", input)
+  return res.buy
+}
+
+export async function fetchBuy(reference: string): Promise<Buy> {
+  const res = await get<{ success: boolean; buy: Buy }>(`/api/buy/${encodeURIComponent(reference)}`)
+  return res.buy
+}
+
+export async function fetchBuys(): Promise<Buy[]> {
+  const res = await get<{ success: boolean; buys: Buy[] }>("/api/buy")
+  return res.buys
+}
+
+export function fetchSellInfo(): Promise<SellInfo> {
+  return get<SellInfo>("/api/sell/info")
+}
+
+/** 200 = credited; 202 = confirming/credit retrying (poll fetchSell). */
+export async function initiateSell(input: { usdtAmount: number; network: SellNetwork }): Promise<Sell> {
+  const res = await post<{ success: boolean; sell: Sell }>("/api/sell", input)
+  return res.sell
+}
+
+export async function fetchSell(reference: string): Promise<Sell> {
+  const res = await get<{ success: boolean; sell: Sell }>(`/api/sell/${encodeURIComponent(reference)}`)
+  return res.sell
+}
+
+export async function fetchSells(): Promise<Sell[]> {
+  const res = await get<{ success: boolean; sells: Sell[] }>("/api/sell")
+  return res.sells
+}
+
+// ── Transactions ────────────────────────────────────────────────────────────
+
+export function fetchTransactions(params?: Record<string, string>): Promise<TransactionsPage> {
+  const q = params ? `?${new URLSearchParams(params)}` : ""
+  return get<TransactionsPage>(`/api/transactions/unified${q}`)
+}
+
+// ── Hyperliquid trading (/api/trade/*) — mirrors mobile's trade.ts 1:1 ──────
+
+export type HlSpotMarket = { symbol: string; coinName: string; price: number }
+export type HlFuturesMarket = { symbol: string; price: number; maxLeverage: number }
+
+export type HlMarkets = {
+  spot: HlSpotMarket[]
+  futures: HlFuturesMarket[]
+  minOrderUsd: number
+}
+
+export type HlPosition = {
+  symbol: string
+  size: number
+  absSize: number
+  side: "long" | "short"
+  entryPrice: number
+  markPrice: number
+  notionalUsd: number
+  unrealizedPnl: number
+  returnOnEquity: number
+  liquidationPrice: number | null
+  marginUsed: number
+  leverage: { type: "cross" | "isolated"; value: number }
+}
+
+export type HlOpenOrder = {
+  oid: number
+  market: "spot" | "futures"
+  symbol: string
+  side: "buy" | "sell"
+  limitPrice: number
+  size: number
+  origSize: number
+  isTrigger: boolean
+  triggerPrice: number | null
+  orderType: string
+  reduceOnly: boolean
+  timestamp: number
+  known: boolean
+}
+
+export type HlSpotTokenBalance = {
+  symbol: string
+  total: number
+  hold: number
+  available: number
+}
+
+export type HlAccount = {
+  ready: boolean
+  address?: string
+  balances: {
+    perpsWithdrawableUsdc: number
+    perpsAccountValueUsdc: number
+    spotUsdc: number
+    spotUsdcHold?: number
+    spotTokens?: HlSpotTokenBalance[]
+  } | null
+  positions: HlPosition[]
+  openOrders: HlOpenOrder[]
+}
+
+export type HlOrderOutcome = {
+  success: boolean
+  symbol: string
+  side: "buy" | "sell"
+  size?: number
+  executionPrice?: number
+  filledSize?: number
+  avgFillPrice?: number
+  filledNotionalUsd?: number
+  resting?: boolean
+  error?: string
+}
+
+export type HlCloseOutcome = {
+  success: boolean
+  symbol: string
+  closedSize?: number
+  executionPrice?: number
+  error?: string
+}
+
+export function fetchHlMarkets(): Promise<HlMarkets> {
+  return get<HlMarkets>("/api/trade/markets")
+}
+
+export function fetchHlAccount(): Promise<HlAccount> {
+  return get<HlAccount>("/api/trade/account")
+}
+
+export function placeSpotOrder(input: {
+  symbol: string
+  side: "buy" | "sell"
+  orderType: "market" | "limit"
+  amountUsd?: number
+  size?: number
+  limitPrice?: number
+}): Promise<HlOrderOutcome> {
+  return post<HlOrderOutcome>("/api/trade/spot", input)
+}
+
+export function placeFuturesOrder(input: {
+  symbol: string
+  side: "buy" | "sell"
+  orderType: "market" | "limit"
+  amountUsd?: number
+  size?: number
+  limitPrice?: number
+  leverage?: number
+  reduceOnly?: boolean
+}): Promise<HlOrderOutcome> {
+  return post<HlOrderOutcome>("/api/trade/futures", input)
+}
+
+export function closePosition(input: { symbol: string; size?: number }): Promise<HlCloseOutcome> {
+  return post<HlCloseOutcome>("/api/trade/close", input)
+}
+
+export function cancelOrder(input: {
+  oid: number
+  symbol: string
+  market: "spot" | "futures"
+}): Promise<{ success: boolean; error?: string }> {
+  return post("/api/trade/cancel", input)
+}
+
+// ── Trading wallet: status / fund / withdraw (Dollar Account legs) ─────────
+
+export type HyperliquidBalances = {
+  perpsWithdrawableUsdc: number
+  perpsAccountValueUsdc: number
+  spotUsdc: number
+}
+
+export type TradingWalletStatus = {
+  initialized: boolean
+  tradingWallet: { walletId: string; address: string } | null
+  balances: {
+    arbitrumUsdc: number | null
+    hyperliquid: HyperliquidBalances | null
+  } | null
+  minDepositUsdc?: number
+}
+
+export function fetchTradingWalletStatus(): Promise<TradingWalletStatus> {
+  return get<TradingWalletStatus>("/api/trading-wallet/status")
+}
+
+export function setupTradingWallet(): Promise<{
+  success: boolean
+  alreadyInitialized?: boolean
+  tradingWallet: { walletId: string; address: string }
+}> {
+  return post("/api/trading-wallet/setup", {})
+}
+
+export type FundStatus =
+  | "pending"
+  | "usd_held"
+  | "disbursing"
+  | "usdc_arrived"
+  | "bridging"
+  | "transferring"
+  | "completed"
+  | "failed"
+
+export type FundDestination = "spot" | "perps"
+
+export type Fund = {
+  reference: string
+  status: FundStatus
+  message: string | null
+  amountUsdc: number
+  usdCharged: number
+  destination: FundDestination
+  partial: boolean
+  treasuryTxHash: string | null
+  bridgeTxHash: string | null
+  bridgeLastError: string | null
+  createdAt: string
+  completedAt: string | null
+}
+
+export const FUND_TERMINAL: FundStatus[] = ["completed", "failed"]
+
+export type FundAvailability = {
+  success: boolean
+  enabled: boolean
+  available: number
+  reason?: string
+  feePercent: number
+  minUsdc: number
+  maxUsdc: number
+}
+
+export function fetchFundAvailability(): Promise<FundAvailability> {
+  return get<FundAvailability>("/api/trading-wallet/fund/availability")
+}
+
+export async function initiateFund(input: {
+  amountUsdc: number
+  destination: FundDestination
+}): Promise<Fund> {
+  const res = await post<{ success: boolean; fund: Fund }>("/api/trading-wallet/fund", input)
+  return res.fund
+}
+
+export async function fetchFund(reference: string): Promise<Fund> {
+  const res = await get<{ success: boolean; fund: Fund }>(
+    `/api/trading-wallet/fund/${encodeURIComponent(reference)}`,
+  )
+  return res.fund
+}
+
+export function fetchFunds(): Promise<{ success: boolean; active: Fund | null; funds: Fund[] }> {
+  return get("/api/trading-wallet/fund")
+}
+
+export type TradingWithdrawStatus = "pending" | "hl_withdrawing" | "completed" | "failed"
+export type TradingWithdrawSource = "spot" | "perps"
+
+export type TradingWithdraw = {
+  reference: string
+  status: TradingWithdrawStatus
+  message: string | null
+  amountUsdc: number
+  hlFeeUsdc: number
+  creditUsd: number
+  source: TradingWithdrawSource
+  credited: boolean
+  arrivalTxHash: string | null
+  expectedSeconds: number
+  submittedAt: string
+  createdAt: string
+  completedAt: string | null
+}
+
+export const TRADING_WITHDRAW_TERMINAL: TradingWithdrawStatus[] = ["completed", "failed"]
+
+export type TradingWithdrawInfo = {
+  success: boolean
+  enabled: boolean
+  feePercent: number
+  hlFeeUsdc: number
+  minUsdc: number
+  maxUsdc: number
+  expectedSeconds: number
+}
+
+export function fetchTradingWithdrawInfo(): Promise<TradingWithdrawInfo> {
+  return get<TradingWithdrawInfo>("/api/trading-wallet/withdraw/info")
+}
+
+export async function initiateTradingWithdraw(input: {
+  amountUsdc: number
+  source: TradingWithdrawSource
+}): Promise<TradingWithdraw> {
+  const res = await post<{ success: boolean; withdraw: TradingWithdraw }>(
+    "/api/trading-wallet/withdraw",
+    input,
+  )
+  return res.withdraw
+}
+
+export async function fetchTradingWithdraw(reference: string): Promise<TradingWithdraw> {
+  const res = await get<{ success: boolean; withdraw: TradingWithdraw }>(
+    `/api/trading-wallet/withdraw/${encodeURIComponent(reference)}`,
+  )
+  return res.withdraw
+}
+
+export function fetchTradingWithdrawals(): Promise<{
+  success: boolean
+  active: TradingWithdraw | null
+  withdrawals: TradingWithdraw[]
+}> {
+  return get("/api/trading-wallet/withdraw")
+}
+
+// ── Auto-trading agent ──────────────────────────────────────────────────────
+
+export type AgentConfig = {
+  maxSpotOrderUsdc: number
+  maxFuturesPositionUsdc: number
+  maxFuturesLeverage: number
+  spotEnabled: boolean
+  futuresEnabled: boolean
+}
+
+export type AgentStatus = {
+  agentEnabled: boolean
+  agentSignerGranted: boolean
+  agentEnabledAt: string | null
+  agentConfig: AgentConfig | null
+  tradingWalletReady: boolean
+}
+
+export function fetchAgentStatus(): Promise<AgentStatus> {
+  return get<AgentStatus>("/api/agent/status")
+}
+
+export function enableAgent(input?: { agentConfig?: Partial<AgentConfig> }): Promise<{
+  success: boolean
+  agentEnabled: boolean
+  agentSignerGranted: boolean
+}> {
+  return post("/api/agent/enable", input ?? {})
+}
+
+export function disableAgent(): Promise<{ success: boolean; agentEnabled: boolean }> {
+  return post("/api/agent/disable", {})
+}
+
+// ── Dollar Account (worldstreet-wallet, read-only) ──────────────────────────
+//
+// The dashboard shows the user's USD balance as the Cash row, like mobile's
+// crypto home. Funding it happens on the Worldstreet home — this is a read.
+// Served by the proxy's special-case forward to the wallet service.
+
+export type CurrencyBalance = {
+  availableMinor: number
+  lockedMinor: number
+  available: number
+  locked: number
+}
+
+export type WalletBalances = {
+  userId: string
+  balances: { USD: CurrencyBalance; NGN: CurrencyBalance }
+}
+
+export function fetchDollarBalances(): Promise<{ ok: boolean } & WalletBalances> {
+  return get("/api/dollar/balances")
+}

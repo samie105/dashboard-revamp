@@ -31,7 +31,6 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { LayoutShell } from "@/components/layout-shell"
 import { TradeSelectorProvider } from "@/components/trade-selector"
 import { VividVoiceProvider } from "@/components/vivid-provider"
-import { HlWsWrapper } from "@/components/hl-ws-wrapper"
 
 const isProduction = process.env.NODE_ENV === "production"
 
@@ -61,7 +60,7 @@ export default function RootLayout({
               <AuthProvider>
                 <AuthGate>
                   <WalletProvider>
-                    <HlWsWrapper>
+                    
                       <TooltipProvider>
                         <VividVoiceProvider>
                           <TradeSelectorProvider>
@@ -69,7 +68,7 @@ export default function RootLayout({
                           </TradeSelectorProvider>
                         </VividVoiceProvider>
                       </TooltipProvider>
-                    </HlWsWrapper>
+                    
                   </WalletProvider>
                 </AuthGate>
               </AuthProvider>

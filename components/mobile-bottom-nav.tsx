@@ -88,11 +88,9 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     icon: Activity01Icon,
     items: [
       { name: "Markets", url: "/trading/markets", icon: BarChartIcon },
-      { name: "Spot Trading", url: "/spotv2", icon: Activity01Icon },
-      { name: "Futures", url: "/futures", icon: Chart01Icon },
+      { name: "Spot Trading", url: "/trade", icon: Activity01Icon },
+      { name: "Futures", url: "/trade?market=futures", icon: Chart01Icon },
       { name: "Swap", url: "/swap", icon: RepeatIcon },
-      { name: "Bridge", url: "/bridge", icon: Link01Icon },
-      { name: "Copy Trading", url: "/copy-trading", icon: Copy01Icon },
     ],
   },
   {
@@ -294,8 +292,8 @@ export function MobileBottomNav() {
                 <div className="px-4 py-3 border-b border-border/20">
                   <div className="grid grid-cols-4 gap-1.5">
                     {[
-                      { label: "Deposit", href: "/deposit", icon: Exchange01Icon, accent: true },
-                      { label: "Withdraw", href: "/withdraw", icon: CreditCardIcon },
+                      { label: "Deposit", href: "/buy", icon: Exchange01Icon, accent: true },
+                      { label: "Withdraw", href: "/sell", icon: CreditCardIcon },
                       { label: "Swap", href: "/swap", icon: RepeatIcon },
                       { label: "Transfer", href: "/transactions", icon: ArrowDown01Icon },
                     ].map((action) => (
