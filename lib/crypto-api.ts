@@ -191,6 +191,127 @@ export type TransactionsPage = {
   pagination: { hasMore: boolean; nextCursor?: string; total: number }
 }
 
+// ── Sends ───────────────────────────────────────────────────────────────────
+
+/** Chains the generic native send accepts. Note: no arbitrum. */
+export type SendChain = "ethereum" | "solana" | "sui" | "ton" | "tron"
+
+/** Chains ERC-20 transfers can run on — both use the ethereum Privy wallet. */
+export type EvmTokenChain = "ethereum" | "arbitrum"
+
+/**
+ * Each chain names its hash differently (transactionHash / signature / txid /
+ * hash / digest). Callers want one field, so normalise here rather than making
+ * every call site guess.
+ */
+export type SendResult = { txHash: string; explorerUrl?: string }
+
+type RawSend = {
+  transactionHash?: string
+  signature?: string
+  txid?: string
+  hash?: string
+  digest?: string
+  explorerUrl?: string
+}
+
+function normalizeSend(raw: RawSend): SendResult {
+  const txHash = raw.transactionHash ?? raw.signature ?? raw.txid ?? raw.hash ?? raw.digest ?? ""
+  return { txHash, explorerUrl: raw.explorerUrl }
+}
+
+/** Native coin (ETH, SOL, SUI, TON, TRX). */
+export async function sendNative(input: {
+  chain: SendChain
+  to: string
+  amount: string
+}): Promise<SendResult> {
+  return normalizeSend(await post<RawSend>("/api/privy/wallet/send", input))
+}
+
+/** SPL token on Solana. */
+export async function sendSplToken(input: {
+  to: string
+  amount: number
+  mint: string
+}): Promise<SendResult> {
+  return normalizeSend(await post<RawSend>("/api/privy/wallet/solana/send-token", input))
+}
+
+/** ERC-20 on Ethereum mainnet or Arbitrum. Decimals are read on chain. */
+export async function sendErc20Token(input: {
+  to: string
+  amount: number
+  tokenAddress: string
+  chain?: EvmTokenChain
+}): Promise<SendResult> {
+  return normalizeSend(await post<RawSend>("/api/privy/wallet/ethereum/send-token", input))
+}
+
+/** TRC-20 on Tron. */
+export async function sendTrc20Token(input: {
+  to: string
+  amount: number
+  contractAddress: string
+}): Promise<SendResult> {
+  return normalizeSend(await post<RawSend>("/api/privy/wallet/tron/send-token", input))
+}
+
+/**
+ * Send an asset, picking the right transport from its shape.
+ *
+ * This exists because getting it wrong is expensive: an asset with a contract
+ * address routed to a NATIVE send silently moves the native coin instead of
+ * the token — the amount is taken at face value, so "send 100 USDT" becomes
+ * "send 100 TRX". Centralising the branch keeps that decision in one place
+ * rather than at every call site.
+ */
+export async function sendAsset(input: {
+  chain: string
+  to: string
+  amount: number
+  /** Present for tokens, absent for native coins. */
+  contractAddress?: string
+}): Promise<SendResult> {
+  const { chain, to, amount, contractAddress } = input
+
+  if (contractAddress) {
+    if (chain === "solana") return sendSplToken({ to, amount, mint: contractAddress })
+    if (chain === "tron") return sendTrc20Token({ to, amount, contractAddress })
+    if (chain === "ethereum" || chain === "arbitrum") {
+      return sendErc20Token({ to, amount, tokenAddress: contractAddress, chain })
+    }
+    throw new CryptoApiError(400, `Sending tokens on ${chain} isn't supported yet.`)
+  }
+
+  // Native. The generic send has no arbitrum — mapping it to ethereum would
+  // broadcast on mainnet instead, so refuse rather than send on the wrong chain.
+  if (chain === "arbitrum") {
+    throw new CryptoApiError(400, "Sending native ETH on Arbitrum isn't supported yet.")
+  }
+  return sendNative({ chain: chain as SendChain, to, amount: amount.toString() })
+}
+
+// ── Wallet transfer history ─────────────────────────────────────────────────
+
+export type WalletTransferInput = {
+  type: "send" | "receive"
+  direction: "outgoing" | "incoming"
+  chain: string
+  token: string
+  amount: number
+  fromAddress?: string
+  toAddress?: string
+  txHash: string
+  status?: string
+  memo?: string
+}
+
+/** Record a transfer in history. Idempotent on txHash. */
+export function recordWalletTransfer(input: WalletTransferInput): Promise<unknown> {
+  return post("/api/wallet-transfers", input)
+}
+
 // ── Endpoints ───────────────────────────────────────────────────────────────
 //
 // Only the endpoints already live behind the proxy are exported as callable

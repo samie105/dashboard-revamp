@@ -10,6 +10,7 @@ import {
   ArrowUpRight01Icon,
   ArrowLeft02Icon,
 } from "@hugeicons/core-free-icons"
+import { sendAsset, recordWalletTransfer } from "@/lib/crypto-api"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -148,57 +149,30 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
     setError("")
 
     try {
-      let hash = ""
-
-      // Determine which endpoint to call
-      if (asset.contractAddress && asset.chain === "solana") {
-        // SPL token via solana send-token route
-        const res = await fetch("/api/privy/wallet/solana/send-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: recipient.trim(),
-            amount: amountNum,
-            mint: asset.contractAddress,
-            decimals: asset.decimals ?? 9,
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok || data.error) throw new Error(data.error || "SPL transfer failed")
-        hash = data.signature || data.transactionHash || data.hash || ""
-      } else {
-        // Native send or ERC-20 via per-chain route
-        const chainRoute = asset.chain === "arbitrum" ? "ethereum" : asset.chain
-        const res = await fetch(`/api/privy/wallet/${chainRoute}/send`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: recipient.trim(),
-            amount: amountNum.toString(),
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok || data.error) throw new Error(data.error || "Transaction failed")
-        hash = data.transactionHash || data.signature || data.hash || ""
-      }
+      // sendAsset picks native vs SPL/ERC-20/TRC-20 from the asset's shape.
+      // This used to branch inline and only special-cased Solana, so every
+      // other token fell through to a NATIVE send with its contract address
+      // dropped — "send 100 USDT" on Tron broadcast 100 TRX.
+      const { txHash: hash } = await sendAsset({
+        chain: asset.chain,
+        to: recipient.trim(),
+        amount: amountNum,
+        contractAddress: asset.contractAddress,
+      })
 
       setTxHash(hash)
       setStep("success")
 
       // Record transfer (fire-and-forget)
-      fetch("/api/wallet-transfers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "send",
-          direction: "outgoing",
-          chain: asset.chain,
-          token: asset.symbol,
-          amount: amountNum,
-          toAddress: recipient.trim(),
-          txHash: hash,
-          status: "confirmed",
-        }),
+      recordWalletTransfer({
+        type: "send",
+        direction: "outgoing",
+        chain: asset.chain,
+        token: asset.symbol,
+        amount: amountNum,
+        toAddress: recipient.trim(),
+        txHash: hash,
+        status: "confirmed",
       }).catch(() => {})
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Transaction failed"

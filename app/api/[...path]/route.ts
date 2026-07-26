@@ -32,21 +32,49 @@ import { auth } from "@clerk/nextjs/server"
 const CRYPTO_API = process.env.CRYPTO_API_URL
 
 /**
- * Path prefixes (after `/api/`) served by worldstreet-crypto.
+ * Paths (after `/api/`) served by worldstreet-crypto.
  *
- * Add a prefix here in the same change that deletes the local route, never
- * before — an entry whose local route still exists does nothing, which reads
- * as "migrated" in review when it isn't.
+ * A trailing slash means "this prefix and everything under it"; anything else
+ * must match exactly. Exact-by-default matters — a bare "swap" prefix would
+ * also capture a future "swap-history", forwarding a route nobody migrated.
  *
- * `tokens/` has no local route at all: components/assets/assets-client.tsx
- * calls /api/tokens/metadata and /api/tokens/custom, which only ever existed
- * on the service. Custom-token add has been broken on web; forwarding it is
- * a pure fix with no endpoint to regress.
+ * Add an entry in the same change that deletes the local route, never before:
+ * an entry whose local route still exists does nothing (the specific route
+ * wins), which reads as "migrated" in review when it isn't.
  */
-const FORWARDED = ["tokens/"]
+const FORWARDED = [
+  // No local route, and never had one — assets-client has been calling these
+  // all along, so custom-token add was simply broken on web.
+  "tokens/",
+
+  // Verified line-for-line ports of the deleted local routes.
+  "wallet/balances",
+  "transactions/unified",
+  "wallet-transfers",
+  "swap",
+
+  // Privy wallet lifecycle. Zero callers in the dashboard — the frontend never
+  // used them; wallets are provisioned server-side.
+  "privy/get-wallet",
+  "privy/get-wallet-by-clerk",
+  "privy/onboarding",
+  "privy/pregenerate-wallet",
+  "privy/link-clerk",
+  "privy/refresh-wallet",
+  "privy/add-wallet-signer",
+
+  // Sends. The service replaced the dashboard's per-chain /send routes with
+  // one generic native send plus explicit per-chain token routes.
+  "privy/wallet/send",
+  "privy/wallet/solana/send-token",
+  "privy/wallet/ethereum/send-token",
+  "privy/wallet/tron/send-token",
+]
 
 function isForwarded(path: string): boolean {
-  return FORWARDED.some((prefix) => path === prefix || path.startsWith(prefix))
+  return FORWARDED.some((entry) =>
+    entry.endsWith("/") ? path.startsWith(entry) : path === entry,
+  )
 }
 
 async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
