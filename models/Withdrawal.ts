@@ -12,7 +12,10 @@ export type WithdrawalStatus =
   | "failed"
   | "cancelled"
 
-export type WithdrawalChain = "solana" | "ethereum"
+// "tron" is written by worldstreet-crypto's /api/sell (dollar-account sells on
+// TRC-20) into this same shared collection, so this model has to accept it or
+// saving one of those rows here throws a validation error.
+export type WithdrawalChain = "solana" | "ethereum" | "tron"
 
 export interface IWithdrawalBankDetails {
   bankName: string
@@ -58,7 +61,7 @@ const WithdrawalSchema = new Schema<IWithdrawal>(
     fiatAmount: { type: Number, required: true },
     fiatCurrency: { type: String, required: true, default: "NGN" },
     exchangeRate: { type: Number, required: true },
-    chain: { type: String, required: true, enum: ["solana", "ethereum"] },
+    chain: { type: String, required: true, enum: ["solana", "ethereum", "tron"] },
     userWalletAddress: { type: String, required: true },
     treasuryWalletAddress: { type: String, required: true },
     txHash: { type: String, sparse: true },
