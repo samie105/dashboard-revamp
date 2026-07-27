@@ -90,6 +90,7 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
   const [error, setError] = React.useState("")
   const [txHash, setTxHash] = React.useState("")
   const panelRef = React.useRef<HTMLDivElement>(null)
+  const sendingRef = React.useRef(false)
 
   // Reset on open
   React.useEffect(() => {
@@ -102,14 +103,16 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
     }
   }, [open])
 
-  // Close on outside click
+  // Close on outside click — but never while a send is broadcasting, or the
+  // user loses the confirmation (and their view of the tx hash).
   React.useEffect(() => {
     function handle(e: MouseEvent) {
+      if (step === "sending") return
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose()
     }
     if (open) document.addEventListener("mousedown", handle)
     return () => document.removeEventListener("mousedown", handle)
-  }, [open, onClose])
+  }, [open, onClose, step])
 
   if (!open || !asset) return null
 
@@ -144,7 +147,10 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
   }
 
   async function handleSend() {
-    if (!asset) return
+    // Ref-based re-entrancy guard: state updates are async, so a same-frame
+    // double-click would pass a state check and broadcast twice.
+    if (!asset || sendingRef.current) return
+    sendingRef.current = true
     setStep("sending")
     setError("")
 
@@ -178,6 +184,8 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
       const msg = err instanceof Error ? err.message : "Transaction failed"
       setError(sanitizeError(msg))
       setStep("error")
+    } finally {
+      sendingRef.current = false
     }
   }
 

@@ -85,19 +85,21 @@ export function TradeClient() {
   const maxLev = current && "maxLeverage" in current ? current.maxLeverage : 1
 
   // Clamp leverage when switching to a contract with a lower max — otherwise
-  // the stale higher value is displayed and sent.
+  // the stale higher value is displayed and sent. Futures only: on the Spot
+  // tab maxLev is 1 and must not wipe the user's futures setting.
   React.useEffect(() => {
+    if (market !== "futures" || !current) return
     setLeverage((l) => Math.min(l, maxLev))
-  }, [maxLev])
+  }, [market, current, maxLev])
 
-  // A new symbol invalidates everything priced in the old one.
+  // A new symbol or market invalidates everything priced in the old one.
   React.useEffect(() => {
     setLimitPrice("")
     setTpPrice("")
     setSlPrice("")
     setOutcome(null)
     setError(null)
-  }, [symbol])
+  }, [symbol, market])
 
   // Order book — futures use the bare symbol; spot uses the coinName.
   const bookCoin = React.useMemo(() => {

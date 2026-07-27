@@ -35,7 +35,6 @@ const TYPE_TABS: { key: UnifiedTransactionType | "all"; label: string }[] = [
   { key: "all", label: "All" },
   { key: "deposit", label: "Deposits" },
   { key: "withdrawal", label: "Withdrawals" },
-  { key: "spot_trade", label: "Trades" },
   { key: "swap", label: "Swaps" },
   { key: "transfer", label: "Transfers" },
 ]

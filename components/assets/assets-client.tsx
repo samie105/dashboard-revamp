@@ -1144,7 +1144,7 @@ export default function AssetsClient() {
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <button onClick={() => router.push(`/futures?pair=${m.baseAsset}`)}
+                            <button onClick={() => router.push(`/trade?market=futures&symbol=${m.baseAsset}`)}
                               className="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-500/20 transition-colors">
                               Trade <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
                             </button>

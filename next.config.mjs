@@ -1,6 +1,21 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   serverExternalPackages: ["mongoose"],
+  // Nav menus link to account pages that don't exist yet — land somewhere
+  // sensible instead of a 404 until those pages are built.
+  async redirects() {
+    return [
+      { source: "/profile", destination: "/dashboard", permanent: false },
+      { source: "/settings", destination: "/dashboard", permanent: false },
+      { source: "/security", destination: "/dashboard", permanent: false },
+      { source: "/verification", destination: "/dashboard", permanent: false },
+      { source: "/transfer", destination: "/fund", permanent: false },
+      { source: "/futures", destination: "/trade?market=futures", permanent: false },
+      { source: "/spotv2", destination: "/trade?market=spot", permanent: false },
+      { source: "/deposit", destination: "/buy", permanent: false },
+      { source: "/withdraw", destination: "/sell", permanent: false },
+    ]
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "coin-images.coingecko.com" },

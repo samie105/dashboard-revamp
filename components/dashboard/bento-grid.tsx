@@ -541,7 +541,7 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
         ) : (
           <div className="flex flex-1 flex-col divide-y divide-border/30">
             {spotTrades.map((trade) => {
-              const isBuy = trade.side === "buy"
+              const isBuy = trade.side === "buy" || trade.side === "incoming"
               return (
                 <div key={trade.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/30">
                   <span className={`text-xs font-bold ${isBuy ? "text-emerald-500" : "text-red-500"}`}>
@@ -567,7 +567,8 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="text-sm font-semibold tabular-nums">
-                      ${trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      {/* price isn't served for these rows — show the fiat value */}
+                      ${trade.quoteAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </span>
                     <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
                       <HugeiconsIcon icon={Clock01Icon} className="h-3 w-3" />

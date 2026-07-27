@@ -651,16 +651,19 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   }
 
   const insufficientBalance = numericFrom > 0 && fromCoinBalance > 0 && numericFrom > fromCoinBalance
-  const canSwap = numericFrom > 0 && fromCoin && toCoin && !quoteLoading && !swapLoading && !insufficientBalance && (canQuote ? !!quoteData?.executionData : true)
+  // Unsupported pairs have no execution path — the button must say so, not
+  // sit enabled doing nothing on click.
+  const canSwap = numericFrom > 0 && !!fromCoin && !!toCoin && !quoteLoading && !swapLoading && !insufficientBalance && canQuote && !!quoteData?.executionData
 
   const buttonText = React.useMemo(() => {
     if (!fromCoin || !toCoin) return "Select tokens"
+    if (!canQuote) return "Pair not supported yet"
     if (!fromAmount || numericFrom <= 0) return "Enter amount"
     if (insufficientBalance) return "Insufficient balance"
     if (swapLoading) return "Confirming swap..."
     if (quoteLoading) return "Fetching quote..."
     if (quoteError) return "Quote unavailable"
-    if (canQuote && !quoteData?.executionData && numericFrom > 0) return "No route found"
+    if (!quoteData?.executionData && numericFrom > 0) return "No route found"
     return "Swap"
   }, [fromCoin, toCoin, fromAmount, numericFrom, quoteLoading, swapLoading, insufficientBalance, quoteError, canQuote, quoteData])
 
