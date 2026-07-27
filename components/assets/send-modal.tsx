@@ -10,6 +10,7 @@ import {
   ArrowUpRight01Icon,
   ArrowLeft02Icon,
 } from "@hugeicons/core-free-icons"
+import { sendAsset, recordWalletTransfer } from "@/lib/crypto-api"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
   const [error, setError] = React.useState("")
   const [txHash, setTxHash] = React.useState("")
   const panelRef = React.useRef<HTMLDivElement>(null)
+  const sendingRef = React.useRef(false)
 
   // Reset on open
   React.useEffect(() => {
@@ -101,14 +103,16 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
     }
   }, [open])
 
-  // Close on outside click
+  // Close on outside click — but never while a send is broadcasting, or the
+  // user loses the confirmation (and their view of the tx hash).
   React.useEffect(() => {
     function handle(e: MouseEvent) {
+      if (step === "sending") return
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose()
     }
     if (open) document.addEventListener("mousedown", handle)
     return () => document.removeEventListener("mousedown", handle)
-  }, [open, onClose])
+  }, [open, onClose, step])
 
   if (!open || !asset) return null
 
@@ -143,67 +147,45 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
   }
 
   async function handleSend() {
-    if (!asset) return
+    // Ref-based re-entrancy guard: state updates are async, so a same-frame
+    // double-click would pass a state check and broadcast twice.
+    if (!asset || sendingRef.current) return
+    sendingRef.current = true
     setStep("sending")
     setError("")
 
     try {
-      let hash = ""
-
-      // Determine which endpoint to call
-      if (asset.contractAddress && asset.chain === "solana") {
-        // SPL token via solana send-token route
-        const res = await fetch("/api/privy/wallet/solana/send-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: recipient.trim(),
-            amount: amountNum,
-            mint: asset.contractAddress,
-            decimals: asset.decimals ?? 9,
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok || data.error) throw new Error(data.error || "SPL transfer failed")
-        hash = data.signature || data.transactionHash || data.hash || ""
-      } else {
-        // Native send or ERC-20 via per-chain route
-        const chainRoute = asset.chain === "arbitrum" ? "ethereum" : asset.chain
-        const res = await fetch(`/api/privy/wallet/${chainRoute}/send`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: recipient.trim(),
-            amount: amountNum.toString(),
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok || data.error) throw new Error(data.error || "Transaction failed")
-        hash = data.transactionHash || data.signature || data.hash || ""
-      }
+      // sendAsset picks native vs SPL/ERC-20/TRC-20 from the asset's shape.
+      // This used to branch inline and only special-cased Solana, so every
+      // other token fell through to a NATIVE send with its contract address
+      // dropped — "send 100 USDT" on Tron broadcast 100 TRX.
+      const { txHash: hash } = await sendAsset({
+        chain: asset.chain,
+        to: recipient.trim(),
+        amount: amountNum,
+        contractAddress: asset.contractAddress,
+      })
 
       setTxHash(hash)
       setStep("success")
 
       // Record transfer (fire-and-forget)
-      fetch("/api/wallet-transfers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "send",
-          direction: "outgoing",
-          chain: asset.chain,
-          token: asset.symbol,
-          amount: amountNum,
-          toAddress: recipient.trim(),
-          txHash: hash,
-          status: "confirmed",
-        }),
+      recordWalletTransfer({
+        type: "send",
+        direction: "outgoing",
+        chain: asset.chain,
+        token: asset.symbol,
+        amount: amountNum,
+        toAddress: recipient.trim(),
+        txHash: hash,
+        status: "confirmed",
       }).catch(() => {})
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Transaction failed"
       setError(sanitizeError(msg))
       setStep("error")
+    } finally {
+      sendingRef.current = false
     }
   }
 

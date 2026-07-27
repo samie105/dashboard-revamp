@@ -50,8 +50,8 @@ export function BalanceSection({ coins, prices }: BalanceSectionProps) {
   }, [])
 
   const actions = [
-    { label: "Deposit", icon: Exchange01Icon, href: "/deposit" },
-    { label: "Withdraw", icon: CreditCardIcon, href: "/withdraw" },
+    { label: "Deposit", icon: Exchange01Icon, href: "/buy" },
+    { label: "Withdraw", icon: CreditCardIcon, href: "/sell" },
     { label: "Swap", icon: CoinsSwapIcon, href: "/swap" },
     { label: "Transfer", icon: ArrowDown01Icon, href: "/transfer" },
   ]

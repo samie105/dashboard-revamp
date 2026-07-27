@@ -1,4 +1,11 @@
-import { useState, useEffect, useCallback } from "react"
+"use client"
+
+/**
+ * Legacy-shaped wrapper over useTradeAccount. The old hook polled
+ * /api/hyperliquid/positions and exposed Hyperliquid's raw string fields;
+ * this keeps that shape while sourcing from /api/trade/account.
+ */
+import { useTradeAccount } from "./useTradeAccount"
 
 export interface HyperliquidPosition {
   coin: string
@@ -13,32 +20,19 @@ export interface HyperliquidPosition {
 }
 
 export function useHyperliquidPositions() {
-  const [positions, setPositions] = useState<HyperliquidPosition[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { positions, futuresUsd, isLoading, error, refetch } = useTradeAccount(10_000)
 
-  const fetchPositions = useCallback(async () => {
-    try {
-      setError(null)
-      const res = await fetch("/api/hyperliquid/positions")
-      const data = await res.json()
-      if (data.success) {
-        setPositions(data.data || [])
-      } else {
-        setPositions([])
-      }
-    } catch {
-      setError("Failed to fetch positions")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const mapped: HyperliquidPosition[] = positions.map((p) => ({
+    coin: p.symbol,
+    szi: String(p.size),
+    entryPx: String(p.entryPrice),
+    positionValue: String(p.notionalUsd),
+    unrealizedPnl: String(p.unrealizedPnl),
+    returnOnEquity: String(p.returnOnEquity),
+    liquidationPx: p.liquidationPrice === null ? null : String(p.liquidationPrice),
+    leverage: p.leverage,
+    marginUsed: String(p.marginUsed),
+  }))
 
-  useEffect(() => {
-    fetchPositions()
-    const interval = setInterval(fetchPositions, 10_000)
-    return () => clearInterval(interval)
-  }, [fetchPositions])
-
-  return { positions, loading, error, refetch: fetchPositions }
+  return { positions: mapped, futuresUsd, loading: isLoading, error, refetch }
 }

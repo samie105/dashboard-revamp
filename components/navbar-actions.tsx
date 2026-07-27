@@ -27,12 +27,12 @@ import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useAuth } from "@/components/auth-provider"
 import { getPrices } from "@/lib/actions"
 import {
-  getSpotV2Balance,
-  getSpotV2Positions,
+  getSpotBalances,
+  getSpotPositions,
   getTokenPrices,
   type LedgerBalance,
   type PositionInfo,
-} from "@/lib/spotv2/ledger-actions"
+} from "@/lib/trade-adapter"
 import {
   getRecentUsers,
   type UserSearchResult,
@@ -114,8 +114,8 @@ export function NavbarActions() {
     const load = async () => {
       try {
         const [balances, positions] = await Promise.all([
-          getSpotV2Balance(),
-          getSpotV2Positions(),
+          getSpotBalances(),
+          getSpotPositions(),
         ])
         const tokens = positions.map((p) => p.token)
         const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
@@ -348,11 +348,11 @@ export function NavbarActions() {
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-2 mb-3">
-                    <a href="/deposit" className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90 transition-colors">
+                    <a href="/buy" className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90 transition-colors">
                       <HugeiconsIcon icon={Exchange01Icon} className="h-3.5 w-3.5 text-white [&_path]:stroke-current [&_path]:fill-none [&_path]:opacity-100" />
                       Deposit
                     </a>
-                    <a href="/withdraw" className="flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors">
+                    <a href="/sell" className="flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors">
                       Withdraw
                     </a>
                   </div>
@@ -361,7 +361,7 @@ export function NavbarActions() {
                   <div className="flex flex-col gap-0.5">
                     {[
                       { label: "Spot Wallet", href: "/portfolio", icon: Wallet01Icon },
-                      { label: "Futures Wallet", href: "/futures", icon: Activity01Icon },
+                      { label: "Futures Wallet", href: "/trade?market=futures", icon: Activity01Icon },
                       { label: "Funding", href: "/assets", icon: Wallet01Icon },
                     ].map(w => (
                       <a key={w.label} href={w.href} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors group/link">

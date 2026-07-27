@@ -32,8 +32,8 @@ import { getUserBalances } from "@/lib/actions"
 import type { CoinData, UserBalance } from "@/lib/actions"
 import { useTradeSelector } from "@/components/trade-selector"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
-import { getSpotV2Balance, getSpotV2Positions, getTokenPrices } from "@/lib/spotv2/ledger-actions"
-import type { LedgerBalance, PositionInfo } from "@/lib/spotv2/ledger-actions"
+import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
+import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -170,7 +170,7 @@ function QuickActions() {
       </div>
       <div className="grid grid-cols-2 gap-2 p-3">
         <Link
-          href="/deposit"
+          href="/buy"
           className="flex items-center gap-2.5 rounded-xl border border-border/30 bg-accent/20 p-3 transition-all hover:bg-accent/40 group"
         >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 transition-transform group-hover:scale-105">
@@ -182,7 +182,7 @@ function QuickActions() {
           </div>
         </Link>
         <Link
-          href="/withdraw"
+          href="/sell"
           className="flex items-center gap-2.5 rounded-xl border border-border/30 bg-accent/20 p-3 transition-all hover:bg-accent/40 group"
         >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent transition-transform group-hover:scale-105">
@@ -378,7 +378,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
       }
     })
     // Fetch SpotV2 balances for trading account
-    Promise.all([getSpotV2Balance(), getSpotV2Positions()])
+    Promise.all([getSpotBalances(), getSpotPositions()])
       .then(async ([balances, positions]) => {
         setSpotBalances(balances)
         const tokens = positions.map((p) => p.token)
@@ -602,7 +602,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                         ) : (
                           <div className="flex items-center justify-between rounded-lg border border-dashed border-border/40 bg-card/50 px-3 py-3">
                             <p className="text-[11px] text-muted-foreground">No trading wallet configured</p>
-                            <Link href="/spotv2" className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-primary/90 transition-colors">
+                            <Link href="/trade" className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-primary/90 transition-colors">
                               Set Up
                             </Link>
                           </div>

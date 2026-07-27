@@ -16,19 +16,26 @@ const isPublicRoute = createRouteMatcher([
 const isProtectedApi = createRouteMatcher([
   "/api/profile(.*)",
   "/api/wallet(.*)",
-  "/api/trades(.*)",
   "/api/swap(.*)",
-  "/api/p2p(.*)",
   "/api/admin(.*)",
-  "/api/deposit(.*)",
-  "/api/withdraw(.*)",
+  // Proxied to worldstreet-crypto — listed so an expired session returns a
+  // JSON 401 the client can handle, not an HTML login redirect. Add each
+  // prefix here as it is added to FORWARDED in app/api/[...path]/route.ts.
+  "/api/tokens(.*)",
+  "/api/trade(.*)",
+  "/api/trading-wallet(.*)",
+  "/api/agent(.*)",
+  "/api/buy(.*)",
+  "/api/sell(.*)",
+  "/api/dollar(.*)",
+  "/api/transactions(.*)",
+  "/api/wallet-transfers(.*)",
+  "/api/privy(.*)",
 ])
 
 // Webhook/cron routes that should NOT require auth (called by external services)
 const isWebhookRoute = createRouteMatcher([
   "/api/webhooks(.*)",
-  "/api/deposit/webhook",
-  "/api/spotv2/cron(.*)",
 ])
 
 export default clerkMiddleware(async (auth, req) => {

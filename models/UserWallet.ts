@@ -5,7 +5,9 @@ const UserWalletSchema = new mongoose.Schema(
     clerkUserId: { type: String, index: true },
     email: { type: String, required: true, unique: true, index: true },
     privyUserId: { type: String, required: true, unique: true },
-    privy_type: { type: Number, enum: [0, 1], default: 1 }, // 0 = old privy, 1 = new privy
+    // 0 = old privy app, 1 = second app, 2 = third app. Default stays 1: it
+    // backfills legacy records; new signups are stamped explicitly at creation.
+    privy_type: { type: Number, enum: [0, 1, 2], default: 1 },
     wallets: {
       ethereum: { walletId: String, address: String, publicKey: String },
       solana: { walletId: String, address: String, publicKey: String },

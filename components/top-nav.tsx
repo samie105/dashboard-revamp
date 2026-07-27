@@ -52,13 +52,13 @@ const navItems: NavItem[] = [
         {
           name: "Spot Trading",
           description: "Multi-chain DEX trading",
-          href: "/spotv2",
+          href: "/trade",
           icon: Exchange01Icon,
         },
         {
           name: "Futures",
           description: "Perpetual futures trading",
-          href: "/futures",
+          href: "/trade?market=futures",
           icon: ChartLineData02Icon,
         },
         {
@@ -68,15 +68,15 @@ const navItems: NavItem[] = [
           icon: RepeatIcon,
         },
         {
-          name: "Bridge",
-          description: "Cross-chain transfers",
-          href: "/bridge",
+          name: "Buy USDT",
+          description: "Buy with your dollars",
+          href: "/buy",
           icon: Link01Icon,
         },
         {
-          name: "Copy Trading",
-          description: "Mirror top traders",
-          href: "/copy-trading",
+          name: "Auto Trading",
+          description: "Let the agent trade for you",
+          href: "/auto-trade",
           icon: Copy01Icon,
         },
       ],
