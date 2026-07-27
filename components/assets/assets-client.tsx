@@ -286,7 +286,7 @@ export default function AssetsClient() {
   const { profile } = useProfile()
   const { user } = useAuth()
   const { balances: onChainBalances, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances()
-  const { positions: hlPositions, loading: hlPositionsLoading } = useHyperliquidPositions()
+  const { positions: hlPositions, futuresUsd, loading: hlPositionsLoading } = useHyperliquidPositions()
 
   // SpotV2 data
   const [spotLedger, setSpotLedger] = React.useState<LedgerBalance[]>([])
@@ -420,11 +420,9 @@ export default function AssetsClient() {
     return usdcTotal + posTotal
   }, [spotLedger, spotV2Positions])
 
-  // Futures balance = sum of absolute position notional values
-  const futuresBalance = React.useMemo(
-    () => hlPositions.reduce((sum, p) => sum + Math.abs(parseFloat(p.positionValue || "0")), 0),
-    [hlPositions],
-  )
+  // Futures balance = perps account value (margin + unrealized PnL), not just
+  // open-position notional — a funded account with no positions is not $0.
+  const futuresBalance = futuresUsd
 
   // Per-view displayed balance
   const displayedBalance = React.useMemo(() => {

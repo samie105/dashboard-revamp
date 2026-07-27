@@ -20,7 +20,7 @@ export interface HyperliquidPosition {
 }
 
 export function useHyperliquidPositions() {
-  const { positions, isLoading, error, refetch } = useTradeAccount(10_000)
+  const { positions, futuresUsd, isLoading, error, refetch } = useTradeAccount(10_000)
 
   const mapped: HyperliquidPosition[] = positions.map((p) => ({
     coin: p.symbol,
@@ -34,5 +34,5 @@ export function useHyperliquidPositions() {
     marginUsed: String(p.marginUsed),
   }))
 
-  return { positions: mapped, loading: isLoading, error, refetch }
+  return { positions: mapped, futuresUsd, loading: isLoading, error, refetch }
 }
