@@ -84,6 +84,21 @@ export function TradeClient() {
   const current = React.useMemo(() => list.find((m) => m.symbol === symbol), [list, symbol])
   const maxLev = current && "maxLeverage" in current ? current.maxLeverage : 1
 
+  // Clamp leverage when switching to a contract with a lower max — otherwise
+  // the stale higher value is displayed and sent.
+  React.useEffect(() => {
+    setLeverage((l) => Math.min(l, maxLev))
+  }, [maxLev])
+
+  // A new symbol invalidates everything priced in the old one.
+  React.useEffect(() => {
+    setLimitPrice("")
+    setTpPrice("")
+    setSlPrice("")
+    setOutcome(null)
+    setError(null)
+  }, [symbol])
+
   // Order book — futures use the bare symbol; spot uses the coinName.
   const bookCoin = React.useMemo(() => {
     if (!current) return null
@@ -93,6 +108,7 @@ export function TradeClient() {
   React.useEffect(() => {
     if (!bookCoin) return
     let cancelled = false
+    setBook(null) // don't show the previous coin's book/price while loading
     const load = () =>
       fetchHlOrderBook(bookCoin).then((b) => { if (!cancelled) setBook(b) }).catch(() => {})
     load()
@@ -220,7 +236,7 @@ export function TradeClient() {
             <>
               <span>Spot ${balances.spotUsdc.toFixed(2)}</span>
               <span>·</span>
-              <span>Futures ${balances.perpsWithdrawableUsdc.toFixed(2)}</span>
+              <span>Futures avail ${balances.perpsWithdrawableUsdc.toFixed(2)}</span>
             </>
           )}
           <Link href="/fund" className="rounded-lg bg-primary/10 px-3 py-1.5 font-semibold text-primary hover:bg-primary/20">
@@ -353,8 +369,9 @@ export function TradeClient() {
               {tpslError && <p className="mt-2 text-xs text-amber-500">{tpslError}</p>}
               {amt > 0 && price > 0 && (
                 <p className="mt-2 text-xs text-muted-foreground tabular-nums">
-                  ≈ {(amt * (market === "futures" ? leverage : 1) / price).toFixed(6)} {symbol}
-                  {market === "futures" && leverage > 1 && ` (${leverage}× notional $${(amt * leverage).toFixed(2)})`}
+                  {/* Amount IS the notional; leverage only sets the margin used. */}
+                  ≈ {(amt / price).toFixed(6)} {symbol}
+                  {market === "futures" && leverage > 1 && ` · margin ≈ $${(amt / leverage).toFixed(2)} at ${leverage}×`}
                 </p>
               )}
               {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
@@ -363,6 +380,11 @@ export function TradeClient() {
                   {outcome.resting
                     ? "Limit order resting on the book."
                     : `Filled ${outcome.filledSize ?? ""} ${outcome.symbol} @ $${outcome.avgFillPrice?.toFixed(2) ?? "—"}`}
+                </p>
+              )}
+              {outcome?.success && outcome.tpslWarning && (
+                <p className="mt-1 text-xs font-semibold text-amber-500">
+                  ⚠ {outcome.tpslWarning} — your position is open without that protection.
                 </p>
               )}
               <button onClick={submit} disabled={!canSubmit}

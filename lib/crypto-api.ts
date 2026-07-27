@@ -36,12 +36,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 204) return null as T
 
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  // A proxy or gateway error can hand back HTML — never let that SyntaxError
+  // escape to the UI in place of a readable message.
+  let data: { error?: string; message?: string } | null = null
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      data = null
+    }
+  }
 
   if (!res.ok) {
     // The service answers with { error } on most routes and { message } on the
     // ones lifted from the dashboard — accept either.
-    throw new CryptoApiError(res.status, data?.error ?? data?.message ?? "Something went wrong")
+    throw new CryptoApiError(
+      res.status,
+      data?.error ?? data?.message ?? `The server returned an error (${res.status}). Try again.`,
+    )
   }
   return data as T
 }
@@ -513,6 +525,8 @@ export type HlOrderOutcome = {
   avgFillPrice?: number
   filledNotionalUsd?: number
   resting?: boolean
+  /** Entry succeeded but a TP/SL trigger leg was rejected — surface this. */
+  tpslWarning?: string
   error?: string
 }
 
@@ -588,8 +602,17 @@ export type TradingWalletStatus = {
   minDepositUsdc?: number
 }
 
-export function fetchTradingWalletStatus(): Promise<TradingWalletStatus> {
-  return get<TradingWalletStatus>("/api/trading-wallet/status")
+export async function fetchTradingWalletStatus(): Promise<TradingWalletStatus> {
+  try {
+    return await get<TradingWalletStatus>("/api/trading-wallet/status")
+  } catch (err) {
+    // A brand-new user with no wallet record 404s — that's "not set up yet",
+    // not an error; let the setup flow render instead of an error banner.
+    if (err instanceof CryptoApiError && err.status === 404) {
+      return { initialized: false, tradingWallet: null, balances: null }
+    }
+    throw err
+  }
 }
 
 export function setupTradingWallet(): Promise<{

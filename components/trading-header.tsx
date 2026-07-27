@@ -30,10 +30,12 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [profileOpen, setProfileOpen] = React.useState(false)
-  const { usdcBalance, accountValue, balances, loading: balanceLoading } = useHyperliquidBalance(user?.userId, !!user)
+  const { usdcBalance, accountValue, loading: balanceLoading } = useHyperliquidBalance(user?.userId, !!user)
 
-  // Total value = sum of all spot holdings (USDC + tokens at current prices)
-  const totalValue = balances.reduce((sum, b) => sum + (b.currentValue || 0), 0)
+  // Trading balance = spot USDC (incl. order holds) + perps account value.
+  // Spot token holdings aren't priced by /api/trade/account, so they're
+  // excluded rather than shown at a fake $0 each.
+  const totalValue = usdcBalance.total + accountValue
   const showBalance = !balanceLoading
 
   const displayName = user
