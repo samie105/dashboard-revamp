@@ -551,6 +551,8 @@ export function placeFuturesOrder(input: {
   size?: number
   limitPrice?: number
   leverage?: number
+  takeProfitPrice?: number
+  stopLossPrice?: number
   reduceOnly?: boolean
 }): Promise<HlOrderOutcome> {
   return post<HlOrderOutcome>("/api/trade/futures", input)

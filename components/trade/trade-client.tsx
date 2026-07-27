@@ -48,6 +48,8 @@ export function TradeClient() {
   const [amountUsd, setAmountUsd] = React.useState("")
   const [limitPrice, setLimitPrice] = React.useState("")
   const [leverage, setLeverage] = React.useState(1)
+  const [tpPrice, setTpPrice] = React.useState("")
+  const [slPrice, setSlPrice] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
@@ -100,9 +102,24 @@ export function TradeClient() {
 
   const price = book?.midPrice ?? current?.price ?? 0
   const amt = parseFloat(amountUsd) || 0
+
+  // TP/SL sanity — triggers are validated against the expected entry price
+  // (limit price for limit orders, mid price for market orders).
+  const entryRef = orderType === "limit" ? parseFloat(limitPrice) || 0 : price
+  const tp = parseFloat(tpPrice) || 0
+  const sl = parseFloat(slPrice) || 0
+  const tpslError = React.useMemo(() => {
+    if (market !== "futures" || entryRef <= 0) return null
+    if (tp > 0 && (side === "buy" ? tp <= entryRef : tp >= entryRef))
+      return `Take profit must be ${side === "buy" ? "above" : "below"} the entry price`
+    if (sl > 0 && (side === "buy" ? sl >= entryRef : sl <= entryRef))
+      return `Stop loss must be ${side === "buy" ? "below" : "above"} the entry price`
+    return null
+  }, [market, entryRef, tp, sl, side])
+
   const canSubmit =
     !submitting && !!current && amt >= (markets?.minOrderUsd ?? 10) &&
-    (orderType === "market" || parseFloat(limitPrice) > 0)
+    (orderType === "market" || parseFloat(limitPrice) > 0) && !tpslError
 
   function setMarketTab(m: Market) {
     router.replace(`/trade?market=${m}${symbol ? `&symbol=${symbol}` : ""}`)
@@ -124,7 +141,12 @@ export function TradeClient() {
       const res =
         market === "spot"
           ? await placeSpotOrder(base)
-          : await placeFuturesOrder({ ...base, leverage })
+          : await placeFuturesOrder({
+              ...base,
+              leverage,
+              ...(tp > 0 ? { takeProfitPrice: tp } : {}),
+              ...(sl > 0 ? { stopLossPrice: sl } : {}),
+            })
       setOutcome(res)
       if (!res.success && res.error) setError(res.error)
       refreshAccount()
@@ -312,6 +334,23 @@ export function TradeClient() {
                     onChange={(e) => setLeverage(parseInt(e.target.value))} className="mt-1 w-full accent-[var(--primary)]" />
                 </div>
               )}
+              {market === "futures" && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Take profit</label>
+                    <input value={tpPrice} onChange={(e) => setTpPrice(e.target.value.replace(/[^0-9.]/g, ""))}
+                      inputMode="decimal" placeholder="Optional"
+                      className="mt-1 w-full rounded-xl border border-border/50 bg-background px-3 py-2 text-sm tabular-nums outline-none focus:border-emerald-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Stop loss</label>
+                    <input value={slPrice} onChange={(e) => setSlPrice(e.target.value.replace(/[^0-9.]/g, ""))}
+                      inputMode="decimal" placeholder="Optional"
+                      className="mt-1 w-full rounded-xl border border-border/50 bg-background px-3 py-2 text-sm tabular-nums outline-none focus:border-red-500" />
+                  </div>
+                </div>
+              )}
+              {tpslError && <p className="mt-2 text-xs text-amber-500">{tpslError}</p>}
               {amt > 0 && price > 0 && (
                 <p className="mt-2 text-xs text-muted-foreground tabular-nums">
                   ≈ {(amt * (market === "futures" ? leverage : 1) / price).toFixed(6)} {symbol}
@@ -374,7 +413,11 @@ export function TradeClient() {
                     <div>
                       <span className="font-bold">{o.symbol}</span>{" "}
                       <span className={o.side === "buy" ? "text-emerald-500" : "text-red-500"}>{o.side}</span>{" "}
-                      <span className="text-muted-foreground tabular-nums">{o.size} @ ${o.limitPrice.toLocaleString()}</span>
+                      <span className="text-muted-foreground tabular-nums">
+                        {o.isTrigger
+                          ? `${o.orderType} @ $${(o.triggerPrice ?? o.limitPrice).toLocaleString()}`
+                          : `${o.size} @ $${o.limitPrice.toLocaleString()}`}
+                      </span>
                     </div>
                     <button onClick={() => handleCancel(o.oid, o.symbol, o.market)} disabled={busyKey === `cancel:${o.oid}`}
                       className="rounded-lg border border-border/50 px-2.5 py-1 font-medium hover:bg-accent disabled:opacity-40">
