@@ -33,23 +33,19 @@ import { TradeSelectorProvider } from "@/components/trade-selector"
 import { VividVoiceProvider } from "@/components/vivid-provider"
 import { HlWsWrapper } from "@/components/hl-ws-wrapper"
 
-const isProduction = process.env.NODE_ENV === "production"
-
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-    <ClerkProvider
-      {...(isProduction
-        ? {
-            domain: "worldstreetgold.com",
-            isSatellite: true,
-            signInUrl: "https://www.worldstreetgold.com/login",
-          }
-        : {})}
-    >
+    // This app IS www.worldstreetgold.com — the PRIMARY Clerk domain, where
+    // sign-in actually happens. It must NOT declare isSatellite/domain: doing
+    // so made it a satellite of itself, so Clerk waited forever on a handshake
+    // with a primary that was this very app. `useUser().isLoaded` never flipped
+    // true and every visit hung on "Verifying identity…". Satellite config
+    // belongs only on academy/vision/arcade, which point back here.
+    <ClerkProvider signInUrl="/login" signUpUrl="/register">
       <html
         lang="en"
         suppressHydrationWarning
