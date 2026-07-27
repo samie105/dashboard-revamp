@@ -309,7 +309,7 @@ export default function AssetsClient() {
     return () => { cancelled = true }
   }, [user])
   const [prices, setPrices] = React.useState<Record<string, number>>({})
-  const [activeView, setActiveView] = React.useState<WalletView>("spot")
+  const [activeView, setActiveView] = React.useState<WalletView>("main")
   const [selectedChain, setSelectedChain] = React.useState<string>(CHAINS[0].key)
   const [chainDropdownOpen, setChainDropdownOpen] = React.useState(false)
   const chainDropdownRef = React.useRef<HTMLDivElement>(null)
