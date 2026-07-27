@@ -647,7 +647,11 @@ export async function initiateFund(input: {
   amountUsdc: number
   destination: FundDestination
 }): Promise<Fund> {
-  const res = await post<{ success: boolean; fund: Fund }>("/api/trading-wallet/fund", input)
+  // The service reads `amount`, not `amountUsdc`.
+  const res = await post<{ success: boolean; fund: Fund }>("/api/trading-wallet/fund", {
+    amount: input.amountUsdc,
+    destination: input.destination,
+  })
   return res.fund
 }
 
@@ -701,9 +705,10 @@ export async function initiateTradingWithdraw(input: {
   amountUsdc: number
   source: TradingWithdrawSource
 }): Promise<TradingWithdraw> {
+  // The service reads `amount`, not `amountUsdc`.
   const res = await post<{ success: boolean; withdraw: TradingWithdraw }>(
     "/api/trading-wallet/withdraw",
-    input,
+    { amount: input.amountUsdc, source: input.source },
   )
   return res.withdraw
 }
