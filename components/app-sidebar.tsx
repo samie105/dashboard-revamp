@@ -100,7 +100,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: "Profile", description: "Personal details", url: "/profile", icon: UserIcon },
       { name: "Security", description: "2FA and password", url: "/security", icon: Shield01Icon },
-      { name: "Verification", description: "KYC Status", url: "/verification", icon: File01Icon },
+      { name: "Verification", description: "KYC Status", url: "https://www.worldstreetgold.com/verification", icon: File01Icon },
     ],
   },
   {

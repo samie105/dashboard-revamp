@@ -8,7 +8,9 @@ const nextConfig = {
       { source: "/profile", destination: "/dashboard", permanent: false },
       { source: "/settings", destination: "/dashboard", permanent: false },
       { source: "/security", destination: "/dashboard", permanent: false },
-      { source: "/verification", destination: "/dashboard", permanent: false },
+      // KYC lives on the hub, which owns the Didit flow — send deep links and
+      // bookmarks there rather than bouncing them to the dashboard.
+      { source: "/verification", destination: "https://www.worldstreetgold.com/verification", permanent: false },
       { source: "/transfer", destination: "/fund", permanent: false },
       { source: "/futures", destination: "/trade?market=futures", permanent: false },
       { source: "/spotv2", destination: "/trade?market=spot", permanent: false },
