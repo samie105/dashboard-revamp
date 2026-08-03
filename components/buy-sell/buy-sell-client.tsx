@@ -1,16 +1,28 @@
 "use client"
 
 /**
- * Buy / Sell USDT against the Dollar Account — the web equivalent of mobile's
- * BuyScreen and SellScreen, same state machine: initiate → 200 means done,
- * 202 means poll the reference until a terminal status.
- *
- * Buy: USD hold → treasury disburses USDT on-chain to the user's wallet.
- * Sell: user's wallet sends USDT to treasury → USD credited on confirmation.
+ * Buy / Sell USDT against the Dollar Account — same state machine as before
+ * (initiate → 200 done, 202 poll the reference until terminal), rebuilt on
+ * the flow kit: hero amount, raised-fill network choice, review breakdown,
+ * a CTA that states its blocker, and a staged status screen instead of a
+ * spinner and a shrug.
  */
 
 import * as React from "react"
-import Link from "next/link"
+import { Eyebrow, PageHeader } from "@/components/ui/system"
+import {
+  FlowShell,
+  ContextPanel,
+  AmountField,
+  ChoiceRow,
+  DetailPanel,
+  InlineNotice,
+  FlowCta,
+  StatusScreen,
+  UnavailablePanel,
+  FlowSkeleton,
+  type Stage,
+} from "@/components/ui/flow"
 import {
   fetchBuyAvailability,
   fetchSellInfo,
@@ -26,16 +38,34 @@ import {
   type SellNetwork,
 } from "@/lib/crypto-api"
 
-const NETWORK_LABELS: Record<string, string> = {
-  tron: "Tron",
-  solana: "Solana",
-  ethereum: "Ethereum",
-}
 // Tron leads — it's the network most USDT is bought on (same order as mobile).
-const NETWORK_ORDER = ["tron", "solana", "ethereum"] as const
+const NETWORKS = [
+  { key: "tron", label: "Tron", icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
+  { key: "solana", label: "Solana", icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
+  { key: "ethereum", label: "Ethereum", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
+] as const
 
 const BUY_TERMINAL = ["completed", "delivery_failed", "cancelled"]
 const SELL_TERMINAL = ["completed", "failed"]
+
+/** The checklist the poll advances. Status → stage index. */
+const BUY_STAGES: Stage[] = [
+  { key: "pending", label: "Charging your Dollar Account" },
+  { key: "payment_confirmed", label: "Payment confirmed" },
+  { key: "sending_usdt", label: "Sending USDT to your wallet" },
+  { key: "completed", label: "Delivered" },
+]
+const SELL_STAGES: Stage[] = [
+  { key: "pending", label: "Starting the transfer" },
+  { key: "usdt_sent", label: "USDT sent to treasury" },
+  { key: "tx_verified", label: "Transfer verified on-chain" },
+  { key: "completed", label: "Dollars credited" },
+]
+
+function stageIndex(stages: Stage[], status: string) {
+  const i = stages.findIndex((s) => s.key === status)
+  return i === -1 ? 0 : i
+}
 
 type Mode = "buy" | "sell"
 
@@ -48,8 +78,9 @@ export function BuySellClient({ mode }: { mode: Mode }) {
   const [limits, setLimits] = React.useState({ min: 1, max: 5000, feePercent: 0 })
   const [cashUsd, setCashUsd] = React.useState<number | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+  const [submitError, setSubmitError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<Buy | Sell | null>(null)
 
   // Availability + Dollar Account balance
@@ -61,24 +92,23 @@ export function BuySellClient({ mode }: { mode: Mode }) {
           const a = await fetchBuyAvailability()
           if (cancelled) return
           setLimits({ min: a.minUsdt, max: a.maxUsdt, feePercent: a.feePercent })
-          setEnabled(NETWORK_ORDER.filter((n) => a.chains[n as BuyNetwork]?.enabled))
+          setEnabled(NETWORKS.map((n) => n.key).filter((n) => a.chains[n as BuyNetwork]?.enabled))
         } else {
           const s = await fetchSellInfo()
           if (cancelled) return
           setLimits({ min: s.minUsdt, max: s.maxUsdt, feePercent: s.feePercent })
-          setEnabled(NETWORK_ORDER.filter((n) => s.networks[n as SellNetwork]?.enabled))
+          setEnabled(NETWORKS.map((n) => n.key).filter((n) => s.networks[n as SellNetwork]?.enabled))
         }
+        setLoadError(null)
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load")
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "We couldn't load this screen.")
       } finally {
         if (!cancelled) setLoading(false)
       }
       try {
         const b = await fetchDollarBalances()
         if (!cancelled) setCashUsd(b.balances.USD.available)
-      } catch {
-        /* cash row is best-effort */
-      }
+      } catch { /* cash row is best-effort context */ }
     }
     load()
     return () => { cancelled = true }
@@ -105,147 +135,178 @@ export function BuySellClient({ mode }: { mode: Mode }) {
 
   const amt = parseFloat(amount) || 0
   const usdSide = isBuy ? amt * (1 + limits.feePercent / 100) : amt * (1 - limits.feePercent / 100)
+  const shortBy = isBuy && cashUsd !== null ? usdSide - cashUsd : 0
   const insufficientCash = isBuy && cashUsd !== null && usdSide > cashUsd
-  const canSubmit =
-    !submitting && enabled.length > 0 && amt >= limits.min && amt <= limits.max && !insufficientCash
+  // Max the user can actually buy, fee included — drives the 25/50/75/Max chips.
+  const maxSpendUsdt = isBuy && cashUsd !== null
+    ? Math.min(limits.max, cashUsd / (1 + limits.feePercent / 100))
+    : null
+
+  /* The blocker ladder — the CTA always says WHY it can't proceed. */
+  const blocker =
+    amt <= 0 ? "Enter an amount"
+    : amt < limits.min ? `Minimum is ${limits.min} USDT`
+    : amt > limits.max ? `Maximum is ${limits.max.toLocaleString()} USDT`
+    : insufficientCash ? "Not enough in your Dollar Account"
+    : null
+  const ctaLabel = submitting
+    ? isBuy ? "Placing your order…" : "Starting the transfer…"
+    : blocker ?? (isBuy ? `Buy ${amt.toLocaleString()} USDT` : `Sell ${amt.toLocaleString()} USDT`)
+
+  /* Amount-line validation, phrased as help rather than a scold. */
+  const amountProblem =
+    amt > 0 && amt < limits.min ? `The minimum is ${limits.min} USDT.`
+    : amt > limits.max ? `The maximum is ${limits.max.toLocaleString()} USDT per order.`
+    : insufficientCash ? `You need $${shortBy.toFixed(2)} more in your Dollar Account for this ${isBuy ? "buy" : "order"}.`
+    : null
 
   async function submit() {
     setSubmitting(true)
-    setError(null)
+    setSubmitError(null)
     try {
       const res = isBuy
         ? await initiateBuy({ usdtAmount: amt, network: network as BuyNetwork })
         : await initiateSell({ usdtAmount: amt, network: network as SellNetwork })
       setResult(res)
     } catch (e) {
-      setError(e instanceof CryptoApiError ? e.message : "Something went wrong. Try again.")
+      setSubmitError(e instanceof CryptoApiError ? e.message : "Something went wrong before anything was charged — it's safe to try again.")
     } finally {
       setSubmitting(false)
     }
   }
 
-  // ── Result view ───────────────────────────────────────────────────────────
+  /* ── Status screen — the poll's progress report ─────────────────────── */
   if (result) {
-    const terminal = isBuy ? BUY_TERMINAL : SELL_TERMINAL
+    const stages = isBuy ? BUY_STAGES : SELL_STAGES
     const done = result.status === "completed"
+    const terminal = isBuy ? BUY_TERMINAL : SELL_TERMINAL
     const failed = terminal.includes(result.status) && !done
+    const cancelled = result.status === "cancelled"
+
+    const failureCaption = isBuy
+      ? cancelled
+        ? "This order was cancelled. Nothing was charged to your Dollar Account."
+        : ("deliveryError" in result && result.deliveryError) ||
+          "Your payment went through but delivery didn't complete — support has been notified and will retry or refund automatically."
+      : ("error" in result && result.error) ||
+        "The transfer couldn't be completed. Your USDT hasn't left — it's safe to try again."
+
     return (
-      <div className="mx-auto max-w-md px-4 py-10">
-        <div className="rounded-2xl bg-card p-6 text-center">
-          <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full ${done ? "bg-credit-chip" : failed ? "bg-debit-chip" : "bg-primary/10"}`}>
-            <span className="text-2xl">{done ? "✓" : failed ? "✕" : "…"}</span>
-          </div>
-          <p className="text-base font-semibold">
-            {done
-              ? `${isBuy ? "Bought" : "Sold"} ${result.usdtAmount} USDT`
+      <FlowShell>
+        <StatusScreen
+          state={done ? "success" : failed ? "failure" : "processing"}
+          headline={
+            done
+              ? isBuy ? `Bought ${result.usdtAmount} USDT` : `Sold ${result.usdtAmount} USDT`
               : failed
-                ? `${isBuy ? "Buy" : "Sell"} failed`
-                : `${isBuy ? "Delivering USDT" : "Confirming transfer"}…`}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {done && isBuy && `$${(result as Buy).usdCharged.toFixed(2)} charged to your Dollar Account`}
-            {done && !isBuy && `$${(result as Sell).usdProceeds.toFixed(2)} credited to your Dollar Account`}
-            {failed && (("deliveryError" in result && result.deliveryError) || ("error" in result && result.error) || "Nothing was charged.")}
-            {!done && !failed && `Status: ${result.status.replace(/_/g, " ")}`}
-          </p>
-          {result.txHash && (
-            <p className="mt-2 break-all text-[11px] text-muted-foreground">tx: {result.txHash}</p>
-          )}
-          <div className="mt-6 flex justify-center gap-3">
-            <button
-              onClick={() => { setResult(null); setAmount("") }}
-              className="rounded-xl border border-border/50 px-4 py-2 text-sm font-medium hover:bg-accent"
-            >
-              {isBuy ? "Buy more" : "Sell more"}
-            </button>
-            <Link href="/transactions" className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90">
-              View history
-            </Link>
-          </div>
-        </div>
-      </div>
+                ? cancelled ? "Order cancelled" : isBuy ? "Delivery didn't complete" : "Transfer didn't complete"
+                : isBuy ? "Buying your USDT" : "Selling your USDT"
+          }
+          caption={
+            done
+              ? isBuy
+                ? `$${(result as Buy).usdCharged.toFixed(2)} was charged to your Dollar Account. The USDT is in your ${NETWORKS.find((n) => n.key === result.network)?.label} wallet.`
+                : `$${(result as Sell).usdProceeds.toFixed(2)} was credited to your Dollar Account.`
+              : failed
+                ? failureCaption
+                : "This usually takes under a minute."
+          }
+          illustration={done ? (isBuy ? "cryptoBuy" : "noTransactions") : undefined}
+          stages={!failed ? stages : undefined}
+          activeIndex={done ? stages.length : stageIndex(stages, result.status)}
+          txHash={result.txHash}
+          primary={
+            done
+              ? { label: "View history", href: "/transactions" }
+              : failed
+                ? { label: "Start over", onClick: () => { setResult(null); setAmount("") } }
+                : undefined
+          }
+          secondary={
+            done
+              ? { label: isBuy ? "Buy more" : "Sell more", onClick: () => { setResult(null); setAmount("") } }
+              : failed
+                ? { label: "View history", href: "/transactions" }
+                : undefined
+          }
+        />
+      </FlowShell>
     )
   }
 
-  // ── Form ──────────────────────────────────────────────────────────────────
+  /* ── Form ───────────────────────────────────────────────────────────── */
   return (
-    <div className="mx-auto max-w-md px-4 py-10">
-      <h1 className="font-display text-2xl font-bold tracking-[-0.01em]">{isBuy ? "Buy USDT" : "Sell USDT"}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {isBuy
-          ? "Pay from your Dollar Account — USDT lands in your wallet."
-          : "USDT leaves your wallet — dollars land in your Dollar Account."}
-      </p>
-
-      {cashUsd !== null && (
-        <div className="mt-4 flex items-center justify-between rounded-xl bg-card px-4 py-3">
-          <span className="text-sm text-muted-foreground">Dollar Account</span>
-          <span className="text-sm font-semibold tabular-nums">${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-        </div>
-      )}
+    <FlowShell>
+      <PageHeader
+        title={isBuy ? "Deposit USDT" : "Withdraw USDT"}
+        subtitle={
+          isBuy
+            ? "Pay from your Dollar Account — USDT lands in your wallet."
+            : "USDT leaves your wallet — dollars land in your Dollar Account."
+        }
+        className="mb-5"
+      />
 
       {loading ? (
-        <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
+        <FlowSkeleton />
+      ) : loadError ? (
+        <UnavailablePanel title="We couldn't load this screen" reason={`${loadError} — refresh to try again.`} />
       ) : enabled.length === 0 ? (
-        <p className="mt-6 text-sm text-warning">
-          {isBuy ? "Buying" : "Selling"} is temporarily unavailable. Try again later.
-        </p>
+        <UnavailablePanel
+          title={isBuy ? "Buying is paused right now" : "Selling is paused right now"}
+          reason="The treasury is topping up. This is usually brief — check back in a few minutes."
+          illustration={isBuy ? "cryptoBuy" : "noTransactions"}
+        />
       ) : (
-        <>
-          <div className="mt-6">
-            <label className="text-xs font-medium text-muted-foreground">Network</label>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {enabled.map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setNetwork(n)}
-                  className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${network === n ? "border-primary bg-primary/10 text-primary" : "border-border/50 hover:bg-accent"}`}
-                >
-                  {NETWORK_LABELS[n]}
-                </button>
-              ))}
-            </div>
+        <div className="flex flex-col gap-4">
+          <ContextPanel
+            rows={[
+              ...(cashUsd !== null
+                ? [{ label: "Dollar Account", value: `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}` }]
+                : []),
+            ]}
+          />
+
+          <div className="rounded-2xl bg-card px-4 py-5">
+            <AmountField
+              value={amount}
+              onChange={setAmount}
+              unit="USDT"
+              hint={`Min ${limits.min} · Max ${limits.max.toLocaleString()}`}
+              problem={amountProblem}
+              maxSpend={maxSpendUsdt}
+              presets={!maxSpendUsdt ? [10, 50, 100, 500].filter((p) => p >= limits.min && p <= limits.max) : undefined}
+            />
           </div>
 
-          <div className="mt-4">
-            <label className="text-xs font-medium text-muted-foreground">
-              Amount (USDT) — {limits.min} to {limits.max.toLocaleString()}
-            </label>
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-              inputMode="decimal"
-              placeholder="0.00"
-              className="mt-2 w-full rounded-xl border border-border/50 bg-background px-4 py-3 text-lg font-semibold tabular-nums outline-none focus:border-primary"
+          <div className="flex flex-col gap-2">
+            <Eyebrow>{isBuy ? "Receive on" : "Send from"}</Eyebrow>
+            <ChoiceRow
+              options={NETWORKS.filter((n) => enabled.includes(n.key)).map((n) => ({ key: n.key, label: n.label, icon: n.icon }))}
+              value={network}
+              onChange={setNetwork}
             />
           </div>
 
           {amt > 0 && (
-            <div className="mt-3 flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">
-                {isBuy ? "You pay" : "You receive"}
-                {limits.feePercent > 0 && ` (incl. ${limits.feePercent}% fee)`}
-              </span>
-              <span className="font-semibold tabular-nums">${usdSide.toFixed(2)}</span>
-            </div>
+            <DetailPanel
+              rows={[
+                { label: isBuy ? "You receive" : "You sell", value: `${amt.toLocaleString()} USDT` },
+                ...(limits.feePercent > 0 ? [{ label: "Fee", value: `${limits.feePercent}%` }] : []),
+                {
+                  label: isBuy ? "You pay" : "You receive",
+                  value: `$${usdSide.toFixed(2)}`,
+                  strong: true,
+                },
+              ]}
+            />
           )}
 
-          {insufficientCash && (
-            <p className="mt-2 text-xs text-warning">
-              Not enough in your Dollar Account. Top it up on the Worldstreet home.
-            </p>
-          )}
-          {error && <p className="mt-2 text-xs text-debit">{error}</p>}
+          {submitError && <InlineNotice tone="error">{submitError}</InlineNotice>}
 
-          <button
-            onClick={submit}
-            disabled={!canSubmit}
-            className="mt-6 w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {submitting ? "Working…" : isBuy ? `Buy ${amt > 0 ? `${amt} ` : ""}USDT` : `Sell ${amt > 0 ? `${amt} ` : ""}USDT`}
-          </button>
-        </>
+          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker} busy={submitting} />
+        </div>
       )}
-    </div>
+    </FlowShell>
   )
 }

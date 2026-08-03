@@ -2,15 +2,27 @@
 
 /**
  * Fund / withdraw the Hyperliquid trading account against the Dollar Account —
- * the web equivalent of mobile's FundScreen and WithdrawScreen.
+ * same poll-driven state machine as before, rebuilt on the flow kit.
  *
  * Fund: USD hold → treasury USDC on Arbitrum → HL bridge → Spot/Perps.
  * Withdraw: HL → treasury → USD credited to the Dollar Account.
- * Both: initiate then poll the reference until a terminal status.
  */
 
 import * as React from "react"
-import Link from "next/link"
+import { Eyebrow, PageHeader, illustrations } from "@/components/ui/system"
+import {
+  FlowShell,
+  ContextPanel,
+  AmountField,
+  ChoiceRow,
+  DetailPanel,
+  InlineNotice,
+  FlowCta,
+  StatusScreen,
+  UnavailablePanel,
+  FlowSkeleton,
+  type Stage,
+} from "@/components/ui/flow"
 import {
   fetchFundAvailability,
   fetchTradingWithdrawInfo,
@@ -30,6 +42,37 @@ import {
   type FundDestination,
 } from "@/lib/crypto-api"
 
+/**
+ * The service's fine-grained statuses collapse onto a four-step story the
+ * user can actually follow (mobile FundScreen's checklist).
+ */
+const FUND_STAGES: Stage[] = [
+  { key: "charge", label: "Charging your Dollar Account" },
+  { key: "send", label: "Sending USDC on Arbitrum" },
+  { key: "bridge", label: "Bridging into Hyperliquid" },
+  { key: "land", label: "Landing in your trading balance" },
+]
+const FUND_STAGE_INDEX: Record<string, number> = {
+  pending: 0,
+  usd_held: 1,
+  disbursing: 1,
+  usdc_arrived: 2,
+  bridging: 2,
+  transferring: 3,
+  completed: 4,
+}
+
+const WITHDRAW_STAGES: Stage[] = [
+  { key: "request", label: "Requesting the withdrawal" },
+  { key: "leave", label: "Leaving Hyperliquid" },
+  { key: "credit", label: "Crediting your Dollar Account" },
+]
+const WITHDRAW_STAGE_INDEX: Record<string, number> = {
+  pending: 0,
+  hl_withdrawing: 1,
+  completed: 3,
+}
+
 type Mode = "fund" | "withdraw"
 
 export function FundClient({ mode }: { mode: Mode }) {
@@ -43,8 +86,9 @@ export function FundClient({ mode }: { mode: Mode }) {
   const [walletReady, setWalletReady] = React.useState<boolean | null>(null)
   const [settingUp, setSettingUp] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+  const [submitError, setSubmitError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<Fund | TradingWithdraw | null>(null)
 
   React.useEffect(() => {
@@ -63,8 +107,9 @@ export function FundClient({ mode }: { mode: Mode }) {
           if (cancelled) return
           setLimits({ min: i.minUsdc, max: i.maxUsdc, feePercent: i.feePercent, enabled: i.enabled, reason: "" })
         }
+        setLoadError(null)
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load")
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "We couldn't load this screen.")
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -101,21 +146,43 @@ export function FundClient({ mode }: { mode: Mode }) {
   }, [result, isFund])
 
   const amt = parseFloat(amount) || 0
-  const insufficient = isFund
-    ? cashUsd !== null && amt * (1 + limits.feePercent / 100) > cashUsd
-    : hl !== null && amt > (side === "spot" ? hl.spot : hl.perps)
-  const canSubmit = !submitting && limits.enabled && walletReady === true && amt >= limits.min && amt <= limits.max && !insufficient
+  const sourceBalance = isFund ? cashUsd : hl ? (side === "spot" ? hl.spot : hl.perps) : null
+  const costUsd = isFund ? amt * (1 + limits.feePercent / 100) : amt
+  const shortBy = sourceBalance !== null ? costUsd - sourceBalance : 0
+  const insufficient = sourceBalance !== null && costUsd > sourceBalance
+  const maxSpend = sourceBalance !== null
+    ? Math.min(limits.max, isFund ? sourceBalance / (1 + limits.feePercent / 100) : sourceBalance)
+    : null
+
+  const blocker =
+    amt <= 0 ? "Enter an amount"
+    : amt < limits.min ? `Minimum is ${limits.min} USDC`
+    : amt > limits.max ? `Maximum is ${limits.max.toLocaleString()} USDC`
+    : insufficient ? (isFund ? "Not enough in your Dollar Account" : "Not enough in that balance")
+    : null
+  const ctaLabel = submitting
+    ? isFund ? "Starting the transfer…" : "Requesting withdrawal…"
+    : blocker ?? (isFund ? `Fund ${side === "spot" ? "Spot" : "Futures"} with ${amt.toLocaleString()} USDC` : `Withdraw ${amt.toLocaleString()} USDC`)
+
+  const amountProblem =
+    amt > 0 && amt < limits.min ? `The minimum is ${limits.min} USDC.`
+    : amt > limits.max ? `The maximum is ${limits.max.toLocaleString()} USDC per transfer.`
+    : insufficient
+      ? isFund
+        ? `You need $${shortBy.toFixed(2)} more in your Dollar Account for this transfer.`
+        : `Your ${side === "spot" ? "Spot" : "Futures"} balance only has $${(sourceBalance ?? 0).toFixed(2)} available.`
+      : null
 
   async function submit() {
     setSubmitting(true)
-    setError(null)
+    setSubmitError(null)
     try {
       const res = isFund
         ? await initiateFund({ amountUsdc: amt, destination: side })
         : await initiateTradingWithdraw({ amountUsdc: amt, source: side })
       setResult(res)
     } catch (e) {
-      setError(e instanceof CryptoApiError ? e.message : "Something went wrong. Try again.")
+      setSubmitError(e instanceof CryptoApiError ? e.message : "Something went wrong before anything moved — it's safe to try again.")
     } finally {
       setSubmitting(false)
     }
@@ -123,139 +190,178 @@ export function FundClient({ mode }: { mode: Mode }) {
 
   async function handleSetup() {
     setSettingUp(true)
-    setError(null)
+    setSubmitError(null)
     try {
       await setupTradingWallet()
       setWalletReady(true)
     } catch (e) {
-      setError(e instanceof CryptoApiError ? e.message : "Setup failed. Try again.")
+      setSubmitError(e instanceof CryptoApiError ? e.message : "Setup didn't complete — try again.")
     } finally {
       setSettingUp(false)
     }
   }
 
+  /* ── Status screen ──────────────────────────────────────────────────── */
   if (result) {
-    const terminal: string[] = isFund ? FUND_TERMINAL : TRADING_WITHDRAW_TERMINAL
     const done = result.status === "completed"
     const failed = result.status === "failed"
-    const inFlight = !terminal.includes(result.status)
+    const stages = isFund ? FUND_STAGES : WITHDRAW_STAGES
+    const index = done
+      ? stages.length
+      : (isFund ? FUND_STAGE_INDEX : WITHDRAW_STAGE_INDEX)[result.status] ?? 0
+    const eta = !isFund && "expectedSeconds" in result && result.expectedSeconds > 0
+      ? Math.max(1, Math.round(result.expectedSeconds / 60))
+      : null
+
     return (
-      <div className="mx-auto max-w-md px-4 py-10">
-        <div className="rounded-2xl bg-card p-6 text-center">
-          <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full ${done ? "bg-credit-chip" : failed ? "bg-debit-chip" : "bg-primary/10"}`}>
-            <span className="text-2xl">{done ? "✓" : failed ? "✕" : "…"}</span>
-          </div>
-          <p className="text-base font-semibold">
-            {done
-              ? `${result.amountUsdc} USDC ${isFund ? "delivered" : "withdrawn"}`
+      <FlowShell>
+        <StatusScreen
+          state={done ? "success" : failed ? "failure" : "processing"}
+          headline={
+            done
+              ? `${result.amountUsdc.toLocaleString()} USDC ${isFund ? "delivered" : "withdrawn"}`
               : failed
-                ? `${isFund ? "Funding" : "Withdrawal"} failed`
-                : `${isFund ? "Funding" : "Withdrawing"}…`}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {result.message ?? (inFlight ? `Status: ${result.status.replace(/_/g, " ")}` : "")}
-          </p>
-          {"partial" in result && result.partial && (
-            <p className="mt-2 text-xs text-warning">
-              Funds arrived but not where requested — contact support if they don&apos;t appear.
-            </p>
-          )}
-          <div className="mt-6 flex justify-center gap-3">
-            <button onClick={() => { setResult(null); setAmount("") }} className="rounded-xl border border-border/50 px-4 py-2 text-sm font-medium hover:bg-accent">
-              Done
-            </button>
-            <Link href="/trade" className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90">
-              Go trade
-            </Link>
-          </div>
-        </div>
-      </div>
+                ? isFund ? "Funding didn't complete" : "Withdrawal didn't complete"
+                : isFund ? "Funding your trading account" : "Withdrawing to your Dollar Account"
+          }
+          caption={
+            done
+              ? isFund
+                ? `Your ${side === "spot" ? "Spot" : "Futures"} balance is topped up and ready to trade.`
+                : `$${("creditUsd" in result ? result.creditUsd : result.amountUsdc).toFixed(2)} was credited to your Dollar Account.`
+              : failed
+                ? result.message ??
+                  (isFund
+                    ? "The transfer stopped before completing. Anything already charged will be returned automatically — support has been notified."
+                    : "The withdrawal stopped before completing. Your trading balance is untouched — it's safe to try again.")
+                : eta
+                  ? `Usually takes about ${eta} minute${eta > 1 ? "s" : ""}.`
+                  : "This can take a couple of minutes."
+          }
+          illustration={done ? "cryptoTrade" : undefined}
+          stages={!failed ? stages : undefined}
+          activeIndex={index}
+          notice={
+            "partial" in result && result.partial
+              ? "Funds arrived but not exactly where requested — contact support if they don't show up in a few minutes."
+              : undefined
+          }
+          primary={
+            done
+              ? { label: "Go trade", href: "/trade" }
+              : failed
+                ? { label: "Start over", onClick: () => { setResult(null); setAmount("") } }
+                : undefined
+          }
+          secondary={
+            done
+              ? { label: "Done", onClick: () => { setResult(null); setAmount("") } }
+              : failed
+                ? { label: "View history", href: "/transactions" }
+                : undefined
+          }
+        />
+      </FlowShell>
     )
   }
 
+  /* ── Form ───────────────────────────────────────────────────────────── */
   return (
-    <div className="mx-auto max-w-md px-4 py-10">
-      <h1 className="font-display text-2xl font-bold tracking-[-0.01em]">{isFund ? "Fund trading account" : "Withdraw trading balance"}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {isFund
-          ? "Pay from your Dollar Account — funds land in your Hyperliquid balance ready to trade."
-          : "Move funds from Hyperliquid back to your Dollar Account."}
-      </p>
-
-      <div className="mt-4 space-y-2">
-        {cashUsd !== null && (
-          <div className="flex items-center justify-between rounded-xl bg-card px-4 py-3">
-            <span className="text-sm text-muted-foreground">Dollar Account</span>
-            <span className="text-sm font-semibold tabular-nums">${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-        )}
-        {hl && (
-          <div className="flex items-center justify-between rounded-xl bg-card px-4 py-3">
-            <span className="text-sm text-muted-foreground">Trading balance</span>
-            <span className="text-sm font-semibold tabular-nums">
-              Spot ${hl.spot.toFixed(2)} · Futures ${hl.perps.toFixed(2)}
-            </span>
-          </div>
-        )}
-      </div>
+    <FlowShell>
+      <PageHeader
+        title={isFund ? "Fund trading account" : "Withdraw trading balance"}
+        subtitle={
+          isFund
+            ? "Pay from your Dollar Account — funds land in Hyperliquid ready to trade."
+            : "Move funds from Hyperliquid back to your Dollar Account."
+        }
+        className="mb-5"
+      />
 
       {loading ? (
-        <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
+        <FlowSkeleton />
+      ) : loadError ? (
+        <UnavailablePanel title="We couldn't load this screen" reason={`${loadError} — refresh to try again.`} />
       ) : walletReady === false ? (
-        <div className="mt-6 rounded-2xl bg-card p-5">
-          <p className="text-sm font-semibold">Set up your trading account</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            One-time step — designates your wallet for Hyperliquid trading.
+        /* One-time setup gate — a real screen with a single clear action. */
+        <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-8 text-center">
+          <img src={illustrations.cryptoTrade} alt="" className="h-24 w-24 object-contain" />
+          <p className="text-[15px] font-semibold">Set up your trading account</p>
+          <p className="mx-auto max-w-xs text-[13px] leading-relaxed text-muted-foreground">
+            A one-time step that designates your wallet for Hyperliquid trading. Takes a few seconds.
           </p>
-          <button onClick={handleSetup} disabled={settingUp} className="mt-4 w-full rounded-xl bg-primary py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-40">
+          {submitError && <InlineNotice tone="error" className="w-full text-left">{submitError}</InlineNotice>}
+          <button
+            onClick={handleSetup}
+            disabled={settingUp}
+            className="mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+          >
+            {settingUp && <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" />}
             {settingUp ? "Setting up…" : "Set up trading account"}
           </button>
-          {error && <p className="mt-2 text-xs text-debit">{error}</p>}
         </div>
       ) : !limits.enabled ? (
-        <p className="mt-6 text-sm text-warning">
-          {limits.reason || `${isFund ? "Funding" : "Withdrawing"} is temporarily unavailable.`}
-        </p>
+        <UnavailablePanel
+          title={isFund ? "Funding is paused right now" : "Withdrawals are paused right now"}
+          reason={limits.reason || undefined}
+          illustration="cryptoTrade"
+        />
       ) : (
-        <>
-          <div className="mt-6">
-            <label className="text-xs font-medium text-muted-foreground">{isFund ? "Destination" : "From"}</label>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {(["spot", "perps"] as const).map((s) => (
-                <button key={s} onClick={() => setSide(s)}
-                  className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${side === s ? "border-primary bg-primary/10 text-primary" : "border-border/50 hover:bg-accent"}`}>
-                  {s === "spot" ? "Spot" : "Futures"}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="flex flex-col gap-4">
+          <ContextPanel
+            rows={[
+              ...(cashUsd !== null
+                ? [{ label: "Dollar Account", value: `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}` }]
+                : []),
+              ...(hl
+                ? [{ label: "Trading balance", value: `Spot $${hl.spot.toFixed(2)} · Futures $${hl.perps.toFixed(2)}` }]
+                : []),
+            ]}
+          />
 
-          <div className="mt-4">
-            <label className="text-xs font-medium text-muted-foreground">
-              Amount (USDC) — {limits.min} to {limits.max.toLocaleString()}
-            </label>
-            <input
+          <div className="rounded-2xl bg-card px-4 py-5">
+            <AmountField
               value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-              inputMode="decimal"
-              placeholder="0.00"
-              className="mt-2 w-full rounded-xl border border-border/50 bg-background px-4 py-3 text-lg font-semibold tabular-nums outline-none focus:border-primary"
+              onChange={setAmount}
+              unit="USDC"
+              hint={`Min ${limits.min} · Max ${limits.max.toLocaleString()}`}
+              problem={amountProblem}
+              maxSpend={maxSpend}
             />
           </div>
 
-          {insufficient && (
-            <p className="mt-2 text-xs text-warning">
-              {isFund ? "Not enough in your Dollar Account." : "Not enough in that trading balance."}
-            </p>
-          )}
-          {error && <p className="mt-2 text-xs text-debit">{error}</p>}
+          <div className="flex flex-col gap-2">
+            <Eyebrow>{isFund ? "Destination" : "Withdraw from"}</Eyebrow>
+            <ChoiceRow
+              columns={2}
+              options={[
+                { key: "spot" as const, label: "Spot", sub: hl ? `$${hl.spot.toFixed(2)}` : undefined },
+                { key: "perps" as const, label: "Futures", sub: hl ? `$${hl.perps.toFixed(2)}` : undefined },
+              ]}
+              value={side}
+              onChange={setSide}
+            />
+          </div>
 
-          <button onClick={submit} disabled={!canSubmit}
-            className="mt-6 w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">
-            {submitting ? "Working…" : isFund ? "Fund account" : "Withdraw"}
-          </button>
-        </>
+          {amt > 0 && (
+            <DetailPanel
+              rows={[
+                { label: isFund ? "To your trading balance" : "From your trading balance", value: `${amt.toLocaleString()} USDC` },
+                ...(limits.feePercent > 0 ? [{ label: "Fee", value: `${limits.feePercent}%` }] : []),
+                {
+                  label: isFund ? "Charged to Dollar Account" : "Credited to Dollar Account",
+                  value: `$${costUsd.toFixed(2)}`,
+                  strong: true,
+                },
+              ]}
+            />
+          )}
+
+          {submitError && <InlineNotice tone="error">{submitError}</InlineNotice>}
+
+          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker} busy={submitting} />
+        </div>
       )}
-    </div>
+    </FlowShell>
   )
 }

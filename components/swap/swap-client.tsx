@@ -90,7 +90,7 @@ function TokenSelectModal({
                 <button
                   key={sym}
                   onClick={() => { onSelect(coin); onClose() }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border/40 px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
                 >
                   {coin.image && <img src={coin.image} alt={sym} className="h-4 w-4 rounded-full" />}
                   {sym}
@@ -228,7 +228,7 @@ function QuoteCard({
   const priceImpact = quoteData?.priceImpact ?? (fromAmount * fromPrice > 100000 ? 0.15 : fromAmount * fromPrice > 10000 ? 0.05 : 0.01)
 
   return (
-    <div className="rounded-xl border border-border/30 bg-accent/20 p-3 space-y-2">
+    <div className="rounded-xl bg-surface-sunken/70 p-3 space-y-2">
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Exchange Rate</span>
         <span className="font-medium tabular-nums">
@@ -687,7 +687,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                 <ErrorState message={error} />
               ) : (
               <>
-              <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
+              <div className="rounded-xl bg-surface-sunken/70 p-3.5">
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[11px] font-medium text-muted-foreground">You pay</span>
                   <span className="text-[11px] text-muted-foreground">Balance: {fromCoinBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
@@ -728,7 +728,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                   />
                   <button
                     onClick={() => setShowFromModal(true)}
-                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-card border border-border/40 px-2.5 py-1.5 transition-colors hover:bg-accent"
+                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-accent px-2.5 py-1.5 transition-colors hover:bg-accent/70"
                   >
                     {fromCoin ? (
                       <>
@@ -747,7 +747,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                     <button
                       key={pct}
                       onClick={() => setPercentage(pct)}
-                      className="flex-1 rounded-lg bg-accent/50 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                      className="flex-1 rounded-full bg-background/60 py-1 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
                       {pct === 1 ? "MAX" : `${pct * 100}%`}
                     </button>
@@ -789,7 +789,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
               </div>
 
               {/* ── To ── */}
-              <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
+              <div className="rounded-xl bg-surface-sunken/70 p-3.5">
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[11px] font-medium text-muted-foreground">You receive</span>
                 </div>
@@ -805,7 +805,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                   </div>
                   <button
                     onClick={() => setShowToModal(true)}
-                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-card border border-border/40 px-2.5 py-1.5 transition-colors hover:bg-accent"
+                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-accent px-2.5 py-1.5 transition-colors hover:bg-accent/70"
                   >
                     {toCoin ? (
                       <>
@@ -871,9 +871,9 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                     : "bg-debit-chip text-debit"
                 }`}>
                   {swapResult.success && swapResult.status === "DONE"
-                    ? `Swap confirmed! Tx: ${swapResult.txHash?.slice(0, 10)}...${swapResult.txHash?.slice(-6)}`
+                    ? `Swap confirmed — ${swapResult.txHash?.slice(0, 10)}…${swapResult.txHash?.slice(-6)}. It will appear in your history shortly.`
                     : swapResult.success && swapResult.status === "PENDING"
-                    ? `Swap submitted — awaiting confirmation. Tx: ${swapResult.txHash?.slice(0, 10)}...${swapResult.txHash?.slice(-6)}`
+                    ? `Swap submitted — waiting for the chain to confirm (${swapResult.txHash?.slice(0, 10)}…${swapResult.txHash?.slice(-6)}). Safe to leave this page.`
                     : swapResult.error}
                 </div>
               )}
@@ -887,9 +887,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
               <button
                 disabled={!canSwap}
                 onClick={handleSwap}
-                className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed ${
-                  insufficientBalance ? "bg-red-500" : "bg-primary hover:bg-primary/90"
-                }`}
+                className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {(quoteLoading || swapLoading) && <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin" />}
                 {buttonText}
