@@ -50,11 +50,11 @@
     --sidebar-ring: oklch(0.714 0.014 41.2);
 }
 
-/* ── Dark theme — the Worldstreet hub's ladder.
-   NEUTRAL greys, not warm stone. The ladder, in order:
-     #050505 canvas → #0D0D0D sunken → #131313 card → #1F1F1F raised
-   Each step is ~8–12 points apart, which is what makes a card read as a panel
-   and a segmented thumb read as raised. */
+/* ── Dark theme — the Worldstreet stone ladder.
+   These are the values the hub's cards use (its `@theme` canvas/elev/elev-2
+   tokens, NOT its shadcn --card, which nothing renders) and the same ones the
+   mobile app's theme.ts ships. Warm stone, in order:
+     #0C0A09 canvas → #141110 sunken → #1C1917 card → #292524 raised */
 .dark {
     /* Money direction (Tailwind 500s — picked to glow on near-black).
        Chip tints at 14% so they read on these surfaces. */
@@ -63,26 +63,26 @@
     --debit: #EF4444;
     --debit-chip: rgba(239, 68, 68, 0.14);
     --convert-chip: rgba(234, 179, 8, 0.14);
-    /* Written as HEX on purpose. The equivalent oklch lightnesses are not the
-       round numbers they look like — oklch(0.09 0 0) is #020202, NOT #111111 —
-       so hex keeps the ladder honest and reviewable. */
-    /* Recessed step — sits BELOW --card, so a segmented track reads as a
-       groove on the page and inside a card alike. */
-    --surface-sunken: #0D0D0D;
+    /* Written as HEX on purpose — these are the exact values the hub's cards
+       and the mobile app both use, and oklch round numbers don't map to them
+       (oklch(0.09 0 0) is #020202, not #111111). */
+    /* Panels that sit UNDER a primary one (the transactions sheet). */
+    --surface-sunken: #141110;
 
-    --background: #050505;                /* the canvas */
+    --background: #0C0A09;                /* canvas   — hub `bg-canvas` */
     --foreground: oklch(0.986 0.002 67.8);
-    --card: #131313;                      /* elevated surface */
+    --card: #1C1917;                      /* surface  — hub `bg-elev` */
     --card-foreground: oklch(0.986 0.002 67.8);
-    --popover: #131313;
+    --popover: #1C1917;
     --popover-foreground: oklch(0.986 0.002 67.8);
     --primary: oklch(0.795 0.184 86.047);
     --primary-foreground: oklch(0.147 0.004 49.3);
-    --secondary: #1C1C1C;
+    --secondary: #292524;
     --secondary-foreground: oklch(0.985 0 0);
-    --muted: #1C1C1C;
-    --muted-foreground: #9A9A9A;          /* neutral mid-grey */
-    --accent: #1F1F1F;                    /* raised: active thumb, hover */
+    --muted: #292524;
+    --muted-foreground: #A8A29E;          /* hub `ink-muted` */
+    --subtle: #78716C;                    /* hub `ink-subtle` — eyebrows */
+    --accent: #292524;                    /* raised   — hub `elev-2` */
     --accent-foreground: oklch(0.986 0.002 67.8);
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
@@ -93,11 +93,11 @@
     --chart-3: oklch(0.681 0.162 75.834);
     --chart-4: oklch(0.554 0.135 66.442);
     --chart-5: oklch(0.476 0.114 61.907);
-    --sidebar: #0A0A0A;
+    --sidebar: #141110;
     --sidebar-foreground: oklch(0.986 0.002 67.8);
     --sidebar-primary: oklch(0.795 0.184 86.047);
     --sidebar-primary-foreground: oklch(0.987 0.026 102.212);
-    --sidebar-accent: #1F1F1F;
+    --sidebar-accent: #292524;
     --sidebar-accent-foreground: oklch(0.986 0.002 67.8);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.547 0.021 43.1);
@@ -112,6 +112,7 @@
     --color-debit-chip: var(--debit-chip);
     --color-convert-chip: var(--convert-chip);
     --color-surface-sunken: var(--surface-sunken);
+    --color-subtle: var(--subtle);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -147,7 +148,10 @@
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
+    /* Cards are 20px — the hub renders them as `rounded-[20px]`, softer than
+       the 13px the --radius ladder would give. Everything else keeps the
+       ladder, so only the card corner changes. */
+    --radius-2xl: 20px;
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
 }
@@ -162,14 +166,26 @@
   html {
     @apply font-sans;
     }
+
+  /* Film grain — same overlay the hub runs, so the two surfaces share texture.
+     Fixed, non-interactive, dark only (it's invisible on white anyway). */
+  .dark body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 50;
+    opacity: 0.02;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  }
 }
 
 /* ── Card styling ──────────────────────────────────────────────────────
-   Light mode gets a hairline; dark mode separates by FILL, not outline (the
-   mobile app's house rule). That works here because the ladder now has a real
-   step — #131313 card on a #050505 canvas — so the panel reads without an
-   edge. It only needed a border back when the tokens had collapsed to
-   #020202-on-#000000 and there was no fill difference left to see. */
+   Light mode gets a hairline; dark mode separates by FILL, not outline —
+   the hub renders its cards as bare `rounded-[20px] bg-elev` with no border,
+   and the #1C1917-on-#0C0A09 step is enough to read without one. */
 :root .rounded-2xl[class*="bg-card"],
 :root .rounded-xl[class*="bg-card"] {
   border: 1px solid var(--border);
