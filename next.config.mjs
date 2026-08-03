@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Ship only the traced server + its modules. The Dockerfile copies
+  // .next/standalone, so node_modules never reaches the runtime image.
+  output: "standalone",
   serverExternalPackages: ["mongoose"],
   // Nav menus link to account pages that don't exist yet — land somewhere
   // sensible instead of a 404 until those pages are built.

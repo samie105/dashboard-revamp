@@ -1,6 +1,7 @@
 {
   "name": "worldstreet-dashboard",
   "version": "0.0.1",
+  "packageManager": "pnpm@10.10.0",
   "type": "module",
   "private": true,
   "scripts": {
