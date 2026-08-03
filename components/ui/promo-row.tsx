@@ -146,18 +146,18 @@ export function PromoRow({
             <a
               href={card.href}
               aria-label={`${card.hero}. ${card.tagline}`}
-              className="group flex h-24 items-center overflow-hidden rounded-2xl bg-card pr-3 transition-transform active:scale-[0.985]"
+              className="group flex h-24 items-center gap-3 overflow-hidden rounded-2xl bg-card pl-3 pr-3 transition-transform active:scale-[0.985]"
             >
-              {/* art bleeds off the left edge so the card reads as a scene, not a row */}
+              {/* Sized to sit INSIDE the 96px card with clearance top and
+                  bottom — at the mobile's 104px it clipped against both edges. */}
               <img
                 src={illustrations[card.art]}
                 alt=""
                 loading="lazy"
-                className="-ml-1.5 mt-0.5 shrink-0 object-contain"
+                className="shrink-0 object-contain"
                 style={{
-                  width: 104 * (card.artScale ?? 1),
-                  height: 104 * (card.artScale ?? 1),
-                  marginLeft: card.artScale ? 6 : -6,
+                  width: 64 * (card.artScale ?? 1),
+                  height: 64 * (card.artScale ?? 1),
                 }}
               />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-3">
