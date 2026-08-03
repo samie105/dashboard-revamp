@@ -17,6 +17,7 @@ import {
   ChartLineData01Icon,
   Coins01Icon,
 } from "@hugeicons/core-free-icons"
+import { Balance, Eyebrow, IconAction, PageHeader, Segmented } from "@/components/ui/system"
 import { getPrices, getFuturesMarkets, type CoinData, type FuturesMarket } from "@/lib/actions"
 import { fetchTokenMetadata, addCustomToken, type CustomTokenChain } from "@/lib/crypto-api"
 import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
@@ -248,7 +249,7 @@ function AddTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
                 placeholder="Paste contract address"
                 className="w-full rounded-lg bg-accent/50 px-3 py-2 text-xs font-mono outline-none focus:bg-accent placeholder:text-muted-foreground/50"
               />
-              {lookupError && <p className="text-xs text-red-500">{lookupError}</p>}
+              {lookupError && <p className="text-xs text-debit">{lookupError}</p>}
               <div className="flex gap-2">
                 <button onClick={() => setStep("network")} className="flex-1 rounded-lg border border-border/30 px-4 py-2 text-xs font-medium hover:bg-accent transition-colors">Back</button>
                 <button onClick={handleLookup} disabled={!contractAddress.trim() || isLooking}
@@ -538,55 +539,52 @@ export default function AssetsClient() {
         </div>
       )}
 
-      {/* ═══ Portfolio Header Card ═══ */}
-      <div data-onboarding="portfolio-header" className="rounded-2xl bg-card p-5">
-        {/* Wallet view tabs */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-0.5">
-            {WALLET_VIEWS.map((view) => (
-              <button
-                key={view.key}
-                onClick={() => setActiveView(view.key)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  activeView === view.key
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                }`}
-              >
-                <HugeiconsIcon icon={view.icon} className="h-3 w-3" />
-                {view.label}
-              </button>
-            ))}
-          </div>
-          <button onClick={refresh} disabled={isRefreshing}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50">
-            <HugeiconsIcon icon={RefreshIcon} className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-            {isRefreshing ? "Syncing…" : "Refresh"}
-          </button>
+      {/* ═══ Assets header — page title, hero figure, one tab system ═══ */}
+      <div data-onboarding="portfolio-header" className="flex flex-col gap-4">
+        <PageHeader
+          title="Assets"
+          subtitle="Your crypto across chains"
+          actions={
+            <IconAction
+              icon={({ className }: { className?: string }) => (
+                <HugeiconsIcon icon={RefreshIcon} className={`${className} ${isRefreshing ? "animate-spin" : ""}`} />
+              )}
+              label={isRefreshing ? "Syncing…" : "Refresh"}
+              onClick={refresh}
+            />
+          }
+        />
+
+        <div className="-mx-1 max-w-full overflow-x-auto px-1 scrollbar-none">
+          <Segmented
+            options={WALLET_VIEWS.map((v) => ({ key: v.key, label: v.label }))}
+            value={activeView}
+            onChange={setActiveView}
+          />
         </div>
 
-        {/* Balance display */}
-        <div>
-          <span className="text-3xl font-bold tracking-tight tabular-nums">
-            {(activeView === "spot" ? spotV2Loading : activeView === "futures" ? hlPositionsLoading : (balancesLoading && onChainBalances.length === 0)) ? "Loading…" : `$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          </span>
-          <p className="text-[10px] text-muted-foreground mt-1">
+        {/* Balance hero */}
+        <div className="flex w-fit flex-col gap-1">
+          <Eyebrow>Est. Total Value</Eyebrow>
+          {(activeView === "spot" ? spotV2Loading : activeView === "futures" ? hlPositionsLoading : (balancesLoading && onChainBalances.length === 0)) ? (
+            <span className="font-display text-[clamp(2rem,4vw,3rem)] font-light text-muted-foreground">Loading…</span>
+          ) : (
+            <Balance
+              value={`$${displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              className="text-[clamp(2rem,4vw,3rem)]"
+            />
+          )}
+          <span className="text-[13px] text-muted-foreground">
             {WALLET_VIEWS.find((v) => v.key === activeView)?.sub}
-          </p>
-          {/* On-chain balance — always visible */}
-          <div className="mt-2 flex items-center gap-2">
-            <HugeiconsIcon icon={Wallet01Icon} className="h-3 w-3 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">
-              On-chain:{" "}
-              {balancesLoading && onChainBalances.length === 0 ? (
-                <span className="text-muted-foreground/50">Loading…</span>
-              ) : (
-                <span className="font-medium text-foreground">
+            {!balancesLoading && (
+              <>
+                {" · On-chain "}
+                <span className="font-medium text-foreground tabular-nums">
                   ${onChainTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
-              )}
-            </span>
-          </div>
+              </>
+            )}
+          </span>
         </div>
 
         {/* Divider + Chain selector — shown when Main tab is active */}
@@ -629,9 +627,9 @@ export default function AssetsClient() {
                 <span className="text-muted-foreground">{truncAddr(displayedAddress)}</span>
                 <HugeiconsIcon
                   icon={copied === activeChain.key ? CheckmarkSquare01Icon : Copy01Icon}
-                  className={`h-3 w-3 ${copied === activeChain.key ? "text-emerald-500" : "text-muted-foreground/60"}`}
+                  className={`h-3 w-3 ${copied === activeChain.key ? "text-credit" : "text-muted-foreground/60"}`}
                 />
-                {copied === activeChain.key && <span className="text-[10px] text-emerald-500">Copied!</span>}
+                {copied === activeChain.key && <span className="text-[10px] text-credit">Copied!</span>}
               </button>
             )}
           </div>
@@ -865,10 +863,10 @@ export default function AssetsClient() {
                           </td>
                           <td className="px-4 py-2.5 text-right">
                             <div className="flex flex-col items-end">
-                              <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
+                              <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-credit" : "text-debit"}`}>
                                 {isProfit ? "+" : ""}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
-                              <span className={`text-[10px] tabular-nums ${isProfit ? "text-emerald-500/70" : "text-red-500/70"}`}>
+                              <span className={`text-[10px] tabular-nums ${isProfit ? "text-credit/70" : "text-debit/70"}`}>
                                 {isProfit ? "+" : ""}{pnlPercent.toFixed(2)}%
                               </span>
                             </div>
@@ -939,7 +937,7 @@ export default function AssetsClient() {
                             ${m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: m.price < 1 ? 6 : 2 })}
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <span className={`text-xs font-medium tabular-nums ${pos ? "text-emerald-500" : "text-red-500"}`}>
+                            <span className={`text-xs font-medium tabular-nums ${pos ? "text-credit" : "text-debit"}`}>
                               {pos ? "+" : ""}{m.change24h.toFixed(2)}%
                             </span>
                           </td>
@@ -1020,7 +1018,7 @@ export default function AssetsClient() {
                         <tr key={pos.coin} className="transition-colors hover:bg-accent/30">
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2.5">
-                              <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded text-[9px] font-bold ${isLong ? "bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20" : "bg-red-500/10 text-red-600 ring-1 ring-red-500/20"}`}>
+                              <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded text-[9px] font-bold ${isLong ? "bg-credit-chip text-credit ring-1 ring-emerald-500/20" : "bg-debit-chip text-debit ring-1 ring-red-500/20"}`}>
                                 {isLong ? "L" : "S"}
                               </span>
                               {getCoinImage(pos.coin) ? (
@@ -1051,10 +1049,10 @@ export default function AssetsClient() {
                           </td>
                           <td className="px-4 py-2.5 text-right">
                             <div className="flex flex-col items-end">
-                              <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-emerald-500" : "text-red-500"}`}>
+                              <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-credit" : "text-debit"}`}>
                                 {isProfit ? "+" : ""}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
-                              <span className={`text-[10px] tabular-nums ${isProfit ? "text-emerald-500/70" : "text-red-500/70"}`}>
+                              <span className={`text-[10px] tabular-nums ${isProfit ? "text-credit/70" : "text-debit/70"}`}>
                                 {isProfit ? "+" : ""}{roe.toFixed(2)}%
                               </span>
                             </div>
@@ -1131,7 +1129,7 @@ export default function AssetsClient() {
                             ${m.markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: m.markPrice < 1 ? 6 : 2 })}
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <span className={`text-xs font-medium tabular-nums ${pos ? "text-emerald-500" : "text-red-500"}`}>
+                            <span className={`text-xs font-medium tabular-nums ${pos ? "text-credit" : "text-debit"}`}>
                               {pos ? "+" : ""}{m.change24h.toFixed(2)}%
                             </span>
                           </td>
@@ -1139,7 +1137,7 @@ export default function AssetsClient() {
                             {m.volume24h > 0 ? `$${(m.volume24h / 1_000_000).toFixed(2)}M` : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden md:table-cell">
-                            <span className={m.fundingRate >= 0 ? "text-emerald-500" : "text-red-500"}>
+                            <span className={m.fundingRate >= 0 ? "text-credit" : "text-debit"}>
                               {m.fundingRate >= 0 ? "+" : ""}{(m.fundingRate * 100).toFixed(4)}%
                             </span>
                           </td>
@@ -1164,11 +1162,11 @@ export default function AssetsClient() {
         <div className="lg:col-span-4 space-y-4">
           {/* Spot/perps funding moved to the dedicated /fund flow (Dollar
               Account → Hyperliquid), matching the mobile app. */}
-          <a href="/fund" className="block rounded-2xl border border-border/30 bg-card p-5 hover:border-primary/40 transition-colors">
+          <a href="/fund" className="block rounded-2xl bg-card p-5 hover:border-primary/40 transition-colors">
             <p className="text-sm font-semibold">Fund trading account</p>
             <p className="mt-1 text-xs text-muted-foreground">Move dollars into your Spot or Futures balance to trade.</p>
           </a>
-          <a href="/trading-withdraw" className="block rounded-2xl border border-border/30 bg-card p-5 hover:border-primary/40 transition-colors">
+          <a href="/trading-withdraw" className="block rounded-2xl bg-card p-5 hover:border-primary/40 transition-colors">
             <p className="text-sm font-semibold">Withdraw trading balance</p>
             <p className="mt-1 text-xs text-muted-foreground">Move funds from trading back to your Dollar Account.</p>
           </a>

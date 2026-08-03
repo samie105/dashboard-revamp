@@ -3,7 +3,7 @@ import { WalletCard } from "@/components/dashboard/user-card"
 import { DashboardGrid } from "@/components/dashboard/bento-grid"
 import { WalletCardSkeleton, DashboardGridSkeleton } from "@/components/dashboard/skeletons"
 import { DashboardOnboarding } from "@/components/dashboard/dashboard-onboarding"
-import { WorldStreetSections } from "@/components/dashboard/worldstreet-sections"
+import { Rise } from "@/components/ui/system"
 import { getPrices, getTrades } from "@/lib/actions"
 
 async function WalletCardLoader() {
@@ -34,16 +34,21 @@ async function DashboardGridLoader() {
 
 export default function Page() {
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
+    // overflow-x-hidden clips the hero's full-bleed negative margins; without
+    // it the -mx-4 bleed widens the document by 32px on a phone.
+    <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
       {/* Pending deposit banner (client component) */}
 
-      <Suspense fallback={<WalletCardSkeleton />}>
-        <WalletCardLoader />
-      </Suspense>
-      <WorldStreetSections />
-      <Suspense fallback={<DashboardGridSkeleton />}>
-        <DashboardGridLoader />
-      </Suspense>
+      <Rise>
+        <Suspense fallback={<WalletCardSkeleton />}>
+          <WalletCardLoader />
+        </Suspense>
+      </Rise>
+      <Rise delay={60}>
+        <Suspense fallback={<DashboardGridSkeleton />}>
+          <DashboardGridLoader />
+        </Suspense>
+      </Rise>
       <DashboardOnboarding />
     </div>
   )

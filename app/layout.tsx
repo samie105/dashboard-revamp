@@ -1,5 +1,5 @@
 import type { Viewport } from "next"
-import { Geist, Geist_Mono, Public_Sans } from "next/font/google"
+import { Geist_Mono, Poppins, Public_Sans } from "next/font/google"
 
 import "./globals.css"
 
@@ -21,6 +21,10 @@ import { WalletProvider } from "@/components/wallet-provider"
 
 
 const publicSans = Public_Sans({subsets:['latin'],variable:'--font-sans'})
+
+// The display/brand voice — the mobile app's `fonts.display*` (Poppins).
+// Headlines and hero figures lead with it; body/labels stay Public Sans.
+const poppins = Poppins({ subsets: ["latin"], weight: ["600", "700", "800"], variable: "--font-display" })
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
@@ -48,7 +52,7 @@ export default function RootLayout({
       <html
         lang="en"
         suppressHydrationWarning
-        className={cn("antialiased", fontMono.variable, "font-sans", publicSans.variable)}
+        className={cn("antialiased", fontMono.variable, "font-sans", publicSans.variable, poppins.variable)}
       >
         <body>
           <ThemeProvider>

@@ -6,14 +6,18 @@ import {
   Copy01Icon,
   Exchange01Icon,
   CreditCardIcon,
-  ArrowDown01Icon,
+  CoinsSwapIcon,
+  Clock01Icon,
+  EyeIcon,
   Wallet01Icon,
   Chart01Icon,
   ChartLineData01Icon,
   Coins01Icon,
-  Globe02Icon,
 } from "@hugeicons/core-free-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { ActionPill, Balance, DeltaChip, Eyebrow, Segmented } from "@/components/ui/system"
+import { SilkBackdrop } from "@/components/ui/silk-backdrop"
+import { NETWORKS, NETWORK_ICON } from "@/lib/networks"
 import { useAuth } from "@/components/auth-provider"
 import { useWallet } from "@/components/wallet-provider"
 import { ErrorState } from "@/components/error-state"
@@ -82,7 +86,9 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const { usdcBalance, accountValue, balances: hlBalances } = useHyperliquidBalance(user?.userId, !!user)
   const [isCopied, setIsCopied] = React.useState<string | null>(null)
   const [activeView, setActiveView] = React.useState<WalletView>("total")
-  const [selectedWallet, setSelectedWallet] = React.useState<"tron" | "solana" | "ethereum">("tron")
+  const [selectedWallet, setSelectedWallet] = React.useState<string>("ethereum")
+  // Balance privacy — masks render as fixed-width dots, never a layout jump.
+  const [hidden, setHidden] = React.useState(false)
 
   // SpotV2 ledger data (same source as assets page)
   const [spotLedger, setSpotLedger] = React.useState<LedgerBalance[]>([])
@@ -118,6 +124,20 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     }
     return total
   }, [onChainBalances, prices, walletsGenerated])
+
+  // What each chain is worth — the network strip's figures (mobile grammar:
+  // the strip carries value, chains are never hidden behind a dropdown).
+  const chainTotals = React.useMemo(() => {
+    const m: Record<string, number> = Object.fromEntries(NETWORKS.map((n) => [n.key, 0]))
+    for (const b of onChainBalances) {
+      const p = getPrice(prices, b.symbol)
+      const v = b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
+      // The feed keys by network (arbitrum is its own key even though it shares
+      // the ethereum address), so this maps 1:1 onto the strip.
+      if (m[b.chain] !== undefined) m[b.chain] += v
+    }
+    return m
+  }, [onChainBalances, prices])
 
   // Spot balance = SpotV2 ledger (available + locked) + positions value (matches assets page)
   const spotBalance = React.useMemo(() => {
@@ -166,9 +186,6 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
     : "Trader"
 
-  const tronAddress = addresses?.tron ?? ""
-  const solAddress = addresses?.solana ?? ""
-  const ethAddress = addresses?.ethereum ?? ""
   const currentView = WALLET_VIEWS.find((v) => v.key === activeView)!
 
   const handleCopy = (addr: string, chain: string) => {
@@ -181,161 +198,180 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
 
   if (error) return <ErrorState message={error} />
 
+  const MASK = "$••••••"
+  // All six receivable networks. Arbitrum reuses the Ethereum address, exactly
+  // as the mobile registry does — 6 networks, 5 wallet keys.
+  const WALLETS = NETWORKS.map((n) => ({
+    key: n.key,
+    label: n.label,
+    addr: addresses?.[n.chain] ?? "",
+    icon: NETWORK_ICON[n.key],
+  }))
+  const activeChain = WALLETS.find((w) => w.key === selectedWallet) ?? WALLETS[0]
+
+  const ACTIONS = [
+    { label: "Deposit",  href: "/buy",          icon: Exchange01Icon },
+    { label: "Withdraw", href: "/sell",         icon: CreditCardIcon },
+    { label: "Swap",     href: "/swap",         icon: CoinsSwapIcon },
+    { label: "Trade",    href: "/trade",        icon: ChartLineData01Icon },
+    { label: "History",  href: "/transactions", icon: Clock01Icon },
+  ]
+
   return (
-    <div className="rounded-2xl bg-card">
-      {/* ── Top: Greeting + Deposit / Withdraw ── */}
-      <div data-onboarding="dash-greeting" className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          {isLoaded ? (
-            <Avatar className="h-10 w-10">
-              <AvatarImage src={user?.imageUrl} alt={displayName} />
-              <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
-                {displayName.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          ) : (
-            <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
-          )}
-          <div className="flex flex-col">
-            <h2 className="text-base font-semibold tracking-tight">
-              {isLoaded ? `Welcome back, ${displayName}!` : "Loading…"}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Here&apos;s what&apos;s happening with your portfolio today.
-            </p>
+    <div className="flex flex-col gap-4">
+      {/* ── Hero block — the silk field runs behind everything down to the
+             action rail, exactly as the mobile HeaderBackdrop does. ── */}
+      <div className="relative -mx-4 -mt-4 px-4 pt-4 pb-5 md:-mx-6 md:-mt-6 md:px-6 md:pt-6 lg:-mx-8 lg:-mt-8 lg:px-8 lg:pt-8">
+        <SilkBackdrop className="rounded-b-3xl" />
+
+        <div className="relative flex flex-col gap-5">
+          {/* Greeting row */}
+          <div data-onboarding="dash-greeting" className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {isLoaded ? (
+                <Avatar className="h-9 w-9">
+                  <AvatarImage src={user?.imageUrl} alt={displayName} />
+                  <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
+                    {displayName.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              ) : (
+                <div className="h-9 w-9 animate-pulse rounded-full bg-muted" />
+              )}
+              <div className="flex flex-col">
+                <h2 className="text-sm font-semibold tracking-tight">
+                  {isLoaded ? `Welcome back, ${displayName}` : "Loading…"}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Here&apos;s what&apos;s happening with your portfolio today.
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div data-onboarding="dash-actions" className="flex items-center gap-2">
-          <a
-            href="/buy"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90"
-          >
-            <HugeiconsIcon icon={Exchange01Icon} className="h-3.5 w-3.5" />
-            Deposit
-          </a>
-          <a
-            href="/sell"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border/40 px-4 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-accent"
-          >
-            <HugeiconsIcon icon={CreditCardIcon} className="h-3.5 w-3.5" />
-            Withdraw
-          </a>
-        </div>
-      </div>
-
-      {/* ── Separator ── */}
-      <div className="h-px bg-border/30" />
-
-      {/* ── Balance selector ── */}
-      <div data-onboarding="dash-balance" className="flex flex-col gap-2 p-4 border-b border-border/30">
-        <div className="flex items-center gap-0.5">
-          {WALLET_VIEWS.map((view) => (
+          {/* Network strip — always on, value-carrying (mobile grammar) */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
             <button
-              key={view.key}
-              onClick={() => setActiveView(view.key)}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                activeView === view.key
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              onClick={() => setActiveView("total")}
+              className={`flex shrink-0 items-center gap-2.5 rounded-full py-2 pl-2 pr-4 transition-colors ${
+                activeView === "total" ? "bg-accent" : "bg-card/70 hover:bg-accent/60"
               }`}
             >
-              <HugeiconsIcon icon={view.icon} className="h-3 w-3" />
-              {view.label}
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/[0.12]">
+                <HugeiconsIcon icon={Coins01Icon} className="h-4 w-4 text-primary" />
+              </span>
+              <span className="flex flex-col items-start leading-tight">
+                <span className="text-[14px] font-semibold">All networks</span>
+                <span className="text-[12.5px] tabular-nums text-muted-foreground">
+                  {hidden ? "••••" : formatUSD(onChainTotal + spotBalance + futuresBalance)}
+                </span>
+              </span>
             </button>
-          ))}
-        </div>
-        <div className="flex items-end gap-3">
-          <span className="text-2xl font-bold tabular-nums tracking-tight">{formatUSD(displayedBalance)}</span>
-        </div>
-        {activeView === "main" && (() => {
-          const WALLETS = [
-            { chain: "tron"     as const, label: "Tron",     addr: tronAddress, icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
-            { chain: "solana"   as const, label: "Solana",   addr: solAddress,  icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
-            { chain: "ethereum" as const, label: "Ethereum", addr: ethAddress,  icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
-          ]
-          const active = WALLETS.find((w) => w.chain === selectedWallet) ?? WALLETS[0]
-          return (
-            <div className="flex items-center gap-2 mt-1">
-              {/* Chain selector */}
-              <div className="relative">
-                <img
-                  src={active.icon}
-                  alt=""
-                  className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full"
-                />
-                <select
-                  value={selectedWallet}
-                  onChange={(e) => setSelectedWallet(e.target.value as "tron" | "solana" | "ethereum")}
-                  className="appearance-none rounded-lg border border-border/30 bg-accent/30 py-1.5 pl-7 pr-6 text-[11px] font-medium text-foreground outline-none focus:border-primary/40 cursor-pointer"
-                >
-                  {WALLETS.map((w) => (
-                    <option key={w.chain} value={w.chain}>{w.label}</option>
-                  ))}
-                </select>
-                <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-              {/* Address + copy */}
-              {active.addr ? (
+            {WALLETS.map((w) => {
+              const active = activeView === "main" && w.key === selectedWallet
+              return (
                 <button
-                  onClick={() => handleCopy(active.addr, active.chain)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border/30 bg-accent/20 px-2.5 py-1.5 text-[11px] font-mono text-muted-foreground transition-colors hover:bg-accent"
+                  key={w.key}
+                  onClick={() => { setActiveView("main"); setSelectedWallet(w.key) }}
+                  className={`flex shrink-0 items-center gap-2.5 rounded-full py-2 pl-2 pr-4 transition-colors ${
+                    active ? "bg-accent" : "bg-card/70 hover:bg-accent/60"
+                  }`}
                 >
-                  {truncAddr(active.addr)}
-                  <HugeiconsIcon
-                    icon={Copy01Icon}
-                    className={`h-3 w-3 shrink-0 ${isCopied === active.chain ? "text-emerald-500" : "text-muted-foreground/50"}`}
-                  />
+                  <img src={w.icon} alt="" className="h-8 w-8 rounded-full" />
+                  <span className="flex flex-col items-start leading-tight">
+                    <span className="text-[14px] font-semibold">{w.label}</span>
+                    <span className="text-[12.5px] tabular-nums text-muted-foreground">
+                      {hidden ? "••••" : formatUSD(chainTotals[w.key] ?? 0)}
+                    </span>
+                  </span>
                 </button>
-              ) : (
-                <span className="text-[11px] text-muted-foreground/50">No address</span>
-              )}
+              )
+            })}
+          </div>
+
+          {/* Balance hero — the eyebrow/eye pair stays with the figure rather
+              than spanning the full desktop width the way it does on a phone. */}
+          <div data-onboarding="dash-balance" className="flex w-fit flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <Eyebrow>{activeView === "total" ? "Est. Total Value" : `${currentView.label} Balance`}</Eyebrow>
+              <button
+                onClick={() => setHidden((v) => !v)}
+                className={`transition-colors ${hidden ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"}`}
+                aria-label={hidden ? "Show balances" : "Hide balances"}
+              >
+                <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
+              </button>
             </div>
-          )
-        })()}
-        <span className="text-xs text-muted-foreground">{currentView.sub}</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <Balance value={formatUSD(displayedBalance)} hidden={hidden} mask={MASK} />
+              {dailyPnL !== 0 && !hidden && <DeltaChip value={dailyPnL} prefix="$" suffix="" />}
+            </div>
+            <span className="text-[13px] text-muted-foreground">{currentView.sub}</span>
+          </div>
+
+          {/* View tabs — directly under the figure they control. The wrapper
+              lets the bar scroll rather than push the page wide on a phone. */}
+          <div className="-mx-1 max-w-full overflow-x-auto px-1 scrollbar-none">
+            <Segmented
+              options={WALLET_VIEWS.map((v) => ({ key: v.key, label: v.label, icon: undefined }))}
+              value={activeView}
+              onChange={setActiveView}
+            />
+          </div>
+
+          {/* Address chip for the selected chain */}
+          {activeView === "main" && activeChain.addr && (
+            <button
+              onClick={() => handleCopy(activeChain.addr, activeChain.key)}
+              className="inline-flex w-fit items-center gap-1.5 rounded-full bg-card/70 px-3 py-1.5 font-mono text-[12px] text-muted-foreground transition-colors hover:bg-accent"
+            >
+              {truncAddr(activeChain.addr)}
+              <HugeiconsIcon
+                icon={Copy01Icon}
+                className={`h-3.5 w-3.5 shrink-0 ${isCopied === activeChain.key ? "text-credit" : "text-muted-foreground/50"}`}
+              />
+            </button>
+          )}
+
+          {/* Action rail */}
+          <div data-onboarding="dash-actions" className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+            {ACTIONS.map((a) => (
+              <ActionPill
+                key={a.label}
+                href={a.href}
+                label={a.label}
+                icon={({ className }) => <HugeiconsIcon icon={a.icon} className={className} />}
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* ── Stats row ── */}
-      <div data-onboarding="dash-stats" className="grid grid-cols-3 divide-x divide-border/30">
+      {/* ── Stats card ── */}
+      <div data-onboarding="dash-stats" className="grid grid-cols-1 divide-y divide-border/30 rounded-2xl bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         {/* Today's P&L */}
         <div className="flex flex-col gap-1.5 p-4">
-          <div className="flex items-center gap-1.5">
-            <div className={`h-1.5 w-1.5 rounded-full ${dailyPnL >= 0 ? "bg-emerald-500" : "bg-red-500"}`} />
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Today&apos;s P&amp;L
-            </span>
-          </div>
-          <span className={`text-xl font-bold tabular-nums tracking-tight ${dailyPnL >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-            {dailyPnL >= 0 ? "+" : ""}{formatUSD(dailyPnL)}
+          <Eyebrow>Today&apos;s P&amp;L</Eyebrow>
+          <span className={`text-xl font-bold tabular-nums tracking-tight ${dailyPnL >= 0 ? "text-credit" : "text-debit"}`}>
+            {hidden ? "••••" : `${dailyPnL >= 0 ? "+" : ""}${formatUSD(dailyPnL)}`}
           </span>
           <span className="text-xs text-muted-foreground">24h change</span>
         </div>
 
         {/* Assets */}
         <div className="flex flex-col gap-1.5 p-4">
-          <div className="flex items-center gap-1.5">
-            <HugeiconsIcon icon={Exchange01Icon} className="h-3 w-3 text-primary" />
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Assets
-            </span>
-          </div>
+          <Eyebrow>Assets</Eyebrow>
           <span className="text-xl font-bold tabular-nums tracking-tight">{activeAssetCount}</span>
           <span className="text-xs text-muted-foreground">Active tokens</span>
         </div>
 
-        {/* Networks */}
+        {/* Networks — driven by the registry, not a typed-in number */}
         <div className="flex flex-col gap-1.5 p-4">
-          <div className="flex items-center gap-1.5">
-            <HugeiconsIcon icon={Globe02Icon} className="h-3 w-3 text-primary" />
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Networks
-            </span>
-          </div>
-          <span className="text-xl font-bold tabular-nums tracking-tight">6</span>
-          <span className="text-xs text-muted-foreground">SOL · ETH · ARB · SUI · TON · TRX</span>
+          <Eyebrow>Networks</Eyebrow>
+          <span className="text-xl font-bold tabular-nums tracking-tight">{NETWORKS.length}</span>
+          <span className="text-xs text-muted-foreground">
+            {NETWORKS.map((n) => n.nativeSymbol).join(" · ")}
+          </span>
         </div>
       </div>
     </div>

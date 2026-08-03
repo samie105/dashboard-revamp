@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { Eyebrow, IconAction, PageHeader } from "@/components/ui/system"
 import {
   ArrowDown01Icon,
   ArrowUp01Icon,
@@ -51,8 +52,8 @@ const STATUS_PILLS: { key: UnifiedTransactionStatus | "all"; label: string }[] =
 const STATUS_CONFIG: Record<string, { color: string; label: string; icon: typeof CheckmarkCircle01Icon }> = {
   pending:     { color: "text-amber-500",        label: "Pending",    icon: Clock01Icon },
   processing:  { color: "text-orange-500",        label: "Processing", icon: Loading03Icon },
-  completed:   { color: "text-emerald-500",       label: "Completed",  icon: CheckmarkCircle01Icon },
-  failed:      { color: "text-red-500",           label: "Failed",     icon: AlertCircleIcon },
+  completed:   { color: "text-credit",       label: "Completed",  icon: CheckmarkCircle01Icon },
+  failed:      { color: "text-debit",           label: "Failed",     icon: AlertCircleIcon },
   cancelled:   { color: "text-muted-foreground",  label: "Cancelled",  icon: Cancel01Icon },
   expired:     { color: "text-muted-foreground",  label: "Expired",    icon: Clock01Icon },
 }
@@ -95,13 +96,13 @@ function getTypeConfig(tx: UnifiedTransaction) {
   switch (tx.type) {
     case "deposit":
     case "spot_deposit":
-      return { label: tx.type === "spot_deposit" ? "Spot Deposit" : "Deposit", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: ArrowDown01Icon }
+      return { label: tx.type === "spot_deposit" ? "Spot Deposit" : "Deposit", color: "text-credit", bg: "bg-credit-chip", icon: ArrowDown01Icon }
     case "withdrawal":
-      return { label: "Withdrawal", color: "text-red-400", bg: "bg-red-500/10", icon: ArrowUp01Icon }
+      return { label: "Withdrawal", color: "text-red-400", bg: "bg-debit-chip", icon: ArrowUp01Icon }
     case "p2p":
       return tx.subType === "buy"
-        ? { label: "P2P Deposit", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: ArrowDown01Icon }
-        : { label: "P2P Withdrawal", color: "text-red-400", bg: "bg-red-500/10", icon: ArrowUp01Icon }
+        ? { label: "P2P Deposit", color: "text-credit", bg: "bg-credit-chip", icon: ArrowDown01Icon }
+        : { label: "P2P Withdrawal", color: "text-red-400", bg: "bg-debit-chip", icon: ArrowUp01Icon }
     case "spot_trade":
     case "spot_order":
       return { label: tx.pair ? `Trade ${tx.pair}` : "Spot Trade", color: "text-blue-500", bg: "bg-blue-500/10", icon: Activity01Icon }
@@ -118,7 +119,7 @@ function getTypeConfig(tx: UnifiedTransaction) {
 }
 
 function getAmountColor(tx: UnifiedTransaction): string {
-  if (tx.type === "deposit" || tx.type === "spot_deposit" || (tx.type === "p2p" && tx.subType === "buy")) return "text-emerald-500"
+  if (tx.type === "deposit" || tx.type === "spot_deposit" || (tx.type === "p2p" && tx.subType === "buy")) return "text-credit"
   if (tx.type === "withdrawal" || (tx.type === "p2p" && tx.subType === "sell")) return "text-red-400"
   if (tx.type === "transfer" && tx.subType === "send") return "text-orange-500"
   return "text-foreground"
@@ -180,7 +181,7 @@ export function TransactionsClient() {
   // ── Stat cards ──
   const statCards = stats
     ? [
-        { label: "Deposits", value: String(stats.totalDeposits), sub: `${fmtAmount(stats.depositVolume)} USDT`, icon: ArrowDown01Icon, color: "text-emerald-500" },
+        { label: "Deposits", value: String(stats.totalDeposits), sub: `${fmtAmount(stats.depositVolume)} USDT`, icon: ArrowDown01Icon, color: "text-credit" },
         { label: "Withdrawals", value: String(stats.totalWithdrawals), sub: `${fmtAmount(stats.withdrawalVolume)} USDT`, icon: ArrowUp01Icon, color: "text-red-400" },
         { label: "Trades & Swaps", value: String(stats.totalTrades + stats.totalSwaps), sub: `${stats.totalTransfers} transfers`, icon: Activity01Icon, color: "text-blue-500" },
         { label: "Net Volume", value: `$${fmtAmount(stats.netVolume)}`, sub: "USDT total", icon: Exchange01Icon, color: "text-primary" },
@@ -188,50 +189,42 @@ export function TransactionsClient() {
     : null
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4 pt-6">
-      {/* ── Page Header ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-xl font-bold tracking-tight">Transactions</h1>
-          <p className="text-xs text-muted-foreground">Your complete transaction history</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => exportTransactionsPdf(transactions)}
-            disabled={transactions.length === 0}
-            className="hidden sm:flex items-center gap-1.5 rounded-lg border border-border/50 bg-background px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground disabled:opacity-50"
-          >
-            <HugeiconsIcon icon={Download01Icon} className="h-3 w-3" />
-            PDF
-          </button>
-          <button
-            onClick={refresh}
-            disabled={isLoading}
-            className="hidden sm:flex items-center gap-1.5 rounded-lg border border-border/50 bg-background px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground disabled:opacity-50"
-          >
-            {isLoading ? (
-              <HugeiconsIcon icon={Loading03Icon} className="h-3 w-3 animate-spin" />
-            ) : (
-              <HugeiconsIcon icon={Exchange01Icon} className="h-3 w-3" />
-            )}
-            Refresh
-          </button>
-        </div>
-      </div>
+    <div className="flex flex-col gap-4 p-4 md:p-6 lg:p-8">
+      {/* ── Page Header — bare icon actions, visible on every breakpoint ── */}
+      <PageHeader
+        title="Transactions"
+        subtitle="Your complete transaction history"
+        actions={
+          <>
+            <IconAction
+              icon={({ className }: { className?: string }) => (
+                <HugeiconsIcon icon={Download01Icon} className={className} />
+              )}
+              label="Export PDF"
+              onClick={() => transactions.length > 0 && exportTransactionsPdf(transactions)}
+            />
+            <IconAction
+              icon={({ className }: { className?: string }) => (
+                <HugeiconsIcon
+                  icon={isLoading ? Loading03Icon : Exchange01Icon}
+                  className={`${className} ${isLoading ? "animate-spin" : ""}`}
+                />
+              )}
+              label="Refresh"
+              onClick={refresh}
+            />
+          </>
+        }
+      />
 
-      {/* ── Stats Row ── */}
+      {/* ── Stats Row — 2-up on phones, 4-up from sm ── */}
       {statCards && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {statCards.map((card) => (
-            <div key={card.label} className="rounded-2xl border border-border/40 bg-card p-3.5">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{card.label}</span>
-                <div className={`flex h-6 w-6 items-center justify-center rounded-lg bg-accent/50 ${card.color}`}>
-                  <HugeiconsIcon icon={card.icon} className="h-3.5 w-3.5" />
-                </div>
-              </div>
-              <span className="text-lg font-bold tabular-nums tracking-tight">{card.value}</span>
-              {card.sub && <p className={`text-[10px] mt-0.5 ${card.color}`}>{card.sub}</p>}
+            <div key={card.label} className="flex flex-col gap-1.5 rounded-2xl bg-card p-4">
+              <Eyebrow>{card.label}</Eyebrow>
+              <span className="text-xl font-bold tabular-nums tracking-tight">{card.value}</span>
+              {card.sub && <p className={`text-[13px] ${card.color}`}>{card.sub}</p>}
             </div>
           ))}
         </div>
@@ -239,24 +232,24 @@ export function TransactionsClient() {
 
       {/* ── Error Banner ── */}
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-2.5 text-xs text-red-500">
+        <div className="rounded-xl bg-debit-chip px-4 py-2.5 text-[13px] text-debit">
           {error}
         </div>
       )}
 
       {/* ── Main Content ── */}
-      <div className="rounded-2xl border border-border/40 bg-card">
+      <div className="rounded-2xl bg-card">
         {/* Type Tabs + Search + Date + PDF */}
         <div className="flex flex-col gap-3 border-b border-border/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Type tabs */}
-          <div className="flex items-center gap-0.5 overflow-x-auto rounded-lg border border-border/50 bg-background p-0.5">
+          {/* Type tabs — the one Segmented system; scrolls on narrow screens */}
+          <div className="-mx-1 flex items-center gap-0.5 overflow-x-auto rounded-full bg-surface-sunken p-1 px-1 scrollbar-none">
             {TYPE_TABS.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setFilters({ type: tab.key === "all" ? undefined : tab.key })}
-                className={`shrink-0 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold transition-all ${
                   activeType === tab.key
-                    ? "bg-primary text-white"
+                    ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -293,7 +286,7 @@ export function TransactionsClient() {
               </button>
 
               {showDatePicker && (
-                <div className="absolute right-0 top-full z-20 mt-2 min-w-56 rounded-xl border border-border/50 bg-card p-3 shadow-lg">
+                <div className="absolute right-0 top-full z-20 mt-2 min-w-56 rounded-xl bg-card p-3 shadow-lg">
                   <div className="space-y-2.5">
                     <div>
                       <label className="mb-1 block text-[10px] text-muted-foreground">From</label>
@@ -381,9 +374,10 @@ export function TransactionsClient() {
           </div>
         ) : (
           <div className="overflow-hidden">
-            {/* Desktop table */}
-            <div className="hidden sm:block">
-              <table className="w-full text-xs">
+            {/* Desktop table — scrolls inside itself so the page body never
+                scrolls sideways on a narrow laptop. */}
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full min-w-[640px] text-xs">
                 <thead>
                   <tr className="border-b border-border/20 bg-accent/10 text-[10px] text-muted-foreground">
                     <th className="px-4 py-2 text-left font-medium">Type</th>

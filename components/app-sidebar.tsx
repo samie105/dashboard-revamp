@@ -213,87 +213,66 @@ function CollapsibleNavGroup({
 
   return (
     <div className="flex flex-col">
-      {/* Group toggle */}
+      {/* Group toggle — the Eyebrow treatment, no decorative leading icon */}
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-all hover:bg-accent/40 hover:text-foreground",
-          hasActive && "text-yellow-400",
+          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all hover:text-foreground",
+          hasActive ? "text-primary" : "text-muted-foreground",
         )}
       >
+        <span className="flex-1 text-left">{group.label}</span>
         <HugeiconsIcon
-          icon={group.icon}
+          icon={ArrowDown01Icon}
           className={cn(
-            "size-4 shrink-0 [&_path:not(:first-child)]:stroke-primary",
-            hasActive && "text-yellow-400",
-          )}
-        />
-        <span className="flex-1 text-left text-[10px]">{group.label}</span>
-        <HugeiconsIcon
-          icon={open ? ArrowUp01Icon : ArrowDown01Icon}
-          className={cn(
-            "size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200",
+            "size-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200",
             open && "rotate-180",
           )}
         />
       </button>
 
-      {/* Sub-items with tree‐line (GSAP animated) */}
+      {/* Sub-items — the mobile ListRow grammar: the group's rows sit together
+          on one sunken card, gold-tinted icon chip, active row reads as a
+          raised fill. No tree lines. */}
       <div ref={contentRef} style={{ display: open ? "block" : "none" }}>
-        <div className="relative ml-[15px] mt-px">
-          {/* Vertical tree line */}
-          <div className="absolute left-0 top-0 bottom-2 w-px bg-border/60" />
-
-          <div className="flex flex-col">
-            {group.items.map((item, idx) => {
-              const ext = isExternal(item.url)
-              const isActive = !ext && isActiveRoute(pathname, item.url)
-              const isLast = idx === group.items.length - 1
-              return (
-                <div key={item.name} className="relative flex items-center">
-                  {/* Horizontal branch line */}
-                  <div
-                    className={cn(
-                      "absolute left-0 top-1/2 h-px w-3 bg-border/60",
-                      isLast && "after:absolute after:left-0 after:top-0 after:h-[calc(50%+1px)] after:w-px after:bg-card",
-                    )}
+        <div className="mt-1 flex flex-col gap-0.5 rounded-2xl bg-surface-sunken/60 p-1">
+          {group.items.map((item) => {
+            const ext = isExternal(item.url)
+            const isActive = !ext && isActiveRoute(pathname, item.url)
+            return (
+              <SidebarMenuButton
+                key={item.name}
+                tooltip={item.description || item.name}
+                isActive={isActive}
+                render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} />}
+                className={cn(
+                  "h-auto gap-2.5 rounded-xl px-2 py-1.5 text-sm transition-all data-[active=true]:bg-accent",
+                  isActive ? "text-foreground" : "text-foreground/70 hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors",
+                    isActive ? "bg-primary/[0.16]" : "bg-foreground/[0.05]",
+                  )}
+                >
+                  <HugeiconsIcon
+                    icon={item.icon}
+                    className={cn("size-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")}
                   />
-                  <SidebarMenuButton
-                    tooltip={item.description || item.name}
-                    isActive={isActive}
-                    render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} />}
-                    className={cn(
-                      "ml-4 min-h-7 py-1 text-sm transition-all data-[active=true]:bg-transparent data-[active=true]:text-yellow-400",
-                      isActive
-                        ? "text-yellow-400"
-                        : "text-foreground/70 hover:text-foreground hover:bg-accent/50",
-                    )}
-                  >
-                    <HugeiconsIcon
-                      icon={item.icon}
-                      className="size-4 shrink-0 [&_path:not(:first-child)]:stroke-primary"
-                    />
-                    <span
-                      className={cn(
-                        "truncate flex-1 text-foreground/80",
-                        isActive && "text-yellow-400 font-semibold",
-                      )}
-                    >
-                      {item.name}
-                    </span>
-                    {ext && (
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/40"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-                    )}
-                    {item.badge && (
-                      <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary leading-none">
-                        {item.badge}
-                      </span>
-                    )}
-                  </SidebarMenuButton>
-                </div>
-              )
-            })}
-          </div>
+                </span>
+                <span className={cn("flex-1 truncate", isActive && "font-semibold")}>{item.name}</span>
+                {ext && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/40"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+                )}
+                {item.badge && (
+                  <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary">
+                    {item.badge}
+                  </span>
+                )}
+              </SidebarMenuButton>
+            )
+          })}
         </div>
       </div>
     </div>
@@ -325,7 +304,8 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="flex flex-col gap-2 pt-4 pb-4">
+      {/* Header matches the navbar's 56px band so the two rails line up. */}
+      <SidebarHeader className="flex h-14 flex-col justify-center gap-2 py-0">
         <div className="flex items-center justify-between gap-2 px-2">
           <div className="flex items-center gap-2">
             <Image
@@ -337,10 +317,12 @@ export function AppSidebar() {
               priority
             />
             {!isCollapsed && (
-              <span className="font-semibold leading-none">Worldstreet</span>
+              <span className="font-display text-[15px] font-bold leading-none tracking-[-0.01em]">
+                Worldstreet
+              </span>
             )}
           </div>
-          <SidebarTrigger className="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground shrink-0" />
+          <SidebarTrigger className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:bg-accent hover:text-foreground" />
         </div>
       </SidebarHeader>
 
@@ -358,11 +340,11 @@ export function AppSidebar() {
                 /* Worldstreet items — flat with taglines, no collapsible wrapper */
                 <div className="flex flex-col">
                   {!isCollapsed && (
-                    <div className="px-2 py-2">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">Worldstreet</span>
+                    <div className="px-2 pb-1 pt-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Worldstreet</span>
                     </div>
                   )}
-                  <SidebarMenu className="gap-1 px-1">
+                  <SidebarMenu className="gap-0.5 px-0">
                     {group.items.map((item) => {
                       const isVivid = item.name === "Vivid AI"
                       const ext = item.url.startsWith("http://") || item.url.startsWith("https://")
@@ -408,37 +390,27 @@ export function AppSidebar() {
                         )
                       }
 
+                      // External products are a footnote, not the main event:
+                      // one compact row each, no tagline, no icon chip.
                       return (
                         <SidebarMenuItem key={item.name}>
                           <SidebarMenuButton
-                            tooltip={item.name}
+                            tooltip={`${item.name} — ${item.description}`}
                             isActive={isActive}
                             render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} />}
                             className={cn(
-                              "min-h-10 py-2 px-2.5 text-sm transition-all rounded-md data-[active=true]:bg-transparent data-[active=true]:text-yellow-400",
-                              isActive
-                                ? "text-yellow-400"
-                                : "text-foreground/70 hover:text-foreground hover:bg-accent/50",
+                              "h-auto gap-2.5 rounded-xl px-2 py-1.5 text-[13px] transition-all data-[active=true]:bg-accent",
+                              isActive ? "text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                             )}
                           >
-                            <HugeiconsIcon
-                              icon={item.icon}
-                              className="size-4 shrink-0 [&_path:not(:first-child)]:stroke-primary"
-                            />
+                            <HugeiconsIcon icon={item.icon} className="size-4 shrink-0" />
                             {!isCollapsed && (
-                              <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={cn("truncate text-foreground/80", isActive && "text-yellow-400 font-semibold")}>{item.name}</span>
-                                </div>
-                                <span className="truncate text-[10px] text-muted-foreground/55 leading-tight">{item.description}</span>
-                              </div>
-                            )}
-                            {!isCollapsed && (
-                              <div className="ml-auto flex items-center gap-1.5 pl-2">
+                              <>
+                                <span className={cn("flex-1 truncate", isActive && "font-semibold")}>{item.name}</span>
                                 {ext && (
-                                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/40"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+                                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/30"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
                                 )}
-                              </div>
+                              </>
                             )}
                           </SidebarMenuButton>
                         </SidebarMenuItem>

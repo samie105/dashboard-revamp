@@ -90,7 +90,10 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   )
 
   return (
-    <header className="sticky top-0 z-40 flex h-12 w-full shrink-0 items-center gap-2 border-b border-border/5 bg-background/80 px-3 backdrop-blur-2xl md:gap-4 md:px-6">
+    // Taller, borderless, and transparent so the silk field runs up underneath
+    // it — the mobile header floats on the backdrop rather than sitting in its
+    // own bordered band.
+    <header className="sticky top-0 z-40 flex h-14 w-full shrink-0 items-center gap-2 bg-background/70 px-3 backdrop-blur-2xl md:gap-4 md:px-6">
       {/* Mobile: logo */}
       <div className="flex md:hidden items-center gap-2">
         <img src="/worldstreet-logo/WorldStreet4x.png" alt="WS" className="h-5 w-5 rounded-full" />
@@ -100,19 +103,19 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
       {/* Desktop: inline top nav */}
       {!hideDiscover && <TopNav />}
 
-      {/* Desktop: search */}
+      {/* Desktop: search — the mobile's full-round search pill */}
       <div className="flex flex-1 items-center gap-4">
         <div className="hidden md:flex relative max-w-sm w-full">
-          <HugeiconsIcon icon={Search} className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground/60" />
-          <input 
+          <HugeiconsIcon icon={Search} className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+          <input
             type="search"
-            placeholder="Search assets, trades..." 
-            className="w-full rounded-lg border-0 bg-accent/30 pl-8 pr-3 py-1.5 text-xs outline-none transition-colors placeholder:text-muted-foreground/50 focus:bg-accent/50 focus:ring-1 focus:ring-border/30"
+            placeholder="Search assets, trades…"
+            className="w-full rounded-full border-0 bg-surface-sunken py-2.5 pl-10 pr-4 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/50 focus:bg-accent/60"
           />
         </div>
       </div>
 
-      <div className="flex items-center gap-0.5 md:gap-1 ml-auto">
+      <div className="ml-auto flex items-center gap-1">
         <NavbarActions />
         <ThemeToggle />
 

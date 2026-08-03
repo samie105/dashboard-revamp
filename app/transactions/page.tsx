@@ -4,7 +4,7 @@ import { TransactionsClient } from "@/components/transactions/transactions-clien
 
 function TransactionsSkeleton() {
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4 pt-6">
+    <div className="flex flex-col gap-4 p-4 md:p-6 lg:p-8">
       <div className="flex items-center justify-between">
         <div className="space-y-1.5">
           <Skeleton className="h-7 w-44" />

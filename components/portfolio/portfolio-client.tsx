@@ -22,6 +22,7 @@ import {
   Loading03Icon,
   ArrowUpRight01Icon,
 } from "@hugeicons/core-free-icons"
+import { Balance, Eyebrow, IconAction, PageHeader, Segmented } from "@/components/ui/system"
 import { useAuth } from "@/components/auth-provider"
 import { useWallet } from "@/components/wallet-provider"
 import { useProfile } from "@/components/profile-provider"
@@ -133,10 +134,9 @@ const HOW_STEPS = [
 
 function HowItWorks() {
   return (
-    <div className="rounded-2xl border border-border/40 bg-card">
+    <div className="rounded-2xl bg-card">
       <div className="flex items-center gap-2 border-b border-border/30 px-4 py-3">
-        <HugeiconsIcon icon={InformationCircleIcon} className="h-3.5 w-3.5 text-primary" />
-        <h3 className="text-xs font-semibold">How it works</h3>
+        <h3 className="text-[15px] font-semibold">How it works</h3>
       </div>
       <div className="px-4 py-4">
         <div className="relative pl-5">
@@ -163,10 +163,9 @@ function HowItWorks() {
 /* Quick Actions (right panel) */
 function QuickActions() {
   return (
-    <div className="rounded-2xl border border-border/40 bg-card">
+    <div className="rounded-2xl bg-card">
       <div className="flex items-center gap-2 border-b border-border/30 px-4 py-3">
-        <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3.5 w-3.5 text-primary" />
-        <h3 className="text-xs font-semibold">Quick Actions</h3>
+        <h3 className="text-[15px] font-semibold">Quick Actions</h3>
       </div>
       <div className="grid grid-cols-2 gap-2 p-3">
         <Link
@@ -174,7 +173,7 @@ function QuickActions() {
           className="flex items-center gap-2.5 rounded-xl border border-border/30 bg-accent/20 p-3 transition-all hover:bg-accent/40 group"
         >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 transition-transform group-hover:scale-105">
-            <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-emerald-500" />
+            <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-credit" />
           </div>
           <div>
             <p className="text-xs font-medium leading-tight">Deposit</p>
@@ -232,12 +231,12 @@ function Watchlist({
   }, [coins, watchlistSymbols, search])
 
   return (
-    <div className="rounded-2xl border border-border/40 bg-card">
+    <div className="rounded-2xl bg-card">
       <div className="flex items-center justify-between border-b border-border/30 px-4 py-3">
         <div className="flex items-center gap-2">
-          <HugeiconsIcon icon={StarIcon} className="h-3.5 w-3.5 text-primary" />
+
           <div>
-            <h3 className="text-xs font-semibold">Watchlist</h3>
+            <h3 className="text-[15px] font-semibold">Watchlist</h3>
             <p className="text-[10px] text-muted-foreground">Live prices</p>
           </div>
         </div>
@@ -293,13 +292,13 @@ function Watchlist({
                 <div className="flex items-center gap-2.5">
                   <div className="text-right">
                     <p className="text-xs font-medium tabular-nums">{formatPrice(coin.price)}</p>
-                    <p className={`text-[10px] font-medium tabular-nums ${up ? "text-emerald-500" : "text-red-500"}`}>
+                    <p className={`text-[10px] font-medium tabular-nums ${up ? "text-credit" : "text-debit"}`}>
                       {up ? "+" : ""}{coin.change24h.toFixed(2)}%
                     </p>
                   </div>
                   <div className="hidden sm:block"><Sparkline change24h={coin.change24h} /></div>
                   <button onClick={() => onWatchlistChange(watchlistSymbols.filter((s) => s !== coin.symbol))} className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-red-500/10 transition-all">
-                    <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3 text-muted-foreground hover:text-red-500 transition-colors" />
+                    <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3 text-muted-foreground hover:text-debit transition-colors" />
                   </button>
                 </div>
               </div>
@@ -409,26 +408,25 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
     <>
       <OnboardingFlow steps={ONBOARDING_STEPS} storageKey="portfolio" completed={isOnboardingDone} onComplete={() => markOnboardingComplete("portfolio")} />
 
-      {/* ── Page header ── */}
-      <div data-onboarding="portfolio-header" className="flex items-center justify-between mb-4">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-xl font-bold tracking-tight">Portfolio</h1>
-          <p className="text-xs text-muted-foreground">
-            Manage your accounts, wallets &amp; balances
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 text-right">
-            <span className="text-[10px] text-muted-foreground">Net Worth</span>
-            <span className="text-sm font-bold tabular-nums text-primary">{formatUSD(totalNetWorth)}</span>
-          </div>
-          <button
-            onClick={() => refreshWallets()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border/40 px-2.5 py-1.5 text-[11px] font-medium transition-colors hover:bg-accent"
-          >
-            <HugeiconsIcon icon={RefreshIcon} className={`h-3.5 w-3.5 ${walletsLoading ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
+      {/* ── Page header — title/subtitle + bare icon action (mobile grammar) ── */}
+      <div data-onboarding="portfolio-header" className="mb-5 flex flex-col gap-4">
+        <PageHeader
+          title="Portfolio"
+          subtitle="Manage your accounts, wallets & balances"
+          actions={
+            <IconAction
+              icon={({ className }: { className?: string }) => (
+                <HugeiconsIcon icon={RefreshIcon} className={`${className} ${walletsLoading ? "animate-spin" : ""}`} />
+              )}
+              label="Refresh"
+              onClick={() => refreshWallets()}
+            />
+          }
+        />
+        {/* Net worth reads as the page's hero figure, not a right-aligned stat */}
+        <div className="flex flex-col gap-1">
+          <Eyebrow>Net Worth</Eyebrow>
+          <Balance value={formatUSD(totalNetWorth)} className="text-[clamp(2rem,3.5vw,2.75rem)]" />
         </div>
       </div>
 
@@ -436,33 +434,22 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]">
         {/* ════ LEFT — Main card ════ */}
         <div>
-          <div className="rounded-2xl border border-border/40 bg-card shadow-sm">
-            {/* Card header with underline tabs */}
-            <div data-onboarding="portfolio-tabs" className="border-b border-border/30 px-4">
-              <div className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-2">
-                  <HugeiconsIcon icon={Wallet01Icon} className="h-4 w-4 text-primary" />
-                  <h2 className="text-sm font-semibold">Portfolio</h2>
-                </div>
+          <div className="rounded-2xl bg-card">
+            {/* Card header — in-card title + the ONE segmented tab system */}
+            <div data-onboarding="portfolio-tabs" className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+              <div className="flex min-w-0 flex-col">
+                <h2 className="text-[15px] font-semibold leading-tight">Accounts</h2>
+                <span className="text-[13px] text-muted-foreground">Trading &amp; funding balances</span>
               </div>
-              <div className="flex items-center gap-5 -mb-px">
-                {(["overview", "wallets", "fund"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`relative pb-2.5 text-[11px] font-medium transition-colors ${
-                      activeTab === tab
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {tab === "fund" ? "Fund Wallet" : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    {activeTab === tab && (
-                      <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" />
-                    )}
-                  </button>
-                ))}
-              </div>
+              <Segmented
+                options={[
+                  { key: "overview", label: "Overview" },
+                  { key: "wallets", label: "Wallets" },
+                  { key: "fund", label: "Fund Wallet" },
+                ] as const}
+                value={activeTab}
+                onChange={setActiveTab}
+              />
             </div>
 
             <div data-onboarding="portfolio-main" className="p-4 space-y-3">
@@ -473,8 +460,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                   <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <HugeiconsIcon icon={Chart01Icon} className="h-3.5 w-3.5 text-primary" />
-                        <span className="text-[11px] font-medium text-muted-foreground">Trading Account</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Trading Account</span>
                       </div>
                       <PortfolioTradeButton />
                     </div>
@@ -485,11 +471,11 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                       </div>
                       <div>
                         <p className="text-[10px] text-muted-foreground mb-0.5">Available USDC</p>
-                        <p className="text-sm font-bold tabular-nums text-emerald-500">{formatUSD(availableUsdc)}</p>
+                        <p className="text-sm font-bold tabular-nums text-credit">{formatUSD(availableUsdc)}</p>
                       </div>
                       <div>
                         <p className="text-[10px] text-muted-foreground mb-0.5">In Orders</p>
-                        <p className="text-sm font-bold tabular-nums text-primary">{formatUSD(inOrders)}</p>
+                        <p className="text-sm font-bold tabular-nums">{formatUSD(inOrders)}</p>
                       </div>
                     </div>
                   </div>
@@ -583,7 +569,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                             </div>
                           </div>
                           <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
-                            tradingWallet?.address ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"
+                            tradingWallet?.address ? "bg-emerald-500/10 text-credit" : "bg-muted text-muted-foreground"
                           }`}>
                             {tradingWallet?.address ? "Active" : "Not Set Up"}
                           </span>
@@ -596,7 +582,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                             <code className="text-[11px] font-mono text-foreground/80">{truncAddr(tradingWallet.address)}</code>
                             <HugeiconsIcon
                               icon={copiedAddr === tradingWallet.address ? CheckmarkCircle01Icon : Copy01Icon}
-                              className={`h-3.5 w-3.5 transition-colors ${copiedAddr === tradingWallet.address ? "text-emerald-500" : "text-muted-foreground group-hover:text-primary"}`}
+                              className={`h-3.5 w-3.5 transition-colors ${copiedAddr === tradingWallet.address ? "text-credit" : "text-muted-foreground group-hover:text-primary"}`}
                             />
                           </button>
                         ) : (
@@ -637,7 +623,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                                     onClick={() => copyAddr(addr)}
                                     className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-primary transition-colors"
                                   >
-                                    <HugeiconsIcon icon={copiedAddr === addr ? CheckmarkCircle01Icon : Copy01Icon} className={`h-3.5 w-3.5 ${copiedAddr === addr ? "text-emerald-500" : ""}`} />
+                                    <HugeiconsIcon icon={copiedAddr === addr ? CheckmarkCircle01Icon : Copy01Icon} className={`h-3.5 w-3.5 ${copiedAddr === addr ? "text-credit" : ""}`} />
                                   </button>
                                 ) : (
                                   <span className="rounded-full bg-muted/50 px-2 py-0.5 text-[9px] text-muted-foreground">Pending</span>
@@ -651,7 +637,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                       {/* Unified account note */}
                       {addresses?.ethereum === tradingWallet?.address && (
                         <div className="flex items-center gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10 px-3 py-2">
-                          <HugeiconsIcon icon={CheckmarkCircle01Icon} className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                          <HugeiconsIcon icon={CheckmarkCircle01Icon} className="h-3.5 w-3.5 text-credit shrink-0" />
                           <p className="text-[10px] text-emerald-600 dark:text-emerald-400">Unified account — your Ethereum wallet doubles as your trading wallet.</p>
                         </div>
                       )}
