@@ -272,12 +272,12 @@ export function TradeClient() {
         {/* Chart first, order form beside it (form is order-2 below), book and
             positions on the second row. Same coin id as the book (coinName for
             spot, bare symbol for futures). */}
-        <div className="rounded-2xl bg-card p-4 lg:order-1 lg:col-span-8">
+        <div className="order-1 rounded-2xl bg-card p-4 lg:order-1 lg:col-span-8">
           <CandleChart coin={bookCoin} />
         </div>
 
         {/* Order book */}
-        <div className="rounded-2xl bg-card p-4 lg:order-3 lg:col-span-8">
+        <div className="order-3 rounded-2xl bg-card p-4 lg:order-3 lg:col-span-8">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Order book</p>
           {!book ? (
             <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
@@ -308,7 +308,7 @@ export function TradeClient() {
         </div>
 
         {/* Order form */}
-        <div className="rounded-2xl bg-card p-4 lg:order-2 lg:col-span-4">
+        <div className="order-2 rounded-2xl bg-card p-4 lg:order-2 lg:col-span-4">
           {!ready ? (
             <div className="py-6 text-center">
               <p className="text-sm font-semibold">Trading account not set up</p>
@@ -322,7 +322,7 @@ export function TradeClient() {
               <div className="grid grid-cols-2 gap-2">
                 {(["buy", "sell"] as const).map((s) => (
                   <button key={s} onClick={() => setSide(s)}
-                    className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${side === s ? (s === "buy" ? "bg-emerald-500 text-white" : "bg-red-500 text-white") : "border border-border/50 text-muted-foreground hover:bg-accent"}`}>
+                    className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${side === s ? (s === "buy" ? "bg-credit text-white" : "bg-debit text-white") : "bg-surface-sunken text-muted-foreground hover:bg-accent"}`}>
                     {s === "buy" ? "Buy / Long" : "Sell / Short"}
                   </button>
                 ))}
@@ -390,7 +390,7 @@ export function TradeClient() {
                 </p>
               )}
               <button onClick={submit} disabled={!canSubmit}
-                className={`mt-4 w-full rounded-xl py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${side === "buy" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"}`}>
+                className={`mt-4 w-full rounded-xl py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${side === "buy" ? "bg-credit hover:bg-credit/90" : "bg-debit hover:bg-debit/90"}`}>
                 {submitting ? "Placing…" : `${side === "buy" ? "Buy" : "Sell"} ${symbol}`}
               </button>
             </>
@@ -398,7 +398,7 @@ export function TradeClient() {
         </div>
 
         {/* Positions + open orders */}
-        <div className="space-y-4 lg:order-4 lg:col-span-4">
+        <div className="order-4 space-y-4 lg:order-4 lg:col-span-4">
           <div className="rounded-2xl bg-card p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Positions</p>
             {(account?.positions ?? []).length === 0 ? (

@@ -11,9 +11,12 @@
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Clock01Icon } from "@hugeicons/core-free-icons"
-import { Eyebrow, PageHeader } from "@/components/ui/system"
+import { Eyebrow, PageHeader, Segmented } from "@/components/ui/system"
+import { ReceivePanel } from "@/components/ui/receive-panel"
 import {
   FlowShell,
+  AnnouncementBanner,
+  ErrorDetail,
   ContextPanel,
   AmountField,
   ChoiceRow,
@@ -69,6 +72,26 @@ function stageIndex(stages: Stage[], status: string) {
   return i === -1 ? 0 : i
 }
 
+/**
+ * Backend and chain errors arrive as raw payloads (Privy validation blobs,
+ * RPC 429s). Map the ones we can recognise onto something actionable; the
+ * original is still available behind the Details toggle.
+ */
+function humanError(raw: string): string {
+  const s = raw.toLowerCase()
+  if (s.includes("429") || s.includes("too many requests") || s.includes("capacity limit"))
+    return "Our node provider is rate-limited right now, so we can't read that chain. Try another network, or give it a few minutes."
+  if (s.includes("unrecognized key") || s.includes("invalid_data"))
+    return "That network's transfer service is misconfigured on our side — we've been notified. Try another network in the meantime."
+  if (s.includes("insufficient"))
+    return "There isn't enough balance to cover this, including fees."
+  if (s.includes("timeout") || s.includes("fetch failed") || s.includes("unreachable"))
+    return "We couldn't reach the service. Your funds are untouched — try again shortly."
+  if (s.includes("unauthorized") || s.includes("expired token"))
+    return "Your session expired. Refresh the page and sign in again."
+  return "Something went wrong and nothing was charged. Try again, or pick another network."
+}
+
 type Mode = "buy" | "sell"
 
 export function BuySellClient({ mode }: { mode: Mode }) {
@@ -84,6 +107,10 @@ export function BuySellClient({ mode }: { mode: Mode }) {
   const [submitting, setSubmitting] = React.useState(false)
   const [submitError, setSubmitError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<Buy | Sell | null>(null)
+  // Deposit has two halves: buy with your Dollar Account (needs the treasury)
+  // and receive from an external wallet (only needs your own address). The
+  // second keeps working when the first is paused.
+  const [tab, setTab] = React.useState<"buy" | "receive">("buy")
 
   // Availability + Dollar Account balance
   React.useEffect(() => {
@@ -144,8 +171,13 @@ export function BuySellClient({ mode }: { mode: Mode }) {
     ? Math.min(limits.max, cashUsd / (1 + limits.feePercent / 100))
     : null
 
+  /* Paused or failed-to-load: the form stays visible but inert. */
+  const inert = !!loadError || enabled.length === 0
+
   /* The blocker ladder — the CTA always says WHY it can't proceed. */
   const blocker =
+    inert ? (isBuy ? "Buying unavailable right now" : "Selling unavailable right now")
+    :
     amt <= 0 ? "Enter an amount"
     : amt < limits.min ? `Minimum is ${limits.min} USDT`
     : amt > limits.max ? `Maximum is ${limits.max.toLocaleString()} USDT`
@@ -248,22 +280,39 @@ export function BuySellClient({ mode }: { mode: Mode }) {
         className="mb-5"
       />
 
-      {loading ? (
+      {isBuy && (
+        <div className="mb-4">
+          <Segmented
+            options={[
+              { key: "buy" as const, label: "Buy with cash" },
+              { key: "receive" as const, label: "Receive" },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+        </div>
+      )}
+
+      {isBuy && tab === "receive" ? (
+        <ReceivePanel only={["tron", "solana", "ethereum"]} asset="USDT" />
+      ) : loading ? (
         <FlowSkeleton />
-      ) : loadError ? (
-        <UnavailablePanel
-          title="We couldn't load this screen"
-          reason={`${loadError} — refresh to try again.`}
-          tone="muted"
-        />
-      ) : enabled.length === 0 ? (
-        <UnavailablePanel
-          title={isBuy ? "Buying is paused right now" : "Selling is paused right now"}
-          reason="The treasury is topping up. This is usually brief — check back in a few minutes."
-          icon={Clock01Icon}
-        />
       ) : (
         <div className="flex flex-col gap-4">
+          {loadError && (
+            <AnnouncementBanner
+              title="We couldn't load live limits"
+              detail={`${loadError} You can still see the form, but orders are disabled until this recovers.`}
+              tone="error"
+            />
+          )}
+          {!loadError && enabled.length === 0 && (
+            <AnnouncementBanner
+              title={isBuy ? "Buying is paused right now" : "Selling is paused right now"}
+              detail="The treasury is topping up. This is usually brief — everything below is disabled until it's back."
+              action={isBuy ? { label: "Receive from another wallet instead", href: "#" } : undefined}
+            />
+          )}
           <ContextPanel
             rows={[
               ...(cashUsd !== null
@@ -307,9 +356,9 @@ export function BuySellClient({ mode }: { mode: Mode }) {
             />
           )}
 
-          {submitError && <InlineNotice tone="error">{submitError}</InlineNotice>}
+          {submitError && <ErrorDetail message={humanError(submitError)} raw={submitError} />}
 
-          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker} busy={submitting} />
+          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
         </div>
       )}
     </FlowShell>

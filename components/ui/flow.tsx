@@ -464,3 +464,76 @@ export function FlowSkeleton() {
     </div>
   )
 }
+
+/* ── AnnouncementBanner — a paused/degraded notice that sits ABOVE a still
+      visible form, so the user can see what the flow offers even when they
+      can't act on it yet. ─────────────────────────────────────────────── */
+
+export function AnnouncementBanner({
+  title,
+  detail,
+  tone = "warning",
+  action,
+}: {
+  title: string
+  detail?: React.ReactNode
+  tone?: "warning" | "error"
+  action?: { label: string; href: string }
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-2xl px-4 py-3.5",
+        tone === "warning" ? "bg-warning-chip" : "bg-debit-chip",
+      )}
+    >
+      <span
+        className={cn(
+          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+          tone === "warning" ? "text-warning" : "text-debit",
+        )}
+      >
+        <HugeiconsIcon icon={AlertCircleIcon} className="h-5 w-5" />
+      </span>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className={cn("text-[13px] font-semibold", tone === "warning" ? "text-warning" : "text-debit")}>
+          {title}
+        </p>
+        {detail && (
+          <p className="text-[12.5px] leading-relaxed text-muted-foreground">{detail}</p>
+        )}
+        {action && (
+          <Link href={action.href} className="mt-1 w-fit text-[12.5px] font-semibold text-primary hover:underline">
+            {action.label} →
+          </Link>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── ErrorDetail — human message up front, raw payload behind a toggle ─── */
+
+export function ErrorDetail({ message, raw }: { message: string; raw?: string | null }) {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <div className="rounded-xl bg-debit-chip px-3.5 py-2.5">
+      <p className="text-[13px] leading-relaxed text-debit">{message}</p>
+      {raw && raw !== message && (
+        <>
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="mt-1 text-[11.5px] font-semibold text-debit/70 underline-offset-2 hover:underline"
+          >
+            {open ? "Hide details" : "Details"}
+          </button>
+          {open && (
+            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-background/40 p-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
+              {raw}
+            </pre>
+          )}
+        </>
+      )}
+    </div>
+  )
+}

@@ -14,6 +14,8 @@ import { Clock01Icon, Wallet01Icon } from "@hugeicons/core-free-icons"
 import { Eyebrow, PageHeader } from "@/components/ui/system"
 import {
   FlowShell,
+  AnnouncementBanner,
+  ErrorDetail,
   ContextPanel,
   AmountField,
   ChoiceRow,
@@ -156,8 +158,10 @@ export function FundClient({ mode }: { mode: Mode }) {
     ? Math.min(limits.max, isFund ? sourceBalance / (1 + limits.feePercent / 100) : sourceBalance)
     : null
 
+  const inert = !limits.enabled
   const blocker =
-    amt <= 0 ? "Enter an amount"
+    inert ? (isFund ? "Funding unavailable right now" : "Withdrawals unavailable right now")
+    : amt <= 0 ? "Enter an amount"
     : amt < limits.min ? `Minimum is ${limits.min} USDC`
     : amt > limits.max ? `Maximum is ${limits.max.toLocaleString()} USDC`
     : insufficient ? (isFund ? "Not enough in your Dollar Account" : "Not enough in that balance")
@@ -307,14 +311,14 @@ export function FundClient({ mode }: { mode: Mode }) {
             {settingUp ? "Setting up…" : "Set up trading account"}
           </button>
         </div>
-      ) : !limits.enabled ? (
-        <UnavailablePanel
-          title={isFund ? "Funding is paused right now" : "Withdrawals are paused right now"}
-          reason={limits.reason || undefined}
-          icon={Clock01Icon}
-        />
       ) : (
         <div className="flex flex-col gap-4">
+          {!limits.enabled && (
+            <AnnouncementBanner
+              title={isFund ? "Funding is paused right now" : "Withdrawals are paused right now"}
+              detail={limits.reason || "This is usually brief — everything below is disabled until it's back."}
+            />
+          )}
           <ContextPanel
             rows={[
               ...(cashUsd !== null
@@ -364,9 +368,9 @@ export function FundClient({ mode }: { mode: Mode }) {
             />
           )}
 
-          {submitError && <InlineNotice tone="error">{submitError}</InlineNotice>}
+          {submitError && <ErrorDetail message={submitError} raw={submitError} />}
 
-          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker} busy={submitting} />
+          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
         </div>
       )}
     </FlowShell>
