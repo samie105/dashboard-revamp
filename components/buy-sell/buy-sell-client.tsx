@@ -9,6 +9,8 @@
  */
 
 import * as React from "react"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { Clock01Icon } from "@hugeicons/core-free-icons"
 import { Eyebrow, PageHeader } from "@/components/ui/system"
 import {
   FlowShell,
@@ -211,7 +213,6 @@ export function BuySellClient({ mode }: { mode: Mode }) {
                 ? failureCaption
                 : "This usually takes under a minute."
           }
-          illustration={done ? (isBuy ? "cryptoBuy" : "noTransactions") : undefined}
           stages={!failed ? stages : undefined}
           activeIndex={done ? stages.length : stageIndex(stages, result.status)}
           txHash={result.txHash}
@@ -250,12 +251,16 @@ export function BuySellClient({ mode }: { mode: Mode }) {
       {loading ? (
         <FlowSkeleton />
       ) : loadError ? (
-        <UnavailablePanel title="We couldn't load this screen" reason={`${loadError} — refresh to try again.`} />
+        <UnavailablePanel
+          title="We couldn't load this screen"
+          reason={`${loadError} — refresh to try again.`}
+          tone="muted"
+        />
       ) : enabled.length === 0 ? (
         <UnavailablePanel
           title={isBuy ? "Buying is paused right now" : "Selling is paused right now"}
           reason="The treasury is topping up. This is usually brief — check back in a few minutes."
-          illustration={isBuy ? "cryptoBuy" : "noTransactions"}
+          icon={Clock01Icon}
         />
       ) : (
         <div className="flex flex-col gap-4">

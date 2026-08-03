@@ -9,7 +9,9 @@
  */
 
 import * as React from "react"
-import { Eyebrow, PageHeader, illustrations } from "@/components/ui/system"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { Clock01Icon, Wallet01Icon } from "@hugeicons/core-free-icons"
+import { Eyebrow, PageHeader } from "@/components/ui/system"
 import {
   FlowShell,
   ContextPanel,
@@ -238,7 +240,6 @@ export function FundClient({ mode }: { mode: Mode }) {
                   ? `Usually takes about ${eta} minute${eta > 1 ? "s" : ""}.`
                   : "This can take a couple of minutes."
           }
-          illustration={done ? "cryptoTrade" : undefined}
           stages={!failed ? stages : undefined}
           activeIndex={index}
           notice={
@@ -281,11 +282,17 @@ export function FundClient({ mode }: { mode: Mode }) {
       {loading ? (
         <FlowSkeleton />
       ) : loadError ? (
-        <UnavailablePanel title="We couldn't load this screen" reason={`${loadError} — refresh to try again.`} />
+        <UnavailablePanel
+          title="We couldn't load this screen"
+          reason={`${loadError} — refresh to try again.`}
+          tone="muted"
+        />
       ) : walletReady === false ? (
         /* One-time setup gate — a real screen with a single clear action. */
         <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-8 text-center">
-          <img src={illustrations.cryptoTrade} alt="" className="h-24 w-24 object-contain" />
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
+            <HugeiconsIcon icon={Wallet01Icon} className="h-6 w-6" />
+          </span>
           <p className="text-[15px] font-semibold">Set up your trading account</p>
           <p className="mx-auto max-w-xs text-[13px] leading-relaxed text-muted-foreground">
             A one-time step that designates your wallet for Hyperliquid trading. Takes a few seconds.
@@ -304,7 +311,7 @@ export function FundClient({ mode }: { mode: Mode }) {
         <UnavailablePanel
           title={isFund ? "Funding is paused right now" : "Withdrawals are paused right now"}
           reason={limits.reason || undefined}
-          illustration="cryptoTrade"
+          icon={Clock01Icon}
         />
       ) : (
         <div className="flex flex-col gap-4">

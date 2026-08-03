@@ -20,8 +20,9 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { AlertCircleIcon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
-import { Eyebrow, illustrations, type IllustrationKey } from "@/components/ui/system"
 
 /* ── FlowShell — the centered column every flow lives in ───────────────── */
 
@@ -309,7 +310,6 @@ export function StatusScreen({
   state,
   headline,
   caption,
-  illustration,
   stages,
   activeIndex = 0,
   txHash,
@@ -320,8 +320,6 @@ export function StatusScreen({
   state: "processing" | "success" | "failure"
   headline: string
   caption?: React.ReactNode
-  /** Success art. Processing/failure draw their own mark. */
-  illustration?: IllustrationKey
   stages?: Stage[]
   activeIndex?: number
   txHash?: string | null
@@ -334,9 +332,7 @@ export function StatusScreen({
 
   return (
     <div className="flex flex-col items-center gap-4 rounded-2xl bg-card px-6 py-8 text-center">
-      {state === "success" && illustration ? (
-        <img src={illustrations[illustration]} alt="" className="h-24 w-24 object-contain" />
-      ) : state === "success" ? (
+      {state === "success" ? (
         <span className="flex h-16 w-16 items-center justify-center rounded-full bg-credit-chip">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-credit"><path d="M20 6L9 17l-5-5" /></svg>
         </span>
@@ -418,15 +414,26 @@ export function StatusScreen({
 export function UnavailablePanel({
   title,
   reason,
-  illustration = "unauthorized",
+  icon = AlertCircleIcon,
+  tone = "warning",
 }: {
   title: string
   reason?: string
-  illustration?: IllustrationKey
+  /** Defaults to a caution mark. Illustrations are for promos and empty
+   *  states — an error is not the place for borrowed art. */
+  icon?: typeof AlertCircleIcon
+  tone?: "warning" | "muted"
 }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-10 text-center">
-      <img src={illustrations[illustration]} alt="" className="h-24 w-24 object-contain" loading="lazy" />
+      <span
+        className={cn(
+          "flex h-14 w-14 items-center justify-center rounded-full",
+          tone === "warning" ? "bg-warning-chip text-warning" : "bg-foreground/[0.06] text-muted-foreground",
+        )}
+      >
+        <HugeiconsIcon icon={icon} className="h-6 w-6" />
+      </span>
       <p className="text-[15px] font-semibold">{title}</p>
       <p className="mx-auto max-w-xs text-[13px] leading-relaxed text-muted-foreground">
         {reason || "This is usually brief — check back in a few minutes."}
