@@ -1,0 +1,33 @@
+# Keep the build context small — the deploy host builds with nixpacks and the
+# context is transferred in full on every build.
+.git
+.github
+node_modules
+**/node_modules
+.next
+out
+dist
+build
+
+# Local tooling / editor state
+.claude
+.vscode
+.cursor
+.windsurf
+.idea
+*.log
+
+# Env files — Coolify injects these as build args, they must not ship in the image
+.env
+.env.*
+!.env.example
+
+# Docs and planning artefacts
+docs
+plans
+*.md
+!README.md
+
+# Test output
+coverage
+.nyc_output
