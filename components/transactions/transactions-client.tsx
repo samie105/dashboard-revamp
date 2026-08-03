@@ -50,7 +50,7 @@ const STATUS_PILLS: { key: UnifiedTransactionStatus | "all"; label: string }[] =
 ]
 
 const STATUS_CONFIG: Record<string, { color: string; label: string; icon: typeof CheckmarkCircle01Icon }> = {
-  pending:     { color: "text-amber-500",        label: "Pending",    icon: Clock01Icon },
+  pending:     { color: "text-warning",        label: "Pending",    icon: Clock01Icon },
   processing:  { color: "text-orange-500",        label: "Processing", icon: Loading03Icon },
   completed:   { color: "text-credit",       label: "Completed",  icon: CheckmarkCircle01Icon },
   failed:      { color: "text-debit",           label: "Failed",     icon: AlertCircleIcon },

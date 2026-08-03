@@ -131,8 +131,8 @@ export function BuySellClient({ mode }: { mode: Mode }) {
     const failed = terminal.includes(result.status) && !done
     return (
       <div className="mx-auto max-w-md px-4 py-10">
-        <div className="rounded-2xl border border-border/30 bg-card p-6 text-center">
-          <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full ${done ? "bg-emerald-500/10" : failed ? "bg-red-500/10" : "bg-primary/10"}`}>
+        <div className="rounded-2xl bg-card p-6 text-center">
+          <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full ${done ? "bg-credit-chip" : failed ? "bg-debit-chip" : "bg-primary/10"}`}>
             <span className="text-2xl">{done ? "✓" : failed ? "✕" : "…"}</span>
           </div>
           <p className="text-base font-semibold">
@@ -170,7 +170,7 @@ export function BuySellClient({ mode }: { mode: Mode }) {
   // ── Form ──────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md px-4 py-10">
-      <h1 className="text-xl font-bold">{isBuy ? "Buy USDT" : "Sell USDT"}</h1>
+      <h1 className="font-display text-2xl font-bold tracking-[-0.01em]">{isBuy ? "Buy USDT" : "Sell USDT"}</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {isBuy
           ? "Pay from your Dollar Account — USDT lands in your wallet."
@@ -178,7 +178,7 @@ export function BuySellClient({ mode }: { mode: Mode }) {
       </p>
 
       {cashUsd !== null && (
-        <div className="mt-4 flex items-center justify-between rounded-xl border border-border/30 bg-card px-4 py-3">
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-card px-4 py-3">
           <span className="text-sm text-muted-foreground">Dollar Account</span>
           <span className="text-sm font-semibold tabular-nums">${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
         </div>
@@ -187,7 +187,7 @@ export function BuySellClient({ mode }: { mode: Mode }) {
       {loading ? (
         <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
       ) : enabled.length === 0 ? (
-        <p className="mt-6 text-sm text-amber-500">
+        <p className="mt-6 text-sm text-warning">
           {isBuy ? "Buying" : "Selling"} is temporarily unavailable. Try again later.
         </p>
       ) : (
@@ -231,11 +231,11 @@ export function BuySellClient({ mode }: { mode: Mode }) {
           )}
 
           {insufficientCash && (
-            <p className="mt-2 text-xs text-amber-500">
+            <p className="mt-2 text-xs text-warning">
               Not enough in your Dollar Account. Top it up on the Worldstreet home.
             </p>
           )}
-          {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+          {error && <p className="mt-2 text-xs text-debit">{error}</p>}
 
           <button
             onClick={submit}

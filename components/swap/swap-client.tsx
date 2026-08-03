@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { PageHeader } from "@/components/ui/system"
 import {
   CoinsSwapIcon,
   ArrowDown01Icon,
@@ -165,7 +166,7 @@ function SwapSettings({
         <HugeiconsIcon icon={Settings01Icon} className="h-4 w-4" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-border/40 bg-card p-4 shadow-xl">
+        <div className="absolute right-0 top-full z-30 mt-2 w-64 rounded-xl bg-card p-4 shadow-xl">
           <h4 className="mb-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Slippage Tolerance</h4>
           <div className="flex items-center gap-2">
             {presets.map((v) => (
@@ -173,7 +174,7 @@ function SwapSettings({
                 key={v}
                 onClick={() => onSlippageChange(v)}
                 className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition-colors ${
-                  slippage === v ? "bg-primary text-white" : "bg-accent/50 hover:bg-accent"
+                  slippage === v ? "bg-primary text-primary-foreground" : "bg-accent/50 hover:bg-accent"
                 }`}
               >
                 {v}%
@@ -194,7 +195,7 @@ function SwapSettings({
             </div>
           </div>
           {slippage > 5 && (
-            <p className="mt-2 text-xs text-amber-500">High slippage may result in unfavorable rates</p>
+            <p className="mt-2 text-xs text-warning">High slippage may result in unfavorable rates</p>
           )}
         </div>
       )}
@@ -236,7 +237,7 @@ function QuoteCard({
       </div>
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Price Impact</span>
-        <span className={`font-medium ${priceImpact > 1 ? "text-red-500" : "text-emerald-500"}`}>
+        <span className={`font-medium ${priceImpact > 1 ? "text-debit" : "text-credit"}`}>
           ~{priceImpact.toFixed(2)}%
         </span>
       </div>
@@ -299,9 +300,9 @@ function SwapHistory() {
 
   const statusColor = (s: string) => {
     switch (s) {
-      case "completed": return "text-emerald-500"
-      case "failed": return "text-red-500"
-      default: return "text-amber-500"
+      case "completed": return "text-credit"
+      case "failed": return "text-debit"
+      default: return "text-warning"
     }
   }
 
@@ -315,10 +316,9 @@ function SwapHistory() {
   }
 
   return (
-    <div className="rounded-2xl border border-border/40 bg-card">
+    <div className="rounded-2xl bg-card">
       <div className="flex items-center justify-between border-b border-border/30 px-4 py-3">
         <div className="flex items-center gap-2">
-          <HugeiconsIcon icon={Clock01Icon} className="h-3.5 w-3.5 text-primary" />
           <h3 className="text-xs font-semibold">Recent Swaps</h3>
         </div>
       </div>
@@ -382,9 +382,8 @@ const STEPS = [
 
 function HowItWorks() {
   return (
-    <div className="rounded-2xl border border-border/40 bg-card">
+    <div className="rounded-2xl bg-card">
       <div className="flex items-center gap-2 border-b border-border/30 px-4 py-3">
-        <HugeiconsIcon icon={InformationCircleIcon} className="h-3.5 w-3.5 text-primary" />
         <h3 className="text-xs font-semibold">How it works</h3>
       </div>
       <div className="px-4 py-4">
@@ -669,11 +668,10 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
 
   const swapCard = (
     <>
-          <div className="rounded-2xl border border-border/40 bg-card shadow-sm">
+          <div className="rounded-2xl bg-card shadow-sm">
             {/* Card header */}
             <div className="flex items-center justify-between border-b border-border/30 px-4 py-3">
               <div className="flex items-center gap-2">
-                <HugeiconsIcon icon={CoinsSwapIcon} className="h-4 w-4 text-primary" />
                 <h2 className="text-sm font-semibold">Swap</h2>
               </div>
               <SwapSettings
@@ -711,7 +709,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                       }
                     }}
                     className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold transition-colors ${
-                      isDollarMode ? "bg-primary text-white" : "bg-accent/50 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      isDollarMode ? "bg-primary text-primary-foreground" : "bg-accent/50 text-muted-foreground hover:bg-accent hover:text-foreground"
                     }`}
                     title={isDollarMode ? "Switch to token amount" : "Switch to USD amount"}
                   >
@@ -784,7 +782,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
               <div className="flex justify-center -my-2.5 relative z-10">
                 <button
                   onClick={flipPair}
-                  className="rounded-full border-4 border-card bg-accent p-1.5 text-muted-foreground shadow-sm transition-all hover:bg-primary hover:text-white hover:scale-110"
+                  className="rounded-full border-4 border-card bg-accent p-1.5 text-muted-foreground shadow-sm transition-all hover:bg-primary hover:text-primary-foreground hover:scale-110"
                 >
                   <HugeiconsIcon icon={Exchange01Icon} className="h-3.5 w-3.5" />
                 </button>
@@ -867,10 +865,10 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
               {swapResult && (
                 <div className={`mt-3 rounded-xl p-3 text-xs font-medium ${
                   swapResult.success && swapResult.status === "DONE"
-                    ? "bg-emerald-500/10 text-emerald-500"
+                    ? "bg-credit-chip text-credit"
                     : swapResult.success && swapResult.status === "PENDING"
-                    ? "bg-amber-500/10 text-amber-500"
-                    : "bg-red-500/10 text-red-500"
+                    ? "bg-warning-chip text-warning"
+                    : "bg-debit-chip text-debit"
                 }`}>
                   {swapResult.success && swapResult.status === "DONE"
                     ? `Swap confirmed! Tx: ${swapResult.txHash?.slice(0, 10)}...${swapResult.txHash?.slice(-6)}`
@@ -882,7 +880,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
 
               {/* Quote error */}
               {quoteError && !quoteLoading && numericFrom > 0 && (
-                <p className="mt-2 text-xs text-amber-500">{quoteError}</p>
+                <p className="mt-2 text-xs text-warning">{quoteError}</p>
               )}
 
               {/* ── Swap button ── */}
@@ -924,16 +922,13 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   return (
     <>
       {/* Page header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-xl font-bold tracking-tight">Swap</h1>
-          <p className="text-xs text-muted-foreground">
-            Swap tokens across chains with the best rates
-          </p>
-        </div>
-        <div className="hidden sm:flex items-center gap-2">
+      <div className="flex items-center justify-between mb-5">
+        <PageHeader title="Swap" subtitle="Swap tokens across chains with the best rates" />
+        {/* Six chain pills don't fit beside the title until well past `sm`,
+            so the row scrolls rather than widening the page. */}
+        <div className="hidden min-w-0 shrink items-center gap-2 overflow-x-auto sm:flex scrollbar-none">
           {CHAINS.map((chain) => (
-            <div key={chain.id} className="flex items-center gap-1.5 rounded-full border border-border/40 bg-accent/30 px-2.5 py-1">
+            <div key={chain.id} className="flex shrink-0 items-center gap-1.5 rounded-full bg-accent/30 px-2.5 py-1">
               <img src={chain.icon} alt={chain.label} className="h-3.5 w-3.5 rounded-full" />
               <span className="text-[10px] font-medium">{chain.label}</span>
             </div>

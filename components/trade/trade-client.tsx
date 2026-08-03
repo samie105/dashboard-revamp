@@ -216,7 +216,7 @@ export function TradeClient() {
         <div className="flex rounded-xl border border-border/50 p-0.5">
           {(["spot", "futures"] as const).map((m) => (
             <button key={m} onClick={() => setMarketTab(m)}
-              className={`rounded-[10px] px-4 py-1.5 text-sm font-semibold transition-colors ${market === m ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`rounded-[10px] px-4 py-1.5 text-sm font-semibold transition-colors ${market === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
               {m === "spot" ? "Spot" : "Futures"}
             </button>
           ))}
@@ -252,7 +252,7 @@ export function TradeClient() {
 
       {/* Symbol picker */}
       {pickerOpen && (
-        <div className="mt-3 rounded-2xl border border-border/30 bg-card p-3">
+        <div className="mt-3 rounded-2xl bg-card p-3">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search markets…"
             className="w-full rounded-lg border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
           <div className="mt-2 grid max-h-64 grid-cols-2 gap-1 overflow-y-auto sm:grid-cols-4">
@@ -272,33 +272,33 @@ export function TradeClient() {
         {/* Chart first, order form beside it (form is order-2 below), book and
             positions on the second row. Same coin id as the book (coinName for
             spot, bare symbol for futures). */}
-        <div className="rounded-2xl border border-border/30 bg-card p-4 lg:order-1 lg:col-span-8">
+        <div className="rounded-2xl bg-card p-4 lg:order-1 lg:col-span-8">
           <CandleChart coin={bookCoin} />
         </div>
 
         {/* Order book */}
-        <div className="rounded-2xl border border-border/30 bg-card p-4 lg:order-3 lg:col-span-8">
+        <div className="rounded-2xl bg-card p-4 lg:order-3 lg:col-span-8">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Order book</p>
           {!book ? (
             <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-3 text-xs tabular-nums">
               <div>
-                <p className="mb-1 font-medium text-emerald-500">Bids</p>
+                <p className="mb-1 font-medium text-credit">Bids</p>
                 {book.bids.map((l, i) => (
                   <div key={i} className="relative flex justify-between py-0.5">
-                    <div className="absolute inset-y-0 left-0 bg-emerald-500/10" style={{ width: `${(l.total / (book.bids[book.bids.length - 1]?.total || 1)) * 100}%` }} />
-                    <span className="relative text-emerald-500">{l.price.toLocaleString(undefined, { maximumFractionDigits: l.price < 1 ? 6 : 2 })}</span>
+                    <div className="absolute inset-y-0 left-0 bg-credit-chip" style={{ width: `${(l.total / (book.bids[book.bids.length - 1]?.total || 1)) * 100}%` }} />
+                    <span className="relative text-credit">{l.price.toLocaleString(undefined, { maximumFractionDigits: l.price < 1 ? 6 : 2 })}</span>
                     <span className="relative text-muted-foreground">{l.size.toFixed(3)}</span>
                   </div>
                 ))}
               </div>
               <div>
-                <p className="mb-1 font-medium text-red-500">Asks</p>
+                <p className="mb-1 font-medium text-debit">Asks</p>
                 {book.asks.map((l, i) => (
                   <div key={i} className="relative flex justify-between py-0.5">
-                    <div className="absolute inset-y-0 left-0 bg-red-500/10" style={{ width: `${(l.total / (book.asks[book.asks.length - 1]?.total || 1)) * 100}%` }} />
-                    <span className="relative text-red-500">{l.price.toLocaleString(undefined, { maximumFractionDigits: l.price < 1 ? 6 : 2 })}</span>
+                    <div className="absolute inset-y-0 left-0 bg-debit-chip" style={{ width: `${(l.total / (book.asks[book.asks.length - 1]?.total || 1)) * 100}%` }} />
+                    <span className="relative text-debit">{l.price.toLocaleString(undefined, { maximumFractionDigits: l.price < 1 ? 6 : 2 })}</span>
                     <span className="relative text-muted-foreground">{l.size.toFixed(3)}</span>
                   </div>
                 ))}
@@ -308,7 +308,7 @@ export function TradeClient() {
         </div>
 
         {/* Order form */}
-        <div className="rounded-2xl border border-border/30 bg-card p-4 lg:order-2 lg:col-span-4">
+        <div className="rounded-2xl bg-card p-4 lg:order-2 lg:col-span-4">
           {!ready ? (
             <div className="py-6 text-center">
               <p className="text-sm font-semibold">Trading account not set up</p>
@@ -368,7 +368,7 @@ export function TradeClient() {
                   </div>
                 </div>
               )}
-              {tpslError && <p className="mt-2 text-xs text-amber-500">{tpslError}</p>}
+              {tpslError && <p className="mt-2 text-xs text-warning">{tpslError}</p>}
               {amt > 0 && price > 0 && (
                 <p className="mt-2 text-xs text-muted-foreground tabular-nums">
                   {/* Amount IS the notional; leverage only sets the margin used. */}
@@ -376,16 +376,16 @@ export function TradeClient() {
                   {market === "futures" && leverage > 1 && ` · margin ≈ $${(amt / leverage).toFixed(2)} at ${leverage}×`}
                 </p>
               )}
-              {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+              {error && <p className="mt-2 text-xs text-debit">{error}</p>}
               {outcome?.success && (
-                <p className="mt-2 text-xs text-emerald-500">
+                <p className="mt-2 text-xs text-credit">
                   {outcome.resting
                     ? "Limit order resting on the book."
                     : `Filled ${outcome.filledSize ?? ""} ${outcome.symbol} @ $${outcome.avgFillPrice?.toFixed(2) ?? "—"}`}
                 </p>
               )}
               {outcome?.success && outcome.tpslWarning && (
-                <p className="mt-1 text-xs font-semibold text-amber-500">
+                <p className="mt-1 text-xs font-semibold text-warning">
                   ⚠ {outcome.tpslWarning} — your position is open without that protection.
                 </p>
               )}
@@ -399,7 +399,7 @@ export function TradeClient() {
 
         {/* Positions + open orders */}
         <div className="space-y-4 lg:order-4 lg:col-span-4">
-          <div className="rounded-2xl border border-border/30 bg-card p-4">
+          <div className="rounded-2xl bg-card p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Positions</p>
             {(account?.positions ?? []).length === 0 ? (
               <p className="mt-3 text-xs text-muted-foreground">No open positions.</p>
@@ -408,15 +408,15 @@ export function TradeClient() {
                 {account!.positions.map((p) => (
                   <div key={p.symbol} className="rounded-xl border border-border/30 px-3 py-2 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold">{p.symbol} <span className={p.side === "long" ? "text-emerald-500" : "text-red-500"}>{p.side.toUpperCase()} {p.leverage.value}×</span></span>
+                      <span className="font-bold">{p.symbol} <span className={p.side === "long" ? "text-credit" : "text-debit"}>{p.side.toUpperCase()} {p.leverage.value}×</span></span>
                       <button onClick={() => handleClose(p.symbol)} disabled={busyKey === `close:${p.symbol}`}
-                        className="rounded-lg bg-red-500/10 px-2.5 py-1 font-semibold text-red-500 hover:bg-red-500/20 disabled:opacity-40">
+                        className="rounded-lg bg-debit-chip px-2.5 py-1 font-semibold text-debit hover:bg-red-500/20 disabled:opacity-40">
                         {busyKey === `close:${p.symbol}` ? "…" : "Close"}
                       </button>
                     </div>
                     <div className="mt-1 flex justify-between text-muted-foreground tabular-nums">
                       <span>{p.absSize} @ ${p.entryPrice.toLocaleString()}</span>
-                      <span className={p.unrealizedPnl >= 0 ? "text-emerald-500" : "text-red-500"}>
+                      <span className={p.unrealizedPnl >= 0 ? "text-credit" : "text-debit"}>
                         {p.unrealizedPnl >= 0 ? "+" : ""}${p.unrealizedPnl.toFixed(2)}
                       </span>
                     </div>
@@ -426,7 +426,7 @@ export function TradeClient() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-border/30 bg-card p-4">
+          <div className="rounded-2xl bg-card p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Open orders</p>
             {(account?.openOrders ?? []).length === 0 ? (
               <p className="mt-3 text-xs text-muted-foreground">No open orders.</p>
@@ -436,7 +436,7 @@ export function TradeClient() {
                   <div key={o.oid} className="flex items-center justify-between rounded-xl border border-border/30 px-3 py-2 text-xs">
                     <div>
                       <span className="font-bold">{o.symbol}</span>{" "}
-                      <span className={o.side === "buy" ? "text-emerald-500" : "text-red-500"}>{o.side}</span>{" "}
+                      <span className={o.side === "buy" ? "text-credit" : "text-debit"}>{o.side}</span>{" "}
                       <span className="text-muted-foreground tabular-nums">
                         {o.isTrigger
                           ? `${o.orderType} @ $${(o.triggerPrice ?? o.limitPrice).toLocaleString()}`

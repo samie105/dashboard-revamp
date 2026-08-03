@@ -4,6 +4,7 @@ import { DashboardGrid } from "@/components/dashboard/bento-grid"
 import { WalletCardSkeleton, DashboardGridSkeleton } from "@/components/dashboard/skeletons"
 import { DashboardOnboarding } from "@/components/dashboard/dashboard-onboarding"
 import { Rise } from "@/components/ui/system"
+import { PromoRow } from "@/components/ui/promo-row"
 import { getPrices, getTrades } from "@/lib/actions"
 
 async function WalletCardLoader() {
@@ -45,6 +46,9 @@ export default function Page() {
         </Suspense>
       </Rise>
       <Rise delay={60}>
+        <PromoRow />
+      </Rise>
+      <Rise delay={120}>
         <Suspense fallback={<DashboardGridSkeleton />}>
           <DashboardGridLoader />
         </Suspense>
