@@ -25,11 +25,17 @@ import { useWallet } from "@/components/wallet-provider"
 export function ReceivePanel({
   /** Restrict to the networks the asset actually lives on. */
   only,
+  /**
+   * The asset being received, named in the warning. Pass `null` when the panel
+   * isn't scoped to one token (the wallet's generic "receive anything" view) —
+   * naming a token there would be a lie, and the warning has to stay true to
+   * be worth reading.
+   */
   asset = "USDT",
   className,
 }: {
   only?: string[]
-  asset?: string
+  asset?: string | null
   className?: string
 }) {
   const { addresses, walletsGenerated } = useWallet()
@@ -78,15 +84,19 @@ export function ReceivePanel({
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      <div className="flex flex-col gap-2">
-        <Eyebrow>Receive on</Eyebrow>
-        <ChoiceRow
-          options={available.map((n) => ({ key: n.key, label: n.label, icon: NETWORK_ICON[n.key] }))}
-          value={key}
-          onChange={setKey}
-          columns={3}
-        />
-      </div>
+      {/* A one-option picker is just noise — the network is already named on
+          the address label and again in the warning. */}
+      {available.length > 1 && (
+        <div className="flex flex-col gap-2">
+          <Eyebrow>Receive on</Eyebrow>
+          <ChoiceRow
+            options={available.map((n) => ({ key: n.key, label: n.label, icon: NETWORK_ICON[n.key] }))}
+            value={key}
+            onChange={setKey}
+            columns={3}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col items-center gap-4 rounded-2xl bg-card px-4 py-6">
         {qr ? (
@@ -126,8 +136,17 @@ export function ReceivePanel({
         <div className="flex w-full items-start gap-2 rounded-xl bg-warning-chip px-3 py-2.5">
           <HugeiconsIcon icon={AlertCircleIcon} className="mt-px h-4 w-4 shrink-0 text-warning" />
           <p className="text-[12px] leading-relaxed text-warning">
-            Only send <strong>{asset} on {active?.label}</strong> to this address. Anything else
-            — a different token, or the right token on another network — may be lost permanently.
+            {asset ? (
+              <>
+                Only send <strong>{asset} on {active?.label}</strong> to this address. Anything else
+                — a different token, or the right token on another network — may be lost permanently.
+              </>
+            ) : (
+              <>
+                Only send assets that exist on <strong>{active?.label}</strong> to this address.
+                The right token on another network may be lost permanently.
+              </>
+            )}
           </p>
         </div>
       </div>

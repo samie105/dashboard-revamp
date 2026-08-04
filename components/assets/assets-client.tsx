@@ -13,6 +13,7 @@ import {
   ArrowDown01Icon as ChevronDownIcon,
   Exchange01Icon,
   ArrowUpRight01Icon,
+  ArrowDownLeft01Icon,
   Chart01Icon,
   ChartLineData01Icon,
   Coins01Icon,
@@ -33,6 +34,7 @@ import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-a
 import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { fetchPrices, type Coin } from "@/lib/crypto-api"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
+import { ReceiveModal, type ReceivableAsset } from "@/components/assets/receive-modal"
 
 // Market rows for the Spot tab — the service's price feed plus the display
 // fields the old spotv2 pair registry carried.
@@ -320,6 +322,8 @@ export default function AssetsClient() {
   const [chainTab, setChainTab] = React.useState<ChainTab>("All")
   const [search, setSearch] = React.useState("")
   const [sendModal, setSendModal] = React.useState<{ open: boolean; asset?: SendableAsset }>({ open: false })
+  // No asset → the header's "Receive" button, which offers every network.
+  const [receiveModal, setReceiveModal] = React.useState<{ open: boolean; asset?: ReceivableAsset }>({ open: false })
   const [spotMarkets, setSpotMarkets] = React.useState<SpotV2Pair[]>([])
   const [spotMarketsLoading, setSpotMarketsLoading] = React.useState(false)
   const [spotMarketsLoaded, setSpotMarketsLoaded] = React.useState(false)
@@ -655,6 +659,10 @@ export default function AssetsClient() {
                     <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
                       placeholder="Search tokens..." className="w-36 rounded-lg bg-accent/50 pl-7 pr-2 py-1.5 text-xs outline-none focus:bg-accent" />
                   </div>
+                  <button onClick={() => setReceiveModal({ open: true })}
+                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                    <HugeiconsIcon icon={ArrowDownLeft01Icon} className="h-3.5 w-3.5" /> Receive
+                  </button>
                   <button data-onboarding="add-token-btn" onClick={() => setShowAddToken(true)}
                     className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                     <HugeiconsIcon icon={Add01Icon} className="h-3.5 w-3.5" /> Add Token
@@ -688,6 +696,9 @@ export default function AssetsClient() {
                       <th className="px-4 py-2 text-left font-medium">Network</th>
                       <th className="px-4 py-2 text-right font-medium">Balance</th>
                       <th className="px-4 py-2 text-right font-medium">Value</th>
+                      {/* The actions column had no header cell, so every row
+                          carried one td more than the thead declared. */}
+                      <th className="px-4 py-2"><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/20">
@@ -731,12 +742,19 @@ export default function AssetsClient() {
                             {bal > 0 ? `$${usdVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00"}
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <button onClick={() => setSendModal({ open: true, asset: { symbol: token.symbol, name: token.name, balance: bal,
-                              chain: token.chain as SendableAsset["chain"], icon: token.icon, contractAddress: token.contractAddress,
-                              decimals: token.isNative ? undefined : 18 } })}
-                              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-                              Send <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-                            </button>
+                            <div className="flex items-center justify-end gap-0.5">
+                              <button onClick={() => setReceiveModal({ open: true, asset: {
+                                symbol: token.symbol, chain: token.chain, icon: token.icon } })}
+                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                                Receive <HugeiconsIcon icon={ArrowDownLeft01Icon} className="h-3 w-3" />
+                              </button>
+                              <button onClick={() => setSendModal({ open: true, asset: { symbol: token.symbol, name: token.name, balance: bal,
+                                chain: token.chain as SendableAsset["chain"], icon: token.icon, contractAddress: token.contractAddress,
+                                decimals: token.isNative ? undefined : 18 } })}
+                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                                Send <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -1174,6 +1192,7 @@ export default function AssetsClient() {
       </div>
 
       <SendModal open={sendModal.open} onClose={() => setSendModal({ open: false })} asset={sendModal.asset} />
+      <ReceiveModal open={receiveModal.open} onClose={() => setReceiveModal({ open: false })} asset={receiveModal.asset} />
     </div>
   )
 }
