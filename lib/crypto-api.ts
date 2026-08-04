@@ -55,6 +55,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       data?.error ?? data?.message ?? `The server returned an error (${res.status}). Try again.`,
     )
   }
+
+  // A 2xx carrying something that isn't JSON is not a response from this API —
+  // it's an auth redirect that fetch followed to a login page, or a gateway
+  // error page. Returning null here would push the failure into the caller as a
+  // TypeError on the next property access, long after the cause is legible.
+  if (text && data === null) {
+    throw new CryptoApiError(
+      res.redirected ? 401 : 502,
+      res.redirected
+        ? "Your session expired. Refresh the page and sign in again."
+        : "The server sent a response we couldn't read. Try again shortly.",
+    )
+  }
+
   return data as T
 }
 

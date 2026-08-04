@@ -12,26 +12,12 @@ const isPublicRoute = createRouteMatcher([
   "/register(.*)",
 ])
 
-// API routes that require authentication
-const isProtectedApi = createRouteMatcher([
-  "/api/profile(.*)",
-  "/api/wallet(.*)",
-  "/api/swap(.*)",
-  "/api/admin(.*)",
-  // Proxied to worldstreet-crypto — listed so an expired session returns a
-  // JSON 401 the client can handle, not an HTML login redirect. Add each
-  // prefix here as it is added to FORWARDED in app/api/[...path]/route.ts.
-  "/api/tokens(.*)",
-  "/api/trade(.*)",
-  "/api/trading-wallet(.*)",
-  "/api/agent(.*)",
-  "/api/buy(.*)",
-  "/api/sell(.*)",
-  "/api/dollar(.*)",
-  "/api/transactions(.*)",
-  "/api/wallet-transfers(.*)",
-  "/api/privy(.*)",
-])
+// Everything under /api (webhooks excepted, below) is authenticated and answers
+// in JSON. It is matched as one prefix rather than an endpoint-by-endpoint list
+// because the list has to stay in sync with FORWARDED in
+// app/api/[...path]/route.ts, and a path missing from it doesn't fail loudly —
+// it falls through to the page branch and hands fetch() an HTML login page.
+const isApiRoute = createRouteMatcher(["/api/(.*)"])
 
 // Webhook/cron routes that should NOT require auth (called by external services)
 const isWebhookRoute = createRouteMatcher([
@@ -44,6 +30,20 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next()
   }
 
+  // API before pages. An expired session on /api/* has to come back as a JSON
+  // 401 the client can recognise: fetch() follows a redirect, so answering with
+  // one returns the login page's HTML under a 200, which every JSON caller
+  // parses into null and then dereferences. The redirect branch below is for
+  // navigations only.
+  if (isApiRoute(req)) {
+    try {
+      await auth.protect()
+    } catch {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    return NextResponse.next()
+  }
+
   if (!isPublicRoute(req)) {
     try {
       await auth.protect()
@@ -53,14 +53,6 @@ export default clerkMiddleware(async (auth, req) => {
         return NextResponse.redirect(LOGIN_URL)
       }
       return NextResponse.redirect(new URL(LOGIN_URL, req.url))
-    }
-  }
-
-  if (isProtectedApi(req)) {
-    try {
-      await auth.protect()
-    } catch {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
   }
 })

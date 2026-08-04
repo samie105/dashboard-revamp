@@ -9,10 +9,9 @@
  */
 
 import * as React from "react"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Clock01Icon } from "@hugeicons/core-free-icons"
 import { Eyebrow, PageHeader, Segmented } from "@/components/ui/system"
 import { ReceivePanel } from "@/components/ui/receive-panel"
+import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
 import {
   FlowShell,
   AnnouncementBanner,
@@ -24,7 +23,6 @@ import {
   InlineNotice,
   FlowCta,
   StatusScreen,
-  UnavailablePanel,
   FlowSkeleton,
   type Stage,
 } from "@/components/ui/flow"
@@ -52,6 +50,30 @@ const NETWORKS = [
 
 const BUY_TERMINAL = ["completed", "delivery_failed", "cancelled"]
 const SELL_TERMINAL = ["completed", "failed"]
+
+/**
+ * Poll cadence, by how long the order has been in flight. Most finish inside a
+ * minute; the steps back off so an order the backend has lost doesn't get
+ * hammered for as long as the tab stays open.
+ */
+const POLL_STEPS = [
+  { until: 60_000, every: 4_000 },
+  { until: 300_000, every: 10_000 },
+  { until: Infinity, every: 30_000 },
+]
+/** Say something once "under a minute" has stopped being true. */
+const POLL_SLOW_AFTER_MS = 120_000
+/** Stop polling. The order is still open — it just isn't finishing here. */
+const POLL_GIVE_UP_MS = 900_000
+
+function pollDelayFor(waitedMs: number): number {
+  return POLL_STEPS.find((s) => waitedMs < s.until)!.every
+}
+
+/** Amounts are USDT: whole where it's whole, never more than 2dp. */
+function fmtUsdt(n: number): string {
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
 
 /** The checklist the poll advances. Status → stage index. */
 const BUY_STAGES: Stage[] = [
@@ -302,7 +324,7 @@ export function BuySellClient({ mode }: { mode: Mode }) {
           {loadError && (
             <AnnouncementBanner
               title="We couldn't load live limits"
-              detail={`${loadError} You can still see the form, but orders are disabled until this recovers.`}
+              detail={`${humanError(loadError)} You can still see the form, but orders are disabled until this recovers.`}
               tone="error"
             />
           )}
