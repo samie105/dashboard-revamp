@@ -20,7 +20,6 @@ import {
   AmountField,
   ChoiceRow,
   DetailPanel,
-  InlineNotice,
   FlowCta,
   StatusScreen,
   FlowSkeleton,
@@ -107,6 +106,13 @@ function humanError(raw: string): string {
     return "That network's transfer service is misconfigured on our side — we've been notified. Try another network in the meantime."
   if (s.includes("insufficient"))
     return "There isn't enough balance to cover this, including fees."
+  if (s.includes("wallet found") || s.includes("create your wallets"))
+    return "Your wallet on that network isn't set up yet. Try another network, or reload the page to finish setting it up."
+  // "…is temporarily unavailable for purchase" — the treasury is short on that
+  // chain. Deliberately not a bare "available": "Availability check failed" is
+  // a different failure with different advice.
+  if (s.includes("unavailable"))
+    return "That network doesn't have enough USDT to fill this right now. Try a smaller amount, or another network."
   if (s.includes("timeout") || s.includes("fetch failed") || s.includes("unreachable"))
     return "We couldn't reach the service. Your funds are untouched — try again shortly."
   if (s.includes("unauthorized") || s.includes("expired token"))
@@ -215,13 +221,26 @@ export function BuySellClient({ mode }: { mode: Mode }) {
     setWaitedMs(POLL_SLOW_AFTER_MS)
   }
 
+  const networkLabel = NETWORKS.find((n) => n.key === network)?.label ?? network
+
+  /* The wallet the USDT is delivered to (buy) or sent from (sell). The service
+     404s without one; knowing here means saying so before the CTA, not after. */
+  const walletAddress = addresses?.[network as keyof WalletAddresses] ?? ""
+  const missingWallet = !walletsLoading && !walletAddress
+
+  /* An order can't exceed what the treasury holds on that chain. The service
+     re-checks at submit and 409s — this just moves the news earlier. */
+  const treasuryMax = isBuy ? chainAvailable[network] : undefined
+  const effectiveMax = treasuryMax != null ? Math.min(limits.max, treasuryMax) : limits.max
+  const treasuryCapped = effectiveMax < limits.max
+
   const amt = parseFloat(amount) || 0
   const usdSide = isBuy ? amt * (1 + limits.feePercent / 100) : amt * (1 - limits.feePercent / 100)
   const shortBy = isBuy && cashUsd !== null ? usdSide - cashUsd : 0
   const insufficientCash = isBuy && cashUsd !== null && usdSide > cashUsd
   // Max the user can actually buy, fee included — drives the 25/50/75/Max chips.
   const maxSpendUsdt = isBuy && cashUsd !== null
-    ? Math.min(limits.max, cashUsd / (1 + limits.feePercent / 100))
+    ? Math.min(effectiveMax, cashUsd / (1 + limits.feePercent / 100))
     : null
 
   /* Paused or failed-to-load: the form stays visible but inert. */
@@ -230,10 +249,16 @@ export function BuySellClient({ mode }: { mode: Mode }) {
   /* The blocker ladder — the CTA always says WHY it can't proceed. */
   const blocker =
     inert ? (isBuy ? "Buying unavailable right now" : "Selling unavailable right now")
+    : walletsLoading ? "Checking your wallet…"
+    : missingWallet ? `No ${networkLabel} wallet yet`
+    : effectiveMax <= 0 ? `No USDT available on ${networkLabel} right now`
     :
     amt <= 0 ? "Enter an amount"
     : amt < limits.min ? `Minimum is ${limits.min} USDT`
-    : amt > limits.max ? `Maximum is ${limits.max.toLocaleString()} USDT`
+    : amt > effectiveMax
+      ? treasuryCapped
+        ? `Only ${fmtUsdt(effectiveMax)} USDT available on ${networkLabel}`
+        : `Maximum is ${limits.max.toLocaleString()} USDT`
     : insufficientCash ? "Not enough in your Dollar Account"
     : null
   const ctaLabel = submitting
@@ -243,7 +268,10 @@ export function BuySellClient({ mode }: { mode: Mode }) {
   /* Amount-line validation, phrased as help rather than a scold. */
   const amountProblem =
     amt > 0 && amt < limits.min ? `The minimum is ${limits.min} USDT.`
-    : amt > limits.max ? `The maximum is ${limits.max.toLocaleString()} USDT per order.`
+    : amt > effectiveMax
+      ? treasuryCapped
+        ? `Only ${fmtUsdt(effectiveMax)} USDT is available on ${networkLabel} right now — try a smaller amount, or another network.`
+        : `The maximum is ${limits.max.toLocaleString()} USDT per order.`
     : insufficientCash ? `You need $${shortBy.toFixed(2)} more in your Dollar Account for this ${isBuy ? "buy" : "order"}.`
     : null
 
@@ -278,6 +306,11 @@ export function BuySellClient({ mode }: { mode: Mode }) {
       : ("error" in result && result.error) ||
         "The transfer couldn't be completed. Your USDT hasn't left — it's safe to try again."
 
+    /* Still running, long past "under a minute". Say so rather than let the
+       spinner keep making a promise the flow has already broken. */
+    const stalled = !done && !failed && waitedMs >= POLL_GIVE_UP_MS
+    const slow = !done && !failed && !stalled && waitedMs >= POLL_SLOW_AFTER_MS
+
     return (
       <FlowShell>
         <StatusScreen
@@ -296,22 +329,34 @@ export function BuySellClient({ mode }: { mode: Mode }) {
                 : `$${(result as Sell).usdProceeds.toFixed(2)} was credited to your Dollar Account.`
               : failed
                 ? failureCaption
-                : "This usually takes under a minute."
+                : stalled || slow
+                  ? "Your order is still open — this is taking longer than it usually does."
+                  : "This usually takes under a minute."
           }
           stages={!failed ? stages : undefined}
           activeIndex={done ? stages.length : stageIndex(stages, result.status)}
           txHash={result.txHash}
+          autoUpdating={!stalled}
+          notice={
+            stalled
+              ? `We've stopped checking automatically. Nothing is lost — reference ${result.reference}. Check again, or find it in your history.`
+              : slow
+                ? "You can leave this page. The order carries on either way, and history will show how it ends."
+                : undefined
+          }
           primary={
             done
               ? { label: "View history", href: "/transactions" }
               : failed
-                ? { label: "Start over", onClick: () => { setResult(null); setAmount("") } }
-                : undefined
+                ? { label: "Start over", onClick: resetFlow }
+                : stalled
+                  ? { label: "Check again", onClick: resumePolling }
+                  : undefined
           }
           secondary={
             done
-              ? { label: isBuy ? "Buy more" : "Sell more", onClick: () => { setResult(null); setAmount("") } }
-              : failed
+              ? { label: isBuy ? "Buy more" : "Sell more", onClick: resetFlow }
+              : failed || stalled
                 ? { label: "View history", href: "/transactions" }
                 : undefined
           }
@@ -363,7 +408,22 @@ export function BuySellClient({ mode }: { mode: Mode }) {
             <AnnouncementBanner
               title={isBuy ? "Buying is paused right now" : "Selling is paused right now"}
               detail="The treasury is topping up. This is usually brief — everything below is disabled until it's back."
-              action={isBuy ? { label: "Receive from another wallet instead", href: "#" } : undefined}
+              action={
+                isBuy
+                  ? { label: "Receive from another wallet instead", onClick: () => setTab("receive") }
+                  : undefined
+              }
+            />
+          )}
+          {!inert && missingWallet && (
+            <AnnouncementBanner
+              title={`Your ${networkLabel} wallet isn't ready`}
+              detail={
+                isBuy
+                  ? `We create a wallet per network, and this one hasn't finished. Pick another network, or try again — the USDT needs somewhere to land.`
+                  : `We create a wallet per network, and this one hasn't finished. Pick another network, or try again.`
+              }
+              action={{ label: "Try again", onClick: () => { void refreshWallets() } }}
             />
           )}
           <ContextPanel
@@ -379,10 +439,14 @@ export function BuySellClient({ mode }: { mode: Mode }) {
               value={amount}
               onChange={setAmount}
               unit="USDT"
-              hint={`Min ${limits.min} · Max ${limits.max.toLocaleString()}`}
+              hint={
+                treasuryCapped
+                  ? `Min ${limits.min} · Up to ${fmtUsdt(effectiveMax)} on ${networkLabel} right now`
+                  : `Min ${limits.min} · Max ${limits.max.toLocaleString()}`
+              }
               problem={amountProblem}
               maxSpend={maxSpendUsdt}
-              presets={!maxSpendUsdt ? [10, 50, 100, 500].filter((p) => p >= limits.min && p <= limits.max) : undefined}
+              presets={!maxSpendUsdt ? [10, 50, 100, 500].filter((p) => p >= limits.min && p <= effectiveMax) : undefined}
             />
           </div>
 

@@ -314,6 +314,7 @@ export function StatusScreen({
   activeIndex = 0,
   txHash,
   notice,
+  autoUpdating = true,
   primary,
   secondary,
 }: {
@@ -325,6 +326,9 @@ export function StatusScreen({
   txHash?: string | null
   /** Extra warning line (e.g. partial delivery). */
   notice?: React.ReactNode
+  /** False once the caller has stopped polling — the "updates automatically"
+   *  line is a promise, so it goes away when it stops being kept. */
+  autoUpdating?: boolean
   primary?: { label: string; onClick?: () => void; href?: string }
   secondary?: { label: string; onClick?: () => void; href?: string }
 }) {
@@ -377,7 +381,7 @@ export function StatusScreen({
         </button>
       )}
 
-      {state === "processing" && (
+      {state === "processing" && autoUpdating && (
         <p className="text-[11px] text-subtle">Updates automatically — you can leave this page.</p>
       )}
 
