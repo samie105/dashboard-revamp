@@ -16,6 +16,9 @@
  */
 
 import * as React from "react"
+import Link from "next/link"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { RollingAmount } from "@/components/ui/rolling-amount"
 
@@ -202,21 +205,44 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  back,
   className,
 }: {
   title: string
   subtitle?: string
   actions?: React.ReactNode
+  /** Where "back" goes. A href navigates; a function runs instead (close a
+   *  modal, step back inside a flow). Sub-pages should always pass one — a
+   *  screen you can only leave through the browser chrome is a dead end. */
+  back?: string | (() => void)
   className?: string
 }) {
   return (
     <div className={cn("flex flex-wrap items-start justify-between gap-3", className)}>
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <h1 className="font-display text-2xl font-bold tracking-[-0.01em]">{title}</h1>
-        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+      <div className="flex min-w-0 items-start gap-2">
+        {back !== undefined && <BackAction to={back} />}
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h1 className="font-display text-2xl font-bold tracking-[-0.01em]">{title}</h1>
+          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+        </div>
       </div>
       {actions && <div className="flex items-center gap-1">{actions}</div>}
     </div>
+  )
+}
+
+/** The one back control. Sits on the SUNKEN step so it reads as a control
+ *  rather than a link, and lines up with the title's cap height. */
+export function BackAction({ to, className }: { to: string | (() => void); className?: string }) {
+  const cls = cn(
+    "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+    className,
+  )
+  const icon = <HugeiconsIcon icon={ArrowLeft01Icon} className="h-[18px] w-[18px]" />
+  return typeof to === "string" ? (
+    <Link href={to} aria-label="Back" title="Back" className={cls}>{icon}</Link>
+  ) : (
+    <button type="button" onClick={to} aria-label="Back" title="Back" className={cls}>{icon}</button>
   )
 }
 

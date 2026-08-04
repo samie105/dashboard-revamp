@@ -921,7 +921,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     <>
       {/* Page header */}
       <div className="flex items-center justify-between mb-5">
-        <PageHeader title="Swap" subtitle="Swap tokens across chains with the best rates" />
+        <PageHeader title="Swap" subtitle="Swap tokens across chains with the best rates" back="/" />
         {/* Six chain pills don't fit beside the title until well past `sm`,
             so the row scrolls rather than widening the page. */}
         <div className="hidden min-w-0 shrink items-center gap-2 overflow-x-auto sm:flex scrollbar-none">

@@ -12,6 +12,7 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { Segmented } from "@/components/ui/system"
 import type { HlAccount } from "@/lib/crypto-api"
 
 type Tab = "positions" | "orders"
@@ -46,31 +47,18 @@ export function PositionsPanel({
 
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
-      {/* Tab strip */}
-      <div className="flex items-center gap-1 border-b border-border/30 px-2">
-        {(
-          [
-            { key: "positions", label: "Positions", count: positions.length },
-            { key: "orders", label: "Open orders", count: orders.length },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={cn(
-              "relative px-3 py-2.5 text-xs font-semibold transition-colors",
-              tab === t.key ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-            {t.count > 0 && (
-              <span className="ml-1.5 rounded-full bg-primary/[0.12] px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                {t.count}
-              </span>
-            )}
-            {tab === t.key && <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary" />}
-          </button>
-        ))}
+      {/* Tab strip — the house Segmented, so this reads like every other tab
+          set in the app rather than inventing an underline idiom. */}
+      <div className="flex items-center border-b border-border/30 px-2 py-1.5">
+        <Segmented
+          size="sm"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { key: "positions", label: positions.length ? `Positions · ${positions.length}` : "Positions" },
+            { key: "orders", label: orders.length ? `Open orders · ${orders.length}` : "Open orders" },
+          ]}
+        />
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">

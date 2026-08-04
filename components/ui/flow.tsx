@@ -420,6 +420,7 @@ export function UnavailablePanel({
   reason,
   icon = AlertCircleIcon,
   tone = "warning",
+  action,
 }: {
   title: string
   reason?: string
@@ -427,7 +428,12 @@ export function UnavailablePanel({
    *  states — an error is not the place for borrowed art. */
   icon?: typeof AlertCircleIcon
   tone?: "warning" | "muted"
+  /** Overrides the default "Back to dashboard" link. Inside a modal the way
+   *  out is closing it — navigating would throw away the screen underneath. */
+  action?: { label: string; onClick: () => void }
 }) {
+  const actionCls =
+    "mt-1 inline-flex items-center rounded-full border border-primary/40 px-4 py-2 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/10"
   return (
     <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-10 text-center">
       <span
@@ -442,9 +448,15 @@ export function UnavailablePanel({
       <p className="mx-auto max-w-xs text-[13px] leading-relaxed text-muted-foreground">
         {reason || "This is usually brief — check back in a few minutes."}
       </p>
-      <Link href="/" className="mt-1 inline-flex items-center rounded-full border border-primary/40 px-4 py-2 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/10">
-        Back to dashboard
-      </Link>
+      {action ? (
+        <button type="button" onClick={action.onClick} className={actionCls}>
+          {action.label}
+        </button>
+      ) : (
+        <Link href="/" className={actionCls}>
+          Back to dashboard
+        </Link>
+      )}
     </div>
   )
 }

@@ -413,7 +413,7 @@ export function BuySellClient({
           <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
       ) : (
-        <PageHeader title={title} subtitle={subtitle} className="mb-5" />
+        <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
       )}
 
       {isBuy && (

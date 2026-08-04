@@ -25,8 +25,18 @@ import { Cancel01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { BuySellClient } from "@/components/buy-sell/buy-sell-client"
+import { FundClient } from "@/components/fund/fund-client"
 
-type FlowMode = "buy" | "sell"
+/** The four money doors. buy/sell move USDT against the Dollar Account;
+ *  fund/trading-withdraw move USDC between the Dollar Account and Hyperliquid. */
+type FlowMode = "buy" | "sell" | "fund" | "trading-withdraw"
+
+const FLOW_LABELS: Record<FlowMode, string> = {
+  buy: "Deposit USDT",
+  sell: "Withdraw USDT",
+  fund: "Fund trading account",
+  "trading-withdraw": "Withdraw trading balance",
+}
 
 const MoneyFlowContext = React.createContext<{
   openFlow: (mode: FlowMode) => void
@@ -97,7 +107,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
         <Dialog.Portal>
           <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/60 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-sm" />
           <Dialog.Popup
-            aria-label={mode === "buy" ? "Deposit USDT" : "Withdraw USDT"}
+            aria-label={FLOW_LABELS[mode]}
             className={cn(
               "fixed z-50 flex flex-col bg-card outline-none",
               isMobile
@@ -124,15 +134,25 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
             </button>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              <BuySellClient
-                // Keyed by mode so a half-typed deposit never leaks into a
-                // withdrawal. Each open is a fresh mount regardless — the
-                // portal unmounts the popup once the close transition ends.
-                key={mode}
-                mode={mode}
-                variant="modal"
-                onInFlightChange={handleInFlightChange}
-              />
+              {/* Keyed by mode so a half-typed deposit never leaks into a
+                  withdrawal. Each open is a fresh mount regardless — the
+                  portal unmounts the popup once the close transition ends. */}
+              {mode === "buy" || mode === "sell" ? (
+                <BuySellClient
+                  key={mode}
+                  mode={mode}
+                  variant="modal"
+                  onInFlightChange={handleInFlightChange}
+                />
+              ) : (
+                <FundClient
+                  key={mode}
+                  mode={mode === "fund" ? "fund" : "withdraw"}
+                  variant="modal"
+                  onInFlightChange={handleInFlightChange}
+                  onDismiss={closeFlow}
+                />
+              )}
             </div>
           </Dialog.Popup>
         </Dialog.Portal>

@@ -79,8 +79,32 @@ const WITHDRAW_STAGE_INDEX: Record<string, number> = {
 
 type Mode = "fund" | "withdraw"
 
-export function FundClient({ mode }: { mode: Mode }) {
+/** The modal variant's column — same children, none of the page margins
+ *  (the modal/drawer shell already frames it). Mirrors BuySellClient. */
+function ModalBody({ children }: { children: React.ReactNode }) {
+  return <div className="p-4 sm:p-5">{children}</div>
+}
+
+export function FundClient({
+  mode,
+  variant = "page",
+  onInFlightChange,
+  onDismiss,
+}: {
+  mode: Mode
+  /** "page" = the /fund and /trading-withdraw routes. "modal" = the same flow
+   *  inside the money-flow modal/drawer, with a compact header. */
+  variant?: "page" | "modal"
+  /** Reports when dismissing would abandon an in-flight transfer, so the modal
+   *  shell can ignore backdrop clicks and Escape at exactly those moments. */
+  onInFlightChange?: (inFlight: boolean) => void
+  /** Closes the containing modal. Dead-end screens use it instead of a link so
+   *  they don't navigate away from whatever the modal opened over. */
+  onDismiss?: () => void
+}) {
   const isFund = mode === "fund"
+  const isModal = variant === "modal"
+  const Shell = isModal ? ModalBody : FlowShell
 
   const [amount, setAmount] = React.useState("")
   const [side, setSide] = React.useState<FundDestination>("spot")
@@ -148,6 +172,16 @@ export function FundClient({ mode }: { mode: Mode }) {
     }, 4000)
     return () => clearInterval(id)
   }, [result, isFund])
+
+  // Dismissing mid-transfer is the one unforgivable accident — tell the modal
+  // shell when a submit is in the air or a status screen is still moving.
+  const terminalNow = result
+    ? (isFund ? (FUND_TERMINAL as readonly string[]) : (TRADING_WITHDRAW_TERMINAL as readonly string[])).includes(result.status)
+    : false
+  const inFlight = submitting || (!!result && !terminalNow)
+  React.useEffect(() => {
+    onInFlightChange?.(inFlight)
+  }, [inFlight, onInFlightChange])
 
   const amt = parseFloat(amount) || 0
   const sourceBalance = isFund ? cashUsd : hl ? (side === "spot" ? hl.spot : hl.perps) : null
@@ -220,7 +254,7 @@ export function FundClient({ mode }: { mode: Mode }) {
       : null
 
     return (
-      <FlowShell>
+      <Shell>
         <StatusScreen
           state={done ? "success" : failed ? "failure" : "processing"}
           headline={
@@ -253,7 +287,11 @@ export function FundClient({ mode }: { mode: Mode }) {
           }
           primary={
             done
-              ? { label: "Go trade", href: "/trade" }
+              ? // In a modal the workspace is already behind you — closing
+                // returns to it; a link would reload the page you're on.
+                isModal && onDismiss
+                ? { label: "Back to trading", onClick: onDismiss }
+                : { label: "Go trade", href: "/trade" }
               : failed
                 ? { label: "Start over", onClick: () => { setResult(null); setAmount("") } }
                 : undefined
@@ -266,22 +304,26 @@ export function FundClient({ mode }: { mode: Mode }) {
                 : undefined
           }
         />
-      </FlowShell>
+      </Shell>
     )
   }
 
   /* ── Form ───────────────────────────────────────────────────────────── */
+  const title = isFund ? "Fund trading account" : "Withdraw trading balance"
+  const subtitle = isFund
+    ? "Pay from your Dollar Account — funds land in Hyperliquid ready to trade."
+    : "Move funds from Hyperliquid back to your Dollar Account."
+
   return (
-    <FlowShell>
-      <PageHeader
-        title={isFund ? "Fund trading account" : "Withdraw trading balance"}
-        subtitle={
-          isFund
-            ? "Pay from your Dollar Account — funds land in Hyperliquid ready to trade."
-            : "Move funds from Hyperliquid back to your Dollar Account."
-        }
-        className="mb-5"
-      />
+    <Shell>
+      {isModal ? (
+        <div className="mb-4 pr-10">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+      ) : (
+        <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
+      )}
 
       {loading ? (
         <FlowSkeleton />
@@ -290,6 +332,7 @@ export function FundClient({ mode }: { mode: Mode }) {
           title="We couldn't load this screen"
           reason={`${loadError} — refresh to try again.`}
           tone="muted"
+          action={isModal && onDismiss ? { label: "Close", onClick: onDismiss } : undefined}
         />
       ) : walletReady === false ? (
         /* One-time setup gate — a real screen with a single clear action. */
@@ -373,6 +416,6 @@ export function FundClient({ mode }: { mode: Mode }) {
           <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
         </div>
       )}
-    </FlowShell>
+    </Shell>
   )
 }

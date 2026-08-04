@@ -41,13 +41,35 @@ import {
 import { CandleChart } from "@/components/trade/candle-chart"
 import { OrderBook } from "@/components/trade/order-book"
 import { PositionsPanel } from "@/components/trade/positions-panel"
+import { BackAction, Eyebrow, Segmented, type SegmentedOption } from "@/components/ui/system"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 
 type Market = "spot" | "futures"
 type Side = "buy" | "sell"
 type OrderType = "market" | "limit"
 
+const MARKET_TABS: readonly SegmentedOption<Market>[] = [
+  { key: "spot", label: "Spot" },
+  { key: "futures", label: "Futures" },
+]
+const ORDER_TYPES: readonly SegmentedOption<OrderType>[] = [
+  { key: "market", label: "Market" },
+  { key: "limit", label: "Limit" },
+]
+
 function fmtPx(p: number) {
   return p.toLocaleString(undefined, { maximumFractionDigits: p < 1 ? 6 : 2 })
+}
+
+/** A labelled figure in the market strip — Eyebrow over a tabular value. */
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="hidden shrink-0 flex-col gap-0.5 md:flex">
+      <Eyebrow className="text-[9px] tracking-[0.1em]">{label}</Eyebrow>
+      <span className="text-[11px] font-medium tabular-nums">{value}</span>
+    </span>
+  )
 }
 
 function fmtCompact(n: number) {
@@ -60,6 +82,7 @@ function fmtCompact(n: number) {
 export function TradeClient() {
   const params = useSearchParams()
   const router = useRouter()
+  const { openFlow } = useMoneyFlow()
 
   const market: Market = params.get("market") === "futures" ? "futures" : "spot"
   const urlSymbol = params.get("symbol") ?? params.get("pair") ?? ""
@@ -202,9 +225,19 @@ export function TradeClient() {
     !submitting && !!current && amt >= minOrder &&
     (orderType === "market" || parseFloat(limitPrice) > 0) && !tpslError
 
+  // Switching market carries no symbol: a spot pair name is meaningless on the
+  // perps list (and vice versa), so the selection effect picks that market's
+  // default and the sync effect below writes it back to the URL.
   function setMarketTab(m: Market) {
-    router.replace(`/trade?market=${m}${symbol ? `&symbol=${symbol}` : ""}`)
+    router.replace(`/trade?market=${m}`)
   }
+
+  // Keep the address bar honest — it's what gets refreshed, shared and
+  // bookmarked, so it must name the pair actually on screen.
+  React.useEffect(() => {
+    if (!symbol || urlSymbol.toUpperCase() === symbol.toUpperCase()) return
+    router.replace(`/trade?market=${market}&symbol=${symbol}`)
+  }, [symbol, market, urlSymbol, router])
 
   async function submit() {
     if (!current) return
@@ -375,12 +408,12 @@ export function TradeClient() {
           One-time setup, then fund it with USDC to start trading.
         </p>
       </div>
-      <Link
-        href="/fund"
+      <button
+        onClick={() => openFlow("fund")}
         className="mt-1 flex h-10 w-full items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
       >
         Set up &amp; fund
-      </Link>
+      </button>
     </div>
   ) : (
     <div className="flex flex-col gap-3 p-3.5">
@@ -401,20 +434,14 @@ export function TradeClient() {
         ))}
       </div>
 
-      {/* Type */}
-      <div className="flex items-center gap-0.5 self-start rounded-full bg-surface-sunken p-0.5">
-        {(["market", "limit"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setOrderType(t)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-              orderType === t ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t === "market" ? "Market" : "Limit"}
-          </button>
-        ))}
-      </div>
+      {/* Type — the house Segmented, same control as everywhere else */}
+      <Segmented
+        size="sm"
+        value={orderType}
+        onChange={setOrderType}
+        options={ORDER_TYPES}
+        className="self-start"
+      />
 
       {orderType === "limit" && (
         <label className="flex flex-col gap-1">
@@ -575,25 +602,24 @@ export function TradeClient() {
     <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background lg:overflow-hidden">
       {/* Top bar */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/30 px-3 py-2 lg:flex-nowrap">
-        <Link href="/" className="flex shrink-0 items-center gap-2" title="Back to dashboard">
-          <Image src="/worldstreet-logo/WorldStreet1x.png" alt="Worldstreet" width={72} height={18} className="h-[18px] w-auto object-contain" />
-        </Link>
+        {/* This route has no sidebar or navbar, so it carries its own way
+            out — a back control, not just a clickable logo. */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <BackAction to="/" className="mt-0" />
+          <Link href="/" className="hidden items-center sm:flex" title="Dashboard">
+            <Image src="/worldstreet-logo/WorldStreet1x.png" alt="Worldstreet" width={72} height={18} className="h-[18px] w-auto object-contain" />
+          </Link>
+        </div>
         <span className="hidden h-5 w-px bg-border/40 sm:block" />
 
         {/* Market toggle */}
-        <div className="flex shrink-0 items-center gap-0.5 rounded-full bg-surface-sunken p-0.5">
-          {(["spot", "futures"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMarketTab(m)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                market === m ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {m === "spot" ? "Spot" : "Futures"}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          size="sm"
+          value={market}
+          onChange={setMarketTab}
+          options={MARKET_TABS}
+          className="shrink-0"
+        />
 
         {/* Pair */}
         <div className="relative shrink-0">
@@ -620,18 +646,9 @@ export function TradeClient() {
           <span className={`shrink-0 text-xs font-semibold tabular-nums ${changeUp ? "text-credit" : "text-debit"}`}>
             {stats ? `${changeUp ? "+" : ""}${stats.changePct.toFixed(2)}%` : "—"}
           </span>
-          <span className="hidden shrink-0 flex-col md:flex">
-            <span className="text-[9px] uppercase tracking-wide text-subtle">24h High</span>
-            <span className="text-[11px] font-medium tabular-nums">{stats ? `$${fmtPx(stats.high)}` : "—"}</span>
-          </span>
-          <span className="hidden shrink-0 flex-col md:flex">
-            <span className="text-[9px] uppercase tracking-wide text-subtle">24h Low</span>
-            <span className="text-[11px] font-medium tabular-nums">{stats ? `$${fmtPx(stats.low)}` : "—"}</span>
-          </span>
-          <span className="hidden shrink-0 flex-col md:flex">
-            <span className="text-[9px] uppercase tracking-wide text-subtle">24h Volume</span>
-            <span className="text-[11px] font-medium tabular-nums">{stats ? fmtCompact(stats.quoteVolume) : "—"}</span>
-          </span>
+          <Stat label="24h High" value={stats ? `$${fmtPx(stats.high)}` : "—"} />
+          <Stat label="24h Low" value={stats ? `$${fmtPx(stats.low)}` : "—"} />
+          <Stat label="24h Volume" value={stats ? fmtCompact(stats.quoteVolume) : "—"} />
         </div>
 
         {/* Balances + money doors */}
@@ -643,12 +660,24 @@ export function TradeClient() {
               Futures <span className="font-semibold text-foreground">${balances.perpsWithdrawableUsdc.toFixed(2)}</span>
             </span>
           )}
-          <Link href="/fund" className="rounded-full bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90">
+          {/* Funding is a detour from trading, not a destination — it opens
+              over the workspace so the chart and the ticket keep their state. */}
+          <button
+            onClick={() => openFlow("fund")}
+            className="rounded-full bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
             Fund
-          </Link>
-          <Link href="/trading-withdraw" className="rounded-full bg-surface-sunken px-3.5 py-1.5 text-xs font-semibold transition-colors hover:bg-accent">
+          </button>
+          <button
+            onClick={() => openFlow("trading-withdraw")}
+            className="rounded-full bg-surface-sunken px-3.5 py-1.5 text-xs font-semibold transition-colors hover:bg-accent"
+          >
             Withdraw
-          </Link>
+          </button>
+          <span className="hidden h-5 w-px bg-border/40 sm:block" />
+          {/* The shell's chrome doesn't reach this route, so the theme control
+              travels with it. */}
+          <ThemeToggle />
         </div>
       </div>
 

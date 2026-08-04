@@ -12,6 +12,7 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { Eyebrow } from "@/components/ui/system"
 import type { HlOrderBook } from "@/lib/hl-public"
 
 function fmtPrice(p: number) {
@@ -101,7 +102,7 @@ export function OrderBook({
     return (
       <div ref={paneRef} className={cn("flex flex-col gap-1 overflow-hidden p-3", className)}>
         <div className="flex items-center justify-between px-0.5 pb-1">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">Order book</span>
+          <Eyebrow className="text-[10px]">Order book</Eyebrow>
         </div>
         {Array.from({ length: 2 * fit + 1 }).map((_, i) => (
           <div key={i} className="h-[18px] animate-pulse rounded bg-surface-sunken/70" />
@@ -122,7 +123,7 @@ export function OrderBook({
   return (
     <div ref={paneRef} className={cn("flex min-h-0 flex-col overflow-hidden", className)}>
       <div className="flex items-center justify-between px-3 pb-1 pt-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">Order book</span>
+        <Eyebrow className="text-[10px]">Order book</Eyebrow>
         <span className="text-[10px] tabular-nums text-subtle">spread {fmtPrice(book.spread)}</span>
       </div>
       <div className="grid grid-cols-[1fr_auto] gap-2 px-3 pb-1 text-[10px] uppercase tracking-wide text-subtle">
