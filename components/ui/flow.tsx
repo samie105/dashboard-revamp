@@ -478,7 +478,9 @@ export function AnnouncementBanner({
   title: string
   detail?: React.ReactNode
   tone?: "warning" | "error"
-  action?: { label: string; href: string }
+  /** Links out, or acts in place — a banner that offers a way forward has to
+   *  be able to reach the same screen's state, not only another route. */
+  action?: { label: string; href?: string; onClick?: () => void }
 }) {
   return (
     <div
@@ -502,11 +504,19 @@ export function AnnouncementBanner({
         {detail && (
           <p className="text-[12.5px] leading-relaxed text-muted-foreground">{detail}</p>
         )}
-        {action && (
-          <Link href={action.href} className="mt-1 w-fit text-[12.5px] font-semibold text-primary hover:underline">
-            {action.label} →
-          </Link>
-        )}
+        {action &&
+          (action.href ? (
+            <Link href={action.href} className="mt-1 w-fit text-[12.5px] font-semibold text-primary hover:underline">
+              {action.label} →
+            </Link>
+          ) : (
+            <button
+              onClick={action.onClick}
+              className="mt-1 w-fit text-[12.5px] font-semibold text-primary hover:underline"
+            >
+              {action.label} →
+            </button>
+          ))}
       </div>
     </div>
   )

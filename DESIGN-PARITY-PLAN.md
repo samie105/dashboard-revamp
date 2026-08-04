@@ -2,6 +2,26 @@
 
 Measured from the live iPhone 17 simulator (`worldstreet-app`, 402pt viewport) against the live web dev server (`localhost:58086`). Every number below is read off a real screenshot, not the token file.
 
+> **Status — 2026-08-04: all six stages have landed.** Section 1 (the mobile
+> grammar) is the spec the code now implements, and stays useful. Section 2
+> ("what the web looks like today") describes the *before* state and no longer
+> matches anything.
+>
+> Where each stage ended up, all in [components/ui/system.tsx](components/ui/system.tsx):
+> `Balance` (font-display 300, `clamp(2.75rem, 5.5vw, 4.5rem)`, −0.02em) ·
+> `Segmented` · `PageHeader` + `IconAction` · `CardHeader` (title/subtitle, no
+> leading icon) · `ListRow` · `EmptyState` · `ActionPill`. The network strip and
+> its per-chain figures are in [components/dashboard/user-card.tsx](components/dashboard/user-card.tsx)
+> — six receivable networks over five wallet keys, since Arbitrum reuses the
+> Ethereum address. The money-flow screens got their own kit in
+> [components/ui/flow.tsx](components/ui/flow.tsx).
+>
+> The three open questions in §4 were settled by what shipped: the gold-chip
+> pill won (`ActionPill`); `/portfolio` and `/assets` stayed separate rather
+> than merging as mobile did; density is compressed against mobile's rhythm,
+> not matched to it. The dev-server port is now pinned to 3200 in
+> [.claude/launch.json](.claude/launch.json), not the `:58086` above.
+
 ---
 
 ## 1. The mobile grammar (the target)

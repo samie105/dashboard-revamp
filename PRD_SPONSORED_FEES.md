@@ -1,5 +1,19 @@
 # PRD: Sponsored Gas Fees — Zero-Cost Transactions for All Users
 
+> **Status — 2026-08-04: shipped, and narrower than written.**
+> [lib/privy/sponsorship.ts](lib/privy/sponsorship.ts) is the single decision
+> point the PRD asked for, with `GAS_SPONSORSHIP_ENABLED` as the kill switch,
+> and [lib/privy/gas-log.ts](lib/privy/gas-log.ts) does the admin logging.
+>
+> It sponsors `ethereum` and `solana` — chain *types*, so every EVM network is
+> covered by the first. Tron, SUI and TON return `false`, as scoped.
+>
+> Caveat: this path only runs while the dashboard still signs with Privy
+> server-side. Phase 5 of
+> [plans/crypto-service-migration.md](plans/crypto-service-migration.md) hands
+> signing to `worldstreet-crypto`, and sponsorship moves with it. Implementation
+> notes are in [plans/sponsored-fees.md](plans/sponsored-fees.md).
+
 ## Problem Statement
 
 Users on the WorldStreet platform currently need native tokens (ETH, SOL, TRX) in their wallets to pay gas fees for on-chain transactions. This creates two problems:

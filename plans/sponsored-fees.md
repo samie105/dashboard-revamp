@@ -1,6 +1,13 @@
 # Plan: Sponsored Gas Fees — Zero-Cost Transactions
 
-> Source PRD: `PRD_SPONSORED_FEES.md`
+> Source PRD: [PRD_SPONSORED_FEES.md](../PRD_SPONSORED_FEES.md)
+
+> **Status — 2026-08-04: shipped.** The engine is
+> [lib/privy/sponsorship.ts](../lib/privy/sponsorship.ts) and the logging is
+> [lib/privy/gas-log.ts](../lib/privy/gas-log.ts). The PRD's status note carries
+> the detail, including what happens to this path when Phase 5 of
+> [crypto-service-migration.md](crypto-service-migration.md) moves signing out
+> of the dashboard.
 
 ## Architectural decisions
 

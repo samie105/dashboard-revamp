@@ -119,9 +119,14 @@ type Mode = "buy" | "sell"
 export function BuySellClient({ mode }: { mode: Mode }) {
   const isBuy = mode === "buy"
 
+  const { addresses, isLoading: walletsLoading, refreshWallets } = useWallet()
+
   const [amount, setAmount] = React.useState("")
   const [network, setNetwork] = React.useState<string>("tron")
   const [enabled, setEnabled] = React.useState<string[]>([])
+  // How much USDT the treasury can actually disburse per chain. Buy only —
+  // selling sends the user's own USDT, so the treasury isn't the constraint.
+  const [chainAvailable, setChainAvailable] = React.useState<Record<string, number | undefined>>({})
   const [limits, setLimits] = React.useState({ min: 1, max: 5000, feePercent: 0 })
   const [cashUsd, setCashUsd] = React.useState<number | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -144,6 +149,9 @@ export function BuySellClient({ mode }: { mode: Mode }) {
           if (cancelled) return
           setLimits({ min: a.minUsdt, max: a.maxUsdt, feePercent: a.feePercent })
           setEnabled(NETWORKS.map((n) => n.key).filter((n) => a.chains[n as BuyNetwork]?.enabled))
+          setChainAvailable(
+            Object.fromEntries(NETWORKS.map((n) => [n.key, a.chains[n.key as BuyNetwork]?.available])),
+          )
         } else {
           const s = await fetchSellInfo()
           if (cancelled) return
@@ -171,18 +179,41 @@ export function BuySellClient({ mode }: { mode: Mode }) {
   }, [enabled, network])
 
   // Poll a non-terminal result. fetchSell also advances the flow server-side.
+  // Each attempt schedules the next one, so the gap can widen as the wait does
+  // — and stop entirely, rather than polling into an empty room forever.
+  const pollStartedAt = React.useRef<number | null>(null)
+  const [waitedMs, setWaitedMs] = React.useState(0)
+
   React.useEffect(() => {
     if (!result) return
     const terminal = isBuy ? BUY_TERMINAL : SELL_TERMINAL
     if (terminal.includes(result.status)) return
-    const id = setInterval(async () => {
+    if (pollStartedAt.current === null) pollStartedAt.current = Date.now()
+    if (waitedMs >= POLL_GIVE_UP_MS) return
+
+    const id = setTimeout(async () => {
       try {
         const next = isBuy ? await fetchBuy(result.reference) : await fetchSell(result.reference)
         setResult(next)
-      } catch { /* keep polling */ }
-    }, 4000)
-    return () => clearInterval(id)
-  }, [result, isBuy])
+      } catch { /* a poll that fails isn't an order that failed — try again */ }
+      setWaitedMs(Date.now() - (pollStartedAt.current ?? Date.now()))
+    }, pollDelayFor(waitedMs))
+    return () => clearTimeout(id)
+  }, [result, waitedMs, isBuy])
+
+  /** Back to the form, with the poll clock wound back. */
+  function resetFlow() {
+    pollStartedAt.current = null
+    setWaitedMs(0)
+    setResult(null)
+    setAmount("")
+  }
+
+  /** Resume after giving up, at the backed-off cadence rather than from zero. */
+  function resumePolling() {
+    pollStartedAt.current = Date.now() - POLL_SLOW_AFTER_MS
+    setWaitedMs(POLL_SLOW_AFTER_MS)
+  }
 
   const amt = parseFloat(amount) || 0
   const usdSide = isBuy ? amt * (1 + limits.feePercent / 100) : amt * (1 - limits.feePercent / 100)

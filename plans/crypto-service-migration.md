@@ -8,6 +8,21 @@
 > Rewritten after the phased draft ran into its own assumptions. Superseded
 > reasoning is called out where it would otherwise mislead.
 
+> **Status — 2026-08-04. Live plan; Phases 1–4 have landed, Phase 5 has not.**
+> Verified against the tree, not against this document:
+>
+> | Phase | State | Evidence in code |
+> |---|---|---|
+> | 1 — mechanical cutovers | done | `FORWARDED` in [app/api/[...path]/route.ts](../app/api/%5B...path%5D/route.ts); no local route survives except `api/vivid/*` |
+> | 2 — spotv2 | done | ledger engine gone from `models/`; [lib/trade-adapter.ts](../lib/trade-adapter.ts) maps the old signatures onto `/api/trade/*` |
+> | 3 — Buy / Sell replace the NGN ramp | done | [components/buy-sell/buy-sell-client.tsx](../components/buy-sell/buy-sell-client.tsx); zero `flutterwave` references left in the app |
+> | 4 — market data direct | done for the trade page | [lib/hl-public.ts](../lib/hl-public.ts) serves the book + candles client-side. The dashboard, portfolio, markets and swap screens still read [lib/actions.ts](../lib/actions.ts) (CoinGecko + Hyperliquid server actions) — that half is what's left. |
+> | 5 — flatten and clean up | **not started** | proxy still in place; `@gmx-io/sdk`, `viem`, `tronweb`, the Solana and Sui SDKs all still in `package.json`; secrets in `.env.example` still unrotated |
+>
+> Two items below are load-bearing and still open: **rotating the credentials
+> committed to `.env.example`** (they are in git history — deleting the lines
+> is not a fix), and the five questions under [Open decisions](#open-decisions).
+
 ## The model we're copying
 
 `worldstreet-app` has **no backend of its own**:
@@ -214,10 +229,10 @@ holdings. Different numbers, not a silent refactor.
 
 5. **Delete** `app/api/deposit/`, `app/api/withdraw/`, `lib/flutterwave/`,
    `lib/deposit/`, and the Flutterwave env vars. This also removes a
-   pre-existing bug: [withdraw-client.tsx:177](../components/withdraw/withdraw-client.tsx:177)
-   defaults the chain selector to `tron` while
-   [initiate/route.ts:32](../app/api/withdraw/initiate/route.ts:32) rejects it
-   with a 400.
+   pre-existing bug: `components/withdraw/withdraw-client.tsx:177` defaulted
+   the chain selector to `tron` while `app/api/withdraw/initiate/route.ts:32`
+   rejected it with a 400. *(Both files are gone as of this phase — the paths
+   are left unlinked as a record of what was deleted.)*
 
 **Communicate:** no bank details on withdraw; no NGN/GHS selector; no
 Flutterwave redirect; no manual tx-hash paste. Old NGN records stay in the
@@ -277,8 +292,11 @@ estimate either get service endpoints or get dropped.
 - **Rotate the secrets committed in [.env.example](../.env.example)** —
   `NEW_PRIVY_APP_SECRET` and `PRIV_KEY_ADMIN` are real values in git history.
   Rotation is the only fix; deleting the file does nothing.
-- Update [PROJECT.md](../PROJECT.md) — still documents `/spot` as the spot page,
-  predates gmx/community/vivid/spotv2, and claims Tron withdrawals work.
+- ~~Update PROJECT.md~~ — done differently. It was too far gone to update
+  (documented `/spot` as the spot page, predated gmx/community/vivid/spotv2,
+  claimed Tron withdrawals work), so it moved to
+  [docs/archive/](../docs/archive/README.md) and the current architecture now
+  lives in [README.md](../README.md).
 
 ---
 

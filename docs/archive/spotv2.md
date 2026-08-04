@@ -1,6 +1,6 @@
 # Plan: Spot Trading v2 — Ledger-Based Spot Trading
 
-> Source PRD: [PRD_SPOTV2_INTEGRATION.MD](../PRD_SPOTV2_INTEGRATION.MD)
+> Source PRD: [PRD_SPOTV2_INTEGRATION.md](./PRD_SPOTV2_INTEGRATION.md)
 
 ## Architectural decisions
 
