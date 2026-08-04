@@ -26,6 +26,7 @@ import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
 import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
+import { fetchPrices } from "@/lib/crypto-api"
 
 function truncAddr(addr: string) {
   if (!addr || addr.length < 14) return addr
@@ -42,7 +43,7 @@ function formatUSD(amount: number): string {
 }
 
 function getPrice(prices: Record<string, number>, symbol: string): number {
-  return prices[symbol] ?? 0
+  return prices[symbol] ?? prices[symbol.toUpperCase()] ?? prices[symbol.toLowerCase()] ?? 0
 }
 
 function calculateDailyPnL(
@@ -52,7 +53,7 @@ function calculateDailyPnL(
 ): number {
   let pnl = 0
   for (const [symbol, amount] of Object.entries(holdings)) {
-    const price = prices[symbol] ?? 0
+    const price = getPrice(prices, symbol)
     const coin = coins.find((c) => c.symbol === symbol)
     const change = coin?.change24h ?? 0
     if (price && amount) {
@@ -90,6 +91,33 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   // Balance privacy — masks render as fixed-width dots, never a layout jump.
   const [hidden, setHidden] = React.useState(false)
 
+  // Live prices from the crypto service feed — the same source the hub, the
+  // assets page and mobile value holdings at. The server-rendered `prices`
+  // snapshot seeds first paint; this keeps valuations fresh alongside the 30s
+  // balance polls instead of freezing them at render time.
+  const [livePrices, setLivePrices] = React.useState<Record<string, number>>(prices)
+  React.useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetchPrices()
+        if (cancelled) return
+        const merged: Record<string, number> = { ...res.prices }
+        for (const c of res.coins) {
+          const key = c.symbol.toUpperCase()
+          if (merged[key] === undefined && c.price > 0) merged[key] = c.price
+        }
+        setLivePrices(merged)
+      } catch {
+        /* keep last good prices */
+      }
+    }
+    load()
+    const id = setInterval(load, 30_000)
+    return () => { cancelled = true; clearInterval(id) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // SpotV2 ledger data (same source as assets page)
   const [spotLedger, setSpotLedger] = React.useState<LedgerBalance[]>([])
   const [spotV2Positions, setSpotV2Positions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
@@ -119,25 +147,25 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     if (!walletsGenerated) return 0
     let total = 0
     for (const b of onChainBalances) {
-      const p = getPrice(prices, b.symbol)
+      const p = getPrice(livePrices, b.symbol)
       total += b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
     }
     return total
-  }, [onChainBalances, prices, walletsGenerated])
+  }, [onChainBalances, livePrices, walletsGenerated])
 
   // What each chain is worth — the network strip's figures (mobile grammar:
   // the strip carries value, chains are never hidden behind a dropdown).
   const chainTotals = React.useMemo(() => {
     const m: Record<string, number> = Object.fromEntries(NETWORKS.map((n) => [n.key, 0]))
     for (const b of onChainBalances) {
-      const p = getPrice(prices, b.symbol)
+      const p = getPrice(livePrices, b.symbol)
       const v = b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
       // The feed keys by network (arbitrum is its own key even though it shares
       // the ethereum address), so this maps 1:1 onto the strip.
       if (m[b.chain] !== undefined) m[b.chain] += v
     }
     return m
-  }, [onChainBalances, prices])
+  }, [onChainBalances, livePrices])
 
   // Spot balance = SpotV2 ledger (available + locked) + positions value (matches assets page)
   const spotBalance = React.useMemo(() => {
@@ -160,8 +188,8 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   }, [onChainBalances, walletsGenerated])
 
   const dailyPnL = React.useMemo(
-    () => calculateDailyPnL(holdings, prices, coins),
-    [holdings, prices, coins],
+    () => calculateDailyPnL(holdings, livePrices, coins),
+    [holdings, livePrices, coins],
   )
 
   // Per-view balance
