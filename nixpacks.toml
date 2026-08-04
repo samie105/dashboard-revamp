@@ -1,0 +1,10 @@
+# Nixpacks installs dependencies BEFORE copying the full source tree, so the
+# @worldstreet/vivid-voice `file:` dependency gets packed from a packages/ dir
+# that holds only its package.json — no dist/. pnpm stores that empty copy and
+# `next build` dies on "Can't resolve '@worldstreet/vivid-voice'".
+#
+# By the build phase the whole repo is present, so re-running the install first
+# lets pnpm notice the directory dep changed and repack it with dist/ included.
+# With everything already in the store the repair costs well under a second.
+[phases.build]
+cmds = ["pnpm install --frozen-lockfile --prefer-offline", "pnpm run build"]
