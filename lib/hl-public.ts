@@ -127,3 +127,43 @@ export async function fetchHlDayChange(coin: string): Promise<number | null> {
   const last = candles[candles.length - 1].close
   return first > 0 ? ((last - first) / first) * 100 : null
 }
+
+// ── 24h stats ───────────────────────────────────────────────────────────────
+
+export type Hl24hStats = {
+  /** Close 24h ago → last close, as a percentage. */
+  changePct: number
+  high: number
+  low: number
+  /** Approximate quote volume: Σ base volume × close. */
+  quoteVolume: number
+  lastClose: number
+}
+
+/**
+ * The backend's market list carries no 24h figures, so the header derives them
+ * from the same public candle feed the chart uses: 25 hourly bars ≈ a rolling
+ * day. Approximate by design — good enough for a ticker strip, not for stats
+ * the user trades against.
+ */
+export async function fetchHl24hStats(coin: string): Promise<Hl24hStats | null> {
+  const candles = await fetchHlCandles(coin, "1h", 25)
+  if (candles.length < 2) return null
+  const first = candles[0]
+  const last = candles[candles.length - 1]
+  let high = -Infinity
+  let low = Infinity
+  let quoteVolume = 0
+  for (const c of candles) {
+    if (c.high > high) high = c.high
+    if (c.low < low) low = c.low
+    quoteVolume += c.volume * c.close
+  }
+  return {
+    changePct: first.open > 0 ? ((last.close - first.open) / first.open) * 100 : 0,
+    high,
+    low,
+    quoteVolume,
+    lastClose: last.close,
+  }
+}

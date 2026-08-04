@@ -230,6 +230,14 @@ svg[viewBox="0 0 24 24"] > path:not(:first-child) {
   animation: wallet-progress 2.5s infinite linear;
 }
 
+/* Hidden scrollbar — for horizontal chip/stat strips that still need to pan */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Slim scrollbar — invisible until hover, thin and translucent */
 .slim-scroll {
   scrollbar-width: thin;
