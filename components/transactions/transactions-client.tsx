@@ -96,7 +96,19 @@ function getTypeConfig(tx: UnifiedTransaction) {
   switch (tx.type) {
     case "deposit":
     case "spot_deposit":
-      return { label: tx.type === "spot_deposit" ? "Spot Deposit" : "Deposit", color: "text-credit", bg: "bg-credit-chip", icon: ArrowDown01Icon }
+      // Both are money in and share the credit styling, but "Deposit" reads as
+      // a purchase — an on-chain arrival is better named for what happened.
+      return {
+        label:
+          tx.type === "spot_deposit"
+            ? "Spot Deposit"
+            : tx.subType === "onchain"
+              ? "Received"
+              : "Deposit",
+        color: "text-credit",
+        bg: "bg-credit-chip",
+        icon: ArrowDown01Icon,
+      }
     case "withdrawal":
       return { label: "Withdrawal", color: "text-red-400", bg: "bg-debit-chip", icon: ArrowUp01Icon }
     case "p2p":
@@ -426,6 +438,8 @@ export function TransactionsClient() {
                               <span>→ {typeof tx.toAmount === "string" ? parseFloat(tx.toAmount).toLocaleString(undefined, { maximumFractionDigits: 6 }) : tx.toAmount} {tx.toToken}</span>
                             ) : tx.pair ? (
                               <span>{tx.pair}</span>
+                            ) : tx.subType === "onchain" && tx.fromAddress ? (
+                              <span className="text-[10px]">from {truncateHash(tx.fromAddress)}</span>
                             ) : tx.direction ? (
                               <span className="capitalize text-[10px]">{tx.direction.replace(/-/g, " → ")}</span>
                             ) : (
