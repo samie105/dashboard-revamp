@@ -21,6 +21,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn, avatarUrl } from "@/lib/utils"
 import { useProfile } from "@/components/profile-provider"
+import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
@@ -88,6 +89,7 @@ export function NavbarActions() {
   const { user } = useAuth()
   const { profile } = useProfile()
   const { startCall } = useGlobalCall()
+  const { openFlow } = useMoneyFlow()
   const isMobile = useIsMobile()
 
   /* ── Wallet data ── */
@@ -348,13 +350,23 @@ export function NavbarActions() {
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-2 mb-3">
-                    <a href="/buy" className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90 transition-colors">
+                    {/* Opens the money-flow modal in place — the popover
+                        closes first so it isn't left hanging underneath. */}
+                    <button
+                      type="button"
+                      onClick={() => { setSection(null); openFlow("buy") }}
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90 transition-colors"
+                    >
                       <HugeiconsIcon icon={Exchange01Icon} className="h-3.5 w-3.5 text-white [&_path]:stroke-current [&_path]:fill-none [&_path]:opacity-100" />
                       Deposit
-                    </a>
-                    <a href="/sell" className="flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSection(null); openFlow("sell") }}
+                      className="flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                    >
                       Withdraw
-                    </a>
+                    </button>
                   </div>
                   <div className="h-px bg-border/20 mb-2" />
                   <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-1 mb-1 block">Wallets</span>

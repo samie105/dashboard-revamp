@@ -20,6 +20,7 @@ import { SilkBackdrop } from "@/components/ui/silk-backdrop"
 import { NETWORKS, NETWORK_ICON } from "@/lib/networks"
 import { useAuth } from "@/components/auth-provider"
 import { useWallet } from "@/components/wallet-provider"
+import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { ErrorState } from "@/components/error-state"
 import type { CoinData } from "@/lib/actions"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
@@ -83,6 +84,7 @@ type WalletView = (typeof WALLET_VIEWS)[number]["key"]
 export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const { user, isLoaded } = useAuth()
   const { addresses, walletsGenerated } = useWallet()
+  const { openFlow } = useMoneyFlow()
   const { balances: onChainBalances } = useWalletBalances()
   const { usdcBalance, accountValue, balances: hlBalances } = useHyperliquidBalance(user?.userId, !!user)
   const [isCopied, setIsCopied] = React.useState<string | null>(null)
@@ -237,12 +239,19 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   }))
   const activeChain = WALLETS.find((w) => w.key === selectedWallet) ?? WALLETS[0]
 
-  const ACTIONS = [
-    { label: "Deposit",  href: "/buy",          icon: Exchange01Icon },
-    { label: "Withdraw", href: "/sell",         icon: CreditCardIcon },
-    { label: "Swap",     href: "/swap",         icon: CoinsSwapIcon },
-    { label: "Trade",    href: "/trade",        icon: ChartLineData01Icon },
-    { label: "History",  href: "/transactions", icon: Clock01Icon },
+  // Deposit/Withdraw open the money-flow modal in place — /buy and /sell
+  // stay as routes for deep links, but the rail shouldn't leave the page.
+  const ACTIONS: {
+    label: string
+    icon: typeof Exchange01Icon
+    href?: string
+    onClick?: () => void
+  }[] = [
+    { label: "Deposit",  onClick: () => openFlow("buy"),  icon: Exchange01Icon },
+    { label: "Withdraw", onClick: () => openFlow("sell"), icon: CreditCardIcon },
+    { label: "Swap",     href: "/swap",                   icon: CoinsSwapIcon },
+    { label: "Trade",    href: "/trade",                  icon: ChartLineData01Icon },
+    { label: "History",  href: "/transactions",           icon: Clock01Icon },
   ]
 
   return (
@@ -367,6 +376,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               <ActionPill
                 key={a.label}
                 href={a.href}
+                onClick={a.onClick}
                 label={a.label}
                 icon={({ className }) => <HugeiconsIcon icon={a.icon} className={className} />}
               />

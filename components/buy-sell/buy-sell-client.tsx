@@ -9,6 +9,7 @@
  */
 
 import * as React from "react"
+import { cn } from "@/lib/utils"
 import { Eyebrow, PageHeader, Segmented } from "@/components/ui/system"
 import { ReceivePanel } from "@/components/ui/receive-panel"
 import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
@@ -122,8 +123,30 @@ function humanError(raw: string): string {
 
 type Mode = "buy" | "sell"
 
-export function BuySellClient({ mode }: { mode: Mode }) {
+/** The modal variant's column — same children as FlowShell, none of the page
+ *  margins (the modal/drawer shell already frames it). */
+function ModalBody({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn("p-4 sm:p-5", className)}>{children}</div>
+}
+
+export function BuySellClient({
+  mode,
+  variant = "page",
+  onInFlightChange,
+}: {
+  mode: Mode
+  /** "page" = the /buy and /sell routes (FlowShell + PageHeader — deep links
+   *  and redirects keep working). "modal" = the same flow inside the
+   *  money-flow modal/drawer, with a compact header instead. */
+  variant?: "page" | "modal"
+  /** Reports when dismissing would abandon an in-flight order — mid-submit,
+   *  or a processing (non-terminal) status screen. The modal shell uses this
+   *  to ignore backdrop clicks and Escape at exactly those moments. */
+  onInFlightChange?: (inFlight: boolean) => void
+}) {
   const isBuy = mode === "buy"
+  const isModal = variant === "modal"
+  const Shell = isModal ? ModalBody : FlowShell
 
   const { addresses, isLoading: walletsLoading, refreshWallets } = useWallet()
 
@@ -206,6 +229,15 @@ export function BuySellClient({ mode }: { mode: Mode }) {
     }, pollDelayFor(waitedMs))
     return () => clearTimeout(id)
   }, [result, waitedMs, isBuy])
+
+  /* In flight = money is (or may be) moving and the UI is its only witness:
+     the initiate call is awaiting, or the status screen is still non-terminal.
+     Success/failure screens are safe to dismiss. */
+  const terminalStatuses = isBuy ? BUY_TERMINAL : SELL_TERMINAL
+  const inFlight = submitting || (!!result && !terminalStatuses.includes(result.status))
+  React.useEffect(() => {
+    onInFlightChange?.(inFlight)
+  }, [inFlight, onInFlightChange])
 
   /** Back to the form, with the poll clock wound back. */
   function resetFlow() {
@@ -312,7 +344,7 @@ export function BuySellClient({ mode }: { mode: Mode }) {
     const slow = !done && !failed && !stalled && waitedMs >= POLL_SLOW_AFTER_MS
 
     return (
-      <FlowShell>
+      <Shell>
         <StatusScreen
           state={done ? "success" : failed ? "failure" : "processing"}
           headline={
@@ -361,22 +393,28 @@ export function BuySellClient({ mode }: { mode: Mode }) {
                 : undefined
           }
         />
-      </FlowShell>
+      </Shell>
     )
   }
 
   /* ── Form ───────────────────────────────────────────────────────────── */
+  const title = isBuy ? "Deposit USDT" : "Withdraw USDT"
+  const subtitle = isBuy
+    ? "Pay from your Dollar Account — USDT lands in your wallet."
+    : "USDT leaves your wallet — dollars land in your Dollar Account."
+
   return (
-    <FlowShell>
-      <PageHeader
-        title={isBuy ? "Deposit USDT" : "Withdraw USDT"}
-        subtitle={
-          isBuy
-            ? "Pay from your Dollar Account — USDT lands in your wallet."
-            : "USDT leaves your wallet — dollars land in your Dollar Account."
-        }
-        className="mb-5"
-      />
+    <Shell>
+      {isModal ? (
+        /* Compact header — sits left of the shell's close button (pr-10
+           keeps the title clear of it). */
+        <div className="mb-4 flex flex-col gap-0.5 pr-10">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+      ) : (
+        <PageHeader title={title} subtitle={subtitle} className="mb-5" />
+      )}
 
       {isBuy && (
         <div className="mb-4">
@@ -478,6 +516,6 @@ export function BuySellClient({ mode }: { mode: Mode }) {
           <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
         </div>
       )}
-    </FlowShell>
+    </Shell>
   )
 }

@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { Navbar } from "@/components/navbar"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { IncomingCallProvider } from "@/components/community/incoming-call-provider"
+import { MoneyFlowProvider } from "@/components/flows/money-flow-modal"
 
 /** Routes that render full-bleed (no sidebar / top-nav / navbar). */
 const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
@@ -18,32 +19,36 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   if (isFullBleed) {
     return (
       <IncomingCallProvider>
-        <div className="flex h-dvh flex-col overflow-hidden">
-          <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
-        </div>
+        <MoneyFlowProvider>
+          <div className="flex h-dvh flex-col overflow-hidden">
+            <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
+          </div>
+        </MoneyFlowProvider>
       </IncomingCallProvider>
     )
   }
 
   return (
     <IncomingCallProvider>
-      <div className="flex flex-col h-screen overflow-hidden">
-        <div className="flex flex-1 overflow-hidden">
-          <SidebarProvider>
-            {/* Sidebar hidden on mobile — bottom nav replaces it */}
-            <div className="hidden md:flex">
-              <AppSidebar />
-            </div>
-            <div className="flex flex-1 flex-col w-full overflow-hidden">
-              <Navbar />
-              <main className="flex-1 overflow-y-auto w-full pb-16 md:pb-0">
-                {children}
-              </main>
-            </div>
-          </SidebarProvider>
+      <MoneyFlowProvider>
+        <div className="flex flex-col h-screen overflow-hidden">
+          <div className="flex flex-1 overflow-hidden">
+            <SidebarProvider>
+              {/* Sidebar hidden on mobile — bottom nav replaces it */}
+              <div className="hidden md:flex">
+                <AppSidebar />
+              </div>
+              <div className="flex flex-1 flex-col w-full overflow-hidden">
+                <Navbar />
+                <main className="flex-1 overflow-y-auto w-full pb-16 md:pb-0">
+                  {children}
+                </main>
+              </div>
+            </SidebarProvider>
+          </div>
+          <MobileBottomNav />
         </div>
-        <MobileBottomNav />
-      </div>
+      </MoneyFlowProvider>
     </IncomingCallProvider>
   )
 }
