@@ -10,22 +10,24 @@
 # ships only the server and the modules it actually traced, so node_modules
 # never reaches the final stage.
 
-# ── deps ──────────────────────────────────────────────────────────────────
-FROM node:22-alpine AS deps
-WORKDIR /app
-RUN corepack enable
-
-# Copy only what the install needs, so this layer caches across code changes.
-# The local file: dependency must be present or pnpm can't resolve it.
-COPY package.json pnpm-lock.yaml ./
-COPY packages/vivid-voice/package.json ./packages/vivid-voice/
-RUN pnpm install --frozen-lockfile --prefer-offline
-
 # ── build ─────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 WORKDIR /app
 RUN corepack enable
-COPY --from=deps /app/node_modules ./node_modules
+
+# packages/ must be complete BEFORE pnpm runs. @worldstreet/vivid-voice is a `file:`
+# dependency, so pnpm packs the directory into the store honouring its own
+# "files": ["dist"]. Copying in just its package.json — as an earlier deps stage did —
+# packs a copy with no dist/ at all, and since .dockerignore excludes **/node_modules
+# the later COPY . . can't repair it. The build died on
+# "Can't resolve '@worldstreet/vivid-voice'" while resolving ./dist/index.js.
+#
+# packages/ is only 1.1MB (dist/ is committed), and keeping it above COPY . . means
+# the install layer still caches on package.json/pnpm-lock.yaml alone.
+COPY package.json pnpm-lock.yaml ./
+COPY packages ./packages
+RUN pnpm install --frozen-lockfile --prefer-offline
+
 COPY . .
 
 # Next inlines NEXT_PUBLIC_* at build time, so they must be present here.
