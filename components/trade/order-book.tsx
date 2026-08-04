@@ -60,13 +60,17 @@ function Row({
   )
 }
 
+/** Row height and the fixed chrome (header, labels, mid row, pressure bar). */
+const ROW_H = 18
+const CHROME_H = 124
+
 export function OrderBook({
   book,
   /** Direction of the last mid-price move, for the arrow beside mid. */
   lastTick,
   onPickPrice,
-  /** Levels per side. The list is windowed to fit the pane. */
-  depth = 9,
+  /** Ceiling on levels per side; the pane shows as many as actually fit. */
+  depth = 16,
   className,
 }: {
   book: HlOrderBook | null
@@ -75,13 +79,31 @@ export function OrderBook({
   depth?: number
   className?: string
 }) {
+  const paneRef = React.useRef<HTMLDivElement>(null)
+  const [fit, setFit] = React.useState(depth)
+
+  // A book that leaves half the rail empty reads as broken data, so the ladder
+  // grows to fill whatever height it's given instead of a fixed count.
+  React.useEffect(() => {
+    const el = paneRef.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const measure = () => {
+      const perSide = Math.floor((el.clientHeight - CHROME_H) / 2 / ROW_H)
+      setFit(Math.max(4, Math.min(depth, perSide)))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [depth])
+
   if (!book) {
     return (
-      <div className={cn("flex flex-col gap-1 p-3", className)}>
+      <div ref={paneRef} className={cn("flex flex-col gap-1 overflow-hidden p-3", className)}>
         <div className="flex items-center justify-between px-0.5 pb-1">
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">Order book</span>
         </div>
-        {Array.from({ length: 2 * depth + 1 }).map((_, i) => (
+        {Array.from({ length: 2 * fit + 1 }).map((_, i) => (
           <div key={i} className="h-[18px] animate-pulse rounded bg-surface-sunken/70" />
         ))}
       </div>
@@ -89,16 +111,16 @@ export function OrderBook({
   }
 
   // Asks render top-down from worst to best so the touch meets the mid row.
-  const asks = book.asks.slice(0, depth).reverse()
-  const bids = book.bids.slice(0, depth)
+  const asks = book.asks.slice(0, fit).reverse()
+  const bids = book.bids.slice(0, fit)
   const maxTotal = Math.max(
-    book.asks[Math.min(depth, book.asks.length) - 1]?.total ?? 0,
-    book.bids[Math.min(depth, book.bids.length) - 1]?.total ?? 0,
+    book.asks[Math.min(fit, book.asks.length) - 1]?.total ?? 0,
+    book.bids[Math.min(fit, book.bids.length) - 1]?.total ?? 0,
   )
   const buyPct = Math.round(book.buyRatio * 100)
 
   return (
-    <div className={cn("flex min-h-0 flex-col", className)}>
+    <div ref={paneRef} className={cn("flex min-h-0 flex-col overflow-hidden", className)}>
       <div className="flex items-center justify-between px-3 pb-1 pt-3">
         <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">Order book</span>
         <span className="text-[10px] tabular-nums text-subtle">spread {fmtPrice(book.spread)}</span>

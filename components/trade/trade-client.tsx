@@ -84,18 +84,29 @@ export function TradeClient() {
   const [outcome, setOutcome] = React.useState<HlOrderOutcome | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [busyKey, setBusyKey] = React.useState<string | null>(null)
+  // Load failures are tracked apart from order errors: an unreachable account
+  // must never be mistaken for an account that exists but isn't set up.
+  const [marketsError, setMarketsError] = React.useState(false)
+  const [accountError, setAccountError] = React.useState(false)
 
   // Markets + account
   const refreshAccount = React.useCallback(() => {
-    fetchHlAccount().then(setAccount).catch(() => {})
+    fetchHlAccount()
+      .then((a) => { setAccount(a); setAccountError(false) })
+      .catch(() => setAccountError(true))
+  }, [])
+
+  const loadMarkets = React.useCallback(() => {
+    setMarketsError(false)
+    fetchHlMarkets().then(setMarkets).catch(() => setMarketsError(true))
   }, [])
 
   React.useEffect(() => {
-    fetchHlMarkets().then(setMarkets).catch(() => setError("Failed to load markets"))
+    loadMarkets()
     refreshAccount()
     const id = setInterval(refreshAccount, 15_000)
     return () => clearInterval(id)
-  }, [refreshAccount])
+  }, [loadMarkets, refreshAccount])
 
   // Pick default/URL symbol once markets load.
   const list = React.useMemo(
@@ -142,7 +153,7 @@ export function TradeClient() {
     prevMidRef.current = 0
     setLastTick(null)
     const load = () =>
-      fetchHlOrderBook(bookCoin, 14)
+      fetchHlOrderBook(bookCoin, 22)
         .then((b) => {
           if (cancelled) return
           if (prevMidRef.current > 0 && b.midPrice !== prevMidRef.current) {
@@ -324,7 +335,36 @@ export function TradeClient() {
   )
 
   /* ── Order ticket ─────────────────────────────────────────────────────── */
-  const ticket = !ready ? (
+  const ticket = accountError ? (
+    <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-warning"><circle cx="12" cy="12" r="10" /><path d="M12 8v5" /><path d="M12 16h.01" /></svg>
+      </span>
+      <div>
+        <p className="text-sm font-semibold">Can&apos;t reach your trading account</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          Your balances and positions couldn&apos;t be loaded, so orders are on hold. Nothing has
+          been placed or cancelled.
+        </p>
+      </div>
+      <button
+        onClick={refreshAccount}
+        className="mt-1 flex h-10 w-full items-center justify-center rounded-full bg-surface-sunken text-sm font-semibold transition-colors hover:bg-accent"
+      >
+        Try again
+      </button>
+    </div>
+  ) : !account ? (
+    <div className="flex flex-col gap-3 p-3.5">
+      <div className="grid grid-cols-2 gap-1.5">
+        <div className="h-10 animate-pulse rounded-xl bg-surface-sunken" />
+        <div className="h-10 animate-pulse rounded-xl bg-surface-sunken" />
+      </div>
+      <div className="h-7 w-32 animate-pulse rounded-full bg-surface-sunken" />
+      <div className="h-[52px] animate-pulse rounded-xl bg-surface-sunken" />
+      <div className="h-11 animate-pulse rounded-full bg-surface-sunken" />
+    </div>
+  ) : !ready ? (
     <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.12]">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg>
@@ -617,7 +657,32 @@ export function TradeClient() {
         {/* Chart + bottom panel */}
         <div className="flex min-h-0 min-w-0 flex-col lg:flex-1">
           <div className="h-[340px] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1">
-            <CandleChart coin={bookCoin} />
+            {marketsError ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-warning"><circle cx="12" cy="12" r="10" /><path d="M12 8v5" /><path d="M12 16h.01" /></svg>
+                </span>
+                <div>
+                  <p className="text-sm font-semibold">Markets couldn&apos;t be loaded</p>
+                  <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
+                    Prices and the order book are unavailable right now. Your balances and open
+                    positions are unaffected.
+                  </p>
+                </div>
+                <button
+                  onClick={loadMarkets}
+                  className="rounded-full bg-surface-sunken px-4 py-2 text-xs font-semibold transition-colors hover:bg-accent"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : !bookCoin ? (
+              <div className="flex h-full items-center justify-center">
+                <span className="h-5 w-5 animate-spin rounded-full border-2 border-border/40 border-t-primary" />
+              </div>
+            ) : (
+              <CandleChart coin={bookCoin} />
+            )}
           </div>
           <PositionsPanel
             account={account}
