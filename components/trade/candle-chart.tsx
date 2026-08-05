@@ -130,7 +130,7 @@ export function CandleChart({ coin, className }: { coin: string | null; classNam
           <button
             key={i}
             onClick={() => setIntervalKey(i)}
-            className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
               interval === i ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
             }`}
           >

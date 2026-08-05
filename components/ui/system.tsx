@@ -181,9 +181,11 @@ export function Segmented<T extends string>({
         return (
           <button
             key={opt.key}
+            type="button"
+            aria-pressed={active}
             onClick={() => onChange(opt.key)}
             className={cn(
-              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition-all",
+              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
               md ? "px-3.5 py-2 text-[13px]" : "px-2.5 py-1 text-xs",
               active
                 ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent"
@@ -235,7 +237,7 @@ export function PageHeader({
  *  rather than a link, and lines up with the title's cap height. */
 export function BackAction({ to, className }: { to: string | (() => void); className?: string }) {
   const cls = cn(
-    "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+    "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
     className,
   )
   const icon = <HugeiconsIcon icon={ArrowLeft01Icon} className="h-[18px] w-[18px]" />

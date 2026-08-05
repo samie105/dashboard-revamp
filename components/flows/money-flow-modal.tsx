@@ -24,6 +24,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Cancel01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { Segmented, type SegmentedOption } from "@/components/ui/system"
 import { BuySellClient } from "@/components/buy-sell/buy-sell-client"
 import { FundClient } from "@/components/fund/fund-client"
 
@@ -37,6 +38,18 @@ const FLOW_LABELS: Record<FlowMode, string> = {
   fund: "Fund trading account",
   "trading-withdraw": "Withdraw trading balance",
 }
+
+/** Each door pairs with its opposite direction — money in ↔ money out. The
+ *  toggle at the top of the modal flips between them without closing, so
+ *  "wrong direction" is one tap to fix instead of close-reopen-refind. */
+const CASH_DIRECTIONS: readonly SegmentedOption<FlowMode>[] = [
+  { key: "buy", label: "Deposit" },
+  { key: "sell", label: "Withdraw" },
+]
+const TRADING_DIRECTIONS: readonly SegmentedOption<FlowMode>[] = [
+  { key: "fund", label: "Fund" },
+  { key: "trading-withdraw", label: "Withdraw" },
+]
 
 const MoneyFlowContext = React.createContext<{
   openFlow: (mode: FlowMode) => void
@@ -76,6 +89,14 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
 
   const handleInFlightChange = React.useCallback((v: boolean) => {
     inFlightRef.current = v
+  }, [])
+
+  // Direction toggle: swap to the paired flow in place. Ignored while a move
+  // is in flight — switching would unmount a live status screen.
+  const switchMode = React.useCallback((next: FlowMode) => {
+    if (inFlightRef.current) return
+    inFlightRef.current = false
+    setMode(next)
   }, [])
 
   // Backdrop clicks and Escape ask to close through here. While a move is in
@@ -132,6 +153,16 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
             >
               <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
             </button>
+
+            {/* Direction toggle — pinned above the scroll area, clear of the X. */}
+            <div className="flex shrink-0 justify-start px-4 pb-0 pt-4 sm:px-5">
+              <Segmented
+                size="sm"
+                value={mode}
+                onChange={switchMode}
+                options={mode === "buy" || mode === "sell" ? CASH_DIRECTIONS : TRADING_DIRECTIONS}
+              />
+            </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {/* Keyed by mode so a half-typed deposit never leaks into a

@@ -41,6 +41,7 @@ import {
 import { CandleChart } from "@/components/trade/candle-chart"
 import { OrderBook } from "@/components/trade/order-book"
 import { PositionsPanel } from "@/components/trade/positions-panel"
+import { MarketsRail } from "@/components/trade/markets-rail"
 import { BackAction, Eyebrow, Segmented, type SegmentedOption } from "@/components/ui/system"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
@@ -66,8 +67,8 @@ function fmtPx(p: number) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <span className="hidden shrink-0 flex-col gap-0.5 md:flex">
-      <Eyebrow className="text-[9px] tracking-[0.1em]">{label}</Eyebrow>
-      <span className="text-[11px] font-medium tabular-nums">{value}</span>
+      <Eyebrow className="text-[10px] tracking-[0.1em]">{label}</Eyebrow>
+      <span className="text-[13px] font-medium tabular-nums">{value}</span>
     </span>
   )
 }
@@ -445,7 +446,7 @@ export function TradeClient() {
 
       {orderType === "limit" && (
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] text-subtle">Limit price</span>
+          <span className="text-xs text-subtle">Limit price</span>
           <div className="flex items-center rounded-xl bg-surface-sunken focus-within:ring-1 focus-within:ring-foreground/[0.12]">
             <input
               value={limitPrice}
@@ -454,13 +455,13 @@ export function TradeClient() {
               placeholder={price ? fmtPx(price) : "…"}
               className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
             />
-            <span className="pr-3 text-[11px] text-subtle">USD</span>
+            <span className="pr-3 text-xs text-subtle">USD</span>
           </div>
         </label>
       )}
 
       <label className="flex flex-col gap-1">
-        <span className="flex items-center justify-between text-[11px] text-subtle">
+        <span className="flex items-center justify-between text-xs text-subtle">
           <span>Amount</span>
           {market === "spot" && side === "buy" && balances && (
             <span className="tabular-nums">avail ${balances.spotUsdc.toFixed(2)}</span>
@@ -493,7 +494,7 @@ export function TradeClient() {
                     : (maxNotional * pct).toFixed(2),
                 )
               }
-              className="rounded-lg bg-surface-sunken py-1 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="rounded-lg bg-surface-sunken py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               {pct === 1 ? "Max" : `${pct * 100}%`}
             </button>
@@ -503,7 +504,7 @@ export function TradeClient() {
 
       {market === "futures" && (
         <div>
-          <div className="flex justify-between text-[11px] text-subtle">
+          <div className="flex justify-between text-xs text-subtle">
             <span>Leverage</span>
             <span className="font-bold tabular-nums text-foreground">{leverage}×</span>
           </div>
@@ -525,7 +526,7 @@ export function TradeClient() {
       {market === "futures" && (
         <div className="grid grid-cols-2 gap-1.5">
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-subtle">Take profit</span>
+            <span className="text-xs text-subtle">Take profit</span>
             <input
               value={tpPrice}
               onChange={(e) => setTpPrice(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -535,7 +536,7 @@ export function TradeClient() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-subtle">Stop loss</span>
+            <span className="text-xs text-subtle">Stop loss</span>
             <input
               value={slPrice}
               onChange={(e) => setSlPrice(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -548,11 +549,11 @@ export function TradeClient() {
       )}
 
       {tpslError && (
-        <p className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-[11px] leading-relaxed text-warning">{tpslError}</p>
+        <p role="alert" className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed text-warning">{tpslError}</p>
       )}
 
       {amt > 0 && price > 0 && (
-        <div className="divide-y divide-border/15 rounded-xl bg-surface-sunken/70 px-3 text-[11px] tabular-nums">
+        <div className="divide-y divide-border/15 rounded-xl bg-surface-sunken/70 px-3 text-xs tabular-nums">
           <div className="flex justify-between py-1.5">
             <span className="text-subtle">Qty</span>
             {/* Amount IS the notional; leverage only sets the margin used. */}
@@ -568,17 +569,17 @@ export function TradeClient() {
       )}
 
       {error && (
-        <p className="rounded-lg bg-debit-chip px-2.5 py-1.5 text-[11px] leading-relaxed text-debit">{error}</p>
+        <p role="alert" className="rounded-lg bg-debit-chip px-2.5 py-1.5 text-xs leading-relaxed text-debit">{error}</p>
       )}
       {outcome?.success && (
-        <p className="rounded-lg bg-credit-chip px-2.5 py-1.5 text-[11px] leading-relaxed text-credit">
+        <p role="status" className="rounded-lg bg-credit-chip px-2.5 py-1.5 text-xs leading-relaxed text-credit">
           {outcome.resting
             ? "Limit order resting on the book."
             : `Filled ${outcome.filledSize ?? ""} ${outcome.symbol} @ $${outcome.avgFillPrice?.toFixed(2) ?? "—"}`}
         </p>
       )}
       {outcome?.success && outcome.tpslWarning && (
-        <p className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-[11px] font-semibold leading-relaxed text-warning">
+        <p role="alert" className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs font-semibold leading-relaxed text-warning">
           ⚠ {outcome.tpslWarning} — your position is open without that protection.
         </p>
       )}
@@ -601,7 +602,7 @@ export function TradeClient() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background lg:overflow-hidden">
       {/* Top bar */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/30 px-3 py-2 lg:flex-nowrap">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border/30 px-3 py-2.5 lg:flex-nowrap">
         {/* This route has no sidebar or navbar, so it carries its own way
             out — a back control, not just a clickable logo. */}
         <div className="flex shrink-0 items-center gap-1.5">
@@ -610,40 +611,43 @@ export function TradeClient() {
             <Image src="/worldstreet-logo/WorldStreet1x.png" alt="Worldstreet" width={72} height={18} className="h-[18px] w-auto object-contain" />
           </Link>
         </div>
-        <span className="hidden h-5 w-px bg-border/40 sm:block" />
+        <span className="hidden h-6 w-px bg-border/40 sm:block" />
 
         {/* Market toggle */}
         <Segmented
-          size="sm"
           value={market}
           onChange={setMarketTab}
           options={MARKET_TABS}
           className="shrink-0"
         />
 
-        {/* Pair */}
+        {/* Pair — the rail owns switching on wide screens; this dropdown
+            covers every width below xl and still works above it. */}
         <div className="relative shrink-0">
           <button
             onClick={() => setPickerOpen((v) => !v)}
-            className="flex items-center gap-1.5 rounded-xl bg-surface-sunken px-3 py-1.5 text-sm font-bold transition-colors hover:bg-accent"
+            aria-haspopup="listbox"
+            aria-expanded={pickerOpen}
+            className="flex items-center gap-1.5 rounded-xl bg-surface-sunken px-3.5 py-2 text-[15px] font-bold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             {symbol || "—"}
-            <span className="text-[10px] font-semibold text-subtle">{market === "futures" ? "PERP" : "/USDC"}</span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-subtle"><path d="M6 9l6 6 6-6" /></svg>
+            <span className="text-[11px] font-semibold text-subtle">{market === "futures" ? "PERP" : "/USDC"}</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-subtle"><path d="M6 9l6 6 6-6" /></svg>
           </button>
           {picker}
         </div>
 
         {/* Price + 24h stats */}
-        <div className="flex min-w-0 items-center gap-4 overflow-x-auto scrollbar-none">
+        <div className="flex min-w-0 items-center gap-5 overflow-x-auto scrollbar-none">
           <span
-            className={`shrink-0 text-lg font-bold tabular-nums ${
+            aria-live="polite"
+            className={`shrink-0 text-2xl font-bold tabular-nums tracking-tight ${
               lastTick === "up" ? "text-credit" : lastTick === "down" ? "text-debit" : ""
             }`}
           >
             ${fmtPx(price)}
           </span>
-          <span className={`shrink-0 text-xs font-semibold tabular-nums ${changeUp ? "text-credit" : "text-debit"}`}>
+          <span className={`shrink-0 text-sm font-semibold tabular-nums ${changeUp ? "text-credit" : "text-debit"}`}>
             {stats ? `${changeUp ? "+" : ""}${stats.changePct.toFixed(2)}%` : "—"}
           </span>
           <Stat label="24h High" value={stats ? `$${fmtPx(stats.high)}` : "—"} />
@@ -654,7 +658,7 @@ export function TradeClient() {
         {/* Balances + money doors */}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {balances && (
-            <span className="hidden text-[11px] tabular-nums text-muted-foreground xl:block">
+            <span className="hidden text-xs tabular-nums text-muted-foreground 2xl:block">
               Spot <span className="font-semibold text-foreground">${balances.spotUsdc.toFixed(2)}</span>
               <span className="mx-1 text-subtle">·</span>
               Futures <span className="font-semibold text-foreground">${balances.perpsWithdrawableUsdc.toFixed(2)}</span>
@@ -664,17 +668,17 @@ export function TradeClient() {
               over the workspace so the chart and the ticket keep their state. */}
           <button
             onClick={() => openFlow("fund")}
-            className="rounded-full bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+            className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             Fund
           </button>
           <button
             onClick={() => openFlow("trading-withdraw")}
-            className="rounded-full bg-surface-sunken px-3.5 py-1.5 text-xs font-semibold transition-colors hover:bg-accent"
+            className="rounded-full bg-surface-sunken px-4 py-2 text-sm font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             Withdraw
           </button>
-          <span className="hidden h-5 w-px bg-border/40 sm:block" />
+          <span className="hidden h-6 w-px bg-border/40 sm:block" />
           {/* The shell's chrome doesn't reach this route, so the theme control
               travels with it. */}
           <ThemeToggle />
@@ -683,6 +687,16 @@ export function TradeClient() {
 
       {/* Workspace body */}
       <div className="flex min-h-0 flex-col lg:flex-1 lg:flex-row">
+        {/* Markets rail — the full list lives on the left so switching pairs
+            is one click, not a menu dive. */}
+        <MarketsRail
+          list={list}
+          market={market}
+          symbol={symbol}
+          onSelect={setSymbol}
+          className="hidden w-[236px] shrink-0 border-r border-border/30 xl:flex"
+        />
+
         {/* Chart + bottom panel */}
         <div className="flex min-h-0 min-w-0 flex-col lg:flex-1">
           <div className="h-[340px] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1">
