@@ -9,6 +9,20 @@ import { allFunctions } from "@/lib/vivid-functions"
 import { getPageInfo } from "@/lib/vivid-page-context"
 import VividVoiceControl from "@/components/vivid/vivid-voice-control"
 import VividSpotlight from "@/components/vivid/vivid-spotlight"
+import VividWidget from "@/components/vivid/VividWidget"
+
+/**
+ * Which Vivid owns the corner.
+ *
+ * "hosted" loads the widget from platformvivid, whose persona, site knowledge,
+ * routes and destructive-control list are configured in the Vivid dashboard and
+ * go live in ~30s without a deploy — that is what the team edits. Anything else
+ * runs the in-repo stack (this provider's own orb, tools and page control).
+ *
+ * Exactly ONE renders: two orbs would fight over the same corner. Both drive
+ * the same instrumented DOM, so the controls work either way.
+ */
+const HOSTED = process.env.NEXT_PUBLIC_VIVID_MODE === "hosted"
 
 // Hide the floating mic on auth/full-chat routes. It STAYS on /trade — driving
 // the trading workspace by voice is the whole point of Vivid on this app.
@@ -22,6 +36,11 @@ export function VividVoiceProvider({ children }: { children: React.ReactNode }) 
   const { profile } = useProfile()
 
   const hideMic = HIDE_MIC_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
+
+  // Hosted mode: the platform widget is the assistant. Skip the in-repo
+  // provider entirely — it would mount a second orb and a second realtime
+  // session on top of the widget's.
+  const hosted = HOSTED
 
   // Listen for vivid:navigate events dispatched by the navigateToPage function
   useEffect(() => {
@@ -42,6 +61,15 @@ export function VividVoiceProvider({ children }: { children: React.ReactNode }) 
         email: user.primaryEmailAddress?.emailAddress || profile?.email || undefined,
       }
     : null
+
+  if (hosted) {
+    return (
+      <>
+        {children}
+        {!hideMic && <VividWidget />}
+      </>
+    )
+  }
 
   return (
     <VividProvider

@@ -459,6 +459,7 @@ export function TradeClient() {
           <button
             key={s}
             onClick={() => setSide(s)}
+            aria-label={market === "futures" ? (s === "buy" ? "Long side" : "Short side") : (s === "buy" ? "Buy side" : "Sell side")}
             data-vivid-target={s === "buy" ? "trade-side-buy" : "trade-side-sell"}
             data-vivid-label={market === "futures" ? (s === "buy" ? "Long side" : "Short side") : (s === "buy" ? "Buy side" : "Sell side")}
             className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${
@@ -492,6 +493,7 @@ export function TradeClient() {
               inputMode="decimal"
               data-vivid-target="trade-limit-price"
               data-vivid-label="Limit price in USD"
+              aria-label="Limit price in USD"
               placeholder={price ? fmtPx(price) : "…"}
               className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
             />
@@ -517,6 +519,7 @@ export function TradeClient() {
             inputMode="decimal"
             data-vivid-target="trade-amount"
             data-vivid-label="Order amount in USD (the notional)"
+            aria-label="Order amount in USD"
             placeholder={`Min ${minOrder}`}
             className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
           />
@@ -531,6 +534,7 @@ export function TradeClient() {
               key={pct}
               data-vivid-target={pct === 1 ? "trade-amount-max" : `trade-amount-${pct * 100}pct`}
               data-vivid-label={pct === 1 ? "Use the full available balance" : `Use ${pct * 100}% of the available balance`}
+              aria-label={pct === 1 ? "Use the full available balance as the amount" : `Use ${pct * 100} percent of the available balance as the amount`}
               onClick={() =>
                 setAmountUsd(
                   pct === 1
@@ -560,6 +564,7 @@ export function TradeClient() {
             onChange={(e) => setLeverage(parseInt(e.target.value))}
             data-vivid-target="trade-leverage"
             data-vivid-label={`Leverage slider, 1 to ${maxLev}. Fill with a whole number.`}
+            aria-label={`Leverage multiplier, 1 to ${maxLev}`}
             className="mt-1 w-full accent-[var(--primary)]"
           />
           <div className="flex justify-between text-[9px] text-subtle">
@@ -579,6 +584,7 @@ export function TradeClient() {
               inputMode="decimal"
               data-vivid-target="trade-take-profit"
               data-vivid-label="Take profit trigger price (optional)"
+              aria-label="Take profit trigger price"
               placeholder="Optional"
               className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-credit/40"
             />
@@ -591,6 +597,7 @@ export function TradeClient() {
               inputMode="decimal"
               data-vivid-target="trade-stop-loss"
               data-vivid-label="Stop loss trigger price (optional)"
+              aria-label="Stop loss trigger price"
               placeholder="Optional"
               className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-debit/40"
             />

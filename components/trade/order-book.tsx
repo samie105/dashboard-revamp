@@ -43,6 +43,7 @@ function Row({
   return (
     <button
       onClick={() => onPick(price)}
+      aria-label={`${side === "bid" ? "Bid" : "Ask"} ${fmtPrice(price)} — set as limit price`}
       className="relative grid w-full grid-cols-[1fr_auto] gap-2 px-3 py-[3px] text-left text-[11px] leading-4 tabular-nums transition-colors hover:bg-accent/50"
       title={`Set limit price ${fmtPrice(price)}`}
     >

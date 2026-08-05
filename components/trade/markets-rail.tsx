@@ -79,6 +79,7 @@ export function MarketsRail({
                 key={m.symbol}
                 role="option"
                 aria-selected={active}
+                aria-label={`Switch to the ${m.symbol} market`}
                 data-vivid-target={`pick-pair-${m.symbol}`}
                 data-vivid-label={`Switch to the ${m.symbol} market`}
                 onClick={() => onSelect(m.symbol)}
