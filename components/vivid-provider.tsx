@@ -14,15 +14,19 @@ import VividWidget from "@/components/vivid/VividWidget"
 /**
  * Which Vivid owns the corner.
  *
- * "hosted" loads the widget from platformvivid, whose persona, site knowledge,
+ * DEFAULT is the hosted widget from platformvivid: its persona, site knowledge,
  * routes and destructive-control list are configured in the Vivid dashboard and
- * go live in ~30s without a deploy — that is what the team edits. Anything else
- * runs the in-repo stack (this provider's own orb, tools and page control).
+ * go live in ~30s without a deploy — that is what the team edits, and it brings
+ * its own realtime key, so it works without OPENAI_API_KEY on this deployment.
  *
- * Exactly ONE renders: two orbs would fight over the same corner. Both drive
- * the same instrumented DOM, so the controls work either way.
+ * NEXT_PUBLIC_VIVID_MODE=inrepo runs the in-repo stack instead (this provider's
+ * own orb, function tools and page control), which needs OPENAI_API_KEY set.
+ *
+ * Exactly ONE renders: two orbs would fight over the same corner and open two
+ * realtime sessions. Both drive the same instrumented DOM — the six
+ * money-moving controls name themselves the same way for either.
  */
-const HOSTED = process.env.NEXT_PUBLIC_VIVID_MODE === "hosted"
+const HOSTED = process.env.NEXT_PUBLIC_VIVID_MODE !== "inrepo"
 
 // Hide the floating mic on auth/full-chat routes. It STAYS on /trade — driving
 // the trading workspace by voice is the whole point of Vivid on this app.
