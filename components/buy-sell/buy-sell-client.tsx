@@ -107,6 +107,9 @@ function humanError(raw: string): string {
     return "That network's transfer service is misconfigured on our side — we've been notified. Try another network in the meantime."
   if (s.includes("insufficient"))
     return "There isn't enough balance to cover this, including fees."
+  // The TRX gas pre-flight already phrases its error for humans — pass it
+  // through rather than flattening it into the generic fallback.
+  if (s.includes("trx")) return raw
   if (s.includes("wallet found") || s.includes("create your wallets"))
     return "Your wallet on that network isn't set up yet. Try another network, or reload the page to finish setting it up."
   // "…is temporarily unavailable for purchase" — the treasury is short on that
