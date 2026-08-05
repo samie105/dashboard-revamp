@@ -47,6 +47,7 @@ import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { BackAction, Eyebrow, Segmented, type SegmentedOption } from "@/components/ui/system"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
+import { registerVividContext } from "@/lib/vivid-page-context"
 
 type Market = "spot" | "futures"
 type Side = "buy" | "sell"
@@ -302,6 +303,27 @@ export function TradeClient() {
     }
   }
 
+  // Publish the live workspace state for Vivid's getCurrentPageContext.
+  const vividSnap = React.useRef<Record<string, unknown>>({})
+  vividSnap.current = {
+    market,
+    pair: symbol,
+    livePrice: price,
+    ticket: {
+      side: market === "futures" ? (side === "buy" ? "long" : "short") : side,
+      orderType,
+      amountUsd: amountUsd || "(empty)",
+      ...(orderType === "limit" ? { limitPrice: limitPrice || "(empty)" } : {}),
+      ...(market === "futures" ? { leverage, takeProfit: tpPrice || null, stopLoss: slPrice || null } : {}),
+      readyToSubmit: canSubmit,
+      ...(canSubmit ? {} : { blockedBecause: !current ? "markets not loaded" : amt < minOrder ? `amount below the ${minOrder} minimum` : tpslError ?? "limit price missing" }),
+    },
+    openPositions: account?.positions.length ?? 0,
+    openOrders: account?.openOrders.length ?? 0,
+    tradingAccountReady: account?.ready ?? false,
+  }
+  React.useEffect(() => registerVividContext("tradeWorkspace", () => vividSnap.current), [])
+
   const filtered = React.useMemo(() => {
     if (!search) return list
     const q = search.toLowerCase()
@@ -344,6 +366,8 @@ export function TradeClient() {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search markets…"
           autoFocus
+          data-vivid-target="trade-pair-search"
+          data-vivid-label="Search the pair list"
           className="w-full rounded-xl bg-surface-sunken px-3 py-2 text-sm outline-none placeholder:text-subtle"
         />
         <div className="mt-1.5 max-h-72 overflow-y-auto">
@@ -354,6 +378,8 @@ export function TradeClient() {
               <button
                 key={m.symbol}
                 onClick={() => { setSymbol(m.symbol); setPickerOpen(false); setSearch("") }}
+                data-vivid-target={`pick-pair-${m.symbol}`}
+                data-vivid-label={`Switch to the ${m.symbol} market`}
                 className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent ${m.symbol === symbol ? "bg-accent" : ""}`}
               >
                 <span className="flex items-center gap-2 font-semibold">
@@ -433,6 +459,8 @@ export function TradeClient() {
           <button
             key={s}
             onClick={() => setSide(s)}
+            data-vivid-target={s === "buy" ? "trade-side-buy" : "trade-side-sell"}
+            data-vivid-label={market === "futures" ? (s === "buy" ? "Long side" : "Short side") : (s === "buy" ? "Buy side" : "Sell side")}
             className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${
               side === s
                 ? s === "buy" ? "bg-credit text-white" : "bg-debit text-white"
@@ -451,6 +479,7 @@ export function TradeClient() {
         onChange={setOrderType}
         options={ORDER_TYPES}
         className="self-start"
+        vividPrefix="order-type"
       />
 
       {orderType === "limit" && (
@@ -461,6 +490,8 @@ export function TradeClient() {
               value={limitPrice}
               onChange={(e) => setLimitPrice(e.target.value.replace(/[^0-9.]/g, ""))}
               inputMode="decimal"
+              data-vivid-target="trade-limit-price"
+              data-vivid-label="Limit price in USD"
               placeholder={price ? fmtPx(price) : "…"}
               className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
             />
@@ -484,6 +515,8 @@ export function TradeClient() {
             value={amountUsd}
             onChange={(e) => setAmountUsd(e.target.value.replace(/[^0-9.]/g, ""))}
             inputMode="decimal"
+            data-vivid-target="trade-amount"
+            data-vivid-label="Order amount in USD (the notional)"
             placeholder={`Min ${minOrder}`}
             className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
           />
@@ -496,6 +529,8 @@ export function TradeClient() {
           {[0.25, 0.5, 0.75, 1].map((pct) => (
             <button
               key={pct}
+              data-vivid-target={pct === 1 ? "trade-amount-max" : `trade-amount-${pct * 100}pct`}
+              data-vivid-label={pct === 1 ? "Use the full available balance" : `Use ${pct * 100}% of the available balance`}
               onClick={() =>
                 setAmountUsd(
                   pct === 1
@@ -523,6 +558,8 @@ export function TradeClient() {
             max={maxLev}
             value={leverage}
             onChange={(e) => setLeverage(parseInt(e.target.value))}
+            data-vivid-target="trade-leverage"
+            data-vivid-label={`Leverage slider, 1 to ${maxLev}. Fill with a whole number.`}
             className="mt-1 w-full accent-[var(--primary)]"
           />
           <div className="flex justify-between text-[9px] text-subtle">
@@ -540,6 +577,8 @@ export function TradeClient() {
               value={tpPrice}
               onChange={(e) => setTpPrice(e.target.value.replace(/[^0-9.]/g, ""))}
               inputMode="decimal"
+              data-vivid-target="trade-take-profit"
+              data-vivid-label="Take profit trigger price (optional)"
               placeholder="Optional"
               className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-credit/40"
             />
@@ -550,6 +589,8 @@ export function TradeClient() {
               value={slPrice}
               onChange={(e) => setSlPrice(e.target.value.replace(/[^0-9.]/g, ""))}
               inputMode="decimal"
+              data-vivid-target="trade-stop-loss"
+              data-vivid-label="Stop loss trigger price (optional)"
               placeholder="Optional"
               className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-debit/40"
             />
@@ -596,6 +637,9 @@ export function TradeClient() {
       <button
         onClick={submit}
         disabled={!canSubmit}
+        data-vivid-target="trade-submit"
+        data-vivid-guard=""
+        data-vivid-label={`Place the order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol} for the amount shown. Moves real money.`}
         className={`w-full rounded-full py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
           side === "buy" ? "bg-credit hover:bg-credit/90" : "bg-debit hover:bg-debit/90"
         }`}
@@ -628,6 +672,7 @@ export function TradeClient() {
           onChange={setMarketTab}
           options={MARKET_TABS}
           className="order-4 shrink-0 lg:order-none"
+          vividPrefix="market-tab"
         />
 
         {/* Pair — the rail owns switching on wide screens; this dropdown
@@ -637,6 +682,8 @@ export function TradeClient() {
             onClick={() => setPickerOpen((v) => !v)}
             aria-haspopup="listbox"
             aria-expanded={pickerOpen}
+            data-vivid-target="trade-pair-picker"
+            data-vivid-label="Open the pair picker dropdown"
             className="flex items-center gap-1.5 rounded-xl bg-surface-sunken px-2.5 py-2 text-[15px] font-bold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-3.5"
           >
             <CoinAvatar symbol={bookCoin ?? symbol} size="md" />
@@ -678,12 +725,16 @@ export function TradeClient() {
               over the workspace so the chart and the ticket keep their state. */}
           <button
             onClick={() => openFlow("fund")}
+            data-vivid-target="trade-fund-button"
+            data-vivid-label="Open the fund-trading-account modal"
             className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
           >
             Fund
           </button>
           <button
             onClick={() => openFlow("trading-withdraw")}
+            data-vivid-target="trade-withdraw-button"
+            data-vivid-label="Open the withdraw-trading-balance modal"
             className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
           >
             Withdraw
@@ -709,7 +760,11 @@ export function TradeClient() {
 
         {/* Chart + bottom panel */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="h-[260px] shrink-0 sm:h-[320px] lg:h-auto lg:min-h-0 lg:flex-1">
+          <div
+            className="h-[260px] shrink-0 sm:h-[320px] lg:h-auto lg:min-h-0 lg:flex-1"
+            data-vivid-target="price-chart"
+            data-vivid-label="The candlestick price chart"
+          >
             {marketsError ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
@@ -802,12 +857,16 @@ export function TradeClient() {
       <div className="flex shrink-0 items-center gap-2 border-t border-border/30 bg-background px-3 py-2.5 safe-area-bottom lg:hidden">
         <button
           onClick={() => { setSide("buy"); setTicketOpen(true) }}
+          data-vivid-target="trade-open-ticket-long"
+          data-vivid-label="Open the order ticket on the buy/long side"
           className="flex-1 rounded-full bg-credit py-3 text-sm font-bold text-white transition-colors hover:bg-credit/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-credit/40"
         >
           {market === "futures" ? "Long" : "Buy"}
         </button>
         <button
           onClick={() => { setSide("sell"); setTicketOpen(true) }}
+          data-vivid-target="trade-open-ticket-short"
+          data-vivid-label="Open the order ticket on the sell/short side"
           className="flex-1 rounded-full bg-debit py-3 text-sm font-bold text-white transition-colors hover:bg-debit/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-debit/40"
         >
           {market === "futures" ? "Short" : "Sell"}

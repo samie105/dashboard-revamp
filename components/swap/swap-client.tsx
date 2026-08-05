@@ -718,6 +718,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                   <input
                     type="text"
                     inputMode="decimal"
+                    data-vivid-target="swap-amount"
+                    data-vivid-label="The amount to swap from"
                     value={fromAmount}
                     onChange={(e) => {
                       const v = e.target.value
@@ -887,6 +889,9 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
               <button
                 disabled={!canSwap}
                 onClick={handleSwap}
+                data-vivid-target="swap-submit"
+                data-vivid-guard=""
+                data-vivid-label="Execute the swap. Moves real money."
                 className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {(quoteLoading || swapLoading) && <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin" />}

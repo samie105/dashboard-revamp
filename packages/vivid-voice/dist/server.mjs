@@ -148,25 +148,32 @@ function createTokenHandler(config = {}) {
       if (config.buildInstructions) {
         instructions = await config.buildInstructions(body);
       }
-      const sessionPayload = {
-        model: config.model || "gpt-4o-realtime-preview-2024-12-17",
-        modalities: ["text", "audio"],
-        voice: config.voice || "alloy",
+      const session = {
+        type: "realtime",
+        model: config.model || "gpt-realtime",
         instructions,
-        input_audio_transcription: {
-          model: "whisper-1"
-        },
-        turn_detection: config.turnDetection || {
-          type: "server_vad",
-          threshold: 0.6,
-          prefix_padding_ms: 400,
-          silence_duration_ms: 600
+        audio: {
+          input: {
+            transcription: {
+              model: "whisper-1"
+            },
+            turn_detection: config.turnDetection || {
+              type: "server_vad",
+              threshold: 0.6,
+              prefix_padding_ms: 400,
+              silence_duration_ms: 600
+            }
+          },
+          output: {
+            voice: config.voice || "alloy"
+          }
         }
       };
       if (config.tools && config.tools.length > 0) {
-        sessionPayload.tools = config.tools;
+        session.tools = config.tools;
       }
-      const sessionResponse = await fetch("https://api.openai.com/v1/realtime/sessions", {
+      const sessionPayload = { session };
+      const sessionResponse = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
@@ -183,9 +190,11 @@ function createTokenHandler(config = {}) {
         );
       }
       const sessionData = await sessionResponse.json();
+      const cs = sessionData.client_secret;
+      const clientSecret = typeof sessionData.value === "string" ? sessionData.value : typeof cs === "string" ? cs : cs && (cs.value || cs.client_secret);
       const response = {
-        client_secret: sessionData.client_secret.value,
-        expires_at: sessionData.client_secret.expires_at
+        client_secret: clientSecret,
+        expires_at: sessionData.expires_at != null ? sessionData.expires_at : cs && cs.expires_at
       };
       return new Response(JSON.stringify(response), {
         status: 200,
@@ -280,5 +289,4 @@ function handleCorsOptions() {
 }
 
 export { VIVID_BASE_PROMPT, VIVID_TEST_PROMPT, buildSystemPrompt, createClerkValidator, createCorsHeaders, createFunctionHandler, createTokenHandler, extractClerkUserId, generateFunctionInstructions, handleCorsOptions };
-//# sourceMappingURL=server.mjs.map
 //# sourceMappingURL=server.mjs.map

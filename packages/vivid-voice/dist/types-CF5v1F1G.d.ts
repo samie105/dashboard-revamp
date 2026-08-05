@@ -208,6 +208,10 @@ interface UseVividReturn {
     stopListening: () => void;
     /** Get current audio levels for visualization (returns Uint8Array of frequency data) */
     getAudioLevels: () => Uint8Array;
+    /** Send an image (data URL or https URL) into the conversation as user input */
+    sendImage: (imageUrl: string, options?: {
+        triggerResponse?: boolean;
+    }) => void;
 }
 /**
  * OpenAI Realtime session configuration (WebRTC / ephemeral sessions)

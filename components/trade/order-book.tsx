@@ -121,7 +121,12 @@ export function OrderBook({
   const buyPct = Math.round(book.buyRatio * 100)
 
   return (
-    <div ref={paneRef} className={cn("flex min-h-0 flex-col overflow-hidden", className)}>
+    <div
+      ref={paneRef}
+      data-vivid-target="order-book"
+      data-vivid-label="The live order book — asks, mid price, bids"
+      className={cn("flex min-h-0 flex-col overflow-hidden", className)}
+    >
       <div className="flex items-center justify-between px-3 pb-1 pt-3">
         <Eyebrow className="text-[10px]">Order book</Eyebrow>
         <span className="text-[10px] tabular-nums text-subtle">spread {fmtPrice(book.spread)}</span>

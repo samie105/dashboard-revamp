@@ -56,7 +56,11 @@ export function PositionsPanel({
   const orders = account?.openOrders ?? []
 
   return (
-    <div className={cn("flex min-h-0 flex-col", className)}>
+    <div
+      className={cn("flex min-h-0 flex-col", className)}
+      data-vivid-target="positions-panel"
+      data-vivid-label="Open positions and resting orders"
+    >
       {/* Tab strip — the house Segmented, so this reads like every other tab
           set in the app rather than inventing an underline idiom. */}
       <div className={cn("flex items-center border-b border-border/30 px-2 py-1.5", hideTabs && "hidden")}>
@@ -130,6 +134,9 @@ export function PositionsPanel({
                         <button
                           onClick={() => onClosePosition(p.symbol)}
                           disabled={busyKey === `close:${p.symbol}`}
+                          data-vivid-target={`close-position-${p.symbol}`}
+                          data-vivid-guard=""
+                          data-vivid-label={`Close the ${p.symbol} ${p.side} position at market. Moves real money.`}
                           className="rounded-lg bg-debit-chip px-2.5 py-1 text-[11px] font-semibold text-debit transition-colors hover:bg-debit/20 disabled:opacity-40"
                         >
                           {busyKey === `close:${p.symbol}` ? "Closing…" : "Close"}
@@ -186,6 +193,9 @@ export function PositionsPanel({
                     <button
                       onClick={() => onCancelOrder(o.oid, o.symbol, o.market)}
                       disabled={busyKey === `cancel:${o.oid}`}
+                      data-vivid-target={`cancel-order-${o.oid}`}
+                      data-vivid-guard=""
+                      data-vivid-label={`Cancel the resting ${o.symbol} ${o.side} order`}
                       className="rounded-lg bg-surface-sunken px-2.5 py-1 text-[11px] font-medium transition-colors hover:bg-accent disabled:opacity-40"
                     >
                       {busyKey === `cancel:${o.oid}` ? "Cancelling…" : "Cancel"}

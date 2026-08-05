@@ -154,6 +154,7 @@ export function Segmented<T extends string>({
   onChange,
   size = "md",
   className,
+  vividPrefix,
 }: {
   options: readonly SegmentedOption<T>[]
   value: T
@@ -161,6 +162,9 @@ export function Segmented<T extends string>({
   /** md = the mobile 40px bar. sm = compact, for inside card headers. */
   size?: "sm" | "md"
   className?: string
+  /** Registers each option with Vivid as `${prefix}-${key}` so the assistant
+   *  can press tabs. Omit on controls Vivid has no business touching. */
+  vividPrefix?: string
 }) {
   const md = size === "md"
   return (
@@ -183,6 +187,9 @@ export function Segmented<T extends string>({
             key={opt.key}
             type="button"
             aria-pressed={active}
+            {...(vividPrefix
+              ? { "data-vivid-target": `${vividPrefix}-${opt.key}`, "data-vivid-label": `${opt.label} tab` }
+              : {})}
             onClick={() => onChange(opt.key)}
             className={cn(
               "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
@@ -312,12 +319,13 @@ export function ActionPill({
   label,
   href,
   onClick,
+  ...rest
 }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
   href?: string
   onClick?: () => void
-}) {
+} & Record<`data-${string}`, string>) {
   const cls =
     "flex shrink-0 items-center gap-2.5 rounded-full bg-card py-2 pl-2 pr-4 transition-colors hover:bg-accent"
   const inner = (
@@ -329,9 +337,9 @@ export function ActionPill({
     </>
   )
   return href ? (
-    <a href={href} className={cls}>{inner}</a>
+    <a href={href} className={cls} {...rest}>{inner}</a>
   ) : (
-    <button onClick={onClick} className={cls}>{inner}</button>
+    <button onClick={onClick} className={cls} {...rest}>{inner}</button>
   )
 }
 

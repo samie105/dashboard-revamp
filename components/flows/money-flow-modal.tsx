@@ -27,6 +27,17 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { Segmented, type SegmentedOption } from "@/components/ui/system"
 import { BuySellClient } from "@/components/buy-sell/buy-sell-client"
 import { FundClient } from "@/components/fund/fund-client"
+import { PENDING_PANEL_KEY } from "@/lib/vivid-functions"
+import { registerVividContext } from "@/lib/vivid-page-context"
+
+/** Vivid panel ids → flow modes. The provider is mounted on every route, so it
+ *  is always the synchronous handler for vivid:open-panel. */
+const VIVID_PANEL_TO_MODE: Record<string, FlowMode> = {
+  deposit: "buy",
+  withdraw: "sell",
+  fund_trading: "fund",
+  withdraw_trading: "trading-withdraw",
+}
 
 /** The four money doors. buy/sell move USDT against the Dollar Account;
  *  fund/trading-withdraw move USDC between the Dollar Account and Hyperliquid. */
@@ -119,6 +130,41 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
       setOpen(false)
     }
   }, [pathname])
+
+  // ── Vivid ────────────────────────────────────────────────────────────────
+  // The assistant opens these flows via vivid:open-panel; `handled` is flipped
+  // synchronously so the dispatcher knows nothing else needs to happen. A
+  // stashed request (set when this provider wasn't mounted yet) replays once.
+  React.useEffect(() => {
+    const onPanel = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { panel?: string; handled?: boolean }
+      const mode = detail?.panel ? VIVID_PANEL_TO_MODE[detail.panel] : undefined
+      if (!mode) return
+      detail.handled = true
+      openFlow(mode)
+    }
+    window.addEventListener("vivid:open-panel", onPanel)
+
+    let pending: string | null = null
+    try {
+      pending = sessionStorage.getItem(PENDING_PANEL_KEY)
+      if (pending) sessionStorage.removeItem(PENDING_PANEL_KEY)
+    } catch { /* private mode */ }
+    if (pending && VIVID_PANEL_TO_MODE[pending]) {
+      const mode = VIVID_PANEL_TO_MODE[pending]
+      setTimeout(() => openFlow(mode), 120)
+    }
+
+    return () => window.removeEventListener("vivid:open-panel", onPanel)
+  }, [openFlow])
+
+  // Publish what's up so "what am I looking at?" sees the modal, not just the
+  // page behind it.
+  React.useEffect(() => {
+    return registerVividContext("moneyFlowModal", () =>
+      open ? { openModal: FLOW_LABELS[mode], direction: mode } : null,
+    )
+  }, [open, mode])
 
   return (
     <MoneyFlowContext.Provider value={ctx}>

@@ -154,7 +154,7 @@ function createTokenHandler(config = {}) {
         instructions = await config.buildInstructions(body);
       }
       const sessionPayload = {
-        model: config.model || "gpt-4o-realtime-preview-2024-12-17",
+        model: config.model || "gpt-realtime",
         modalities: ["text", "audio"],
         voice: config.voice || "alloy",
         instructions,
@@ -294,5 +294,4 @@ exports.createTokenHandler = createTokenHandler;
 exports.extractClerkUserId = extractClerkUserId;
 exports.generateFunctionInstructions = generateFunctionInstructions;
 exports.handleCorsOptions = handleCorsOptions;
-//# sourceMappingURL=server.js.map
 //# sourceMappingURL=server.js.map

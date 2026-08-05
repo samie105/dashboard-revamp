@@ -90,6 +90,8 @@ export function AmountField({
           autoFocus={autoFocus}
           placeholder="0"
           aria-label={`Amount in ${unit}`}
+          data-vivid-target="flow-amount"
+          data-vivid-label={`The amount to move, in ${unit}`}
           className="w-full min-w-0 bg-transparent text-center font-display text-[clamp(2.75rem,8vw,3.5rem)] font-light leading-none tracking-[-0.02em] tabular-nums outline-none placeholder:text-muted-foreground/30"
         />
       </div>
@@ -233,6 +235,9 @@ export function FlowCta({
     <button
       onClick={onClick}
       disabled={disabled || busy}
+      data-vivid-target="flow-submit"
+      data-vivid-guard=""
+      data-vivid-label={`Submit this money flow: ${label}. Moves real money.`}
       className={cn(
         "flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-bold transition-all",
         "bg-primary text-primary-foreground hover:bg-primary/90",

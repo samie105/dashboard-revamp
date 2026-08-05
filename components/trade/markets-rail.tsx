@@ -44,7 +44,12 @@ export function MarketsRail({
   }, [list, search])
 
   return (
-    <aside aria-label="Markets" className={cn("flex min-h-0 flex-col", className)}>
+    <aside
+      aria-label="Markets"
+      data-vivid-target="markets-rail"
+      data-vivid-label="The market list rail — every tradable pair"
+      className={cn("flex min-h-0 flex-col", className)}
+    >
       <div className="shrink-0 px-3 pb-2 pt-3">
         <Eyebrow className="text-[10px]">Markets{list.length > 0 && ` · ${list.length}`}</Eyebrow>
         <input
@@ -52,6 +57,8 @@ export function MarketsRail({
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search…"
           aria-label="Search markets"
+          data-vivid-target="markets-search"
+          data-vivid-label="Filter the market list"
           className="mt-2 w-full rounded-xl bg-surface-sunken px-3 py-2 text-sm outline-none transition-shadow placeholder:text-subtle focus-visible:ring-2 focus-visible:ring-primary/40"
         />
       </div>
@@ -72,6 +79,8 @@ export function MarketsRail({
                 key={m.symbol}
                 role="option"
                 aria-selected={active}
+                data-vivid-target={`pick-pair-${m.symbol}`}
+                data-vivid-label={`Switch to the ${m.symbol} market`}
                 onClick={() => onSelect(m.symbol)}
                 className={cn(
                   "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",

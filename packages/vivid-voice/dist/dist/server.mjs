@@ -152,7 +152,7 @@ function createTokenHandler(config = {}) {
         instructions = await config.buildInstructions(body);
       }
       const sessionPayload = {
-        model: config.model || "gpt-4o-realtime-preview-2024-12-17",
+        model: config.model || "gpt-realtime",
         modalities: ["text", "audio"],
         voice: config.voice || "alloy",
         instructions,
@@ -283,5 +283,4 @@ function handleCorsOptions() {
 }
 
 export { VIVID_BASE_PROMPT, VIVID_TEST_PROMPT, buildSystemPrompt, createClerkValidator, createCorsHeaders, createFunctionHandler, createTokenHandler, extractClerkUserId, generateFunctionInstructions, handleCorsOptions };
-//# sourceMappingURL=server.mjs.map
 //# sourceMappingURL=server.mjs.map

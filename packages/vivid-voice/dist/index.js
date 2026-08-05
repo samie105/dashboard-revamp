@@ -517,6 +517,25 @@ var _RealtimeClient = class _RealtimeClient {
     this.sendEvent({ type: "response.create" });
   }
   /**
+   * Send an image (data URL or https URL) into the conversation as user input.
+   * Pass triggerResponse: true to have the model respond immediately; leave it
+   * off when a function handler sends the image (the function result's
+   * response.create will pick it up).
+   */
+  sendImage(imageUrl, options = {}) {
+    this.sendEvent({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_image", image_url: imageUrl }]
+      }
+    });
+    if (options.triggerResponse) {
+      this.sendEvent({ type: "response.create" });
+    }
+  }
+  /**
    * Check if connected
    */
   isConnected() {
@@ -620,8 +639,8 @@ var _RealtimeClient = class _RealtimeClient {
     }
   }
 };
-_RealtimeClient.REALTIME_URL = "https://api.openai.com/v1/realtime";
-_RealtimeClient.MODEL = "gpt-4o-realtime-preview-2024-12-17";
+_RealtimeClient.REALTIME_URL = "https://api.openai.com/v1/realtime/calls";
+_RealtimeClient.MODEL = "gpt-realtime-2.1";
 var RealtimeClient = _RealtimeClient;
 
 // src/persistence.ts
@@ -986,6 +1005,9 @@ function VividProvider({
     }
     return new Uint8Array(0);
   }, []);
+  const sendImage = react.useCallback((imageUrl, options) => {
+    clientRef.current?.sendImage(imageUrl, options);
+  }, []);
   const registerFunction = react.useCallback((fn) => {
     functionRegistry.current.register(fn);
   }, []);
@@ -1012,6 +1034,7 @@ function VividProvider({
       startListening,
       stopListening,
       getAudioLevels,
+      sendImage,
       config: {
         requireAuth,
         platformContext,
@@ -1035,6 +1058,7 @@ function VividProvider({
       startListening,
       stopListening,
       getAudioLevels,
+      sendImage,
       requireAuth,
       platformContext,
       functions,
@@ -1601,5 +1625,4 @@ exports.requestMicrophonePermission = requestMicrophonePermission;
 exports.stringParam = stringParam;
 exports.useVivid = useVivid;
 exports.useVividOptional = useVividOptional;
-//# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

@@ -622,7 +622,7 @@ var _RealtimeClient = class _RealtimeClient {
   }
 };
 _RealtimeClient.REALTIME_URL = "https://api.openai.com/v1/realtime";
-_RealtimeClient.MODEL = "gpt-4o-realtime-preview-2024-12-17";
+_RealtimeClient.MODEL = "gpt-realtime";
 var RealtimeClient = _RealtimeClient;
 
 // src/persistence.ts
@@ -1574,5 +1574,4 @@ async function requestMicrophonePermission() {
 }
 
 export { AudioCapture, AudioLevelAnalyzer, AudioPlayback, ConversationStore, FunctionRegistry, VIVID_BASE_PROMPT, VIVID_TEST_PROMPT, VividButton, VividProvider, VividTranscript, VividWidget, booleanParam, buildParameters, buildSystemPrompt, createAssistantTurn, createUserTurn, createVividFunction, enumParam, executeFunction, formatConversationForContext, functionToOpenAITool, generateFunctionInstructions, generateTurnId, isAudioCaptureSupported, numberParam, requestMicrophonePermission, stringParam, useVivid, useVividOptional };
-//# sourceMappingURL=index.mjs.map
 //# sourceMappingURL=index.mjs.map

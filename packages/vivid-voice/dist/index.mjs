@@ -515,6 +515,25 @@ var _RealtimeClient = class _RealtimeClient {
     this.sendEvent({ type: "response.create" });
   }
   /**
+   * Send an image (data URL or https URL) into the conversation as user input.
+   * Pass triggerResponse: true to have the model respond immediately; leave it
+   * off when a function handler sends the image (the function result's
+   * response.create will pick it up).
+   */
+  sendImage(imageUrl, options = {}) {
+    this.sendEvent({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_image", image_url: imageUrl }]
+      }
+    });
+    if (options.triggerResponse) {
+      this.sendEvent({ type: "response.create" });
+    }
+  }
+  /**
    * Check if connected
    */
   isConnected() {
@@ -618,8 +637,8 @@ var _RealtimeClient = class _RealtimeClient {
     }
   }
 };
-_RealtimeClient.REALTIME_URL = "https://api.openai.com/v1/realtime";
-_RealtimeClient.MODEL = "gpt-4o-realtime-preview-2024-12-17";
+_RealtimeClient.REALTIME_URL = "https://api.openai.com/v1/realtime/calls";
+_RealtimeClient.MODEL = "gpt-realtime-2.1";
 var RealtimeClient = _RealtimeClient;
 
 // src/persistence.ts
@@ -984,6 +1003,9 @@ function VividProvider({
     }
     return new Uint8Array(0);
   }, []);
+  const sendImage = useCallback((imageUrl, options) => {
+    clientRef.current?.sendImage(imageUrl, options);
+  }, []);
   const registerFunction = useCallback((fn) => {
     functionRegistry.current.register(fn);
   }, []);
@@ -1010,6 +1032,7 @@ function VividProvider({
       startListening,
       stopListening,
       getAudioLevels,
+      sendImage,
       config: {
         requireAuth,
         platformContext,
@@ -1033,6 +1056,7 @@ function VividProvider({
       startListening,
       stopListening,
       getAudioLevels,
+      sendImage,
       requireAuth,
       platformContext,
       functions,
@@ -1571,5 +1595,4 @@ async function requestMicrophonePermission() {
 }
 
 export { AudioCapture, AudioLevelAnalyzer, AudioPlayback, ConversationStore, FunctionRegistry, VIVID_BASE_PROMPT, VIVID_TEST_PROMPT, VividButton, VividProvider, VividTranscript, VividWidget, booleanParam, buildParameters, buildSystemPrompt, createAssistantTurn, createUserTurn, createVividFunction, enumParam, executeFunction, formatConversationForContext, functionToOpenAITool, generateFunctionInstructions, generateTurnId, isAudioCaptureSupported, numberParam, requestMicrophonePermission, stringParam, useVivid, useVividOptional };
-//# sourceMappingURL=index.mjs.map
 //# sourceMappingURL=index.mjs.map

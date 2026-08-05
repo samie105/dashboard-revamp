@@ -624,7 +624,7 @@ var _RealtimeClient = class _RealtimeClient {
   }
 };
 _RealtimeClient.REALTIME_URL = "https://api.openai.com/v1/realtime";
-_RealtimeClient.MODEL = "gpt-4o-realtime-preview-2024-12-17";
+_RealtimeClient.MODEL = "gpt-realtime";
 var RealtimeClient = _RealtimeClient;
 
 // src/persistence.ts
@@ -1604,5 +1604,4 @@ exports.requestMicrophonePermission = requestMicrophonePermission;
 exports.stringParam = stringParam;
 exports.useVivid = useVivid;
 exports.useVividOptional = useVividOptional;
-//# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

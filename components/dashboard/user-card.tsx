@@ -246,12 +246,14 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     icon: typeof Exchange01Icon
     href?: string
     onClick?: () => void
+    vivid: string
+    vividLabel: string
   }[] = [
-    { label: "Deposit",  onClick: () => openFlow("buy"),  icon: Exchange01Icon },
-    { label: "Withdraw", onClick: () => openFlow("sell"), icon: CreditCardIcon },
-    { label: "Swap",     href: "/swap",                   icon: CoinsSwapIcon },
-    { label: "Trade",    href: "/trade",                  icon: ChartLineData01Icon },
-    { label: "History",  href: "/transactions",           icon: Clock01Icon },
+    { label: "Deposit",  onClick: () => openFlow("buy"),  icon: Exchange01Icon,     vivid: "open-deposit",  vividLabel: "Open the deposit modal" },
+    { label: "Withdraw", onClick: () => openFlow("sell"), icon: CreditCardIcon,     vivid: "open-withdraw", vividLabel: "Open the withdraw modal" },
+    { label: "Swap",     href: "/swap",                   icon: CoinsSwapIcon,      vivid: "go-swap",       vividLabel: "Go to the swap page" },
+    { label: "Trade",    href: "/trade",                  icon: ChartLineData01Icon, vivid: "go-trade",     vividLabel: "Go to the trading workspace" },
+    { label: "History",  href: "/transactions",           icon: Clock01Icon,        vivid: "go-history",    vividLabel: "Go to transaction history" },
   ]
 
   return (
@@ -350,6 +352,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               lets the bar scroll rather than push the page wide on a phone. */}
           <div className="-mx-1 max-w-full overflow-x-auto px-1 scrollbar-none">
             <Segmented
+              vividPrefix="balance-view"
               options={WALLET_VIEWS.map((v) => ({ key: v.key, label: v.label, icon: undefined }))}
               value={activeView}
               onChange={setActiveView}
@@ -379,6 +382,8 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                 onClick={a.onClick}
                 label={a.label}
                 icon={({ className }) => <HugeiconsIcon icon={a.icon} className={className} />}
+                data-vivid-target={a.vivid}
+                data-vivid-label={a.vividLabel}
               />
             ))}
           </div>

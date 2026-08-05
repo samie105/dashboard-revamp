@@ -4,8 +4,34 @@ import {
   stringParam,
   enumParam,
   numberParam,
+  booleanParam,
 } from '@worldstreet/vivid-voice/functions'
 import type { VoiceFunctionConfig } from '@worldstreet/vivid-voice/functions'
+import {
+  DESTINATION_IDS,
+  PANEL_IDS,
+  describeDestinations,
+  describePanels,
+  findDestination,
+  findPanel,
+} from './vivid-destinations'
+import { getPageInfo, readLiveContext } from './vivid-page-context'
+import {
+  DEFAULT_HOLD_MS,
+  GUARD_ATTR,
+  listTargets,
+  missReport,
+  performScroll,
+  scrollToTarget,
+  setNativeInput,
+  setSpotlight,
+  waitForPanelSettle,
+  waitForTarget,
+} from './vivid-page-control'
+import { runWebSearch } from './vivid/web-search'
+
+/** sessionStorage key used to replay a panel request across a navigation. */
+export const PENDING_PANEL_KEY = 'vivid:pending-panel'
 
 // =============================================================================
 // Constants
@@ -41,6 +67,7 @@ const SYMBOL_TO_COINGECKO: Record<string, string> = {
   SUI: 'sui',
 }
 
+
 // =============================================================================
 // Client Functions (run in browser)
 // =============================================================================
@@ -48,25 +75,115 @@ const SYMBOL_TO_COINGECKO: Record<string, string> = {
 export const navigateToPage = createVividFunction({
   name: 'navigateToPage',
   description:
-    'Navigate to a page in the WorldStreet dashboard. ' +
-    'Valid paths: / (Dashboard home), /trade?market=spot (Spot trading), ' +
-    '/trade?market=futures (Futures trading), /swap (Token swap), ' +
-    '/assets (Portfolio & assets), /buy (Buy crypto), /sell (Sell crypto), ' +
-    '/fund (Fund trading account), /trading-withdraw (Withdraw trading balance), ' +
-    '/transactions (Transaction history).',
+    'Take the user to a screen anywhere in the WorldStreet ecosystem. ' +
+    'Pass the destination id — NOT a URL path. Some destinations live on other ' +
+    'WorldStreet apps and will load a new site, which is expected.\n' +
+    describeDestinations(),
   parameters: buildParameters({
-    path: stringParam(
-      'The URL path to navigate to. Must be one of: /, /trade?market=spot, /trade?market=futures, /swap, /assets, /buy, /sell, /fund, /trading-withdraw, /transactions',
+    destination: enumParam(
+      'Which screen to open. Must be one of the listed destination ids.',
+      DESTINATION_IDS,
       true,
     ),
   }),
-  handler: async ({ path }) => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('vivid:navigate', { detail: { path } }),
-      )
+  handler: async ({ destination }: { destination?: string }) => {
+    if (typeof window === 'undefined') return { error: 'Navigation is only available in the browser' }
+
+    const target = findDestination(destination ?? '')
+    if (!target) {
+      // Better to say so than to push a path that 404s.
+      return {
+        error: `Unknown destination "${destination}".`,
+        validDestinations: DESTINATION_IDS,
+      }
     }
-    return { success: true, navigatedTo: path }
+
+    if (target.external) {
+      window.location.assign(target.url)
+    } else {
+      window.dispatchEvent(new CustomEvent('vivid:navigate', { detail: { path: target.url } }))
+    }
+
+    return { success: true, opened: target.label, url: target.url, leftThisApp: target.external }
+  },
+  executionContext: 'client',
+})
+
+export const openPanel = createVividFunction({
+  name: 'openPanel',
+  description:
+    'Open one of the money flows as a modal over whatever screen the user is on — ' +
+    'deposit, withdraw, fund the trading account, withdraw the trading balance. ' +
+    'These are NOT pages; they open on top and the screen behind stays live.\n' +
+    describePanels(),
+  parameters: buildParameters({
+    panel: enumParam('Which panel to open. Must be one of the listed panel ids.', PANEL_IDS, true),
+  }),
+  handler: async ({ panel }: { panel?: string }) => {
+    if (typeof window === 'undefined') return { error: 'Panels are only available in the browser' }
+
+    const target = findPanel(panel ?? '')
+    if (!target) {
+      return { error: `Unknown panel "${panel}".`, validPanels: PANEL_IDS }
+    }
+
+    // Listeners flip `handled` synchronously during dispatch. If nothing handled
+    // it, the owning provider isn't mounted — stash the request and navigate;
+    // the provider replays it on mount.
+    const detail: { panel: string; handled: boolean } = { panel: target.id, handled: false }
+    window.dispatchEvent(new CustomEvent('vivid:open-panel', { detail }))
+
+    if (!detail.handled) {
+      try {
+        sessionStorage.setItem(PENDING_PANEL_KEY, target.id)
+      } catch {
+        /* private mode — the navigation below still gets them to the right page */
+      }
+      window.dispatchEvent(new CustomEvent('vivid:navigate', { detail: { path: target.route } }))
+      await waitForPanelSettle()
+      return {
+        success: true,
+        opened: target.label,
+        navigatedFirst: true,
+        availableTargets: listTargets(),
+      }
+    }
+
+    // The panel is portalled and animates in, so it is legitimately absent for
+    // a few frames after the event. Wait for it, then hand its controls straight
+    // back — no second listPageControls round trip before filling anything in.
+    await waitForPanelSettle()
+    return { success: true, opened: target.label, availableTargets: listTargets() }
+  },
+  executionContext: 'client',
+})
+
+export const getCurrentPageContext = createVividFunction({
+  name: 'getCurrentPageContext',
+  description:
+    "Find out what the user is looking at right now — the page they are on, what is rendered on it, " +
+    'and live on-screen values (which pair and side the trade ticket holds, which balance view is showing, ' +
+    'whether a modal is up). ' +
+    'CALL THIS whenever the user says "this page", "this screen", "here", "what am I looking at", ' +
+    '"what does this mean", or asks about something visible without naming it. ' +
+    'The page changes as they navigate, so never rely on what you were told earlier in the conversation — check.',
+  parameters: buildParameters({}),
+  handler: async () => {
+    if (typeof window === 'undefined') return { error: 'Page context is only available in the browser' }
+
+    const path = window.location.pathname + window.location.search
+    const info = getPageInfo(window.location.pathname)
+    const live = readLiveContext()
+
+    return {
+      path,
+      page: info.name,
+      whatIsOnScreen: info.summary,
+      ...(info.actions ? { whatTheUserCanDoHere: info.actions } : {}),
+      ...(Object.keys(live).length > 0
+        ? { liveOnScreen: live }
+        : { note: 'No live values published by this page — describe it from whatIsOnScreen.' }),
+    }
   },
   executionContext: 'client',
 })
@@ -84,6 +201,238 @@ export const showAlert = createVividFunction({
     return { success: true }
   },
   executionContext: 'client',
+})
+
+export const lookAtCamera = createVividFunction({
+  name: 'lookAtCamera',
+  description:
+    "Look through the user's camera. Call this whenever the user asks about something physical or visual — " +
+    '"what am I holding", "look at this", "can you see this chart on my other screen", "what does this say". ' +
+    'A fresh camera frame is added to the conversation right before your response, so just describe what you see. ' +
+    'If the camera is off, the browser will ask the user for permission first.',
+  parameters: buildParameters({}),
+  handler: async () => {
+    if (typeof window === 'undefined') return { error: 'Camera is only available in the browser' }
+    // Ask the voice control (which owns the camera stream and the realtime
+    // connection) to capture a frame and inject it into the conversation.
+    return await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        window.removeEventListener('vivid:look-result', onResult)
+        resolve({ error: 'Camera capture timed out. Ask the user to enable their camera.' })
+      }, 10000)
+      const onResult = (e: Event) => {
+        clearTimeout(timeout)
+        window.removeEventListener('vivid:look-result', onResult)
+        resolve((e as CustomEvent).detail)
+      }
+      window.addEventListener('vivid:look-result', onResult)
+      window.dispatchEvent(new CustomEvent('vivid:look'))
+    })
+  },
+  executionContext: 'client',
+})
+
+// =============================================================================
+// Page control — Vivid's hands on the screen
+// =============================================================================
+// The DOM is the registry: anything carrying data-vivid-target is reachable,
+// nothing else is. listPageControls is the model's eyes; every miss returns the
+// live target list so a wrong id self-corrects in one round trip.
+
+export const listPageControls = createVividFunction({
+  name: 'listPageControls',
+  description:
+    'See everything on the current screen you can point at, fill or press — sections, buttons and ' +
+    'inputs, each with a stable id. CALL THIS FIRST whenever you intend to control the page: ids ' +
+    'differ per screen and per modal, and this list is the live truth. Items marked guarded move ' +
+    'real money and need the user to confirm out loud before pressControl will fire them.',
+  parameters: buildParameters({}),
+  handler: async () => {
+    if (typeof window === 'undefined') return { error: 'Page control is only available in the browser' }
+    const targets = listTargets()
+    return targets.length > 0
+      ? { targets }
+      : { targets, note: 'Nothing controllable is visible here. Navigate or open a panel first.' }
+  },
+  executionContext: 'client',
+})
+
+export const spotlightSection = createVividFunction({
+  name: 'spotlightSection',
+  description:
+    'Physically SHOW the user something: scroll it into view and dim everything else so only that ' +
+    'element stays lit. Use it whenever you say "here", "this button", "right there" — e.g. showing ' +
+    'where the order book is, where to set leverage, where a balance lives. The mask ' +
+    'clears on its own when the user touches the page. Get ids from listPageControls.',
+  parameters: buildParameters({
+    target: stringParam('The data-vivid-target id of the element to spotlight.', true),
+    seconds: numberParam(
+      'How long to hold the mask. Defaults to 4. Raise it only when your spoken explanation ' +
+        'genuinely runs longer than that, so the highlight is still up when you finish the sentence.',
+    ),
+  }),
+  handler: async ({ target, seconds }: { target?: string; seconds?: number }) => {
+    if (typeof window === 'undefined') return { error: 'Page control is only available in the browser' }
+    const el = await waitForTarget(target ?? '')
+    if (!el) return missReport(target ?? '')
+    // Clamp: below 2s the mask reads as a glitch, above 10s it feels stuck.
+    const hold = Number.isFinite(seconds) && seconds! > 0 ? Math.min(Math.max(seconds!, 2), 10) * 1000 : undefined
+    scrollToTarget(el)
+    setSpotlight(target!, hold)
+    return {
+      success: true,
+      spotlighting: target,
+      heldForSeconds: (hold ?? DEFAULT_HOLD_MS) / 1000,
+      note: 'The rest of the page is dimmed. It clears on its own, or the moment the user touches the page.',
+    }
+  },
+  executionContext: 'client',
+})
+
+export const scrollPage = createVividFunction({
+  name: 'scrollPage',
+  description:
+    'Scroll the screen for the user. Fixed, smooth, repeatable jumps — call it again for ' +
+    '"keep going", "more", "further down". If a panel or modal is open it scrolls THAT, not the ' +
+    'page behind it. Use direction top or bottom to jump straight to either end. The result tells ' +
+    'you where you landed and whether you have hit the end, so you never claim to scroll past it. ' +
+    'To bring one specific thing into view, prefer spotlightSection — it scrolls and points.',
+  parameters: buildParameters({
+    direction: enumParam('Which way to go.', ['down', 'up', 'top', 'bottom'], true),
+    amount: enumParam(
+      'How far, as a share of the visible height: small ~a third, medium ~three quarters ' +
+        '(default), large ~one and a half screens. Ignored for top and bottom.',
+      ['small', 'medium', 'large'],
+    ),
+    pixels: numberParam(
+      'Exact distance in pixels — use when the user names a number ("scroll down 300"). Overrides amount.',
+    ),
+  }),
+  handler: async ({ direction, amount, pixels }: { direction?: string; amount?: string; pixels?: number }) => {
+    if (typeof window === 'undefined') return { error: 'Scrolling is only available in the browser' }
+    const dir = (direction ?? 'down') as 'up' | 'down' | 'top' | 'bottom'
+    const size = (amount ?? 'medium') as 'small' | 'medium' | 'large'
+    const r = await performScroll(dir, size, pixels)
+    return {
+      success: true,
+      scrolled: dir,
+      by: Math.abs(r.scrolled),
+      of: r.surface,
+      atTop: r.atTop,
+      atBottom: r.atBottom,
+      ...(r.scrolled === 0
+        ? { note: r.atBottom ? 'Already at the bottom.' : r.atTop ? 'Already at the top.' : 'Nothing to scroll.' }
+        : {}),
+    }
+  },
+  executionContext: 'client',
+})
+
+export const clearSpotlight = createVividFunction({
+  name: 'clearSpotlight',
+  description: 'Remove the spotlight mask and restore the page, e.g. when moving on to a new topic.',
+  parameters: buildParameters({}),
+  handler: async () => {
+    if (typeof window === 'undefined') return { error: 'Page control is only available in the browser' }
+    setSpotlight(null)
+    return { success: true }
+  },
+  executionContext: 'client',
+})
+
+export const fillField = createVividFunction({
+  name: 'fillField',
+  description:
+    'Type into an input on screen for the user — an amount, a limit price, a search. Works exactly like ' +
+    'keyboard input, so the page reacts as they would expect (tickets recompute, forms validate). ' +
+    'Filling never submits anything: pair with pressControl only after the user asks. ' +
+    'Get ids from listPageControls; only kind "input" targets are fillable.',
+  parameters: buildParameters({
+    target: stringParam('The data-vivid-target id of the input to fill.', true),
+    value: stringParam('Exactly what to type into it. Plain digits for amounts — no currency symbols or commas.', true),
+  }),
+  handler: async ({ target, value }: { target?: string; value?: string }) => {
+    if (typeof window === 'undefined') return { error: 'Page control is only available in the browser' }
+    const el = await waitForTarget(target ?? '')
+    if (!el) return missReport(target ?? '')
+    scrollToTarget(el)
+    const result = setNativeInput(el, value ?? '')
+    if (!result.ok) {
+      return { error: `"${target}" is not a fillable input.`, availableTargets: listTargets() }
+    }
+    if (result.settled !== result.wrote) {
+      // The component rejected or reformatted it — say so rather than claiming success.
+      return {
+        partial: true,
+        filled: target,
+        requested: value,
+        fieldNowShows: result.settled,
+        note: 'The field did not keep exactly what was typed. Read back what it shows before continuing.',
+      }
+    }
+    return { success: true, filled: target, fieldNowShows: result.settled }
+  },
+  executionContext: 'client',
+})
+
+export const pressControl = createVividFunction({
+  name: 'pressControl',
+  description:
+    'Press a button or link on screen for the user — switch a tab, pick a pair, apply a Max amount, ' +
+    'submit a form they asked you to submit. Controls marked guarded move real money (placing orders, ' +
+    'closing positions, transfers): for those you MUST first tell the user exactly what will happen ' +
+    'and hear them agree, then call again with confirmed=true. ' +
+    'Never set confirmed on your own initiative. Get ids from listPageControls.',
+  parameters: buildParameters({
+    target: stringParam('The data-vivid-target id of the button or link to press.', true),
+    confirmed: booleanParam(
+      'Only for guarded controls: true once the user has verbally agreed to this exact action.',
+    ),
+  }),
+  handler: async ({ target, confirmed }: { target?: string; confirmed?: boolean }) => {
+    if (typeof window === 'undefined') return { error: 'Page control is only available in the browser' }
+    const el = await waitForTarget(target ?? '')
+    if (!el) return missReport(target ?? '')
+    if (el.hasAttribute(GUARD_ATTR) && !confirmed) {
+      scrollToTarget(el)
+      setSpotlight(target!)
+      return {
+        needsConfirmation: true,
+        control: target,
+        note:
+          'This moves real money, so it is spotlighted but NOT pressed. Tell the user exactly what ' +
+          'pressing it will do, and only after they clearly agree call pressControl again with confirmed=true.',
+      }
+    }
+    scrollToTarget(el)
+    el.click()
+    return { success: true, pressed: target }
+  },
+  executionContext: 'client',
+})
+
+export const searchWeb = createVividFunction({
+  name: 'searchWeb',
+  description:
+    'Search the live internet and get back a short, current answer with sources. Use for news, ' +
+    'current events, companies, products, people, places — anything outside WorldStreet where being ' +
+    'out of date would make you wrong. NOT for crypto prices, forex, balances or transaction ' +
+    'history — those have dedicated tools.',
+  parameters: buildParameters({
+    query: stringParam(
+      'A complete, self-contained search query. Resolve pronouns from the conversation first.',
+      true,
+    ),
+  }),
+  handler: async ({ query }: { query?: string }) => {
+    if (!query || !query.trim()) return { error: 'Give searchWeb a real query.' }
+    const result = await runWebSearch(query.trim())
+    if (!result.ok) {
+      return { error: result.error, retryable: result.retryable }
+    }
+    return { answer: result.answer, sources: result.sources }
+  },
+  executionContext: 'server',
 })
 
 // =============================================================================
@@ -551,12 +900,30 @@ export const getForexRate = createVividFunction({
   executionContext: 'server',
 })
 
+
+// =============================================================================
+// Registry
+// =============================================================================
+
 export const allFunctions: VoiceFunctionConfig[] = [
+  // Getting around + acting on the screen
   navigateToPage,
-  showAlert,
+  openPanel,
+  getCurrentPageContext,
+  listPageControls,
+  spotlightSection,
+  scrollPage,
+  clearSpotlight,
+  fillField,
+  pressControl,
+  lookAtCamera,
+  // Data
   getCryptoPrice,
   getPortfolioBalance,
   getMarketAnalysis,
   getTransactionHistory,
   getForexRate,
+  searchWeb,
+  // Misc
+  showAlert,
 ]

@@ -50,7 +50,7 @@ interface VividServerConfig {
     instructions?: string;
     /**
      * OpenAI Realtime model to use
-     * @default 'gpt-4o-realtime-preview-2024-12-17'
+     * @default 'gpt-realtime'
      */
     model?: string;
     /**
