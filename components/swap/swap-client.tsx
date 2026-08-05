@@ -891,6 +891,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                 onClick={handleSwap}
                 data-vivid-target="swap-submit"
                 data-vivid-guard=""
+                aria-label="Execute swap"
                 data-vivid-label="Execute the swap. Moves real money."
                 className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
               >

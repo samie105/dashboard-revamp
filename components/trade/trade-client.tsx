@@ -646,6 +646,7 @@ export function TradeClient() {
         disabled={!canSubmit}
         data-vivid-target="trade-submit"
         data-vivid-guard=""
+        aria-label={`Place order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${market === "futures" && leverage > 1 ? ` at ${leverage}x` : ""}`}
         data-vivid-label={`Place the order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol} for the amount shown. Moves real money.`}
         className={`w-full rounded-full py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
           side === "buy" ? "bg-credit hover:bg-credit/90" : "bg-debit hover:bg-debit/90"

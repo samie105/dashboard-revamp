@@ -136,6 +136,7 @@ export function PositionsPanel({
                           disabled={busyKey === `close:${p.symbol}`}
                           data-vivid-target={`close-position-${p.symbol}`}
                           data-vivid-guard=""
+                          aria-label={`Close position — ${p.symbol} ${p.side} at market`}
                           data-vivid-label={`Close the ${p.symbol} ${p.side} position at market. Moves real money.`}
                           className="rounded-lg bg-debit-chip px-2.5 py-1 text-[11px] font-semibold text-debit transition-colors hover:bg-debit/20 disabled:opacity-40"
                         >
@@ -195,6 +196,7 @@ export function PositionsPanel({
                       disabled={busyKey === `cancel:${o.oid}`}
                       data-vivid-target={`cancel-order-${o.oid}`}
                       data-vivid-guard=""
+                      aria-label={`Cancel order — ${o.symbol} ${o.side}`}
                       data-vivid-label={`Cancel the resting ${o.symbol} ${o.side} order`}
                       className="rounded-lg bg-surface-sunken px-2.5 py-1 text-[11px] font-medium transition-colors hover:bg-accent disabled:opacity-40"
                     >
