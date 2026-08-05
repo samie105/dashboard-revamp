@@ -20,6 +20,7 @@ import * as React from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useSearchParams, useRouter } from "next/navigation"
+import { Dialog } from "@base-ui/react/dialog"
 import {
   fetchHlMarkets,
   fetchHlAccount,
@@ -42,6 +43,7 @@ import { CandleChart } from "@/components/trade/candle-chart"
 import { OrderBook } from "@/components/trade/order-book"
 import { PositionsPanel } from "@/components/trade/positions-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
+import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { BackAction, Eyebrow, Segmented, type SegmentedOption } from "@/components/ui/system"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
@@ -108,6 +110,10 @@ export function TradeClient() {
   const [outcome, setOutcome] = React.useState<HlOrderOutcome | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [busyKey, setBusyKey] = React.useState<string | null>(null)
+  // Mobile-only view state: which pane sits under the chart, and whether the
+  // order ticket sheet is up.
+  const [mobilePane, setMobilePane] = React.useState<"book" | "positions" | "orders">("book")
+  const [ticketOpen, setTicketOpen] = React.useState(false)
   // Load failures are tracked apart from order errors: an unreachable account
   // must never be mistaken for an account that exists but isn't set up.
   const [marketsError, setMarketsError] = React.useState(false)
@@ -310,6 +316,8 @@ export function TradeClient() {
 
   const ready = account?.ready ?? false
   const balances = account?.balances
+  const positionCount = account?.positions.length ?? 0
+  const orderCount = account?.openOrders.length ?? 0
 
   // Percent chips: the notional the balance can actually carry. Spot sells
   // spend the token, not USDC, so no honest max exists there.
@@ -348,7 +356,8 @@ export function TradeClient() {
                 onClick={() => { setSymbol(m.symbol); setPickerOpen(false); setSearch("") }}
                 className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent ${m.symbol === symbol ? "bg-accent" : ""}`}
               >
-                <span className="font-semibold">
+                <span className="flex items-center gap-2 font-semibold">
+                  <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} size="md" />
                   {m.symbol}
                   <span className="ml-1 text-[10px] font-medium text-subtle">
                     {market === "futures" ? "PERP" : "USDC"}
@@ -600,12 +609,12 @@ export function TradeClient() {
 
   /* ── Workspace ────────────────────────────────────────────────────────── */
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background lg:overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {/* Top bar */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border/30 px-3 py-2.5 lg:flex-nowrap">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/30 px-3 py-2.5 sm:gap-x-5 lg:flex-nowrap">
         {/* This route has no sidebar or navbar, so it carries its own way
             out — a back control, not just a clickable logo. */}
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="order-1 flex shrink-0 items-center gap-1.5 lg:order-none">
           <BackAction to="/" className="mt-0" />
           <Link href="/" className="hidden items-center sm:flex" title="Dashboard">
             <Image src="/worldstreet-logo/WorldStreet1x.png" alt="Worldstreet" width={72} height={18} className="h-[18px] w-auto object-contain" />
@@ -618,30 +627,31 @@ export function TradeClient() {
           value={market}
           onChange={setMarketTab}
           options={MARKET_TABS}
-          className="shrink-0"
+          className="order-4 shrink-0 lg:order-none"
         />
 
         {/* Pair — the rail owns switching on wide screens; this dropdown
             covers every width below xl and still works above it. */}
-        <div className="relative shrink-0">
+        <div className="relative order-2 shrink-0 lg:order-none">
           <button
             onClick={() => setPickerOpen((v) => !v)}
             aria-haspopup="listbox"
             aria-expanded={pickerOpen}
-            className="flex items-center gap-1.5 rounded-xl bg-surface-sunken px-3.5 py-2 text-[15px] font-bold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="flex items-center gap-1.5 rounded-xl bg-surface-sunken px-2.5 py-2 text-[15px] font-bold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-3.5"
           >
+            <CoinAvatar symbol={bookCoin ?? symbol} size="md" />
             {symbol || "—"}
-            <span className="text-[11px] font-semibold text-subtle">{market === "futures" ? "PERP" : "/USDC"}</span>
+            <span className="hidden text-[11px] font-semibold text-subtle sm:inline">{market === "futures" ? "PERP" : "/USDC"}</span>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-subtle"><path d="M6 9l6 6 6-6" /></svg>
           </button>
           {picker}
         </div>
 
         {/* Price + 24h stats */}
-        <div className="flex min-w-0 items-center gap-5 overflow-x-auto scrollbar-none">
+        <div className="order-3 ml-auto flex min-w-0 items-center gap-3 overflow-x-auto scrollbar-none sm:gap-5 lg:order-none lg:ml-0">
           <span
             aria-live="polite"
-            className={`shrink-0 text-2xl font-bold tabular-nums tracking-tight ${
+            className={`shrink-0 text-xl font-bold tabular-nums tracking-tight sm:text-2xl ${
               lastTick === "up" ? "text-credit" : lastTick === "down" ? "text-debit" : ""
             }`}
           >
@@ -656,7 +666,7 @@ export function TradeClient() {
         </div>
 
         {/* Balances + money doors */}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="order-5 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 lg:order-none">
           {balances && (
             <span className="hidden text-xs tabular-nums text-muted-foreground 2xl:block">
               Spot <span className="font-semibold text-foreground">${balances.spotUsdc.toFixed(2)}</span>
@@ -668,13 +678,13 @@ export function TradeClient() {
               over the workspace so the chart and the ticket keep their state. */}
           <button
             onClick={() => openFlow("fund")}
-            className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
           >
             Fund
           </button>
           <button
             onClick={() => openFlow("trading-withdraw")}
-            className="rounded-full bg-surface-sunken px-4 py-2 text-sm font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
           >
             Withdraw
           </button>
@@ -686,7 +696,7 @@ export function TradeClient() {
       </div>
 
       {/* Workspace body */}
-      <div className="flex min-h-0 flex-col lg:flex-1 lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Markets rail — the full list lives on the left so switching pairs
             is one click, not a menu dive. */}
         <MarketsRail
@@ -698,8 +708,8 @@ export function TradeClient() {
         />
 
         {/* Chart + bottom panel */}
-        <div className="flex min-h-0 min-w-0 flex-col lg:flex-1">
-          <div className="h-[340px] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="h-[260px] shrink-0 sm:h-[320px] lg:h-auto lg:min-h-0 lg:flex-1">
             {marketsError ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
@@ -734,6 +744,42 @@ export function TradeClient() {
             onCancelOrder={handleCancel}
             className="hidden h-[228px] shrink-0 border-t border-border/30 lg:flex"
           />
+
+          {/* Below lg the book and positions share one pane instead of
+              stacking into an endless scroll — one tap to compare, and the
+              chart above never leaves the screen. */}
+          <div className="flex min-h-0 flex-1 flex-col border-t border-border/30 lg:hidden">
+            <div className="flex shrink-0 items-center border-b border-border/30 px-2 py-1.5">
+              <Segmented
+                size="sm"
+                value={mobilePane}
+                onChange={setMobilePane}
+                options={[
+                  { key: "book", label: "Book" },
+                  { key: "positions", label: positionCount ? `Positions · ${positionCount}` : "Positions" },
+                  { key: "orders", label: orderCount ? `Orders · ${orderCount}` : "Orders" },
+                ]}
+              />
+            </div>
+            {mobilePane === "book" ? (
+              <OrderBook
+                book={book}
+                lastTick={lastTick}
+                onPickPrice={(p) => { pickPrice(p); setTicketOpen(true) }}
+                className="min-h-0 flex-1"
+              />
+            ) : (
+              <PositionsPanel
+                account={account}
+                busyKey={busyKey}
+                onClosePosition={handleClose}
+                onCancelOrder={handleCancel}
+                className="min-h-0 flex-1"
+                hideTabs
+                tab={mobilePane === "orders" ? "orders" : "positions"}
+              />
+            )}
+          </div>
         </div>
 
         {/* Order book rail */}
@@ -744,27 +790,60 @@ export function TradeClient() {
           className="hidden w-[248px] shrink-0 border-l border-border/30 lg:flex xl:w-[276px]"
         />
 
-        {/* Ticket rail */}
-        <aside className="shrink-0 border-t border-border/30 lg:w-[300px] lg:overflow-y-auto lg:border-l lg:border-t-0 xl:w-[320px]">
+        {/* Ticket rail — desktop keeps it always-on; below lg it becomes the
+            bottom sheet the action bar opens, so the chart owns the screen. */}
+        <aside className="hidden shrink-0 lg:block lg:w-[300px] lg:overflow-y-auto lg:border-l lg:border-border/30 xl:w-[320px]">
           {ticket}
         </aside>
       </div>
 
-      {/* Below lg: book + positions continue the scrolling column */}
-      <OrderBook
-        book={book}
-        lastTick={lastTick}
-        onPickPrice={pickPrice}
-        depth={7}
-        className="border-t border-border/30 lg:hidden"
-      />
-      <PositionsPanel
-        account={account}
-        busyKey={busyKey}
-        onClosePosition={handleClose}
-        onCancelOrder={handleCancel}
-        className="border-t border-border/30 pb-6 lg:hidden"
-      />
+      {/* Mobile action bar — the ticket is one tap away at all times, and the
+          tap already says which side you meant. */}
+      <div className="flex shrink-0 items-center gap-2 border-t border-border/30 bg-background px-3 py-2.5 safe-area-bottom lg:hidden">
+        <button
+          onClick={() => { setSide("buy"); setTicketOpen(true) }}
+          className="flex-1 rounded-full bg-credit py-3 text-sm font-bold text-white transition-colors hover:bg-credit/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-credit/40"
+        >
+          {market === "futures" ? "Long" : "Buy"}
+        </button>
+        <button
+          onClick={() => { setSide("sell"); setTicketOpen(true) }}
+          className="flex-1 rounded-full bg-debit py-3 text-sm font-bold text-white transition-colors hover:bg-debit/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-debit/40"
+        >
+          {market === "futures" ? "Short" : "Sell"}
+        </button>
+      </div>
+
+      {/* Ticket sheet (mobile) */}
+      <Dialog.Root open={ticketOpen} onOpenChange={setTicketOpen}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/60 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-sm lg:hidden" />
+          <Dialog.Popup
+            aria-label={`${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] translate-y-0 flex-col rounded-t-2xl bg-card outline-none transition-transform duration-300 ease-out data-ending-style:translate-y-full data-starting-style:translate-y-full safe-area-bottom lg:hidden"
+          >
+            <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/[0.16]" />
+            <div className="flex shrink-0 items-center justify-between px-4 pt-2">
+              <span className="flex items-center gap-2 text-sm font-bold">
+                <CoinAvatar symbol={bookCoin ?? symbol} size="sm" />
+                {symbol}
+                <span className="text-[11px] font-semibold text-subtle">
+                  {market === "futures" ? "PERP" : "/USDC"}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setTicketOpen(false)}
+                aria-label="Close"
+                className="-mr-1 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{ticket}</div>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

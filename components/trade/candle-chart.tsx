@@ -124,7 +124,7 @@ export function CandleChart({ coin, className }: { coin: string | null; classNam
   }, [coin, interval])
 
   return (
-    <div className={`flex h-full min-h-0 flex-col ${className ?? ""}`}>
+    <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`}>
       <div className="flex items-center gap-0.5 px-2 pt-2">
         {INTERVALS.map((i) => (
           <button
@@ -139,7 +139,7 @@ export function CandleChart({ coin, className }: { coin: string | null; classNam
         ))}
         {empty && <span className="ml-2 text-xs text-muted-foreground">No candle data for this market.</span>}
       </div>
-      <div ref={containerRef} className="min-h-[260px] flex-1" />
+      <div ref={containerRef} className="min-h-0 flex-1" />
     </div>
   )
 }

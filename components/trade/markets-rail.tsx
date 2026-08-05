@@ -13,6 +13,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Eyebrow } from "@/components/ui/system"
+import { CoinAvatar } from "@/components/ui/coin-avatar"
 import type { HlSpotMarket, HlFuturesMarket } from "@/lib/crypto-api"
 
 type AnyMarket = HlSpotMarket | HlFuturesMarket
@@ -77,7 +78,8 @@ export function MarketsRail({
                   active ? "bg-accent" : "hover:bg-accent/50",
                 )}
               >
-                <span className="min-w-0 truncate text-sm font-semibold">
+                <span className="flex min-w-0 items-center gap-2 truncate text-sm font-semibold">
+                  <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} size="md" />
                   {m.symbol}
                   <span className="ml-1 text-[10px] font-medium text-subtle">
                     {market === "futures" ? "PERP" : "USDC"}

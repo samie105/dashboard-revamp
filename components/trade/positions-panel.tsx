@@ -13,6 +13,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Segmented } from "@/components/ui/system"
+import { CoinAvatar } from "@/components/ui/coin-avatar"
 import type { HlAccount } from "@/lib/crypto-api"
 
 type Tab = "positions" | "orders"
@@ -34,14 +35,23 @@ export function PositionsPanel({
   onClosePosition,
   onCancelOrder,
   className,
+  hideTabs = false,
+  tab: controlledTab,
 }: {
   account: HlAccount | null
   busyKey: string | null
   onClosePosition: (symbol: string) => void
   onCancelOrder: (oid: number, symbol: string, market: "spot" | "futures") => void
   className?: string
+  /** The mobile pane supplies its own tab strip, so the panel drops its own
+   *  rather than stacking two rows of tabs. */
+  hideTabs?: boolean
+  /** Drives the panel from outside (the mobile pane strip). Uncontrolled on
+   *  desktop, where the panel owns its own tabs. */
+  tab?: Tab
 }) {
-  const [tab, setTab] = React.useState<Tab>("positions")
+  const [ownTab, setTab] = React.useState<Tab>("positions")
+  const tab = controlledTab ?? ownTab
   const positions = account?.positions ?? []
   const orders = account?.openOrders ?? []
 
@@ -49,7 +59,7 @@ export function PositionsPanel({
     <div className={cn("flex min-h-0 flex-col", className)}>
       {/* Tab strip — the house Segmented, so this reads like every other tab
           set in the app rather than inventing an underline idiom. */}
-      <div className="flex items-center border-b border-border/30 px-2 py-1.5">
+      <div className={cn("flex items-center border-b border-border/30 px-2 py-1.5", hideTabs && "hidden")}>
         <Segmented
           size="sm"
           value={tab}
@@ -87,10 +97,13 @@ export function PositionsPanel({
                   return (
                     <tr key={p.symbol} className="border-b border-border/10 hover:bg-accent/30">
                       <td className={TD}>
-                        <span className="font-bold">{p.symbol}</span>{" "}
+                        <span className="inline-flex items-center gap-2 align-middle">
+                          <CoinAvatar symbol={p.symbol} size="sm" />
+                          <span className="font-bold">{p.symbol}</span>
+                        </span>
                         <span
                           className={cn(
-                            "ml-1 rounded px-1.5 py-0.5 text-[10px] font-bold",
+                            "ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold",
                             p.side === "long" ? "bg-credit-chip text-credit" : "bg-debit-chip text-debit",
                           )}
                         >
@@ -148,7 +161,10 @@ export function PositionsPanel({
               {orders.map((o) => (
                 <tr key={o.oid} className="border-b border-border/10 hover:bg-accent/30">
                   <td className={TD}>
-                    <span className="font-bold">{o.symbol}</span>{" "}
+                    <span className="inline-flex items-center gap-2 align-middle">
+                      <CoinAvatar symbol={o.symbol} size="sm" />
+                      <span className="font-bold">{o.symbol}</span>
+                    </span>{" "}
                     <span className="text-[10px] uppercase text-subtle">{o.market}</span>
                   </td>
                   <td className={cn(TD, "font-semibold", o.side === "buy" ? "text-credit" : "text-debit")}>
