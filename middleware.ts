@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
 import { NextResponse } from "next/server"
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 
 const isProduction = process.env.NODE_ENV === "production"
 const LOGIN_URL = isProduction
@@ -25,6 +26,11 @@ const isWebhookRoute = createRouteMatcher([
 ])
 
 export default clerkMiddleware(async (auth, req) => {
+  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
+  if (DEV_AUTH_BYPASS) {
+    return NextResponse.next()
+  }
+
   // Skip auth for webhook routes (called by external services)
   if (isWebhookRoute(req)) {
     return NextResponse.next()

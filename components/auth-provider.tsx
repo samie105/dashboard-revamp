@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { useProfile } from "@/components/profile-provider"
+import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
 
 export type AuthUser = {
   userId: string
@@ -70,15 +71,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clerkSignOut({ redirectUrl: "https://www.worldstreetgold.com/login" })
   }, [clerkSignOut])
 
-  const value = React.useMemo(
-    () => ({
+  const value = React.useMemo(() => {
+    // Dev-only bypass: present a fake signed-in user so AuthGate and the UI
+    // render without Clerk (which is domain-locked and fails on localhost).
+    if (DEV_AUTH_BYPASS) {
+      return {
+        user: { ...DEV_BYPASS_USER, isLoaded: true },
+        isSignedIn: true,
+        isLoaded: true,
+        signOut: async () => {},
+      }
+    }
+    return {
       user: authUser,
       isSignedIn: isSignedIn ?? false,
       isLoaded,
       signOut,
-    }),
-    [authUser, isSignedIn, isLoaded, signOut],
-  )
+    }
+  }, [authUser, isSignedIn, isLoaded, signOut])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
