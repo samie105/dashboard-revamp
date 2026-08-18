@@ -21,13 +21,52 @@
 import * as React from "react"
 import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { AlertCircleIcon } from "@hugeicons/core-free-icons"
+import {
+  AlertCircleIcon,
+  ArrowDownLeft01Icon,
+  ArrowUpRight01Icon,
+} from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 
 /* ── FlowShell — the centered column every flow lives in ───────────────── */
 
 export function FlowShell({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn("mx-auto w-full max-w-md px-4 py-8", className)}>{children}</div>
+}
+
+/* ── FlowHeader — the flow names its direction, in the colour of money ──── */
+
+export function FlowHeader({
+  direction,
+  title,
+  subtitle,
+  className,
+}: {
+  /** "in" = money arriving (credit green), "out" = money leaving (debit red).
+   *  The one place outside a balance where those colours may appear — they
+   *  mean direction here exactly as they do on a transaction row. */
+  direction: "in" | "out"
+  title: string
+  subtitle?: string
+  className?: string
+}) {
+  const isIn = direction === "in"
+  return (
+    <div className={cn("flex items-center gap-3", className)}>
+      <span
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+          isIn ? "bg-credit-chip text-credit" : "bg-debit-chip text-debit",
+        )}
+      >
+        <HugeiconsIcon icon={isIn ? ArrowDownLeft01Icon : ArrowUpRight01Icon} className="h-5 w-5" />
+      </span>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <h2 className="font-display text-[17px] font-semibold leading-tight tracking-[-0.01em]">{title}</h2>
+        {subtitle && <p className="text-xs leading-snug text-muted-foreground">{subtitle}</p>}
+      </div>
+    </div>
+  )
 }
 
 /* ── ContextPanel — quiet "where money sits" rows above the form ───────── */
@@ -41,7 +80,9 @@ export function ContextPanel({
 }) {
   if (rows.length === 0) return null
   return (
-    <div className={cn("divide-y divide-border/20 rounded-2xl bg-card", className)}>
+    // Sunken, not card — these flows also render INSIDE a bg-card modal, where
+    // a card-on-card panel disappears. Sunken + hairline reads on every ground.
+    <div className={cn("divide-y divide-border/20 rounded-2xl bg-surface-sunken/70 ring-1 ring-border/25", className)}>
       {rows.map((r) => (
         <div key={r.label} className="flex items-center justify-between px-4 py-3">
           <span className="text-[13px] text-muted-foreground">{r.label}</span>
@@ -65,6 +106,7 @@ export function AmountField({
   maxSpend,
   presets,
   autoFocus = true,
+  maxDecimals = 2,
 }: {
   value: string
   onChange: (v: string) => void
@@ -76,9 +118,20 @@ export function AmountField({
   maxSpend?: number | null
   presets?: number[]
   autoFocus?: boolean
+  /** These flows settle in cents. Accepting more precision than the service
+   *  can honour meant a user could type 100.005, read "$100.01" in the review
+   *  panel, and have 100.005 sent — the two numbers disagreeing about their
+   *  own money. */
+  maxDecimals?: number
 }) {
   const set = (v: string) => {
-    if (/^[0-9]*\.?[0-9]*$/.test(v)) onChange(v)
+    if (!/^[0-9]*\.?[0-9]*$/.test(v)) return
+    const [whole = "", frac] = v.split(".")
+    // Trim runs of leading zeros ("007" → "7") but keep a lone "0" and the
+    // "0." a user is mid-way through typing.
+    const w = whole.replace(/^0+(?=\d)/, "")
+    if (frac !== undefined && frac.length > maxDecimals) return
+    onChange(frac !== undefined ? `${w}.${frac}` : w)
   }
   return (
     <div className="flex flex-col items-center gap-3 py-2">
@@ -154,9 +207,9 @@ export function ChoiceRow<T extends string>({
             key={o.key}
             onClick={() => onChange(o.key)}
             className={cn(
-              "flex items-center justify-center gap-2 rounded-2xl px-3 py-3 transition-colors",
+              "flex items-center justify-center gap-2 rounded-2xl px-3 py-3 transition-all active:scale-[0.97] motion-reduce:active:scale-100",
               active
-                ? "bg-accent ring-1 ring-foreground/[0.08]"
+                ? "bg-accent shadow-sm ring-1 ring-foreground/[0.08]"
                 : "bg-surface-sunken/70 hover:bg-accent/60",
             )}
           >
@@ -182,7 +235,7 @@ export function DetailPanel({
   className?: string
 }) {
   return (
-    <div className={cn("divide-y divide-border/15 rounded-2xl bg-surface-sunken/70 px-4", className)}>
+    <div className={cn("divide-y divide-border/15 rounded-2xl bg-surface-sunken/70 px-4 ring-1 ring-border/25", className)}>
       {rows.map((r) => (
         <div key={r.label} className="flex items-center justify-between py-2.5">
           <span className={cn("text-[13px]", r.strong ? "font-semibold" : "text-muted-foreground")}>{r.label}</span>
@@ -242,7 +295,10 @@ export function FlowCta({
       className={cn(
         "flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-bold transition-all",
         "bg-primary text-primary-foreground hover:bg-primary/90",
-        (disabled || busy) && "cursor-not-allowed opacity-40 hover:bg-primary",
+        disabled || busy
+          ? "cursor-not-allowed opacity-40 hover:bg-primary"
+          : // Armed: the CTA glows — the one gold moment in the flow earns it.
+            "shadow-[0_10px_28px_-10px_color-mix(in_oklab,var(--primary)_55%,transparent)] active:scale-[0.985] motion-reduce:active:scale-100",
       )}
     >
       {busy && (
@@ -257,15 +313,107 @@ export function FlowCta({
 
 export type Stage = { key: string; label: string }
 
+/** mm:ss for a stage that's been running long enough to be worth counting. */
+function fmtElapsed(ms: number) {
+  const total = Math.floor(ms / 1000)
+  const m = Math.floor(total / 60)
+  const sec = total % 60
+  return m > 0 ? `${m}m ${String(sec).padStart(2, "0")}s` : `${sec}s`
+}
+
+/**
+ * Ticks once a second while `since` is set. Used for the live counters on the
+ * active stage and the status headline — a transfer that's been running four
+ * minutes should say so rather than show the same spinner it showed at second
+ * two. Returns 0 when there's nothing to count, so callers can render nothing.
+ */
+export function useElapsed(since: number | null) {
+  const [ms, setMs] = React.useState(0)
+  React.useEffect(() => {
+    if (since === null) {
+      setMs(0)
+      return
+    }
+    setMs(Date.now() - since)
+    const id = setInterval(() => setMs(Date.now() - since), 1000)
+    return () => clearInterval(id)
+  }, [since])
+  return since === null ? 0 : ms
+}
+
+/**
+ * The stage the flow has reached, and when it got there.
+ *
+ * Two jobs, both about not lying to the user:
+ *
+ *  1. **Monotonic.** A service can report a status this client doesn't know —
+ *     a new intermediate step, or a retry re-reporting an earlier one — and
+ *     the raw lookups answer "index 0" for anything unrecognised. Rendered
+ *     literally, the checklist un-ticked itself halfway through a transfer.
+ *     Taking the high-water mark makes an unknown status mean "no news".
+ *
+ *  2. **Timestamped.** The live counter needs to know when the CURRENT stage
+ *     began, which is not when the flow began.
+ *
+ * Both were briefly done by mutating refs during render, which happens to work
+ * and is exactly the thing concurrent rendering is allowed to break. This is
+ * state, updated in an effect, converging in one extra pass.
+ */
+export function useStageProgress(rawIndex: number, resetKey: unknown) {
+  // Lazy initialiser: a bare Date.now() here runs on every render, not just
+  // the first, which is a call into an impure function during render.
+  const [state, setState] = React.useState(() => ({ index: rawIndex, since: Date.now() }))
+
+  // A new flow starts over — otherwise the high-water mark from the last
+  // transfer would pin the next one's checklist to wherever that one ended.
+  React.useEffect(() => {
+    setState({ index: 0, since: Date.now() })
+  }, [resetKey])
+
+  const index = Math.max(rawIndex, state.index)
+
+  React.useEffect(() => {
+    setState((prev) => (index > prev.index ? { index, since: Date.now() } : prev))
+  }, [index])
+
+  return { index, since: state.since }
+}
+
+/** A checkmark that draws itself in rather than popping. */
+function StageCheck({ done }: { done: boolean }) {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+      <path
+        d="M20 6L9 17l-5-5"
+        pathLength={1}
+        strokeDasharray={1}
+        strokeDashoffset={done ? 0 : 1}
+        className="transition-[stroke-dashoffset] duration-500 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+      />
+    </svg>
+  )
+}
+
 export function StageList({
   stages,
   /** Index of the stage in flight. Everything before it renders done;
    *  pass stages.length when the whole flow completed. */
   activeIndex,
+  /** When the current stage started, epoch ms. Drives the live counter — pass
+   *  null to leave the stage silent (e.g. once everything is done). */
+  stageStartedAt = null,
+  /** Wait this long before showing a counter, so a stage that resolves in two
+   *  seconds never flashes one. */
+  countAfterMs = 8_000,
 }: {
   stages: Stage[]
   activeIndex: number
+  stageStartedAt?: number | null
+  countAfterMs?: number
 }) {
+  const elapsed = useElapsed(stageStartedAt)
+  const showCount = stageStartedAt !== null && elapsed >= countAfterMs
+
   return (
     <div className="flex w-full flex-col">
       {stages.map((s, i) => {
@@ -277,31 +425,64 @@ export function StageList({
             <div className="flex flex-col items-center">
               <span
                 className={cn(
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                  "relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                  // The wash transitions too, so a stage completing is one
+                  // continuous change rather than three simultaneous swaps.
+                  "transition-colors duration-500",
                   done && "bg-credit-chip text-credit",
                   current && "bg-primary/15 text-primary",
                   !done && !current && "bg-foreground/[0.06] text-subtle",
                 )}
               >
+                {current && (
+                  // A halo pushing outward from the live dot: proof the flow is
+                  // still connected, without a spinner's false precision.
+                  <span
+                    aria-hidden
+                    className="ws-stage-halo absolute inset-0 rounded-full bg-primary/40"
+                  />
+                )}
                 {done ? (
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                  <StageCheck done />
                 ) : current ? (
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                  <span className="relative h-2 w-2 rounded-full bg-primary" />
                 ) : (
                   <span className="h-1.5 w-1.5 rounded-full bg-current opacity-50" />
                 )}
               </span>
-              {!last && <span className={cn("w-px flex-1 min-h-4", done ? "bg-credit/30" : "bg-border/40")} />}
+              {!last && (
+                // The rail is a track with a fill that GROWS when the stage
+                // above completes — the single clearest signal that the flow
+                // advanced. On the live stage the fill is replaced by a
+                // travelling gradient: motion where the work is.
+                <span className="relative w-px flex-1 min-h-4 overflow-hidden rounded-full bg-border/40">
+                  <span
+                    className={cn(
+                      "absolute inset-x-0 top-0 origin-top rounded-full transition-transform duration-500 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+                      "h-full bg-credit/40",
+                      done ? "scale-y-100" : "scale-y-0",
+                    )}
+                  />
+                  {current && (
+                    <span aria-hidden className="ws-stage-rail-active absolute inset-0" />
+                  )}
+                </span>
+              )}
             </div>
             <span
               className={cn(
-                "pb-4 pt-0.5 text-[13px]",
+                "flex items-baseline gap-2 pb-4 pt-0.5 text-[13px] transition-colors duration-500",
                 done && "text-muted-foreground",
                 current && "font-semibold",
                 !done && !current && "text-subtle",
               )}
             >
               {s.label}
+              {current && showCount && (
+                <span className="text-[11.5px] font-normal tabular-nums text-subtle">
+                  {fmtElapsed(elapsed)}
+                </span>
+              )}
             </span>
           </div>
         )
@@ -318,6 +499,8 @@ export function StatusScreen({
   caption,
   stages,
   activeIndex = 0,
+  stageStartedAt = null,
+  reference,
   txHash,
   notice,
   autoUpdating = true,
@@ -329,6 +512,12 @@ export function StatusScreen({
   caption?: React.ReactNode
   stages?: Stage[]
   activeIndex?: number
+  /** When the CURRENT stage began, epoch ms — drives the live counter. */
+  stageStartedAt?: number | null
+  /** The order reference. Always shown while processing: a user who closes the
+   *  modal mid-transfer needs something to quote, and burying it in a
+   *  timeout-only notice meant it appeared exactly when it was too late. */
+  reference?: string | null
   txHash?: string | null
   /** Extra warning line (e.g. partial delivery). */
   notice?: React.ReactNode
@@ -339,15 +528,19 @@ export function StatusScreen({
   secondary?: { label: string; onClick?: () => void; href?: string }
 }) {
   const [copied, setCopied] = React.useState(false)
+  const [refCopied, setRefCopied] = React.useState(false)
 
   return (
-    <div className="flex flex-col items-center gap-4 rounded-2xl bg-card px-6 py-8 text-center">
+    // No card fill of its own — this screen IS the surface it sits on, whether
+    // that's the modal or the page column. The icon pops in: the flow's verdict
+    // deserves a beat of ceremony.
+    <div className="flex flex-col items-center gap-4 rounded-2xl px-6 py-8 text-center">
       {state === "success" ? (
-        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-credit-chip">
+        <span className="ws-pop-in flex h-16 w-16 items-center justify-center rounded-full bg-credit-chip">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-credit"><path d="M20 6L9 17l-5-5" /></svg>
         </span>
       ) : state === "failure" ? (
-        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-debit-chip">
+        <span className="ws-pop-in flex h-16 w-16 items-center justify-center rounded-full bg-debit-chip">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-debit"><path d="M18 6L6 18M6 6l12 12" /></svg>
         </span>
       ) : (
@@ -364,7 +557,11 @@ export function StatusScreen({
 
       {stages && stages.length > 0 && (
         <div className="w-full max-w-xs pt-1 text-left">
-          <StageList stages={stages} activeIndex={activeIndex} />
+          <StageList
+            stages={stages}
+            activeIndex={activeIndex}
+            stageStartedAt={state === "processing" ? stageStartedAt : null}
+          />
         </div>
       )}
 
@@ -383,6 +580,26 @@ export function StatusScreen({
           <span className="truncate">{txHash.slice(0, 10)}…{txHash.slice(-8)}</span>
           <span className={cn("shrink-0 text-[10px] font-sans font-semibold", copied ? "text-credit" : "text-subtle")}>
             {copied ? "Copied" : "Copy"}
+          </span>
+        </button>
+      )}
+
+      {/* The reference, wherever the flow has got to. Copyable, because the
+          one thing a worried user wants to do with it is paste it to support. */}
+      {reference && state !== "success" && (
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(reference)
+            setRefCopied(true)
+            setTimeout(() => setRefCopied(false), 1500)
+          }}
+          className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent"
+          title="Copy reference"
+        >
+          <span className="shrink-0 text-subtle">Ref</span>
+          <span className="truncate font-mono">{reference}</span>
+          <span className={cn("shrink-0 font-sans font-semibold", refCopied ? "text-credit" : "text-subtle")}>
+            {refCopied ? "Copied" : "Copy"}
           </span>
         </button>
       )}
@@ -441,7 +658,7 @@ export function UnavailablePanel({
   const actionCls =
     "mt-1 inline-flex items-center rounded-full border border-primary/40 px-4 py-2 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/10"
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-10 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-2xl px-6 py-10 text-center">
       <span
         className={cn(
           "flex h-14 w-14 items-center justify-center rounded-full",
@@ -470,19 +687,21 @@ export function UnavailablePanel({
 /* ── FlowSkeleton — loading placeholder in the flow's own shape ────────── */
 
 export function FlowSkeleton() {
+  // Neutral wash, not bg-card — the skeleton also renders inside the bg-card
+  // modal, where card-coloured blocks are invisible.
   return (
     <div className="flex animate-pulse flex-col gap-4">
-      <div className="h-12 rounded-2xl bg-card" />
+      <div className="h-12 rounded-2xl bg-foreground/[0.05]" />
       <div className="flex flex-col items-center gap-3 py-6">
-        <div className="h-12 w-40 rounded-xl bg-card" />
-        <div className="h-3 w-24 rounded bg-card" />
+        <div className="h-12 w-40 rounded-xl bg-foreground/[0.05]" />
+        <div className="h-3 w-24 rounded bg-foreground/[0.05]" />
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <div className="h-12 rounded-2xl bg-card" />
-        <div className="h-12 rounded-2xl bg-card" />
-        <div className="h-12 rounded-2xl bg-card" />
+        <div className="h-12 rounded-2xl bg-foreground/[0.05]" />
+        <div className="h-12 rounded-2xl bg-foreground/[0.05]" />
+        <div className="h-12 rounded-2xl bg-foreground/[0.05]" />
       </div>
-      <div className="h-12 rounded-full bg-card" />
+      <div className="h-12 rounded-full bg-foreground/[0.05]" />
     </div>
   )
 }

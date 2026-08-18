@@ -11,7 +11,6 @@ import {
   Logout01Icon,
 } from "@hugeicons/core-free-icons"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { NotificationBell } from "@/components/notifications"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -99,7 +98,6 @@ export function TradingHeader({ children }: { children?: React.ReactNode }) {
           </div>
         )}
         <NotificationBell />
-        <ThemeToggle />
         <Popover open={profileOpen} onOpenChange={setProfileOpen}>
           <PopoverTrigger
             render={

@@ -29,11 +29,11 @@ export default function CustomInstructionsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="ws-backdrop-in absolute inset-0 bg-black/45 backdrop-blur-md"
         onClick={onClose}
       />
 
-      <div className="relative bg-card rounded-2xl shadow-2xl w-full max-w-md border border-border/30">
+      <div className="ws-pop-in relative bg-card rounded-2xl shadow-2xl w-full max-w-md ring-1 ring-foreground/10">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
           <h3 className="text-sm font-semibold text-foreground">

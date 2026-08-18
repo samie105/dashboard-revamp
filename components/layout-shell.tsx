@@ -8,6 +8,7 @@ import { Navbar } from "@/components/navbar"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { IncomingCallProvider } from "@/components/community/incoming-call-provider"
 import { MoneyFlowProvider } from "@/components/flows/money-flow-modal"
+import { SilkBackdrop } from "@/components/ui/silk-backdrop"
 
 /** Routes that render full-bleed (no sidebar / top-nav / navbar). */
 const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
@@ -15,6 +16,10 @@ const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isFullBleed = FULL_BLEED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
+  // The silk atmosphere belongs to the dashboard hero only, but it must live
+  // HERE, under the z-10 content layer, so the translucent sidebar and navbar
+  // blur it through — inside <main> it could never reach behind the rail.
+  const isDashboard = pathname === "/"
 
   if (isFullBleed) {
     return (
@@ -31,8 +36,31 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   return (
     <IncomingCallProvider>
       <MoneyFlowProvider>
-        <div className="flex flex-col h-screen overflow-hidden">
-          <div className="flex flex-1 overflow-hidden">
+        <div className="relative flex flex-col h-screen overflow-hidden">
+          {/* Desktop atmosphere — the rail's warm bloom spilling into the page.
+              Fixed and non-interactive so it never intercepts a click. */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-y-0 left-0 z-0 hidden w-[42rem] bg-[radial-gradient(60%_50%_at_0%_18%,var(--sidebar-bleed)_0%,transparent_72%)] md:block"
+          />
+          {/* Dashboard atmosphere — full viewport width so the field runs
+              behind the sidebar too and shows through its translucency.
+              Dark gets the WebGL silk; light gets the warm paper wash. */}
+          {isDashboard && (
+            <>
+              <div
+                aria-hidden
+                className="pointer-events-none fixed inset-x-0 top-0 z-0 hidden h-[60vh] dark:block"
+              >
+                <SilkBackdrop />
+              </div>
+              <div
+                aria-hidden
+                className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[60vh] bg-[radial-gradient(90%_75%_at_25%_0%,rgba(234,179,8,0.10)_0%,rgba(234,179,8,0.035)_45%,transparent_75%)] dark:hidden"
+              />
+            </>
+          )}
+          <div className="relative z-10 flex flex-1 overflow-hidden">
             <SidebarProvider>
               {/* Sidebar hidden on mobile — bottom nav replaces it */}
               <div className="hidden md:flex">

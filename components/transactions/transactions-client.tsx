@@ -2,7 +2,16 @@
 
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Eyebrow, IconAction, PageHeader } from "@/components/ui/system"
+import {
+  CardHeader,
+  CardShell,
+  EmptyState,
+  Eyebrow,
+  IconAction,
+  PageHeader,
+  Segmented,
+  SkeletonRows,
+} from "@/components/ui/system"
 import {
   ArrowDown01Icon,
   ArrowUp01Icon,
@@ -12,7 +21,6 @@ import {
   Exchange01Icon,
   Loading03Icon,
   Search01Icon,
-  FilterIcon,
   ArrowRight01Icon,
   Cancel01Icon,
   AlertCircleIcon,
@@ -21,6 +29,7 @@ import {
   Link01Icon,
   Download01Icon,
   Calendar01Icon,
+  LinkSquare01Icon,
 } from "@hugeicons/core-free-icons"
 import { useUnifiedTransactions } from "@/hooks/use-unified-transactions"
 import { exportTransactionsPdf } from "@/lib/export-transactions-pdf"
@@ -49,16 +58,43 @@ const STATUS_PILLS: { key: UnifiedTransactionStatus | "all"; label: string }[] =
   { key: "cancelled", label: "Cancelled" },
 ]
 
-const STATUS_CONFIG: Record<string, { color: string; label: string; icon: typeof CheckmarkCircle01Icon }> = {
-  pending:     { color: "text-warning",        label: "Pending",    icon: Clock01Icon },
-  processing:  { color: "text-orange-500",        label: "Processing", icon: Loading03Icon },
-  completed:   { color: "text-credit",       label: "Completed",  icon: CheckmarkCircle01Icon },
-  failed:      { color: "text-debit",           label: "Failed",     icon: AlertCircleIcon },
-  cancelled:   { color: "text-muted-foreground",  label: "Cancelled",  icon: Cancel01Icon },
-  expired:     { color: "text-muted-foreground",  label: "Expired",    icon: Clock01Icon },
+/* Status has three jobs on this page: colour the pill, name the state, and say
+   where the transaction sits on its timeline. Keeping all three in one record
+   means the pill and the tracker can never disagree about what "processing"
+   looks like.
+
+   `step` is the last timeline node reached; `terminal` marks the states that
+   stop the clock without finishing (a cancelled transfer never "completes",
+   and drawing it as a half-finished success would be a lie). */
+const STATUS_CONFIG: Record<
+  string,
+  {
+    label: string
+    icon: typeof CheckmarkCircle01Icon
+    /** Chip wash + text, drawn from the money-direction tokens. */
+    chip: string
+    step: number
+    terminal?: "failed" | "stopped"
+  }
+> = {
+  pending:    { label: "Pending",    icon: Clock01Icon,             chip: "bg-warning-chip text-warning",                  step: 0 },
+  processing: { label: "Processing", icon: Loading03Icon,           chip: "bg-warning-chip text-warning",                  step: 1 },
+  completed:  { label: "Completed",  icon: CheckmarkCircle01Icon,   chip: "bg-credit-chip text-credit",                    step: 2 },
+  failed:     { label: "Failed",     icon: AlertCircleIcon,         chip: "bg-debit-chip text-debit",                      step: 1, terminal: "failed" },
+  cancelled:  { label: "Cancelled",  icon: Cancel01Icon,            chip: "bg-foreground/[0.06] text-muted-foreground",    step: 1, terminal: "stopped" },
+  expired:    { label: "Expired",    icon: Clock01Icon,             chip: "bg-foreground/[0.06] text-muted-foreground",    step: 1, terminal: "stopped" },
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = { NGN: "₦", USD: "$", GBP: "£", EUR: "€" }
+
+const CHAIN_LABELS: Record<string, string> = {
+  ethereum: "Ethereum",
+  arbitrum: "Arbitrum",
+  solana: "Solana",
+  sui: "Sui",
+  ton: "TON",
+  tron: "Tron",
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -74,8 +110,17 @@ function fmtAmount(n: number, digits = 2) {
   return n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: Math.max(digits, 6) })
 }
 
+function fmtFiat(amount: number, currency = "USD") {
+  return `${CURRENCY_SYMBOLS[currency] || ""}${fmtAmount(amount)}${currency === "USD" ? "" : ` ${currency}`}`
+}
+
 function truncateHash(hash: string) {
   return `${hash.slice(0, 6)}…${hash.slice(-4)}`
+}
+
+function chainLabel(chain?: string) {
+  if (!chain) return undefined
+  return CHAIN_LABELS[chain] ?? chain.charAt(0).toUpperCase() + chain.slice(1)
 }
 
 function copyToClipboard(text: string) {
@@ -92,70 +137,160 @@ function explorerUrl(chain: string | undefined, txHash: string) {
   }
 }
 
-function getTypeConfig(tx: UnifiedTransaction) {
+/* Which way the money went. This replaces a palette that gave trades blue,
+   swaps purple, internal transfers yellow and sends orange — four hues that
+   encoded nothing a reader could act on, in a system where colour is supposed
+   to mean exactly one thing. Money has three directions and now shows three.
+   A swap is deliberately neutral: it isn't income or spending, it's the same
+   money in a different shape. */
+type Direction = "in" | "out" | "neutral"
+
+function directionOf(tx: UnifiedTransaction): Direction {
   switch (tx.type) {
     case "deposit":
     case "spot_deposit":
-      // Both are money in and share the credit styling, but "Deposit" reads as
-      // a purchase — an on-chain arrival is better named for what happened.
-      return {
-        label:
-          tx.type === "spot_deposit"
-            ? "Spot Deposit"
-            : tx.subType === "onchain"
-              ? "Received"
-              : "Deposit",
-        color: "text-credit",
-        bg: "bg-credit-chip",
-        icon: ArrowDown01Icon,
-      }
+      return "in"
     case "withdrawal":
-      return { label: "Withdrawal", color: "text-red-400", bg: "bg-debit-chip", icon: ArrowUp01Icon }
+      return "out"
     case "p2p":
-      return tx.subType === "buy"
-        ? { label: "P2P Deposit", color: "text-credit", bg: "bg-credit-chip", icon: ArrowDown01Icon }
-        : { label: "P2P Withdrawal", color: "text-red-400", bg: "bg-debit-chip", icon: ArrowUp01Icon }
-    case "spot_trade":
-    case "spot_order":
-      return { label: tx.pair ? `Trade ${tx.pair}` : "Spot Trade", color: "text-blue-500", bg: "bg-blue-500/10", icon: Activity01Icon }
-    case "swap":
-      return { label: "Swap", color: "text-purple-500", bg: "bg-purple-500/10", icon: RepeatIcon }
+      return tx.subType === "buy" ? "in" : "out"
     case "transfer":
-      if (tx.subType === "internal" || tx.direction?.includes("-to-")) {
-        return { label: "Internal Transfer", color: "text-yellow-500", bg: "bg-yellow-500/10", icon: Link01Icon }
-      }
-      return { label: "Send", color: "text-orange-500", bg: "bg-orange-500/10", icon: ArrowUp01Icon }
+      if (tx.subType === "receive" || tx.direction === "incoming") return "in"
+      if (tx.subType === "send" || tx.direction === "outgoing") return "out"
+      return "neutral"
     default:
-      return { label: "Transaction", color: "text-muted-foreground", bg: "bg-accent/50", icon: Exchange01Icon }
+      return "neutral"
   }
 }
 
-function getAmountColor(tx: UnifiedTransaction): string {
-  if (tx.type === "deposit" || tx.type === "spot_deposit" || (tx.type === "p2p" && tx.subType === "buy")) return "text-credit"
-  if (tx.type === "withdrawal" || (tx.type === "p2p" && tx.subType === "sell")) return "text-red-400"
-  if (tx.type === "transfer" && tx.subType === "send") return "text-orange-500"
-  return "text-foreground"
+const DIRECTION_STYLE: Record<Direction, { chip: string; text: string; sign: string }> = {
+  in:      { chip: "bg-credit-chip text-credit", text: "text-credit", sign: "+" },
+  out:     { chip: "bg-debit-chip text-debit",   text: "text-debit",  sign: "−" },
+  neutral: { chip: "bg-foreground/[0.06] text-muted-foreground", text: "text-foreground", sign: "" },
 }
 
-function getAmountPrefix(tx: UnifiedTransaction): string {
-  if (tx.type === "deposit" || tx.type === "spot_deposit" || (tx.type === "p2p" && tx.subType === "buy")) return "+"
-  if (tx.type === "withdrawal" || (tx.type === "p2p" && tx.subType === "sell") || (tx.type === "transfer" && tx.subType === "send")) return "-"
-  return ""
+function typeIcon(tx: UnifiedTransaction) {
+  switch (tx.type) {
+    case "swap": return RepeatIcon
+    case "spot_trade":
+    case "spot_order": return Activity01Icon
+    case "transfer":
+      if (tx.subType === "internal" || tx.direction?.includes("-to-")) return Link01Icon
+      return directionOf(tx) === "in" ? ArrowDown01Icon : ArrowUp01Icon
+    default:
+      return directionOf(tx) === "in" ? ArrowDown01Icon : ArrowUp01Icon
+  }
 }
 
-// ── StatusBadge ──────────────────────────────────────────────────────────
+function typeLabel(tx: UnifiedTransaction) {
+  switch (tx.type) {
+    case "deposit":
+      return tx.subType === "onchain" ? "Received" : "Deposit"
+    case "spot_deposit": return "Spot deposit"
+    case "withdrawal": return "Withdrawal"
+    case "p2p": return tx.subType === "buy" ? "P2P deposit" : "P2P withdrawal"
+    case "spot_trade":
+    case "spot_order": return tx.pair ? `Trade ${tx.pair}` : "Spot trade"
+    case "swap": return "Swap"
+    case "transfer":
+      if (tx.subType === "internal" || tx.direction?.includes("-to-")) return "Internal transfer"
+      return directionOf(tx) === "in" ? "Received" : "Sent"
+    default: return "Transaction"
+  }
+}
 
-function StatusBadge({ status }: { status: string }) {
+/** One plain sentence for what happened. The detail panel used to open with a
+ *  grid of twenty grey chips in which "Type" carried the same visual weight as
+ *  the transaction hash — the reader had to assemble the story themselves. */
+function summarise(tx: UnifiedTransaction) {
+  const amt = `${fmtAmount(tx.amount)} ${tx.token}`
+  const on = tx.chain ? ` on ${chainLabel(tx.chain)}` : ""
+  switch (tx.type) {
+    case "deposit":
+      return tx.subType === "onchain"
+        ? `Received ${amt}${on}`
+        : `Deposited ${amt}${tx.fiatAmount ? ` for ${fmtFiat(tx.fiatAmount, tx.fiatCurrency)}` : ""}`
+    case "spot_deposit":
+      return `Moved ${amt} into your spot trading account`
+    case "withdrawal":
+      return `Withdrew ${amt}${tx.bankDetails ? ` to ${tx.bankDetails.bankName}` : on}`
+    case "p2p":
+      return tx.subType === "buy"
+        ? `Bought ${amt} from a P2P seller`
+        : `Sold ${amt} to a P2P buyer`
+    case "swap": {
+      const to = tx.toAmount != null ? `${fmtAmount(Number(tx.toAmount), 2)} ${tx.toToken}` : tx.toToken
+      return to ? `Swapped ${amt} for ${to}` : `Swapped ${amt}`
+    }
+    case "spot_trade":
+    case "spot_order": {
+      const side = String(tx.side ?? "").toLowerCase()
+      const verb = side === "sell" ? "Sold" : "Bought"
+      return `${verb} ${amt}${tx.pair ? ` on ${tx.pair}` : ""}${tx.price ? ` at ${fmtFiat(tx.price)}` : ""}`
+    }
+    case "transfer":
+      if (tx.subType === "internal" || tx.direction?.includes("-to-")) {
+        return `Moved ${amt} between your accounts`
+      }
+      return directionOf(tx) === "in" ? `Received ${amt}${on}` : `Sent ${amt}${on}`
+    default:
+      return `${amt}${on}`
+  }
+}
+
+/** The counterparty, in as few characters as it takes: who you paid, what you
+ *  got back, which market. Without it the row runs label … amount with 400px
+ *  of nothing in between on a wide screen, and the reader has to open every
+ *  transaction to find out who it was with. */
+function counterparty(tx: UnifiedTransaction): string | null {
+  if (tx.type === "swap" && tx.toToken) {
+    const to = tx.toAmount != null ? `${fmtAmount(Number(tx.toAmount))} ${tx.toToken}` : tx.toToken
+    return `→ ${to}`
+  }
+  if (tx.bankDetails) return `to ${tx.bankDetails.bankName}`
+  if (tx.pair) return tx.pair
+  const dir = directionOf(tx)
+  if (dir === "in" && tx.fromAddress) return `from ${truncateHash(tx.fromAddress)}`
+  if (dir === "out" && tx.toAddress) return `to ${truncateHash(tx.toAddress)}`
+  if (tx.direction?.includes("-to-")) return tx.direction.replace(/-/g, " ").replace(" to ", " → ")
+  return null
+}
+
+/** "Today" / "Yesterday" / "Fri, 15 Aug" — the header for a day's group. */
+function dayLabel(iso: string) {
+  const d = new Date(iso)
+  const today = new Date()
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const days = Math.round((startOf(today) - startOf(d)) / 86_400_000)
+  if (days === 0) return "Today"
+  if (days === 1) return "Yesterday"
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(d.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+  })
+}
+
+// ── Status pill ──────────────────────────────────────────────────────────
+
+function StatusPill({ status, className }: { status: string; className?: string }) {
   const s = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${s.color}`}>
-      <HugeiconsIcon icon={s.icon} className="h-3 w-3" />
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold ${s.chip} ${className ?? ""}`}
+    >
+      <HugeiconsIcon
+        icon={s.icon}
+        aria-hidden
+        className={`h-3.5 w-3.5 ${status === "processing" ? "animate-spin" : ""}`}
+      />
       {s.label}
     </span>
   )
 }
 
-// ── Main Component ───────────────────────────────────────────────────────
+// ── Main component ───────────────────────────────────────────────────────
 
 export function TransactionsClient() {
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
@@ -175,7 +310,6 @@ export function TransactionsClient() {
     sentinelRef,
   } = useUnifiedTransactions({ pollInterval: 30000 })
 
-  // Close date picker on outside click
   React.useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (dateRef.current && !dateRef.current.contains(e.target as Node)) {
@@ -186,26 +320,62 @@ export function TransactionsClient() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  const activeType = filters.type || "all"
-  const activeStatus = filters.status || "all"
-  const hasDateFilter = filters.dateFrom || filters.dateTo
+  const activeType = (filters.type || "all") as UnifiedTransactionType | "all"
+  const activeStatus = (filters.status || "all") as UnifiedTransactionStatus | "all"
+  const hasDateFilter = Boolean(filters.dateFrom || filters.dateTo)
 
-  // ── Stat cards ──
+  /* One day per group. A flat list of forty rows makes the reader parse a date
+     column to work out where "this week" ends; a dated header does it once. */
+  const groups = React.useMemo(() => {
+    const out: { label: string; items: UnifiedTransaction[] }[] = []
+    for (const tx of transactions) {
+      const label = dayLabel(tx.createdAt)
+      const last = out[out.length - 1]
+      if (last && last.label === label) last.items.push(tx)
+      else out.push({ label, items: [tx] })
+    }
+    return out
+  }, [transactions])
+
+  /* The stat row is about MONEY, so it's named for money. It used to count
+     things ("Deposits: 3") in the big figure and hide the volume underneath in
+     small text, which put the least interesting number in the largest type. */
   const statCards = stats
     ? [
-        { label: "Deposits", value: String(stats.totalDeposits), sub: `${fmtAmount(stats.depositVolume)} USDT`, icon: ArrowDown01Icon, color: "text-credit" },
-        { label: "Withdrawals", value: String(stats.totalWithdrawals), sub: `${fmtAmount(stats.withdrawalVolume)} USDT`, icon: ArrowUp01Icon, color: "text-red-400" },
-        { label: "Trades & Swaps", value: String(stats.totalTrades + stats.totalSwaps), sub: `${stats.totalTransfers} transfers`, icon: Activity01Icon, color: "text-blue-500" },
-        { label: "Net Volume", value: `$${fmtAmount(stats.netVolume)}`, sub: "USDT total", icon: Exchange01Icon, color: "text-primary" },
+        {
+          label: "Money in",
+          value: `$${fmtAmount(stats.depositVolume)}`,
+          sub: `${stats.totalDeposits} deposit${stats.totalDeposits === 1 ? "" : "s"}`,
+          tone: "text-credit",
+        },
+        {
+          label: "Money out",
+          value: `$${fmtAmount(stats.withdrawalVolume)}`,
+          sub: `${stats.totalWithdrawals} withdrawal${stats.totalWithdrawals === 1 ? "" : "s"}`,
+          tone: "text-debit",
+        },
+        {
+          label: "Moved",
+          value: String(stats.totalTrades + stats.totalSwaps + stats.totalTransfers),
+          sub: `${stats.totalTrades + stats.totalSwaps} trades · ${stats.totalTransfers} transfers`,
+          tone: "text-foreground",
+        },
+        {
+          label: "Net",
+          value: `${stats.netVolume >= 0 ? "+" : "−"}$${fmtAmount(Math.abs(stats.netVolume))}`,
+          sub: "In minus out",
+          tone: stats.netVolume >= 0 ? "text-credit" : "text-debit",
+        },
       ]
     : null
 
+  const filtered = Boolean(filters.type || filters.status || filters.search || hasDateFilter)
+
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6 lg:p-8">
-      {/* ── Page Header — bare icon actions, visible on every breakpoint ── */}
+    <div className="flex flex-col gap-5 p-4 md:p-6 lg:p-8">
       <PageHeader
         title="Transactions"
-        subtitle="Your complete transaction history"
+        subtitle="Every movement of money, across all your accounts"
         actions={
           <>
             <IconAction
@@ -229,286 +399,197 @@ export function TransactionsClient() {
         }
       />
 
-      {/* ── Stats Row — 2-up on phones, 4-up from sm ── */}
-      {statCards && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {statCards.map((card) => (
-            <div key={card.label} className="flex flex-col gap-1.5 rounded-2xl bg-card p-4">
-              <Eyebrow>{card.label}</Eyebrow>
-              <span className="text-xl font-bold tabular-nums tracking-tight">{card.value}</span>
-              {card.sub && <p className={`text-[13px] ${card.color}`}>{card.sub}</p>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Error Banner ── */}
-      {error && (
-        <div className="rounded-xl bg-debit-chip px-4 py-2.5 text-[13px] text-debit">
-          {error}
-        </div>
-      )}
-
-      {/* ── Main Content ── */}
-      <div className="rounded-2xl bg-card">
-        {/* Type Tabs + Search + Date + PDF */}
-        <div className="flex flex-col gap-3 border-b border-border/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Type tabs — the one Segmented system; scrolls on narrow screens */}
-          <div className="-mx-1 flex items-center gap-0.5 overflow-x-auto rounded-full bg-surface-sunken p-1 px-1 scrollbar-none">
-            {TYPE_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setFilters({ type: tab.key === "all" ? undefined : tab.key })}
-                className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold transition-all ${
-                  activeType === tab.key
-                    ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+      {/* ── Summary — four figures, in the money-direction palette ── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {(statCards ?? Array.from({ length: 4 }, () => null)).map((card, i) => (
+          <div key={card?.label ?? i} className="flex flex-col gap-1.5 rounded-2xl bg-card/80 p-4">
+            {card ? (
+              <>
+                <Eyebrow>{card.label}</Eyebrow>
+                <span className={`text-[19px] font-semibold tabular-nums tracking-tight ${card.tone}`}>
+                  {card.value}
+                </span>
+                <p className="text-[13px] text-muted-foreground">{card.sub}</p>
+              </>
+            ) : (
+              <>
+                <span className="skel h-2.5 w-16 rounded" />
+                <span className="skel h-5 w-24 rounded" />
+                <span className="skel h-3 w-20 rounded" />
+              </>
+            )}
           </div>
+        ))}
+      </div>
 
-          {/* Search + Date filter */}
-          <div className="flex items-center gap-2">
-            <div className="relative max-w-56 flex-1">
-              <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search hash, token, address…"
-                value={filters.search || ""}
-                onChange={(e) => setFilters({ search: e.target.value || undefined })}
-                className="w-full rounded-lg border border-border/50 bg-background py-1.5 pl-8 pr-3 text-xs outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary/50"
+      {error && (
+        <div className="rounded-2xl bg-debit-chip px-4 py-3 text-[13px] text-debit">{error}</div>
+      )}
+
+      {/* ── History ── */}
+      <CardShell>
+        <CardHeader
+          title="History"
+          subtitle={
+            isLoading
+              ? "Loading…"
+              : `${transactions.length} ${transactions.length === 1 ? "transaction" : "transactions"}${filtered ? " matching your filters" : ""}`
+          }
+          /* The tabs sit in the header's right slot from `lg` up and drop to
+             their own row below it under that. In the slot on a phone they
+             squeezed "14 transactions" into a two-line column beside them and
+             left the search box about 60px wide. */
+          right={
+            <div className="hidden max-w-full overflow-x-auto scrollbar-none lg:block">
+              <Segmented
+                options={TYPE_TABS}
+                value={activeType}
+                onChange={(key) => setFilters({ type: key === "all" ? undefined : key })}
+                size="sm"
               />
             </div>
+          }
+        />
 
-            {/* Date filter */}
-            <div className="relative" ref={dateRef}>
-              <button
-                onClick={() => setShowDatePicker(!showDatePicker)}
-                className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
-                  hasDateFilter
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border/50 bg-background text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <HugeiconsIcon icon={Calendar01Icon} className="h-3 w-3" />
-                {hasDateFilter ? "Filtered" : "Date"}
-              </button>
-
-              {showDatePicker && (
-                <div className="absolute right-0 top-full z-20 mt-2 min-w-56 rounded-xl bg-card p-3 shadow-lg">
-                  <div className="space-y-2.5">
-                    <div>
-                      <label className="mb-1 block text-[10px] text-muted-foreground">From</label>
-                      <input
-                        type="date"
-                        value={filters.dateFrom || ""}
-                        onChange={(e) => setFilters({ dateFrom: e.target.value || undefined })}
-                        className="w-full rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[10px] text-muted-foreground">To</label>
-                      <input
-                        type="date"
-                        value={filters.dateTo || ""}
-                        onChange={(e) => setFilters({ dateTo: e.target.value || undefined })}
-                        className="w-full rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
-                      />
-                    </div>
-                    {hasDateFilter && (
-                      <button
-                        onClick={() => {
-                          setFilters({ dateFrom: undefined, dateTo: undefined })
-                          setShowDatePicker(false)
-                        }}
-                        className="w-full py-1 text-[10px] text-red-400 hover:text-red-300 transition-colors"
-                      >
-                        Clear dates
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="-mx-1 max-w-full overflow-x-auto px-5 pb-3 scrollbar-none lg:hidden">
+          <Segmented
+            options={TYPE_TABS}
+            value={activeType}
+            onChange={(key) => setFilters({ type: key === "all" ? undefined : key })}
+            size="sm"
+          />
         </div>
 
-        {/* Status filter pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto border-b border-border/20 px-4 py-2">
-          <HugeiconsIcon icon={FilterIcon} className="h-3 w-3 shrink-0 text-muted-foreground" />
-          {STATUS_PILLS.map((pill) => (
+        {/* Filters — search, status, date. One quiet row, not two loud ones. */}
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+          <div className="relative w-full min-w-0 sm:max-w-72 sm:flex-1">
+            <HugeiconsIcon
+              icon={Search01Icon}
+              aria-hidden
+              className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60"
+            />
+            <input
+              type="search"
+              placeholder="Search hash, token, address…"
+              value={filters.search || ""}
+              onChange={(e) => setFilters({ search: e.target.value || undefined })}
+              className="h-9 w-full rounded-full bg-surface-sunken pl-9 pr-3 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/50 focus:ring-1 focus:ring-primary/40"
+            />
+          </div>
+
+          <label className="sr-only" htmlFor="tx-status">Status</label>
+          <select
+            id="tx-status"
+            value={activeStatus}
+            onChange={(e) =>
+              setFilters({
+                status:
+                  e.target.value === "all"
+                    ? undefined
+                    : (e.target.value as UnifiedTransactionStatus),
+              })
+            }
+            className={`h-9 shrink-0 rounded-full px-3 text-[13px] font-medium outline-none transition-colors ${
+              activeStatus === "all"
+                ? "bg-surface-sunken text-muted-foreground"
+                : "bg-primary/[0.12] text-primary"
+            }`}
+          >
+            {STATUS_PILLS.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.key === "all" ? "Any status" : p.label}
+              </option>
+            ))}
+          </select>
+
+          <div className="relative shrink-0" ref={dateRef}>
             <button
-              key={pill.key}
-              onClick={() => setFilters({ status: pill.key === "all" ? undefined : pill.key })}
-              className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
-                activeStatus === pill.key
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              onClick={() => setShowDatePicker((v) => !v)}
+              className={`flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors ${
+                hasDateFilter
+                  ? "bg-primary/[0.12] text-primary"
+                  : "bg-surface-sunken text-muted-foreground hover:text-foreground"
               }`}
             >
-              {pill.label}
+              <HugeiconsIcon icon={Calendar01Icon} aria-hidden className="h-3.5 w-3.5" />
+              {hasDateFilter ? "Dated" : "Any date"}
             </button>
-          ))}
-          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-            {transactions.length} result{transactions.length !== 1 ? "s" : ""}
-          </span>
-        </div>
 
-        {/* Transaction list */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <HugeiconsIcon icon={Loading03Icon} className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : transactions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 px-4 py-16">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50">
-              <HugeiconsIcon icon={Exchange01Icon} className="h-5 w-5 text-muted-foreground/40" />
-            </div>
-            <p className="text-xs font-medium text-muted-foreground">No transactions found</p>
-            <p className="text-[10px] text-muted-foreground/60">
-              {(filters.type || filters.status || filters.search)
-                ? "Try adjusting your filters or search"
-                : "Your transactions will appear here"}
-            </p>
-            {!filters.type && !filters.status && !filters.search && (
-              <div className="mt-2 flex items-center gap-2">
-                <a href="/buy" className="rounded-lg bg-primary px-3.5 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-primary/90">
-                  Deposit
-                </a>
-                <a href="/sell" className="rounded-lg border border-border/50 px-3.5 py-1.5 text-[11px] font-medium transition-colors hover:bg-accent/50">
-                  Withdraw
-                </a>
+            {showDatePicker && (
+              <div className="absolute right-0 top-full z-20 mt-2 min-w-60 rounded-2xl bg-popover/90 p-3 shadow-2xl ring-1 ring-foreground/10 backdrop-blur-2xl">
+                <div className="flex flex-col gap-2.5">
+                  <div>
+                    <label className="mb-1 block text-[12px] text-muted-foreground">From</label>
+                    <input
+                      type="date"
+                      value={filters.dateFrom || ""}
+                      onChange={(e) => setFilters({ dateFrom: e.target.value || undefined })}
+                      className="h-9 w-full rounded-lg bg-surface-sunken px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[12px] text-muted-foreground">To</label>
+                    <input
+                      type="date"
+                      value={filters.dateTo || ""}
+                      onChange={(e) => setFilters({ dateTo: e.target.value || undefined })}
+                      className="h-9 w-full rounded-lg bg-surface-sunken px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
+                    />
+                  </div>
+                  {hasDateFilter && (
+                    <button
+                      onClick={() => {
+                        setFilters({ dateFrom: undefined, dateTo: undefined })
+                        setShowDatePicker(false)
+                      }}
+                      className="rounded-lg py-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Clear dates
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
-        ) : (
-          <div className="overflow-hidden">
-            {/* Desktop table — scrolls inside itself so the page body never
-                scrolls sideways on a narrow laptop. */}
-            <div className="hidden overflow-x-auto sm:block">
-              <table className="w-full min-w-[640px] text-xs">
-                <thead>
-                  <tr className="border-b border-border/20 bg-accent/10 text-[10px] text-muted-foreground">
-                    <th className="px-4 py-2 text-left font-medium">Type</th>
-                    <th className="px-3 py-2 text-left font-medium">Date</th>
-                    <th className="px-3 py-2 text-right font-medium">Amount</th>
-                    <th className="px-3 py-2 text-right font-medium">Details</th>
-                    <th className="px-3 py-2 text-center font-medium">Status</th>
-                    <th className="px-4 py-2 text-right font-medium" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/10">
-                  {transactions.map((tx) => {
-                    const config = getTypeConfig(tx)
-                    return (
-                      <React.Fragment key={tx.id}>
-                        <tr
-                          onClick={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
-                          className="cursor-pointer transition-colors hover:bg-accent/20"
-                        >
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <div className={`flex h-6 w-6 items-center justify-center rounded-lg ${config.bg}`}>
-                                <HugeiconsIcon icon={config.icon} className={`h-3.5 w-3.5 ${config.color}`} />
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{config.label}</span>
-                                {tx.chain && <span className="text-[9px] uppercase text-muted-foreground">{tx.chain}</span>}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5 text-muted-foreground">
-                            <div className="flex flex-col">
-                              <span>{fmtDate(tx.createdAt)}</span>
-                              <span className="text-[10px] text-muted-foreground/60">{fmtTime(tx.createdAt)}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums font-medium">
-                            <span className={getAmountColor(tx)}>
-                              {getAmountPrefix(tx)}{fmtAmount(tx.amount)} {tx.token}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-muted-foreground">
-                            {tx.fiatAmount != null && tx.fiatCurrency ? (
-                              <span>{CURRENCY_SYMBOLS[tx.fiatCurrency] || ""}{fmtAmount(tx.fiatAmount)} {tx.fiatCurrency}</span>
-                            ) : tx.type === "swap" && tx.toToken ? (
-                              <span>→ {typeof tx.toAmount === "string" ? parseFloat(tx.toAmount).toLocaleString(undefined, { maximumFractionDigits: 6 }) : tx.toAmount} {tx.toToken}</span>
-                            ) : tx.pair ? (
-                              <span>{tx.pair}</span>
-                            ) : tx.subType === "onchain" && tx.fromAddress ? (
-                              <span className="text-[10px]">from {truncateHash(tx.fromAddress)}</span>
-                            ) : tx.direction ? (
-                              <span className="capitalize text-[10px]">{tx.direction.replace(/-/g, " → ")}</span>
-                            ) : (
-                              <span className="text-muted-foreground/40">—</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2.5 text-center">
-                            <StatusBadge status={tx.status} />
-                          </td>
-                          <td className="px-4 py-2.5 text-right">
-                            <HugeiconsIcon
-                              icon={ArrowRight01Icon}
-                              className={`h-3.5 w-3.5 text-muted-foreground/40 transition-transform ${expandedId === tx.id ? "rotate-90" : ""}`}
-                            />
-                          </td>
-                        </tr>
-                        {expandedId === tx.id && (
-                          <tr>
-                            <td colSpan={6} className="bg-accent/5 px-4 py-3">
-                              <TransactionDetail tx={tx} />
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+        </div>
 
-            {/* Mobile cards */}
-            <div className="flex flex-col divide-y divide-border/10 sm:hidden">
-              {transactions.map((tx) => {
-                const config = getTypeConfig(tx)
-                return (
-                  <div key={tx.id}>
-                    <button
-                      onClick={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/20"
-                    >
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${config.bg}`}>
-                        <HugeiconsIcon icon={config.icon} className={`h-4 w-4 ${config.color}`} />
-                      </div>
-                      <div className="flex min-w-0 flex-1 flex-col">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium">{config.label}</span>
-                          <span className={`text-xs font-semibold tabular-nums ${getAmountColor(tx)}`}>
-                            {getAmountPrefix(tx)}{fmtAmount(tx.amount)} {tx.token}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-muted-foreground">{fmtDate(tx.createdAt)}</span>
-                          <StatusBadge status={tx.status} />
-                        </div>
-                      </div>
-                    </button>
-                    {expandedId === tx.id && (
-                      <div className="bg-accent/5 px-4 py-3">
-                        <TransactionDetail tx={tx} />
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+        {/* ── The list ── */}
+        {isLoading ? (
+          <SkeletonRows rows={7} label="Loading transactions" />
+        ) : transactions.length === 0 ? (
+          <EmptyState
+            icon={({ className }) => <HugeiconsIcon icon={Exchange01Icon} className={className} />}
+            title={filtered ? "Nothing matches those filters" : "No transactions yet"}
+            description={
+              filtered
+                ? "Try a wider date range, or clear the status filter."
+                : "Deposits, withdrawals, swaps and transfers all land here."
+            }
+            ctas={filtered ? [] : [{ label: "Make a deposit", href: "/buy" }]}
+          />
+        ) : (
+          <div className="flex flex-col">
+            {groups.map((group) => (
+              <section key={group.label}>
+                {/* The day header replaces a date column that every row had to
+                    repeat. Sticky, so you always know where you are in a long
+                    scroll. */}
+                <h3 className="sticky top-0 z-10 bg-card/85 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 backdrop-blur-sm">
+                  {group.label}
+                </h3>
+                {group.items.map((tx) => (
+                  <TransactionRow
+                    key={tx.id}
+                    tx={tx}
+                    expanded={expandedId === tx.id}
+                    onToggle={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
+                  />
+                ))}
+              </section>
+            ))}
           </div>
         )}
 
-        {/* Infinite scroll sentinel */}
         {hasMore && (
           <div ref={sentinelRef} className="flex items-center justify-center py-4">
             {isLoadingMore && (
@@ -516,84 +597,287 @@ export function TransactionsClient() {
             )}
           </div>
         )}
-      </div>
+      </CardShell>
     </div>
   )
 }
 
-// ── Expanded Detail Panel ────────────────────────────────────────────────
+// ── Row ──────────────────────────────────────────────────────────────────
 
-function TransactionDetail({ tx }: { tx: UnifiedTransaction }) {
+/* One row shape for every breakpoint. The page used to keep a 640px-min table
+   for desktop and a separate card list for phones — two markup trees, two sets
+   of styles, and a detail panel rendered twice. */
+function TransactionRow({
+  tx,
+  expanded,
+  onToggle,
+}: {
+  tx: UnifiedTransaction
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const dir = directionOf(tx)
+  const style = DIRECTION_STYLE[dir]
+  const Icon = typeIcon(tx)
+  const peer = counterparty(tx)
+  const failed = tx.status === "failed" || tx.status === "cancelled" || tx.status === "expired"
+
   return (
-    <div className="grid gap-2.5 sm:grid-cols-2">
-      <DetailRow label="ID" value={`#${tx.id.slice(-8).toUpperCase()}`} copyable copyValue={tx.id} />
-      <DetailRow
-        label="Type"
-        value={
-          tx.type === "p2p"
-            ? `P2P ${tx.subType}`
-            : tx.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-        }
-      />
-      <DetailRow label="Amount" value={`${fmtAmount(tx.amount)} ${tx.token}`} />
-      {tx.chain && <DetailRow label="Network" value={tx.chain.toUpperCase()} />}
+    <div className="border-t border-border/10 first:border-t-0">
+      <button
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/25"
+      >
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${style.chip}`}>
+          <HugeiconsIcon icon={Icon} aria-hidden className="h-4 w-4" />
+        </span>
 
-      {/* Fiat info */}
-      {tx.fiatAmount != null && tx.fiatCurrency && (
-        <>
-          <DetailRow label="Fiat Amount" value={`${CURRENCY_SYMBOLS[tx.fiatCurrency] || ""}${fmtAmount(tx.fiatAmount)} ${tx.fiatCurrency}`} />
-          {tx.exchangeRate != null && (
-            <DetailRow label="Exchange Rate" value={`1 USDT = ${CURRENCY_SYMBOLS[tx.fiatCurrency] || ""}${fmtAmount(tx.exchangeRate)}`} />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-[14px] font-semibold">{typeLabel(tx)}</span>
+          <span className="truncate text-[12.5px] text-muted-foreground">
+            {[chainLabel(tx.chain), fmtTime(tx.createdAt)].filter(Boolean).join(" · ")}
+          </span>
+        </span>
+
+        {/* Who it was with. Hidden on phones, where the row has no slack. */}
+        {peer && (
+          <span className="hidden min-w-0 max-w-[34%] flex-1 truncate text-right font-mono text-[12.5px] text-muted-foreground/80 md:block">
+            {peer}
+          </span>
+        )}
+
+        {/* Amount, with what it was worth underneath. A struck-through figure
+            on a failed transaction says "this didn't happen" faster than the
+            status pill alone can. */}
+        <span className="flex w-[104px] shrink-0 flex-col items-end sm:w-40">
+          <span
+            className={`text-[14px] font-semibold tabular-nums ${failed ? "text-muted-foreground line-through" : style.text}`}
+          >
+            {style.sign}
+            {fmtAmount(tx.amount)} {tx.token}
+          </span>
+          {tx.fiatAmount != null && (
+            <span className="text-[12.5px] tabular-nums text-muted-foreground">
+              {fmtFiat(tx.fiatAmount, tx.fiatCurrency)}
+            </span>
           )}
-        </>
-      )}
+        </span>
 
-      {/* Trade-specific */}
-      {tx.pair && <DetailRow label="Pair" value={tx.pair} />}
-      {tx.side && <DetailRow label="Side" value={String(tx.side).toUpperCase()} />}
-      {tx.price != null && <DetailRow label="Price" value={fmtAmount(tx.price, 8)} />}
+        {/* Fixed width, so the pills form a column instead of ragging with the
+            length of the amount beside them. */}
+        <span className="hidden w-[112px] shrink-0 justify-end sm:flex">
+          <StatusPill status={tx.status} />
+        </span>
 
-      {/* Swap-specific */}
-      {tx.type === "swap" && tx.fromToken && tx.toToken && (
-        <DetailRow label="Swap" value={`${tx.fromToken} → ${tx.toToken}`} />
-      )}
-      {tx.type === "swap" && tx.fromChain && tx.toChain && (
-        <DetailRow label="Route" value={`${tx.fromChain} → ${tx.toChain}`} />
-      )}
-      {tx.type === "swap" && tx.toAmount && (
-        <DetailRow label="Received" value={`${typeof tx.toAmount === "string" ? parseFloat(tx.toAmount).toLocaleString(undefined, { maximumFractionDigits: 6 }) : tx.toAmount} ${tx.toToken}`} />
-      )}
-
-      {/* Transfer direction */}
-      {tx.direction && <DetailRow label="Direction" value={tx.direction.replace(/-/g, " → ")} />}
-
-      {/* Addresses */}
-      {tx.fromAddress && <DetailRow label="From" value={truncateHash(tx.fromAddress)} copyable copyValue={tx.fromAddress} />}
-      {tx.toAddress && <DetailRow label="To" value={truncateHash(tx.toAddress)} copyable copyValue={tx.toAddress} />}
-
-      {/* Bank details */}
-      {tx.bankDetails && (
-        <>
-          <DetailRow label="Bank" value={tx.bankDetails.bankName} />
-          <DetailRow label="Account" value={`${tx.bankDetails.accountName} • ${tx.bankDetails.accountNumber}`} />
-        </>
-      )}
-
-      {/* Tx hash */}
-      {tx.txHash && (
-        <DetailRow
-          label="Tx Hash"
-          value={truncateHash(tx.txHash)}
-          href={explorerUrl(tx.chain, tx.txHash)}
-          copyable
-          copyValue={tx.txHash}
+        <HugeiconsIcon
+          icon={ArrowRight01Icon}
+          aria-hidden
+          className={`h-4 w-4 shrink-0 text-muted-foreground/40 transition-transform ${expanded ? "rotate-90" : ""}`}
         />
-      )}
+      </button>
 
-      <DetailRow label="Created" value={`${fmtDate(tx.createdAt)} at ${fmtTime(tx.createdAt)}`} />
-      {tx.completedAt && (
-        <DetailRow label="Completed" value={`${fmtDate(tx.completedAt)} at ${fmtTime(tx.completedAt)}`} />
+      {expanded && (
+        <div className="bg-surface-sunken/50 px-4 pb-4 pt-1">
+          <TransactionDetail tx={tx} />
+        </div>
       )}
+    </div>
+  )
+}
+
+// ── Detail ───────────────────────────────────────────────────────────────
+
+/* The breakdown, in the order a person actually asks for it:
+     1. what happened, in a sentence, with the money
+     2. where it is now — the tracker
+     3. the specifics, grouped by the question they answer
+   The old panel put all twenty facts in one flat grid of identical grey chips,
+   where the transaction hash and the word "Type" looked equally important. */
+function TransactionDetail({ tx }: { tx: UnifiedTransaction }) {
+  const dir = directionOf(tx)
+  const style = DIRECTION_STYLE[dir]
+  const failed = tx.status === "failed" || tx.status === "cancelled" || tx.status === "expired"
+
+  return (
+    <div className="flex flex-col gap-4 rounded-2xl bg-card/70 p-4">
+      {/* 1 ── What happened */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <p className="text-[15px] font-semibold leading-snug">{summarise(tx)}</p>
+          <p className="text-[13px] text-muted-foreground">
+            {fmtDate(tx.createdAt)} at {fmtTime(tx.createdAt)}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span
+            className={`font-display text-[22px] font-light leading-none tabular-nums ${failed ? "text-muted-foreground line-through" : style.text}`}
+          >
+            {style.sign}
+            {fmtAmount(tx.amount)} {tx.token}
+          </span>
+          <StatusPill status={tx.status} />
+        </div>
+      </div>
+
+      {/* 2 ── Where it is now */}
+      <StatusTracker tx={tx} />
+
+      {/* 3 ── The specifics */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <DetailSection title="Amount">
+          <DetailRow label={dir === "out" ? "Sent" : dir === "in" ? "Received" : "Amount"} value={`${fmtAmount(tx.amount)} ${tx.token}`} />
+          {tx.fiatAmount != null && (
+            <DetailRow label="Value" value={fmtFiat(tx.fiatAmount, tx.fiatCurrency)} />
+          )}
+          {tx.exchangeRate != null && (
+            <DetailRow
+              label="Rate"
+              value={`1 ${tx.token} = ${fmtFiat(tx.exchangeRate, tx.fiatCurrency)}`}
+            />
+          )}
+          {tx.price != null && <DetailRow label="Price" value={fmtFiat(tx.price)} />}
+          {tx.pair && <DetailRow label="Pair" value={tx.pair} />}
+          {tx.side && <DetailRow label="Side" value={String(tx.side).toUpperCase()} />}
+          {tx.type === "swap" && tx.toAmount != null && (
+            <DetailRow
+              label="Received"
+              value={`${fmtAmount(Number(tx.toAmount))} ${tx.toToken ?? ""}`.trim()}
+            />
+          )}
+        </DetailSection>
+
+        <DetailSection title="Route">
+          {tx.chain && <DetailRow label="Network" value={chainLabel(tx.chain)!} />}
+          {tx.type === "swap" && tx.fromChain && tx.toChain && (
+            <DetailRow
+              label="Bridge"
+              value={`${chainLabel(tx.fromChain)} → ${chainLabel(tx.toChain)}`}
+            />
+          )}
+          {tx.fromAddress && (
+            <DetailRow label="From" value={truncateHash(tx.fromAddress)} mono copyValue={tx.fromAddress} />
+          )}
+          {tx.toAddress && (
+            <DetailRow label="To" value={truncateHash(tx.toAddress)} mono copyValue={tx.toAddress} />
+          )}
+          {tx.direction && !tx.fromAddress && !tx.toAddress && (
+            <DetailRow label="Direction" value={tx.direction.replace(/-/g, " → ")} />
+          )}
+          {tx.bankDetails && (
+            <>
+              <DetailRow label="Bank" value={tx.bankDetails.bankName} />
+              <DetailRow
+                label="Account"
+                value={`${tx.bankDetails.accountName} · ${tx.bankDetails.accountNumber}`}
+              />
+            </>
+          )}
+          {!tx.chain && !tx.fromAddress && !tx.toAddress && !tx.bankDetails && !tx.direction && (
+            <p className="px-3 py-2 text-[13px] text-muted-foreground/60">
+              No route recorded — this stayed inside WorldStreet.
+            </p>
+          )}
+        </DetailSection>
+      </div>
+
+      {/* Reference — the ids you'd quote to support, full width because a hash
+          in a half-width column truncates into uselessness. */}
+      <DetailSection title="Reference">
+        <DetailRow
+          label="Transaction ID"
+          value={`#${tx.id.slice(-8).toUpperCase()}`}
+          mono
+          copyValue={tx.id}
+        />
+        {tx.txHash && (
+          <DetailRow
+            label="Hash"
+            value={truncateHash(tx.txHash)}
+            mono
+            copyValue={tx.txHash}
+            href={explorerUrl(tx.chain, tx.txHash)}
+          />
+        )}
+      </DetailSection>
+    </div>
+  )
+}
+
+/* ── Status tracker ────────────────────────────────────────────────────────
+   The one thing the brief asked for by name. Status was a nine-pixel label in
+   a table cell; it's now a rail with the timestamps attached, so "where is my
+   money" is answered by looking, not by reading. Terminal failures stop the
+   rail where they stopped rather than drawing an unreached third node. */
+function StatusTracker({ tx }: { tx: UnifiedTransaction }) {
+  const cfg = STATUS_CONFIG[tx.status] ?? STATUS_CONFIG.pending
+
+  const steps =
+    cfg.terminal === "failed"
+      ? [
+          { label: "Submitted", at: tx.createdAt },
+          { label: "Failed", at: tx.completedAt },
+        ]
+      : cfg.terminal === "stopped"
+        ? [
+            { label: "Submitted", at: tx.createdAt },
+            { label: cfg.label, at: tx.completedAt },
+          ]
+        : [
+            { label: "Submitted", at: tx.createdAt },
+            { label: "Processing", at: undefined },
+            { label: "Completed", at: tx.completedAt },
+          ]
+
+  const reached = cfg.terminal ? 1 : cfg.step
+  const tone =
+    cfg.terminal === "failed"
+      ? "bg-debit"
+      : cfg.terminal === "stopped"
+        ? "bg-muted-foreground"
+        : "bg-credit"
+
+  return (
+    <ol className="flex max-w-2xl items-start gap-0 rounded-xl bg-surface-sunken/70 px-4 py-3">
+      {steps.map((step, i) => {
+        const done = i <= reached
+        return (
+          <li key={step.label} className={`flex min-w-0 items-start ${i === steps.length - 1 ? "" : "flex-1"}`}>
+            <div className="flex min-w-0 flex-col items-center gap-1.5">
+              <span
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${done ? tone : "bg-foreground/15"} ${
+                  // The live edge pulses; a finished one shouldn't.
+                  done && i === reached && !cfg.terminal && cfg.step < 2
+                    ? "motion-safe:animate-pulse"
+                    : ""
+                }`}
+              />
+              <span className={`whitespace-nowrap text-[12px] font-medium ${done ? "text-foreground" : "text-muted-foreground/50"}`}>
+                {step.label}
+              </span>
+              <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground/60">
+                {step.at ? fmtTime(step.at) : done ? "—" : ""}
+              </span>
+            </div>
+            {i < steps.length - 1 && (
+              <span
+                className={`mt-[4px] h-0.5 min-w-4 flex-1 rounded-full ${i < reached ? tone : "bg-foreground/10"}`}
+              />
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+// ── Detail primitives ────────────────────────────────────────────────────
+
+function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-xl bg-surface-sunken/70 p-3">
+      <Eyebrow className="px-1 pb-1">{title}</Eyebrow>
+      {children}
     </div>
   )
 }
@@ -602,43 +886,57 @@ function DetailRow({
   label,
   value,
   href,
-  copyable,
+  mono,
   copyValue,
 }: {
   label: string
   value: string
   href?: string
-  copyable?: boolean
+  mono?: boolean
   copyValue?: string
 }) {
+  const [copied, setCopied] = React.useState(false)
+  const copy = () => {
+    copyToClipboard(copyValue ?? value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1400)
+  }
+
   return (
-    <div className="flex items-start justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2">
-      <span className="text-[10px] font-medium text-muted-foreground shrink-0">{label}</span>
-      <div className="flex items-center gap-1.5 min-w-0">
+    <div className="flex items-center justify-between gap-3 rounded-lg px-1 py-1.5">
+      <span className="shrink-0 text-[13px] text-muted-foreground">{label}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
         {href ? (
           <a
             href={href}
             target="_blank"
             rel="noreferrer"
-            className="truncate text-[11px] font-medium text-primary hover:underline"
+            className={`truncate text-[13px] font-medium text-primary hover:underline ${mono ? "font-mono" : ""}`}
           >
             {value}
           </a>
         ) : (
-          <span className="truncate text-[11px] font-medium">{value}</span>
+          <span className={`truncate text-[13px] font-medium ${mono ? "font-mono" : ""}`}>{value}</span>
         )}
-        {copyable && (
+        {href && (
+          <HugeiconsIcon icon={LinkSquare01Icon} aria-hidden className="h-3 w-3 shrink-0 text-primary/70" />
+        )}
+        {copyValue && (
           <button
             onClick={(e) => {
               e.stopPropagation()
-              copyToClipboard(copyValue ?? value)
+              copy()
             }}
-            className="shrink-0 rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-foreground"
+            aria-label={`Copy ${label}`}
+            className="shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
           >
-            <HugeiconsIcon icon={Copy01Icon} className="h-3 w-3" />
+            <HugeiconsIcon
+              icon={copied ? CheckmarkCircle01Icon : Copy01Icon}
+              className={`h-3.5 w-3.5 ${copied ? "text-credit" : ""}`}
+            />
           </button>
         )}
-      </div>
+      </span>
     </div>
   )
 }

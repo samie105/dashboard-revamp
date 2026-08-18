@@ -20,12 +20,12 @@ function AlertDialogContent({
   return (
     <AlertDialogPrimitive.Portal>
       <AlertDialogPrimitive.Backdrop
-        className="data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/50 duration-150 fixed inset-0 z-50"
+        className="ws-backdrop-in data-closed:animate-out data-closed:fade-out-0 data-closed:duration-200 bg-black/45 backdrop-blur-md fixed inset-0 z-50"
       />
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cn(
-          "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-foreground/10 fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl p-6 ring-1 shadow-lg duration-150 sm:max-w-md",
+          "ws-pop-in data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[0.97] data-closed:duration-200 bg-card ring-foreground/10 fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl p-6 ring-1 shadow-2xl sm:max-w-md",
           className
         )}
         {...props}

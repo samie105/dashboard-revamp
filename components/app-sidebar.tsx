@@ -14,17 +14,13 @@ import {
   ChartCandlestickIcon,
   File01Icon,
   DashboardSquare01Icon,
-  Link01Icon,
   RepeatIcon,
   Shield01Icon,
-  ComputerTerminal01Icon,
   Chart01Icon,
   UserIcon,
   UserGroup02Icon,
   Wallet01Icon,
-  Copy01Icon,
   ArrowDown01Icon,
-  ArrowUp01Icon,
   Store01Icon,
   BarChartIcon,
   Book01Icon,
@@ -33,19 +29,18 @@ import {
   DollarCircleIcon,
   Rocket01Icon,
   EyeIcon,
+  LinkSquare02Icon,
 } from "@hugeicons/core-free-icons"
 
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator,
   useSidebar,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
@@ -120,8 +115,12 @@ const NAV_GROUPS: NavGroup[] = [
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
+function isExternal(url: string) {
+  return url.startsWith("http://") || url.startsWith("https://")
+}
+
 function isActiveRoute(pathname: string, url: string) {
-  if (url.startsWith("http://") || url.startsWith("https://")) return false
+  if (isExternal(url)) return false
   if (url === "/") return pathname === "/"
   return pathname === url || pathname.startsWith(`${url}/`)
 }
@@ -130,19 +129,160 @@ function groupHasActiveRoute(pathname: string, items: NavItem[]) {
   return items.some((item) => isActiveRoute(pathname, item.url))
 }
 
+/**
+ * One row height, one icon size, one gap — every nav row in the rail shares
+ * these so the left edge reads as a single column instead of five.
+ */
+const ROW = "h-9 gap-3 rounded-xl px-2.5 text-[13.5px] [&_svg]:size-[18px]"
+
+// ── Section eyebrow ──────────────────────────────────────────────────────
+
+function SectionLabel({
+  children,
+  active,
+  open,
+  onToggle,
+}: {
+  children: React.ReactNode
+  active?: boolean
+  open: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-lg px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors",
+        active ? "text-primary" : "text-muted-foreground/70 hover:text-foreground",
+      )}
+    >
+      <span className="flex-1 text-left">{children}</span>
+      <HugeiconsIcon
+        icon={ArrowDown01Icon}
+        className={cn(
+          "size-3.5 shrink-0 text-muted-foreground/40 transition-transform duration-200",
+          open && "rotate-180",
+        )}
+      />
+    </button>
+  )
+}
+
+// ── Nav row ──────────────────────────────────────────────────────────────
+
+function NavRow({
+  item,
+  isActive,
+  collapsed,
+  /** Products rail rows are a footnote: no icon chip, dimmer by default. */
+  muted,
+  trailing,
+}: {
+  item: NavItem
+  isActive: boolean
+  collapsed: boolean
+  muted?: boolean
+  trailing?: React.ReactNode
+}) {
+  const ext = isExternal(item.url)
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        tooltip={collapsed ? item.name : item.description || item.name}
+        isActive={isActive}
+        render={
+          ext ? (
+            <a href={item.url} target="_blank" rel="noopener noreferrer" />
+          ) : (
+            <Link href={item.url} />
+          )
+        }
+        className={cn(
+          ROW,
+          "relative transition-colors duration-150 data-[active=true]:bg-transparent",
+          collapsed && "justify-center px-0",
+          isActive
+            ? "bg-foreground/[0.06] font-medium text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
+            : muted
+              ? "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+              : "text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground",
+        )}
+      >
+        {muted ? (
+          <HugeiconsIcon
+            icon={item.icon}
+            className={cn("shrink-0", isActive ? "text-primary" : "text-muted-foreground/80")}
+          />
+        ) : (
+          <span
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-[9px] transition-colors",
+              isActive ? "bg-primary/[0.18]" : "bg-foreground/[0.05]",
+            )}
+          >
+            <HugeiconsIcon
+              icon={item.icon}
+              className={cn("shrink-0", isActive ? "text-primary" : "text-muted-foreground")}
+            />
+          </span>
+        )}
+
+        {!collapsed && (
+          <>
+            <span className="flex-1 truncate">{item.name}</span>
+            {trailing}
+            {ext && (
+              <HugeiconsIcon
+                icon={LinkSquare02Icon}
+                className="shrink-0 text-muted-foreground/35 [&_svg]:size-3"
+              />
+            )}
+            {item.badge && (
+              <span className="rounded-md bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary">
+                {item.badge}
+              </span>
+            )}
+          </>
+        )}
+
+        {/* Active marker — a gold tick on the rail's edge, the one place gold
+            carries "you are here". */}
+        {isActive && !collapsed && (
+          <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+}
+
 // ── Collapsible Nav Group ────────────────────────────────────────────────
 
 function CollapsibleNavGroup({
   group,
   pathname,
   isCollapsed,
+  muted,
+  itemActive,
+  itemTrailing,
 }: {
   group: NavGroup
   pathname: string
   isCollapsed: boolean
+  /** Footnote rows (the products rail): bare icon, dimmer resting state. */
+  muted?: boolean
+  /** Overrides "is this row lit" for rows with their own liveness (Vivid). */
+  itemActive?: (item: NavItem) => boolean
+  itemTrailing?: (item: NavItem) => React.ReactNode
 }) {
-  const hasActive = groupHasActiveRoute(pathname, group.items)
-  const [open, setOpen] = React.useState(hasActive)
+  const isRowActive = (item: NavItem) =>
+    itemActive ? itemActive(item) : isActiveRoute(pathname, item.url)
+  const hasActive = group.items.some(isRowActive)
+  // Open by default — a rail of collapsed labels reads as dead space, and
+  // every section here is short enough to live on screen at once.
+  const [open, setOpen] = React.useState(true)
   const contentRef = React.useRef<HTMLDivElement>(null)
 
   // auto-expand when a child becomes active
@@ -161,7 +301,6 @@ function CollapsibleNavGroup({
         { height: 0, opacity: 0 },
         { height: "auto", opacity: 1, duration: 0.25, ease: "power2.out" },
       )
-      // stagger children
       gsap.fromTo(
         el.children[0]?.children ?? [],
         { x: -6, opacity: 0 },
@@ -173,107 +312,49 @@ function CollapsibleNavGroup({
         opacity: 0,
         duration: 0.2,
         ease: "power2.in",
-        onComplete: () => { gsap.set(el, { display: "none" }) },
+        onComplete: () => {
+          gsap.set(el, { display: "none" })
+        },
       })
     }
   }, [open])
 
-  const isExternal = (url: string) => url.startsWith("http://") || url.startsWith("https://")
-
   if (isCollapsed) {
-    // In collapsed mode show items flat with tooltips
     return (
       <>
-        {group.items.map((item) => {
-          const ext = isExternal(item.url)
-          return (
-            <SidebarMenuItem key={item.name}>
-              <SidebarMenuButton
-                tooltip={item.name}
-                isActive={!ext && isActiveRoute(pathname, item.url)}
-                render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} />}
-                className={cn(
-                  "transition-colors text-sm items-center",
-                  !ext && isActiveRoute(pathname, item.url)
-                    ? "bg-accent/80"
-                    : "text-foreground/80 hover:text-foreground hover:bg-accent/50",
-                )}
-              >
-                <HugeiconsIcon
-                  icon={item.icon}
-                  className="size-4.5 shrink-0 [&_path:not(:first-child)]:stroke-primary"
-                />
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          )
-        })}
+        {group.items.map((item) => (
+          <NavRow
+            key={item.name}
+            item={item}
+            isActive={isRowActive(item)}
+            collapsed
+            muted={muted}
+            trailing={itemTrailing?.(item)}
+          />
+        ))}
       </>
     )
   }
 
   return (
     <div className="flex flex-col">
-      {/* Group toggle — the Eyebrow treatment, no decorative leading icon */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all hover:text-foreground",
-          hasActive ? "text-primary" : "text-muted-foreground",
-        )}
-      >
-        <span className="flex-1 text-left">{group.label}</span>
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
-          className={cn(
-            "size-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200",
-            open && "rotate-180",
-          )}
-        />
-      </button>
+      <SectionLabel active={hasActive} open={open} onToggle={() => setOpen((v) => !v)}>
+        {group.label}
+      </SectionLabel>
 
-      {/* Sub-items — the mobile ListRow grammar: the group's rows sit together
-          on one sunken card, gold-tinted icon chip, active row reads as a
-          raised fill. No tree lines. */}
       <div ref={contentRef} style={{ display: open ? "block" : "none" }}>
-        <div className="mt-1 flex flex-col gap-0.5 rounded-2xl bg-surface-sunken/60 p-1">
-          {group.items.map((item) => {
-            const ext = isExternal(item.url)
-            const isActive = !ext && isActiveRoute(pathname, item.url)
-            return (
-              <SidebarMenuButton
-                key={item.name}
-                tooltip={item.description || item.name}
-                isActive={isActive}
-                render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} />}
-                className={cn(
-                  "h-auto gap-2.5 rounded-xl px-2 py-1.5 text-sm transition-all data-[active=true]:bg-accent",
-                  isActive ? "text-foreground" : "text-foreground/70 hover:bg-accent/50 hover:text-foreground",
-                )}
-              >
-                <span
-                  className={cn(
-                    "flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors",
-                    isActive ? "bg-primary/[0.16]" : "bg-foreground/[0.05]",
-                  )}
-                >
-                  <HugeiconsIcon
-                    icon={item.icon}
-                    className={cn("size-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")}
-                  />
-                </span>
-                <span className={cn("flex-1 truncate", isActive && "font-semibold")}>{item.name}</span>
-                {ext && (
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/40"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-                )}
-                {item.badge && (
-                  <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary">
-                    {item.badge}
-                  </span>
-                )}
-              </SidebarMenuButton>
-            )
-          })}
-        </div>
+        <SidebarMenu className="gap-0.5">
+          {group.items.map((item) => (
+            <NavRow
+              key={item.name}
+              item={item}
+              isActive={isRowActive(item)}
+              collapsed={false}
+              muted={muted}
+              trailing={itemTrailing?.(item)}
+            />
+          ))}
+        </SidebarMenu>
       </div>
     </div>
   )
@@ -287,9 +368,6 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed"
   const _vivid = useVividOptional()
   const vividState = _vivid?.state ?? "idle"
-  const isConnected = _vivid?.isConnected ?? false
-  const startSession = _vivid?.startSession ?? (async () => {})
-  const endSession = _vivid?.endSession ?? (() => {})
   const vividIsActive = vividState !== "idle" && vividState !== "error"
 
   const VIVID_DOT: Record<string, string> = {
@@ -302,134 +380,96 @@ export function AppSidebar() {
     error: "bg-red-400",
   }
 
+  const productGroup = NAV_GROUPS[NAV_GROUPS.length - 1]
+  const navGroups = NAV_GROUPS.slice(0, -1)
+
   return (
-    <Sidebar collapsible="icon">
-      {/* Header matches the navbar's 56px band so the two rails line up. */}
-      <SidebarHeader className="flex h-14 flex-col justify-center gap-2 py-0">
-        <div className="flex items-center justify-between gap-2 px-2">
-          <div className="flex items-center gap-2">
+    <Sidebar
+      variant="floating"
+      collapsible="icon"
+      /* The rail floats: translucent stone over the page, one 22px corner,
+         hairline ring instead of a hard border. The gradient wash below is
+         atmosphere only — it never sits behind text. */
+      className="py-4 pl-4 pr-1 [&_[data-slot=sidebar-inner]]:relative [&_[data-slot=sidebar-inner]]:overflow-hidden [&_[data-slot=sidebar-inner]]:rounded-[22px] [&_[data-slot=sidebar-inner]]:border [&_[data-slot=sidebar-inner]]:border-border/60 [&_[data-slot=sidebar-inner]]:bg-sidebar/72 dark:[&_[data-slot=sidebar-inner]]:bg-sidebar/40 [&_[data-slot=sidebar-inner]]:shadow-[0_8px_32px_-12px_rgb(0_0_0/0.28)] [&_[data-slot=sidebar-inner]]:ring-0 [&_[data-slot=sidebar-inner]]:backdrop-blur-2xl [&_[data-slot=sidebar-inner]]:backdrop-saturate-150"
+    >
+      {/* Ambient wash — warm gold bloom at the crown falling into the stone,
+          the desktop-only gradient. Behind everything, never interactive. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(125%_78%_at_8%_0%,var(--sidebar-glow)_0%,transparent_68%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-transparent via-transparent to-background/45"
+      />
+
+      {/* Header — the ecosystem lockup, identical to Academy's: gold W mark
+          26px + "WorldStreet" Poppins SemiBold 15 + gold app eyebrow. */}
+      <SidebarHeader className="gap-0 px-2.5 pb-3 pt-4">
+        <div className={cn("flex items-center gap-2.5", isCollapsed && "justify-center")}>
+          <Link
+            href="/"
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-2.5 rounded-xl outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-ring",
+              isCollapsed && "flex-none justify-center",
+            )}
+          >
             <Image
-              src="/worldstreet-logo/WorldStreet1x.png"
+              src="/worldstreet-logo/WorldStreet1.png"
               alt="Worldstreet"
-              width={96}
-              height={24}
-              className={cn("h-6 w-auto object-contain", isCollapsed && "h-5")}
+              width={26}
+              height={26}
+              className="h-[26px] w-[26px] shrink-0 object-contain"
               priority
             />
             {!isCollapsed && (
-              <span className="font-display text-[15px] font-bold leading-none tracking-[-0.01em]">
-                Worldstreet
+              <span className="grid min-w-0 flex-1 text-left leading-tight">
+                <span className="truncate font-display text-[15px] font-semibold tracking-[-0.01em]">
+                  WorldStreet
+                </span>
+                <span className="truncate font-sans text-[10px] font-semibold uppercase tracking-[2px] text-primary">
+                  Dashboard
+                </span>
               </span>
             )}
-          </div>
-          <SidebarTrigger className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:bg-accent hover:text-foreground" />
+          </Link>
+          {!isCollapsed && (
+            <SidebarTrigger className="size-7 shrink-0 rounded-lg text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground" />
+          )}
         </div>
+        {isCollapsed && (
+          <SidebarTrigger className="mx-auto mt-2 size-7 shrink-0 rounded-lg text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground" />
+        )}
       </SidebarHeader>
 
-      <SidebarContent className="gap-0 py-2">
-        {NAV_GROUPS.map((group, i) => (
-          <React.Fragment key={group.label}>
-            {isCollapsed && i > 0 && <SidebarSeparator className="mx-2.5 my-0.5" />}
-            <SidebarGroup className={i > 0 ? "mt-0.5" : ""}>
-              {isCollapsed && (
-                <SidebarGroupLabel className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-0.5">
-                  {group.label}
-                </SidebarGroupLabel>
-              )}
-              {group.label === "Worldstreet" ? (
-                /* Worldstreet items — flat with taglines, no collapsible wrapper */
-                <div className="flex flex-col">
-                  {!isCollapsed && (
-                    <div className="px-2 pb-1 pt-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Worldstreet</span>
-                    </div>
-                  )}
-                  <SidebarMenu className="gap-0.5 px-0">
-                    {group.items.map((item) => {
-                      const isVivid = item.name === "Vivid AI"
-                      const ext = item.url.startsWith("http://") || item.url.startsWith("https://")
-                      const isActive = !ext && !isVivid && isActiveRoute(pathname, item.url)
-
-                      if (isVivid) {
-                        const vividActive = !ext && isActiveRoute(pathname, item.url)
-                        return (
-                          <SidebarMenuItem key={item.name}>
-                            <SidebarMenuButton
-                              tooltip={vividIsActive ? `Vivid AI — ${vividState}` : "Vivid AI"}
-                              isActive={vividActive}
-                              render={<Link href={item.url} />}
-                              className={cn(
-                                "min-h-10 py-2 px-2.5 text-sm transition-all rounded-md data-[active=true]:bg-transparent data-[active=true]:text-yellow-400",
-                                vividActive || vividIsActive
-                                  ? "text-yellow-400 bg-yellow-400/5 hover:bg-yellow-400/10"
-                                  : "text-foreground/70 hover:text-foreground hover:bg-accent/50",
-                              )}
-                            >
-                              <HugeiconsIcon
-                                icon={item.icon}
-                                className={cn(
-                                  "size-4 shrink-0",
-                                  (vividActive || vividIsActive) ? "text-yellow-400" : "[&_path:not(:first-child)]:stroke-primary"
-                                )}
-                              />
-                              {!isCollapsed && (
-                                <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={cn("truncate text-foreground/80", (vividActive || vividIsActive) && "text-yellow-400 font-semibold")}>{item.name}</span>
-                                    {vividIsActive && (
-                                      <span className={cn("inline-block h-1.5 w-1.5 rounded-full shrink-0", VIVID_DOT[vividState])} />
-                                    )}
-                                  </div>
-                                  <span className="truncate text-[10px] text-muted-foreground/55 leading-tight">
-                                    {vividIsActive ? vividState.charAt(0).toUpperCase() + vividState.slice(1) + "…" : item.description}
-                                  </span>
-                                </div>
-                              )}
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        )
-                      }
-
-                      // External products are a footnote, not the main event:
-                      // one compact row each, no tagline, no icon chip.
-                      return (
-                        <SidebarMenuItem key={item.name}>
-                          <SidebarMenuButton
-                            tooltip={`${item.name} — ${item.description}`}
-                            isActive={isActive}
-                            render={ext ? <a href={item.url} target="_blank" rel="noopener noreferrer" /> : <Link href={item.url} />}
-                            className={cn(
-                              "h-auto gap-2.5 rounded-xl px-2 py-1.5 text-[13px] transition-all data-[active=true]:bg-accent",
-                              isActive ? "text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                            )}
-                          >
-                            <HugeiconsIcon icon={item.icon} className="size-4 shrink-0" />
-                            {!isCollapsed && (
-                              <>
-                                <span className={cn("flex-1 truncate", isActive && "font-semibold")}>{item.name}</span>
-                                {ext && (
-                                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground/30"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-                                )}
-                              </>
-                            )}
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      )
-                    })}
-                  </SidebarMenu>
-                </div>
-              ) : (
-                <SidebarMenu className="gap-0.5">
-                  <CollapsibleNavGroup
-                    group={group}
-                    pathname={pathname}
-                    isCollapsed={isCollapsed}
-                  />
-                </SidebarMenu>
-              )}
-            </SidebarGroup>
-          </React.Fragment>
+      <SidebarContent className="gap-0 px-2.5 pb-4 pt-1">
+        {navGroups.map((group) => (
+          <SidebarGroup key={group.label} className="px-0 py-2">
+            <CollapsibleNavGroup group={group} pathname={pathname} isCollapsed={isCollapsed} />
+          </SidebarGroup>
         ))}
+
+        {/* Products rail — the rest of the ecosystem, one compact row each.
+            Collapsible like every other section: it's the longest group and
+            the least-used, so it's the one people most want to fold away. */}
+        <SidebarGroup className="px-0 py-2">
+          <CollapsibleNavGroup
+            group={productGroup}
+            pathname={pathname}
+            isCollapsed={isCollapsed}
+            muted
+            itemActive={(item) =>
+              isActiveRoute(pathname, item.url) || (item.name === "Vivid AI" && vividIsActive)
+            }
+            itemTrailing={(item) =>
+              item.name === "Vivid AI" && vividIsActive ? (
+                <span
+                  className={cn("inline-block size-1.5 shrink-0 rounded-full", VIVID_DOT[vividState])}
+                />
+              ) : undefined
+            }
+          />
+        </SidebarGroup>
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

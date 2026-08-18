@@ -4,25 +4,39 @@ import * as React from "react"
 import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
-  ArrowDown01Icon,
   Wallet01Icon,
   Chart01Icon,
   Search01Icon,
   Copy01Icon,
   Exchange01Icon,
-  CreditCardIcon,
   RefreshIcon,
   Shield01Icon,
   ArrowRight01Icon,
-  InformationCircleIcon,
   StarIcon,
   Cancel01Icon,
   Add01Icon,
   CheckmarkCircle01Icon,
   Loading03Icon,
   ArrowUpRight01Icon,
+  ArrowDownLeft01Icon,
 } from "@hugeicons/core-free-icons"
-import { Balance, Eyebrow, IconAction, PageHeader, Segmented } from "@/components/ui/system"
+import {
+  ActionPill,
+  Balance,
+  CardHeader,
+  CardShell,
+  Eyebrow,
+  IconAction,
+  PageHeader,
+  Segmented,
+  Skel,
+  Sparkline,
+  WeightBar,
+} from "@/components/ui/system"
+import { CoinAvatar } from "@/components/ui/coin-avatar"
+import { numOr, pctSigned, price, qty, share, usd } from "@/lib/num"
+import { useSparklines } from "@/hooks/useSparklines"
+import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { useAuth } from "@/components/auth-provider"
 import { useWallet } from "@/components/wallet-provider"
 import { useProfile } from "@/components/profile-provider"
@@ -31,8 +45,6 @@ import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flo
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { getUserBalances } from "@/lib/actions"
 import type { CoinData, UserBalance } from "@/lib/actions"
-import { useTradeSelector } from "@/components/trade-selector"
-import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
 import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 
@@ -49,12 +61,24 @@ interface PortfolioClientProps {
   }
 }
 
-type Tab = "overview" | "wallets" | "fund"
+type Tab = "overview" | "wallets"
+
+/* Each tab explains itself, in one line, right where it lives. This replaces a
+   standalone "How it works" panel whose four steps only narrated these very
+   tabs — guidance next to the thing beats guidance about the thing. */
+const TABS = [
+  { key: "overview" as const, label: "Overview", blurb: "Where your money sits, across trading and funding" },
+  { key: "wallets" as const, label: "Wallets", blurb: "Your address on every chain — copy one to receive" },
+]
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function formatUSD(n: number) {
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD" })
+/* All four of these used to assume a finite number. A price feed that returns
+   undefined for one symbol then printed "$NaN" in the middle of a balance
+   table — a figure the reader can't distinguish from a real one, in a place
+   where believing it costs money. */
+function formatUSD(n: unknown) {
+  return usd(n)
 }
 
 function truncAddr(addr: string) {
@@ -62,11 +86,8 @@ function truncAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`
 }
 
-function formatPrice(price: number) {
-  if (price >= 1000) return "$" + price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  if (price >= 1) return "$" + price.toFixed(2)
-  if (price >= 0.01) return "$" + price.toFixed(4)
-  return "$" + price.toFixed(6)
+function formatPrice(value: unknown) {
+  return price(value)
 }
 
 const CHAINS = [
@@ -91,8 +112,8 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
   },
   {
     target: '[data-onboarding="portfolio-tabs"]',
-    title: "Navigation Tabs",
-    description: "Switch between Overview, Wallets, and Fund Trading Wallet.",
+    title: "Accounts",
+    description: "Overview shows where your money sits; Wallets shows your address on every chain.",
     placement: "bottom",
   },
   {
@@ -103,96 +124,30 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
   },
   {
     target: '[data-onboarding="portfolio-sidebar"]',
-    title: "Quick Actions & Watchlist",
-    description: "Deposit, withdraw, and track your favorite coins with live prices.",
+    title: "Watchlist",
+    description: "Track the coins you care about, with live prices.",
     placement: "left",
   },
 ]
 
 // ── Sub-components ───────────────────────────────────────────────────────
 
-/* Sparkline */
-function Sparkline({ change24h }: { change24h: number }) {
-  const up = change24h >= 0
-  const d = up ? [40, 45, 42, 48, 52, 50, 55, 58, 55, 60] : [60, 55, 58, 52, 48, 50, 45, 42, 45, 40]
-  const h = 20, w = 48, min = Math.min(...d), max = Math.max(...d), r = max - min || 1
-  const pts = d.map((v, i) => `${(i * w) / (d.length - 1)},${h - ((v - min) / r) * h}`).join(" ")
+/* Action rail — the page's verbs, on the page.
+   These were a titled "Quick Actions" card in the right rail: a header, a
+   border and two buttons inside it. A panel is for a THING (a watchlist, an
+   account); actions belong to the page, next to the balance they move. Same
+   pill grammar as the dashboard rail, and they open the real money-flow modal
+   rather than walking the user off to /buy and /sell. */
+function PortfolioActions() {
+  const { openFlow } = useMoneyFlow()
   return (
-    <svg width={w} height={h} className="overflow-visible">
-      <polyline points={pts} fill="none" stroke={up ? "oklch(0.72 0.19 142)" : "oklch(0.64 0.2 25)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-/* How It Works (right panel) */
-const HOW_STEPS = [
-  { title: "Check overview", desc: "View trading & funding balances" },
-  { title: "Manage wallets", desc: "See addresses across all chains" },
-  { title: "Fund trading", desc: "Transfer USDC to your trading account" },
-  { title: "Start trading", desc: "Head to Spot or Futures to trade" },
-]
-
-function HowItWorks() {
-  return (
-    <div className="rounded-2xl bg-card">
-      <div className="flex items-center gap-2 border-b border-border/30 px-4 py-3">
-        <h3 className="text-[15px] font-semibold">How it works</h3>
-      </div>
-      <div className="px-4 py-4">
-        <div className="relative pl-5">
-          <div className="absolute left-1.75 top-1 bottom-1 w-px bg-border/50" />
-          <div className="space-y-4">
-            {HOW_STEPS.map((s, i) => (
-              <div key={i} className="relative flex items-start gap-3">
-                <div className="absolute -left-5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-primary/40 bg-card">
-                  <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium leading-tight">{s.title}</p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">{s.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* Quick Actions (right panel) */
-function QuickActions() {
-  return (
-    <div className="rounded-2xl bg-card">
-      <div className="flex items-center gap-2 border-b border-border/30 px-4 py-3">
-        <h3 className="text-[15px] font-semibold">Quick Actions</h3>
-      </div>
-      <div className="grid grid-cols-2 gap-2 p-3">
-        <Link
-          href="/buy"
-          className="flex items-center gap-2.5 rounded-xl border border-border/30 bg-accent/20 p-3 transition-all hover:bg-accent/40 group"
-        >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 transition-transform group-hover:scale-105">
-            <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-credit" />
-          </div>
-          <div>
-            <p className="text-xs font-medium leading-tight">Deposit</p>
-            <p className="text-[10px] text-muted-foreground">Add funds</p>
-          </div>
-        </Link>
-        <Link
-          href="/sell"
-          className="flex items-center gap-2.5 rounded-xl border border-border/30 bg-accent/20 p-3 transition-all hover:bg-accent/40 group"
-        >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent transition-transform group-hover:scale-105">
-            <HugeiconsIcon icon={CreditCardIcon} className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div>
-            <p className="text-xs font-medium leading-tight">Withdraw</p>
-            <p className="text-[10px] text-muted-foreground">Cash out</p>
-          </div>
-        </Link>
-      </div>
+    <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+      <ActionPill icon={({ className }) => <HugeiconsIcon icon={ArrowDownLeft01Icon} className={className} />} label="Deposit" onClick={() => openFlow("buy")} />
+      <ActionPill icon={({ className }) => <HugeiconsIcon icon={ArrowUpRight01Icon} className={className} />} label="Withdraw" onClick={() => openFlow("sell")} />
+      <ActionPill icon={({ className }) => <HugeiconsIcon icon={Exchange01Icon} className={className} />} label="Fund trading" onClick={() => openFlow("fund")} />
+      {/* Straight to the trading screen. This used to open a modal whose only
+          content was a list of links that are all permanently in the sidebar. */}
+      <ActionPill icon={({ className }) => <HugeiconsIcon icon={Chart01Icon} className={className} />} label="Trade" href="/trade" />
     </div>
   )
 }
@@ -223,6 +178,11 @@ function Watchlist({
     [coins, watchlistSymbols],
   )
 
+  // Real 7-day curves — one batched request for the whole list. The same
+  // response carries the 24h change, which the Hyperliquid-first price feed
+  // doesn't (it reported a flat 0.00% for every coin on this page).
+  const spark = useSparklines(watchlistSymbols)
+
   const addable = React.useMemo(() => {
     const inSet = new Set(watchlistSymbols)
     let r = coins.filter((c) => !inSet.has(c.symbol))
@@ -231,36 +191,32 @@ function Watchlist({
   }, [coins, watchlistSymbols, search])
 
   return (
-    <div className="rounded-2xl bg-card">
-      <div className="flex items-center justify-between border-b border-border/30 px-4 py-3">
-        <div className="flex items-center gap-2">
-
-          <div>
-            <h3 className="text-[15px] font-semibold">Watchlist</h3>
-            <p className="text-[10px] text-muted-foreground">Live prices</p>
-          </div>
-        </div>
-        <div className="relative" ref={ref}>
-          <button onClick={() => setShowAdd((v) => !v)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors">
-            <HugeiconsIcon icon={Add01Icon} className="h-3 w-3" /> Add
+    <CardShell>
+      <CardHeader
+        title="Watchlist"
+        subtitle="Live prices"
+        right={
+        <div className="relative shrink-0" ref={ref}>
+          <button onClick={() => setShowAdd((v) => !v)} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+            <HugeiconsIcon icon={Add01Icon} className="h-3.5 w-3.5" /> Add
           </button>
           {showAdd && (
             <div className="absolute right-0 top-9 z-50 w-64 rounded-xl border-0 bg-popover/90 backdrop-blur-2xl ring-1 ring-white/10 shadow-xl shadow-black/8 overflow-hidden">
               <div className="border-b border-white/10 p-2">
                 <div className="flex items-center gap-2 rounded-lg bg-accent/40 px-2.5 py-1.5">
                   <HugeiconsIcon icon={Search01Icon} className="h-3 w-3 text-muted-foreground shrink-0" />
-                  <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="bg-transparent text-xs outline-none w-full placeholder:text-muted-foreground/50" />
+                  <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="w-full bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/50" />
                 </div>
               </div>
               <div className="max-h-52 overflow-y-auto slim-scroll">
                 <div className="p-1">
                   {addable.length === 0 ? (
-                    <p className="text-[11px] text-muted-foreground text-center py-4">No coins found</p>
+                    <p className="py-4 text-center text-[13px] text-muted-foreground">No coins found</p>
                   ) : addable.map((c) => (
                     <button key={c.id} onClick={() => { onWatchlistChange([...watchlistSymbols, c.symbol]); setShowAdd(false); setSearch("") }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 hover:bg-accent/30 transition-colors">
-                      {c.image ? <img src={c.image} alt="" className="h-4 w-4 rounded-full" /> : <span className="text-[10px] font-bold">{c.symbol}</span>}
-                      <span className="text-xs font-medium">{c.symbol}</span>
-                      <span className="text-[10px] text-muted-foreground">{c.name}</span>
+                      <CoinAvatar src={c.image} symbol={c.symbol} size="sm" className="h-4 w-4 text-[7px]" />
+                      <span className="text-[13px] font-semibold">{c.symbol}</span>
+                      <span className="text-[12px] text-muted-foreground">{c.name}</span>
                       <HugeiconsIcon icon={Add01Icon} className="ml-auto h-3 w-3 text-primary" />
                     </button>
                   ))}
@@ -269,11 +225,21 @@ function Watchlist({
             </div>
           )}
         </div>
-      </div>
-      <ScrollArea className="h-80">
+        }
+      />
+      {/* The list used to be pinned at h-80 inside a card that stretches to the
+          left column's height — on a desktop that left ~140px of empty card
+          under the last row. It now takes whatever room the card has, with a
+          floor for the stacked mobile layout where the card has no height of
+          its own to inherit. */}
+      <ScrollArea className="min-h-[22rem] flex-1 lg:min-h-0">
         <div className="p-1.5">
           {list.map((coin) => {
-            const up = coin.change24h >= 0
+            const s = spark(coin.symbol)
+            // Prefer the change that arrives with the curve: it's from the same
+            // series the chart draws, so the number and the line always agree.
+            const change = numOr(s?.change24h ?? coin.change24h, 0)
+            const up = change >= 0
             const isStar = starred.includes(coin.symbol)
             return (
               <div key={coin.id} className="group flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-accent/30 transition-colors">
@@ -281,22 +247,32 @@ function Watchlist({
                   <button onClick={() => setStarred((p) => p.includes(coin.symbol) ? p.filter((s) => s !== coin.symbol) : [...p, coin.symbol])} className="opacity-0 group-hover:opacity-100 transition-opacity">
                     <HugeiconsIcon icon={StarIcon} className={`h-3 w-3 ${isStar ? "text-amber-400" : "text-muted-foreground/40 hover:text-amber-400"} transition-colors`} />
                   </button>
-                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent/30 overflow-hidden">
-                    {coin.image ? <img src={coin.image} alt="" className="h-4 w-4" /> : <span className="text-[10px] font-bold">{coin.symbol}</span>}
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-accent/30">
+                    <CoinAvatar src={coin.image} symbol={coin.symbol} size="sm" className="h-4 w-4 text-[7px]" />
                   </div>
                   <div>
-                    <p className="text-xs font-medium leading-tight">{coin.symbol}/USD</p>
-                    <p className="text-[10px] text-muted-foreground">{coin.name}</p>
+                    <p className="text-[13px] font-semibold leading-tight">{coin.symbol}/USD</p>
+                    <p className="text-[12px] text-muted-foreground">{coin.name}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="text-right">
-                    <p className="text-xs font-medium tabular-nums">{formatPrice(coin.price)}</p>
-                    <p className={`text-[10px] font-medium tabular-nums ${up ? "text-credit" : "text-debit"}`}>
-                      {up ? "+" : ""}{coin.change24h.toFixed(2)}%
+                <div className="flex shrink-0 items-center gap-2.5">
+                  {/* The chart sat in a plain div inside a flex row, so in the
+                      320px rail it was squeezed to a few pixels wide. It holds
+                      its size now, and reserves the space while loading so the
+                      figures don't jump sideways when the curve lands. */}
+                  <span className="hidden h-6 w-16 shrink-0 items-center sm:flex">
+                    {s === undefined ? (
+                      <Skel className="h-4 w-full rounded-sm" />
+                    ) : (
+                      <Sparkline points={s?.prices} />
+                    )}
+                  </span>
+                  <div className="w-[74px] shrink-0 text-right">
+                    <p className="text-[13px] font-semibold tabular-nums">{formatPrice(coin.price)}</p>
+                    <p className={`text-[12px] font-medium tabular-nums ${up ? "text-credit" : "text-debit"}`}>
+                      {pctSigned(change)}
                     </p>
                   </div>
-                  <div className="hidden sm:block"><Sparkline change24h={coin.change24h} /></div>
                   <button onClick={() => onWatchlistChange(watchlistSymbols.filter((s) => s !== coin.symbol))} className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-red-500/10 transition-all">
                     <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3 text-muted-foreground hover:text-debit transition-colors" />
                   </button>
@@ -306,18 +282,17 @@ function Watchlist({
           })}
         </div>
       </ScrollArea>
-    </div>
+    </CardShell>
   )
 }
 
 // ── Trade Button ──────────────────────────────────────────────────────
 
 function PortfolioTradeButton() {
-  const { openTradeSelector } = useTradeSelector()
   return (
-    <button onClick={() => openTradeSelector()} className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">
-      Trade <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3" />
-    </button>
+    <Link href="/trade" className="inline-flex items-center gap-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground">
+      Trade <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5" />
+    </Link>
   )
 }
 
@@ -327,17 +302,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
   const { user } = useAuth()
   const { addresses, tradingWallet, walletsGenerated, isLoading: walletsLoading, refreshWallets } = useWallet()
   const { profile, updateProfile } = useProfile()
-  const { balances: walletBalances } = useWalletBalances()
-
-  // Sum USDC/USDT on-chain balance across all chains
-  const usdcWalletBalance = React.useMemo(() => {
-    return walletBalances
-      .filter((b) => b.symbol === "USDC" || b.symbol === "USDT")
-      .reduce((sum, b) => sum + b.balance, 0)
-  }, [walletBalances])
-
   const [activeTab, setActiveTab] = React.useState<Tab>("overview")
-  const [transferAmount, setTransferAmount] = React.useState("")
   const [copiedAddr, setCopiedAddr] = React.useState<string | null>(null)
   const [watchlistSymbols, setWatchlistSymbols] = React.useState<string[]>(
     profile?.watchlist?.length ? profile.watchlist : INITIAL_WATCHLIST,
@@ -394,7 +359,58 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
   const positionsValue = spotPositions.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0)
   const tradingValue = availableUsdc + lockedUsdc + positionsValue
   const inOrders = lockedUsdc
-  const totalNetWorth = tradingValue
+
+  // What the funding (main) wallet is worth. Keyed off the balances themselves
+  // rather than the CHAINS display list, so nothing is counted twice.
+  const fundingValue = React.useMemo(
+    () =>
+      accountBalances.reduce(
+        (sum, b) =>
+          sum + numOr(numOr(b.available) + numOr(b.locked)) * numOr(prices[b.asset.toUpperCase()]),
+        0,
+      ),
+    [accountBalances, prices],
+  )
+
+  /** One chain's funding balance. Matched on CHAIN, not asset: Ethereum and
+   *  Arbitrum share the symbol ETH, and an asset-first match handed Arbitrum
+   *  Ethereum's balance — the same money shown (and counted) twice. */
+  const chainBalance = React.useCallback(
+    (chainKey: string) => {
+      const b = accountBalances.find((x) => x.chain === chainKey)
+      return b ? b.available + b.locked : 0
+    },
+    [accountBalances],
+  )
+
+  // Net worth is every account this page shows. It previously reported the
+  // trading account alone while the funding table listed thousands more.
+  const totalNetWorth = tradingValue + fundingValue
+
+  /* The funding table's rows, with each holding's SHARE of the account worked
+     out once. A column of dollar figures tells you what a holding is worth; it
+     takes mental arithmetic to learn whether it's most of your money or a
+     rounding error, and that comparison is the whole reason to look at a
+     portfolio. `rank` drives the colour, so the ladder reads as an ordering —
+     the same ladder the Assets donut uses, so the two pages agree. */
+  const fundingRows = React.useMemo(() => {
+    const rows = CHAINS.map((chain) => {
+      const amount = numOr(chainBalance(chain.key), 0)
+      // A symbol the feed hasn't priced yet is worth an unknown amount, which
+      // is not the same as zero — the row says so instead of claiming $0.00.
+      const p = prices[chain.symbol]
+      const priced = typeof p === "number" && Number.isFinite(p)
+      return { chain, amount, usdValue: priced ? amount * p : null, priced }
+    })
+    const ranked = [...rows]
+      .sort((a, b) => numOr(b.usdValue) - numOr(a.usdValue))
+      .map((r) => r.chain.key)
+    return rows.map((r) => ({
+      ...r,
+      pct: share(r.usdValue, fundingValue),
+      rank: ranked.indexOf(r.chain.key),
+    }))
+  }, [chainBalance, prices, fundingValue])
 
   const isOnboardingDone = profile?.onboardingCompleted?.includes("portfolio")
 
@@ -427,28 +443,34 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
         <div className="flex flex-col gap-1">
           <Eyebrow>Net Worth</Eyebrow>
           <Balance value={formatUSD(totalNetWorth)} className="text-[clamp(2rem,3.5vw,2.75rem)]" />
+          {/* Say what the figure covers — it's the sum of the two accounts
+              listed below, so the page reconciles with itself. */}
+          <p className="text-[13px] text-muted-foreground">
+            Trading {formatUSD(tradingValue)} · Funding {formatUSD(fundingValue)}
+          </p>
         </div>
+        {/* The verbs sit under the figure they act on. */}
+        <PortfolioActions />
       </div>
 
       {/* ── 2-column layout ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]">
         {/* ════ LEFT — Main card ════ */}
         <div>
-          <div className="rounded-2xl bg-card">
-            {/* Card header — in-card title + the ONE segmented tab system */}
-            <div data-onboarding="portfolio-tabs" className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-              <div className="flex min-w-0 flex-col">
-                <h2 className="text-[15px] font-semibold leading-tight">Accounts</h2>
-                <span className="text-[13px] text-muted-foreground">Trading &amp; funding balances</span>
-              </div>
-              <Segmented
-                options={[
-                  { key: "overview", label: "Overview" },
-                  { key: "wallets", label: "Wallets" },
-                  { key: "fund", label: "Fund Wallet" },
-                ] as const}
-                value={activeTab}
-                onChange={setActiveTab}
+          <CardShell>
+            {/* The subtitle IS the tab's explainer — it changes with the tab, so
+                the card always says what you're looking at. */}
+            <div data-onboarding="portfolio-tabs">
+              <CardHeader
+                title="Accounts"
+                subtitle={TABS.find((t) => t.key === activeTab)?.blurb}
+                right={
+                  <Segmented
+                    options={TABS.map(({ key, label }) => ({ key, label }))}
+                    value={activeTab}
+                    onChange={setActiveTab}
+                  />
+                }
               />
             </div>
 
@@ -456,75 +478,81 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
               {/* ─── OVERVIEW TAB ─── */}
               {activeTab === "overview" && (
                 <>
-                  {/* Trading Account */}
-                  <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Trading Account</span>
-                      </div>
+                  {/* Trading Account — sunken well, not a bordered box: the
+                      system separates surfaces by fill. */}
+                  <div className="rounded-2xl bg-surface-sunken/70 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <Eyebrow>Trading Account</Eyebrow>
                       <PortfolioTradeButton />
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <div>
-                        <p className="text-[10px] text-muted-foreground mb-0.5">Account Value</p>
-                        <p className="text-sm font-bold tabular-nums">{formatUSD(tradingValue)}</p>
+                        <p className="mb-0.5 text-[13px] text-muted-foreground">Account Value</p>
+                        <p className="text-[17px] font-semibold tabular-nums">{formatUSD(tradingValue)}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-muted-foreground mb-0.5">Available USDC</p>
-                        <p className="text-sm font-bold tabular-nums text-credit">{formatUSD(availableUsdc)}</p>
+                        <p className="mb-0.5 text-[13px] text-muted-foreground">Available USDC</p>
+                        <p className="text-[17px] font-semibold tabular-nums text-credit">{formatUSD(availableUsdc)}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-muted-foreground mb-0.5">In Orders</p>
-                        <p className="text-sm font-bold tabular-nums">{formatUSD(inOrders)}</p>
+                        <p className="mb-0.5 text-[13px] text-muted-foreground">In Orders</p>
+                        <p className="text-[17px] font-semibold tabular-nums">{formatUSD(inOrders)}</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Funding Account */}
-                  <div className="h-px bg-border/30" />
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-medium text-muted-foreground">Funding Account (Main Wallet)</span>
+                  {/* Funding Account — the other half of net worth, so it names
+                      its total instead of making the reader add up a column. */}
+                  <div className="pt-1">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <Eyebrow>Funding Account · Main Wallet</Eyebrow>
+                      <span className="text-[13px] font-semibold tabular-nums">{formatUSD(fundingValue)}</span>
                     </div>
-                    <div className="rounded-xl border border-border/30 overflow-hidden">
-                      <table className="w-full text-xs">
+                    <div className="overflow-hidden rounded-2xl bg-surface-sunken/70">
+                      <table className="w-full text-[13px]">
                         <thead>
-                          <tr className="border-b border-border/20 bg-accent/10 text-[10px] text-muted-foreground">
-                            <th className="px-3 py-2 text-left font-medium">Asset</th>
-                            <th className="px-3 py-2 text-left font-medium">Chain</th>
-                            <th className="px-3 py-2 text-right font-medium">Balance</th>
-                            <th className="px-3 py-2 text-right font-medium">Value</th>
+                          <tr className="text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
+                            <th className="px-3 py-2 text-left font-semibold">Asset</th>
+                            <th className="hidden px-3 py-2 text-left font-semibold sm:table-cell">Chain</th>
+                            <th className="hidden px-3 py-2 text-left font-semibold md:table-cell">Share</th>
+                            <th className="px-3 py-2 text-right font-semibold">Balance</th>
+                            <th className="px-3 py-2 text-right font-semibold">Value</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border/10">
                           {walletsLoading ? (
                             Array.from({ length: 3 }).map((_, i) => (
-                              <tr key={i}><td colSpan={4} className="px-3 py-2.5"><div className="h-4 w-full animate-pulse rounded bg-muted" /></td></tr>
+                              <tr key={i}><td colSpan={5} className="px-3 py-2.5"><div className="h-4 w-full animate-pulse rounded bg-foreground/[0.06]" /></td></tr>
                             ))
                           ) : !walletsGenerated ? (
-                            <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground text-[11px]">No assets found. Set up your wallet to get started.</td></tr>
+                            <tr><td colSpan={5} className="px-3 py-8 text-center text-[13px] text-muted-foreground">No assets found. Set up your wallet to get started.</td></tr>
                           ) : (
-                            CHAINS.map((chain) => (
-                              <tr key={chain.key} className="hover:bg-accent/20 transition-colors">
+                            fundingRows.map(({ chain, amount, usdValue, pct, rank }) => (
+                              <tr key={chain.key} className="transition-colors hover:bg-accent/30">
                                 <td className="px-3 py-2.5">
                                   <div className="flex items-center gap-2">
-                                    <img src={chain.icon} alt="" className="h-5 w-5 rounded-full" />
-                                    <span className="font-medium">{chain.symbol}</span>
+                                    <CoinAvatar src={chain.icon} symbol={chain.symbol} size="sm" />
+                                    <span className="flex min-w-0 flex-col leading-tight">
+                                      <span className="font-semibold">{chain.symbol}</span>
+                                      <span className="text-[11.5px] text-muted-foreground sm:hidden">{chain.label}</span>
+                                    </span>
                                   </div>
                                 </td>
-                                <td className="px-3 py-2.5 text-muted-foreground">{chain.label}</td>
-                                <td className="px-3 py-2.5 text-right font-medium tabular-nums">
-                                  {(() => {
-                                    const b = accountBalances.find((x) => x.asset.toUpperCase() === chain.symbol.toUpperCase() || x.chain === chain.key)
-                                    return (b ? b.available + b.locked : 0).toFixed(4)
-                                  })()}
+                                <td className="hidden px-3 py-2.5 text-muted-foreground sm:table-cell">{chain.label}</td>
+                                {/* Share — how much of the funding account this
+                                    row is. Hidden below md, where the column
+                                    would be a 30px stub. */}
+                                <td className="hidden w-[34%] px-3 py-2.5 md:table-cell">
+                                  <span className="flex items-center gap-2">
+                                    <WeightBar pct={pct} rank={rank} className="min-w-0 flex-1" />
+                                    <span className="w-9 shrink-0 text-right text-[11.5px] tabular-nums text-muted-foreground">
+                                      {pct >= 0.1 ? `${pct.toFixed(0)}%` : "—"}
+                                    </span>
+                                  </span>
                                 </td>
+                                <td className="px-3 py-2.5 text-right font-medium tabular-nums">{qty(amount)}</td>
                                 <td className="px-3 py-2.5 text-right text-muted-foreground tabular-nums">
-                                  {(() => {
-                                    const b = accountBalances.find((x) => x.asset.toUpperCase() === chain.symbol.toUpperCase() || x.chain === chain.key)
-                                    const amt = b ? b.available + b.locked : 0
-                                    return formatUSD(amt * (prices[chain.symbol] ?? 0))
-                                  })()}
+                                  {formatUSD(usdValue)}
                                 </td>
                               </tr>
                             ))
@@ -542,7 +570,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                   {walletsLoading ? (
                     <div className="flex flex-col items-center gap-3 py-12">
                       <HugeiconsIcon icon={Loading03Icon} className="h-5 w-5 animate-spin text-primary" />
-                      <p className="text-xs text-muted-foreground">Loading wallets…</p>
+                      <p className="text-[13px] text-muted-foreground">Loading wallets…</p>
                     </div>
                   ) : !walletsGenerated ? (
                     <div className="flex flex-col items-center gap-3 py-12 text-center">
@@ -550,26 +578,26 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                         <HugeiconsIcon icon={Wallet01Icon} className="h-6 w-6 text-muted-foreground/40" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium">No wallets yet</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">Your multi-chain wallets will appear here once set up.</p>
+                        <p className="text-[15px] font-semibold">No wallets yet</p>
+                        <p className="mt-1 text-[13px] text-muted-foreground">Your multi-chain wallets appear here once set up.</p>
                       </div>
                     </div>
                   ) : (
                     <>
                       {/* Trading Wallet — hero card */}
-                      <div className="rounded-xl border border-primary/20 bg-linear-to-br from-primary/5 to-transparent p-4">
+                      <div className="rounded-2xl bg-surface-sunken/70 p-4 ring-1 ring-primary/20">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2.5">
                             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
                               <HugeiconsIcon icon={Chart01Icon} className="h-4 w-4 text-primary" />
                             </div>
                             <div>
-                              <p className="text-xs font-semibold">Trading Wallet</p>
-                              <p className="text-[10px] text-muted-foreground">SpotV2 Trading Wallet</p>
+                              <p className="text-[15px] font-semibold leading-tight">Trading Wallet</p>
+                              <p className="text-[13px] text-muted-foreground">Where your spot orders settle</p>
                             </div>
                           </div>
-                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
-                            tradingWallet?.address ? "bg-emerald-500/10 text-credit" : "bg-muted text-muted-foreground"
+                          <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.08em] ${
+                            tradingWallet?.address ? "bg-credit-chip text-credit" : "bg-muted text-muted-foreground"
                           }`}>
                             {tradingWallet?.address ? "Active" : "Not Set Up"}
                           </span>
@@ -577,9 +605,9 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                         {tradingWallet?.address ? (
                           <button
                             onClick={() => copyAddr(tradingWallet.address)}
-                            className="flex w-full items-center justify-between rounded-lg bg-card/80 border border-border/30 px-3 py-2.5 group hover:border-primary/30 transition-colors"
+                            className="group flex w-full items-center justify-between rounded-xl bg-card px-3 py-2.5 ring-1 ring-border/40 transition-colors hover:ring-primary/40"
                           >
-                            <code className="text-[11px] font-mono text-foreground/80">{truncAddr(tradingWallet.address)}</code>
+                            <code className="font-mono text-[13px] text-foreground/80">{truncAddr(tradingWallet.address)}</code>
                             <HugeiconsIcon
                               icon={copiedAddr === tradingWallet.address ? CheckmarkCircle01Icon : Copy01Icon}
                               className={`h-3.5 w-3.5 transition-colors ${copiedAddr === tradingWallet.address ? "text-credit" : "text-muted-foreground group-hover:text-primary"}`}
@@ -587,8 +615,8 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                           </button>
                         ) : (
                           <div className="flex items-center justify-between rounded-lg border border-dashed border-border/40 bg-card/50 px-3 py-3">
-                            <p className="text-[11px] text-muted-foreground">No trading wallet configured</p>
-                            <Link href="/trade" className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-primary/90 transition-colors">
+                            <p className="text-[13px] text-muted-foreground">No trading wallet configured</p>
+                            <Link href="/trade" className="rounded-full bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
                               Set Up
                             </Link>
                           </div>
@@ -599,22 +627,22 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                       <div>
                         <div className="flex items-center gap-2 mb-2.5">
                           <HugeiconsIcon icon={Shield01Icon} className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="text-[11px] font-medium text-muted-foreground">Chain Wallets</span>
+                          <Eyebrow>Chain Wallets</Eyebrow>
                         </div>
-                        <div className="rounded-xl border border-border/30 overflow-hidden divide-y divide-border/20">
+                        <div className="divide-y divide-border/15 overflow-hidden rounded-2xl bg-surface-sunken/70">
                           {CHAINS.map((chain) => {
                             const addrKey = chain.key === "arbitrum" ? "ethereum" : chain.key
                             const addr = addresses?.[addrKey as keyof typeof addresses] ?? ""
                             return (
                               <div key={chain.key} className="flex items-center justify-between px-3.5 py-3 hover:bg-accent/20 transition-colors">
                                 <div className="flex items-center gap-2.5">
-                                  <img src={chain.icon} alt="" className="h-5 w-5 rounded-full" />
+                                  <CoinAvatar src={chain.icon} symbol={chain.symbol} size="sm" />
                                   <div>
-                                    <p className="text-xs font-medium">{chain.label}</p>
+                                    <p className="text-[13px] font-semibold">{chain.label}</p>
                                     {addr ? (
-                                      <p className="text-[10px] font-mono text-muted-foreground">{truncAddr(addr)}</p>
+                                      <p className="font-mono text-[12px] text-muted-foreground">{truncAddr(addr)}</p>
                                     ) : (
-                                      <p className="text-[10px] text-muted-foreground/50">Not generated</p>
+                                      <p className="text-[12px] text-muted-foreground/60">Not generated</p>
                                     )}
                                   </div>
                                 </div>
@@ -626,7 +654,7 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                                     <HugeiconsIcon icon={copiedAddr === addr ? CheckmarkCircle01Icon : Copy01Icon} className={`h-3.5 w-3.5 ${copiedAddr === addr ? "text-credit" : ""}`} />
                                   </button>
                                 ) : (
-                                  <span className="rounded-full bg-muted/50 px-2 py-0.5 text-[9px] text-muted-foreground">Pending</span>
+                                  <span className="rounded-full bg-muted/50 px-2 py-0.5 text-[10.5px] text-muted-foreground">Pending</span>
                                 )}
                               </div>
                             )
@@ -636,9 +664,9 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
 
                       {/* Unified account note */}
                       {addresses?.ethereum === tradingWallet?.address && (
-                        <div className="flex items-center gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10 px-3 py-2">
+                        <div className="flex items-center gap-2 rounded-xl bg-credit-chip px-3 py-2.5">
                           <HugeiconsIcon icon={CheckmarkCircle01Icon} className="h-3.5 w-3.5 text-credit shrink-0" />
-                          <p className="text-[10px] text-emerald-600 dark:text-emerald-400">Unified account — your Ethereum wallet doubles as your trading wallet.</p>
+                          <p className="text-[13px] text-credit">Unified account — your Ethereum wallet doubles as your trading wallet.</p>
                         </div>
                       )}
                     </>
@@ -646,96 +674,13 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                 </div>
               )}
 
-              {/* ─── FUND TAB ─── */}
-              {activeTab === "fund" && (
-                <div className="space-y-3">
-                  {/* Source asset */}
-                  <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
-                    <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-[11px] font-medium text-muted-foreground">Source Asset</span>
-                      <span className="text-[11px] text-muted-foreground">Balance: {usdcWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-card border border-border/40 px-2.5 py-1.5">
-                        <img src="https://coin-images.coingecko.com/coins/images/6319/small/usdc.png" alt="" className="h-5 w-5 rounded-full" />
-                        <span className="text-xs font-semibold">USDC</span>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground">on Arbitrum</span>
-                    </div>
-                  </div>
-
-                  {/* From → To */}
-                  <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">From</span>
-                      <span className="text-xs font-medium">Personal Wallet</span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-center -my-2 relative z-10">
-                    <div className="rounded-full border-4 border-card bg-primary p-1.5 shadow-sm">
-                      <HugeiconsIcon icon={ArrowDown01Icon} className="h-3.5 w-3.5 text-white" />
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">To</span>
-                      <span className="text-xs font-medium">Trading Account</span>
-                    </div>
-                  </div>
-
-                  {/* Amount */}
-                  <div className="rounded-xl border border-border/30 bg-accent/20 p-3.5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-medium text-muted-foreground">Amount (USDC)</span>
-                      <span className="text-[11px] text-muted-foreground">Available: {usdcWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={transferAmount}
-                        onChange={(e) => { if (/^[0-9]*\.?[0-9]*$/.test(e.target.value)) setTransferAmount(e.target.value) }}
-                        placeholder="0.00"
-                        className="flex-1 min-w-0 bg-transparent text-xl font-semibold outline-none tabular-nums placeholder:text-muted-foreground/40"
-                      />
-                      <button onClick={() => setTransferAmount("0")} className="rounded-lg bg-card border border-border/40 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-accent transition-colors">
-                        MAX
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex items-start gap-2.5 rounded-xl bg-blue-500/5 border border-blue-500/10 px-3 py-2.5">
-                    <HugeiconsIcon icon={InformationCircleIcon} className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-px" />
-                    <div className="text-[10px] text-blue-400 space-y-0.5">
-                      <p>Minimum deposit: 5 USDC.</p>
-                    </div>
-                  </div>
-
-                  {/* Button */}
-                  <button
-                    disabled={!transferAmount || parseFloat(transferAmount) <= 0}
-                    className="w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Confirm Deposit
-                  </button>
-
-                  <p className="text-center text-[10px] text-muted-foreground/50">
-                    Processed via the WorldStreet Bridge on Arbitrum
-                  </p>
-                </div>
-              )}
             </div>
-          </div>
+          </CardShell>
         </div>
 
-        {/* ════ RIGHT — Info panels ════ */}
+        {/* ════ RIGHT — the one genuine object that isn't an account ════ */}
         <div data-onboarding="portfolio-sidebar" className="flex flex-col gap-4">
-          <QuickActions />
           <Watchlist coins={coins} watchlistSymbols={watchlistSymbols} onWatchlistChange={handleWatchlistChange} />
-          <HowItWorks />
         </div>
       </div>
     </>

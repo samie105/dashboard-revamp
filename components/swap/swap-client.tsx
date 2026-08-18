@@ -2,6 +2,9 @@
 
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { CardShell, CardHeader, EmptyState, SkeletonRows } from "@/components/ui/system"
+import { CoinAvatar } from "@/components/ui/coin-avatar"
+import { num, qty } from "@/lib/num"
 import { PageHeader } from "@/components/ui/system"
 import {
   CoinsSwapIcon,
@@ -60,8 +63,8 @@ function TokenSelectModal({
   const popular = ["BTC", "ETH", "SOL", "USDT", "USDC", "XRP"]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div ref={ref} className="w-full max-w-md rounded-2xl bg-card shadow-2xl">
+    <div className="ws-backdrop-in fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-md">
+      <div ref={ref} className="ws-pop-in w-full max-w-md rounded-2xl bg-card shadow-2xl ring-1 ring-foreground/10">
         <div className="flex items-center justify-between border-b border-border/30 p-4">
           <h3 className="text-sm font-semibold">Select Token</h3>
           <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
@@ -265,6 +268,9 @@ function QuoteCard({
 /* ── Swap History ── */
 interface SwapTx {
   id: string
+  /** Always present on a unified row — the asset the movement is denominated
+   *  in. The from/to pair below is swap-specific and often missing. */
+  token?: string
   fromToken?: string
   toToken?: string
   amount: number
@@ -298,115 +304,103 @@ function SwapHistory() {
     return () => { cancelled = true }
   }, [])
 
-  const statusColor = (s: string) => {
-    switch (s) {
-      case "completed": return "text-credit"
-      case "failed": return "text-debit"
-      default: return "text-warning"
+  /* Status washes match the transactions page: one vocabulary for state across
+     the product, rather than a per-screen palette. */
+  const statusChip = (st: string) => {
+    switch (st) {
+      case "completed": return "bg-credit-chip text-credit"
+      case "failed": return "bg-debit-chip text-debit"
+      case "cancelled":
+      case "expired": return "bg-foreground/[0.06] text-muted-foreground"
+      default: return "bg-warning-chip text-warning"
     }
   }
 
-  const statusLabel = (s: string) => {
-    switch (s) {
+  const statusLabel = (st: string) => {
+    switch (st) {
       case "completed": return "Completed"
       case "failed": return "Failed"
       case "pending": return "Pending"
+      case "cancelled": return "Cancelled"
       default: return "Processing"
     }
   }
 
+  /* The unified transaction row always carries `token`; `fromToken`/`toToken`
+     are swap-specific and frequently absent. Reading only the optional pair
+     rendered every row as a literal "? → ?" — a question mark is not a token,
+     and printing one tells the reader their swap history is broken when it
+     isn't. Fall back to what the row does carry, and say nothing about the
+     half we genuinely don't know. */
+  const pairOf = (tx: SwapTx) => {
+    const from = tx.fromToken ?? tx.token
+    const to = tx.toToken
+    if (from && to) return `${from} → ${to}`
+    if (from) return `${from} swap`
+    return "Swap"
+  }
+
   return (
-    <div className="rounded-2xl bg-card">
-      <div className="flex items-center justify-between border-b border-border/30 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-xs font-semibold">Recent Swaps</h3>
-        </div>
-      </div>
+    <CardShell>
+      <CardHeader title="Recent swaps" subtitle="Your last ten conversions" />
 
       {loading ? (
-        <div className="space-y-3 px-4 py-4">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-12 w-full rounded-lg" />
-          ))}
-        </div>
+        <SkeletonRows rows={3} label="Loading swap history" />
       ) : swaps.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 px-4 py-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50">
-            <HugeiconsIcon icon={Exchange01Icon} className="h-5 w-5 text-muted-foreground/40" />
-          </div>
-          <p className="text-xs font-medium text-muted-foreground">No swap history yet</p>
-          <p className="text-[10px] text-muted-foreground/60">Your completed swaps will appear here</p>
-        </div>
+        <EmptyState
+          icon={({ className }) => <HugeiconsIcon icon={Exchange01Icon} className={className} />}
+          title="No swaps yet"
+          description="Conversions you make here will be listed with their status."
+        />
       ) : (
-        <div className="divide-y divide-border/30">
-          {swaps.map((tx) => (
-            <div key={tx.id} className="flex items-center justify-between px-4 py-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/50">
-                  <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-muted-foreground" />
+        <div className="flex flex-col divide-y divide-border/10">
+          {swaps.map((tx) => {
+            const from = tx.fromToken ?? tx.token
+            const received = tx.toAmount != null ? num(tx.toAmount) : null
+            return (
+              <div key={tx.id} className="flex items-center gap-3 px-4 py-3">
+                {from ? (
+                  <CoinAvatar symbol={from} size="lg" />
+                ) : (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06]">
+                    <HugeiconsIcon icon={Exchange01Icon} className="h-4 w-4 text-muted-foreground" />
+                  </span>
+                )}
+
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[14px] font-semibold">{pairOf(tx)}</span>
+                  <span className="truncate text-[12.5px] text-muted-foreground">
+                    {[
+                      tx.fromChain && tx.toChain ? `${tx.fromChain} → ${tx.toChain}` : tx.fromChain,
+                      new Date(tx.createdAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium truncate">
-                    {tx.fromToken ?? "?"} → {tx.toToken ?? "?"}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    {tx.fromChain} → {tx.toChain}
-                    {" · "}
-                    {new Date(tx.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                  </p>
+
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="text-[13px] font-semibold tabular-nums">
+                    {qty(tx.amount)}
+                    {received !== null ? ` → ${qty(received)}` : ""}
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${statusChip(tx.status)}`}
+                  >
+                    {statusLabel(tx.status)}
+                  </span>
                 </div>
               </div>
-              <div className="text-right shrink-0 ml-2">
-                <p className="text-xs font-medium tabular-nums">
-                  {tx.amount} → {tx.toAmount ? parseFloat(tx.toAmount).toFixed(4) : "—"}
-                </p>
-                <p className={`text-[10px] font-medium ${statusColor(tx.status)}`}>
-                  {statusLabel(tx.status)}
-                </p>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
-    </div>
-  )
-}
-
-/* ── How It Works Timeline ── */
-const STEPS = [
-  { title: "Select tokens", desc: "Choose tokens and networks" },
-  { title: "Review quote", desc: "Check rates, fees & slippage" },
-  { title: "Confirm swap", desc: "Sign in your wallet" },
-  { title: "Track progress", desc: "Monitor until complete" },
-]
-
-function HowItWorks() {
-  return (
-    <div className="rounded-2xl bg-card">
-      <div className="flex items-center gap-2 border-b border-border/30 px-4 py-3">
-        <h3 className="text-xs font-semibold">How it works</h3>
-      </div>
-      <div className="px-4 py-4">
-        <div className="relative pl-5">
-          {/* Timeline line */}
-          <div className="absolute left-1.75 top-1 bottom-1 w-px bg-border/50" />
-          <div className="space-y-4">
-            {STEPS.map((item, i) => (
-              <div key={i} className="relative flex items-start gap-3">
-                {/* Timeline dot */}
-                <div className="absolute -left-5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-primary/40 bg-card">
-                  <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium leading-tight">{item.title}</p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+    </CardShell>
   )
 }
 
@@ -668,11 +662,26 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
 
   const swapCard = (
     <>
-          <div className="rounded-2xl bg-card shadow-sm">
+          <div className="relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card/80">
+            {/* Neutral corner-light ring — same shell grammar as the other
+                dashboard cards (CardShell in ui/system). */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-2xl p-px"
+              style={{
+                background:
+                  "linear-gradient(135deg, color-mix(in oklab, var(--foreground) 14%, transparent), color-mix(in oklab, var(--foreground) 4%, transparent) 40%, transparent 65%)",
+                WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                WebkitMaskComposite: "xor",
+                mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                maskComposite: "exclude",
+              }}
+            />
             {/* Card header */}
             <div className="flex items-center justify-between border-b border-border/30 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold">Swap</h2>
+              <div className="flex min-w-0 flex-col">
+                <h2 className="text-[15px] font-semibold leading-tight">Swap</h2>
+                <span className="text-[13px] text-muted-foreground">Any pair, live rates</span>
               </div>
               <SwapSettings
                 slippage={slippage}
@@ -949,8 +958,11 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
 
         {/* RIGHT — Info cards stacked */}
         <div className="flex flex-col gap-4">
+          {/* "How it works" — four generic steps that narrated the form beside
+              them — is gone, the same call made on Portfolio. Guidance next to
+              the thing beats guidance about the thing, and the swap card's own
+              subtitle already says what it does. */}
           <SwapHistory />
-          <HowItWorks />
         </div>
       </div>
     </>

@@ -9,7 +9,7 @@ const DASHBOARD_STEPS: OnboardingStep[] = [
     target: '[data-onboarding="dash-greeting"]',
     title: "Welcome to Worldstreet",
     description:
-      "This is your home base. You'll see a quick greeting, your name, and a snapshot of your portfolio status.",
+      "This is your home base. A quick hello up here — your money is the headline, right below.",
     placement: "bottom",
   },
   {
@@ -20,17 +20,17 @@ const DASHBOARD_STEPS: OnboardingStep[] = [
     placement: "bottom",
   },
   {
-    target: '[data-onboarding="dash-balance"]',
+    target: '[data-onboarding="dash-balance-cards"]',
     title: "Your Balances",
     description:
-      "Switch between Total, Main, Spot, and Futures views to see the breakdown of each wallet. Balances update in real-time.",
+      "Your total, with the Main, Spot, and Futures breakdown always in view below it. Tap a card to open that account. Balances update in real-time.",
     placement: "bottom",
   },
   {
-    target: '[data-onboarding="dash-stats"]',
-    title: "Portfolio Stats",
+    target: '[data-onboarding="dash-activity"]',
+    title: "Activity",
     description:
-      "Track today's P&L, active tokens held, and the number of networks your wallets are spread across.",
+      "Anything still in flight stays pinned here until it lands, with your latest movements underneath. Open View all for the full history.",
     placement: "top",
   },
   {
@@ -41,18 +41,18 @@ const DASHBOARD_STEPS: OnboardingStep[] = [
     placement: "bottom",
   },
   {
-    target: '[data-onboarding="dash-trades"]',
-    title: "Recent Market Trades",
-    description:
-      "See real-time trades happening on the exchange. Switch between BTC, ETH, and SOL to follow different markets.",
-    placement: "top",
-  },
-  {
     target: '[data-onboarding="dash-watchlist"]',
     title: "Your Watchlist",
     description:
       "Assets you've starred appear here with live prices. Head to the Spot page to add more to your watchlist.",
     placement: "left",
+  },
+  {
+    target: '[data-onboarding="dash-trades"]',
+    title: "Recent Trades",
+    description:
+      "Your latest spot and futures fills, right next to the swap desk so you can act on them.",
+    placement: "top",
   },
 ]
 

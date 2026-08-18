@@ -14,6 +14,7 @@ import { Clock01Icon, Wallet01Icon } from "@hugeicons/core-free-icons"
 import { Eyebrow, PageHeader } from "@/components/ui/system"
 import {
   FlowShell,
+  FlowHeader,
   AnnouncementBanner,
   ErrorDetail,
   ContextPanel,
@@ -25,8 +26,15 @@ import {
   StatusScreen,
   UnavailablePanel,
   FlowSkeleton,
+  useStageProgress,
   type Stage,
 } from "@/components/ui/flow"
+import { useOnline } from "@/hooks/useOnline"
+import {
+  savePendingFlow,
+  readPendingFlow,
+  clearPendingFlow,
+} from "@/lib/pending-flow"
 import {
   fetchFundAvailability,
   fetchTradingWithdrawInfo,
@@ -77,12 +85,35 @@ const WITHDRAW_STAGE_INDEX: Record<string, number> = {
   completed: 3,
 }
 
+/**
+ * Poll cadence, by how long the transfer has been in flight — the same policy
+ * buy/sell has used all along. This flow previously held a flat 4-second
+ * setInterval with no ceiling: a transfer the bridge had lost was re-queried
+ * every four seconds for as long as the tab stayed open, and the UI never once
+ * admitted that something had gone quiet.
+ */
+const POLL_STEPS = [
+  { until: 60_000, every: 4_000 },
+  { until: 300_000, every: 10_000 },
+  { until: Infinity, every: 30_000 },
+]
+/** Bridging genuinely takes minutes, so "slow" starts later here than on a
+ *  same-ledger buy. */
+const POLL_SLOW_AFTER_MS = 240_000
+const POLL_GIVE_UP_MS = 1_200_000
+
+function pollDelayFor(waitedMs: number): number {
+  return POLL_STEPS.find((s) => waitedMs < s.until)!.every
+}
+
 type Mode = "fund" | "withdraw"
 
 /** The modal variant's column — same children, none of the page margins
  *  (the modal/drawer shell already frames it). Mirrors BuySellClient. */
 function ModalBody({ children }: { children: React.ReactNode }) {
-  return <div className="p-4 sm:p-5">{children}</div>
+  // Fills the fixed-height shell so the sticky CTA settles at the bottom on
+  // short screens instead of floating mid-modal above dead space.
+  return <div className="flex flex-1 flex-col p-4 sm:p-5">{children}</div>
 }
 
 export function FundClient({
@@ -118,6 +149,11 @@ export function FundClient({
   const [submitting, setSubmitting] = React.useState(false)
   const [submitError, setSubmitError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<Fund | TradingWithdraw | null>(null)
+  const [submittedAt, setSubmittedAt] = React.useState<number | null>(null)
+  const [recovering, setRecovering] = React.useState(false)
+  const online = useOnline()
+
+
 
   React.useEffect(() => {
     let cancelled = false
@@ -157,21 +193,76 @@ export function FundClient({
     return () => { cancelled = true }
   }, [isFund])
 
-  // Poll a non-terminal result.
+  /* Pick up a transfer this browser started and never saw finish — the modal
+     unmounts on close and the X stays live mid-transfer, so the reference used
+     to exist only in React state. The service is the authority on how it
+     ended; this only asks. */
+  React.useEffect(() => {
+    const kind = isFund ? "fund" : "trading-withdraw"
+    const pending = readPendingFlow(kind)
+    if (!pending) return
+    let cancelled = false
+    setRecovering(true)
+    ;(isFund ? fetchFund(pending.reference) : fetchTradingWithdraw(pending.reference))
+      .then((r) => {
+        if (cancelled) return
+        const terminal: string[] = isFund ? FUND_TERMINAL : TRADING_WITHDRAW_TERMINAL
+        if (terminal.includes(r.status)) {
+          clearPendingFlow(kind)
+        } else {
+          pollStartedAt.current = pending.startedAt
+          setWaitedMs(Date.now() - pending.startedAt)
+          setSubmittedAt(pending.startedAt)
+          setResult(r)
+        }
+      })
+      // A reference the service won't acknowledge would strand the user on a
+      // status screen that can never advance.
+      .catch(() => { if (!cancelled) clearPendingFlow(kind) })
+      .finally(() => { if (!cancelled) setRecovering(false) })
+    return () => { cancelled = true }
+  }, [isFund])
+
+  /* Poll a non-terminal result. Each attempt schedules the next, so the gap
+     widens as the wait does — and stops, rather than polling into an empty
+     room for as long as the tab lives. */
+  const pollStartedAt = React.useRef<number | null>(null)
+  const [waitedMs, setWaitedMs] = React.useState(0)
+
   React.useEffect(() => {
     if (!result) return
     const terminal: string[] = isFund ? FUND_TERMINAL : TRADING_WITHDRAW_TERMINAL
     if (terminal.includes(result.status)) return
-    const id = setInterval(async () => {
+    if (pollStartedAt.current === null) pollStartedAt.current = Date.now()
+    if (waitedMs >= POLL_GIVE_UP_MS) return
+
+    const id = setTimeout(async () => {
       try {
         const next = isFund
           ? await fetchFund(result.reference)
           : await fetchTradingWithdraw(result.reference)
         setResult(next)
-      } catch { /* keep polling */ }
-    }, 4000)
-    return () => clearInterval(id)
-  }, [result, isFund])
+      } catch { /* a poll that fails isn't a transfer that failed */ }
+      setWaitedMs(Date.now() - (pollStartedAt.current ?? Date.now()))
+    }, pollDelayFor(waitedMs))
+    return () => clearTimeout(id)
+  }, [result, waitedMs, isFund])
+
+  /** Resume after giving up, at the backed-off cadence rather than from zero. */
+  function resumePolling() {
+    pollStartedAt.current = Date.now() - POLL_SLOW_AFTER_MS
+    setWaitedMs(POLL_SLOW_AFTER_MS)
+  }
+
+  /** Back to the form, with the clock wound back and nothing left to recover. */
+  function resetFlow() {
+    clearPendingFlow(isFund ? "fund" : "trading-withdraw")
+    pollStartedAt.current = null
+    setWaitedMs(0)
+    setResult(null)
+    setSubmittedAt(null)
+    setAmount("")
+  }
 
   // Dismissing mid-transfer is the one unforgivable accident — tell the modal
   // shell when a submit is in the air or a status screen is still moving.
@@ -182,6 +273,10 @@ export function FundClient({
   React.useEffect(() => {
     onInFlightChange?.(inFlight)
   }, [inFlight, onInFlightChange])
+
+  React.useEffect(() => {
+    if (terminalNow) clearPendingFlow(isFund ? "fund" : "trading-withdraw")
+  }, [terminalNow, isFund])
 
   const amt = parseFloat(amount) || 0
   const sourceBalance = isFund ? cashUsd : hl ? (side === "spot" ? hl.spot : hl.perps) : null
@@ -194,7 +289,8 @@ export function FundClient({
 
   const inert = !limits.enabled
   const blocker =
-    inert ? (isFund ? "Funding unavailable right now" : "Withdrawals unavailable right now")
+    !online ? "You're offline"
+    : inert ? (isFund ? "Funding unavailable right now" : "Withdrawals unavailable right now")
     : amt <= 0 ? "Enter an amount"
     : amt < limits.min ? `Minimum is ${limits.min} USDC`
     : amt > limits.max ? `Maximum is ${limits.max.toLocaleString()} USDC`
@@ -214,14 +310,24 @@ export function FundClient({
       : null
 
   async function submit() {
+    const startedAt = Date.now()
     setSubmitting(true)
+    setSubmittedAt(startedAt)
     setSubmitError(null)
     try {
+      // The field caps decimals; this guards the percentage chips, which divide
+      // a balance and can land on a long floating-point tail.
+      const amountUsdc = Math.round(amt * 100) / 100
       const res = isFund
-        ? await initiateFund({ amountUsdc: amt, destination: side })
-        : await initiateTradingWithdraw({ amountUsdc: amt, source: side })
+        ? await initiateFund({ amountUsdc, destination: side })
+        : await initiateTradingWithdraw({ amountUsdc, source: side })
+      // Written down before it reaches React state: from here the transfer
+      // survives a close, a refresh, or the tab being killed outright.
+      savePendingFlow(isFund ? "fund" : "trading-withdraw", res.reference, startedAt)
+      pollStartedAt.current = startedAt
       setResult(res)
     } catch (e) {
+      setSubmittedAt(null)
       setSubmitError(e instanceof CryptoApiError ? e.message : "Something went wrong before anything moved — it's safe to try again.")
     } finally {
       setSubmitting(false)
@@ -233,7 +339,14 @@ export function FundClient({
     setSubmitError(null)
     try {
       await setupTradingWallet()
-      setWalletReady(true)
+      /* Ask rather than assume. A setup call that returns 200 after only half
+         completing used to drop the user straight into a form whose every
+         submit would fail with an error that never mentioned the wallet. */
+      const status = await fetchTradingWalletStatus()
+      setWalletReady(status.initialized)
+      if (!status.initialized) {
+        setSubmitError("Setup started but hasn't finished yet. Give it a moment and try again.")
+      }
     } catch (e) {
       setSubmitError(e instanceof CryptoApiError ? e.message : "Setup didn't complete — try again.")
     } finally {
@@ -241,17 +354,38 @@ export function FundClient({
     }
   }
 
+  /* The checklist's position, kept monotonic and timestamped. Computed before
+     the early return so the hook runs on every render, form included. */
+  const activeStages = isFund ? FUND_STAGES : WITHDRAW_STAGES
+  const rawStageIndex =
+    result?.status === "completed"
+      ? activeStages.length
+      : (isFund ? FUND_STAGE_INDEX : WITHDRAW_STAGE_INDEX)[result?.status ?? "pending"] ?? 0
+  const stageProgress = useStageProgress(rawStageIndex, submittedAt)
+
   /* ── Status screen ──────────────────────────────────────────────────── */
-  if (result) {
-    const done = result.status === "completed"
-    const failed = result.status === "failed"
-    const stages = isFund ? FUND_STAGES : WITHDRAW_STAGES
-    const index = done
-      ? stages.length
-      : (isFund ? FUND_STAGE_INDEX : WITHDRAW_STAGE_INDEX)[result.status] ?? 0
-    const eta = !isFund && "expectedSeconds" in result && result.expectedSeconds > 0
+  /* On screen from the moment the CTA is pressed, not from the moment the
+     service answers. Initiating a fund holds real dollars and can take several
+     seconds; a greyed-out button is the least reassuring possible response to
+     "I just moved money". The checklist opens on stage one and the service
+     catches up to it. */
+  if (result || submittedAt !== null) {
+    const status = result?.status ?? "pending"
+    const done = status === "completed"
+    const failed = status === "failed"
+    const stages = activeStages
+    const index = done ? stages.length : stageProgress.index
+    const eta = result && !isFund && "expectedSeconds" in result && result.expectedSeconds > 0
       ? Math.max(1, Math.round(result.expectedSeconds / 60))
       : null
+
+    /* Bridging is slow by nature, so these thresholds are generous — but past
+       them the spinner is making a promise the flow has already broken. */
+    const stalled = !done && !failed && waitedMs >= POLL_GIVE_UP_MS
+    const slow = !done && !failed && !stalled && waitedMs >= POLL_SLOW_AFTER_MS
+    /* Offline is a different stall with different advice: nothing is wrong
+       with the transfer, we simply can't see it. */
+    const blind = !done && !failed && !online
 
     return (
       <Shell>
@@ -259,7 +393,7 @@ export function FundClient({
           state={done ? "success" : failed ? "failure" : "processing"}
           headline={
             done
-              ? `${result.amountUsdc.toLocaleString()} USDC ${isFund ? "delivered" : "withdrawn"}`
+              ? `${result!.amountUsdc.toLocaleString()} USDC ${isFund ? "delivered" : "withdrawn"}`
               : failed
                 ? isFund ? "Funding didn't complete" : "Withdrawal didn't complete"
                 : isFund ? "Funding your trading account" : "Withdrawing to your Dollar Account"
@@ -268,22 +402,37 @@ export function FundClient({
             done
               ? isFund
                 ? `Your ${side === "spot" ? "Spot" : "Futures"} balance is topped up and ready to trade.`
-                : `$${("creditUsd" in result ? result.creditUsd : result.amountUsdc).toFixed(2)} was credited to your Dollar Account.`
+                : `$${(result && "creditUsd" in result ? result.creditUsd : result!.amountUsdc).toFixed(2)} was credited to your Dollar Account.`
               : failed
-                ? result.message ??
+                ? result?.message ??
                   (isFund
                     ? "The transfer stopped before completing. Anything already charged will be returned automatically — support has been notified."
                     : "The withdrawal stopped before completing. Your trading balance is untouched — it's safe to try again.")
-                : eta
-                  ? `Usually takes about ${eta} minute${eta > 1 ? "s" : ""}.`
-                  : "This can take a couple of minutes."
+                : blind
+                  ? "You're offline, so we can't check on this right now. The transfer carries on without you."
+                  : stalled || slow
+                    ? "This is taking longer than it usually does — the transfer is still open."
+                    : !result
+                      ? "Starting the transfer…"
+                      : eta
+                        ? `Usually takes about ${eta} minute${eta > 1 ? "s" : ""}.`
+                        : "This can take a couple of minutes."
           }
           stages={!failed ? stages : undefined}
           activeIndex={index}
+          stageStartedAt={stageProgress.since}
+          reference={result?.reference}
+          autoUpdating={!stalled && !blind}
           notice={
-            "partial" in result && result.partial
-              ? "Funds arrived but not exactly where requested — contact support if they don't show up in a few minutes."
-              : undefined
+            blind
+              ? "We'll pick up where we left off as soon as you're back online."
+              : stalled
+                ? "We've stopped checking automatically. Nothing is lost — the reference below identifies this transfer. Check again, or find it in your history."
+                : result && "partial" in result && result.partial
+                  ? "Funds arrived but not exactly where requested — contact support if they don't show up in a few minutes."
+                  : slow
+                    ? "You can leave this page. The transfer carries on either way, and history will show how it ends."
+                    : undefined
           }
           primary={
             done
@@ -293,13 +442,15 @@ export function FundClient({
                 ? { label: "Back to trading", onClick: onDismiss }
                 : { label: "Go trade", href: "/trade" }
               : failed
-                ? { label: "Start over", onClick: () => { setResult(null); setAmount("") } }
-                : undefined
+                ? { label: "Start over", onClick: resetFlow }
+                : stalled
+                  ? { label: "Check again", onClick: resumePolling }
+                  : undefined
           }
           secondary={
             done
-              ? { label: "Done", onClick: () => { setResult(null); setAmount("") } }
-              : failed
+              ? { label: "Done", onClick: resetFlow }
+              : failed || stalled
                 ? { label: "View history", href: "/transactions" }
                 : undefined
           }
@@ -317,15 +468,19 @@ export function FundClient({
   return (
     <Shell>
       {isModal ? (
-        <div className="mb-4 pr-10">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
-        </div>
+        /* Direction-coloured header — funding flows toward the trading
+           account (credit green); withdrawing flows out of it (debit red). */
+        <FlowHeader
+          direction={isFund ? "in" : "out"}
+          title={title}
+          subtitle={subtitle}
+          className="mb-5"
+        />
       ) : (
         <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
       )}
 
-      {loading ? (
+      {loading || recovering ? (
         <FlowSkeleton />
       ) : loadError ? (
         <UnavailablePanel
@@ -335,8 +490,9 @@ export function FundClient({
           action={isModal && onDismiss ? { label: "Close", onClick: onDismiss } : undefined}
         />
       ) : walletReady === false ? (
-        /* One-time setup gate — a real screen with a single clear action. */
-        <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-8 text-center">
+        /* One-time setup gate — a real screen with a single clear action.
+           No fill of its own: bg-card was invisible inside the bg-card modal. */
+        <div className="flex flex-col items-center gap-3 rounded-2xl px-6 py-8 text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
             <HugeiconsIcon icon={Wallet01Icon} className="h-6 w-6" />
           </span>
@@ -355,7 +511,14 @@ export function FundClient({
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-1 flex-col gap-4">
+          {!online && (
+            <AnnouncementBanner
+              title="You're offline"
+              detail="We can't reach the service right now. Nothing here will submit until you're back."
+              tone="error"
+            />
+          )}
           {!limits.enabled && (
             <AnnouncementBanner
               title={isFund ? "Funding is paused right now" : "Withdrawals are paused right now"}
@@ -373,7 +536,8 @@ export function FundClient({
             ]}
           />
 
-          <div className="rounded-2xl bg-card px-4 py-5">
+          {/* Unboxed hero amount — same treatment as buy/sell. */}
+          <div className="py-1">
             <AmountField
               value={amount}
               onChange={setAmount}
@@ -413,7 +577,15 @@ export function FundClient({
 
           {submitError && <ErrorDetail message={submitError} raw={submitError} />}
 
-          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
+          {isModal ? (
+            /* Pinned confirm — same solid sticky footer as buy/sell: the
+               button never hides below the fold. */
+            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card px-4 pb-4 pt-3 sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
+              <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
+            </div>
+          ) : (
+            <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
+          )}
         </div>
       )}
     </Shell>

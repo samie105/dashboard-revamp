@@ -13,9 +13,17 @@ const LOGIN_URL =
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth()
   const pathname = usePathname()
+  const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r))
+
+  /* Hooks before early returns, always: three of the four branches below
+     return before this point, so an effect placed lower would run on some
+     renders and not others. */
+  React.useEffect(() => {
+    if (!isPublic && isLoaded && !isSignedIn) window.location.href = LOGIN_URL
+  }, [isPublic, isLoaded, isSignedIn])
 
   // Public routes bypass the gate entirely
-  if (PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
+  if (isPublic) {
     return <>{children}</>
   }
 
@@ -31,11 +39,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Clerk loaded but no session → hard redirect to login
+  // Clerk loaded but no session → hard redirect to login.
+  //
+  // The assignment used to happen inline in the render body, which is a side
+  // effect during render: React is free to render a component twice, or to
+  // start a render and throw it away, so a navigation fired from there can
+  // double-fire or never fire at all. In an effect it happens exactly once,
+  // after the "Redirecting…" frame the user actually sees.
   if (!isSignedIn) {
-    if (typeof window !== "undefined") {
-      window.location.href = LOGIN_URL
-    }
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center animate-in fade-in">

@@ -3,13 +3,20 @@
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
-  Cancel01Icon,
   Loading03Icon,
   CheckmarkCircle02Icon,
   Alert02Icon,
   ArrowUpRight01Icon,
   ArrowLeft02Icon,
 } from "@hugeicons/core-free-icons"
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+  ResponsiveModalDescription,
+} from "@/components/ui/responsive-modal"
+import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { sendAsset, recordWalletTransfer } from "@/lib/crypto-api"
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -89,7 +96,6 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
   const [amount, setAmount] = React.useState("")
   const [error, setError] = React.useState("")
   const [txHash, setTxHash] = React.useState("")
-  const panelRef = React.useRef<HTMLDivElement>(null)
   const sendingRef = React.useRef(false)
 
   // Reset on open
@@ -103,18 +109,12 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
     }
   }, [open])
 
-  // Close on outside click — but never while a send is broadcasting, or the
-  // user loses the confirmation (and their view of the tx hash).
-  React.useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (step === "sending") return
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose()
-    }
-    if (open) document.addEventListener("mousedown", handle)
-    return () => document.removeEventListener("mousedown", handle)
-  }, [open, onClose, step])
-
-  if (!open || !asset) return null
+  /* The outside-click listener this used to run by hand is what a dialog
+     primitive is for — and the hand-rolled one only covered mousedown, so
+     Escape did nothing at all here while working everywhere else in the app.
+     The one rule worth keeping is below: a broadcast in flight can't be
+     dismissed, because that's the moment the tx hash exists only on screen. */
+  if (!asset) return null
 
   const amountNum = parseFloat(amount) || 0
   const isValidAmount = amountNum > 0 && amountNum <= asset.balance
@@ -192,38 +192,47 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
   const explorerUrl = txHash && asset ? EXPLORER[asset.chain]?.(txHash) ?? "" : ""
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div ref={panelRef} className="w-full max-w-md rounded-2xl bg-popover shadow-2xl mx-4 overflow-hidden">
-
-        {/* ── Header ────────────────────────────────────────── */}
-        <div className="flex items-center justify-between border-b border-border/30 px-5 py-4">
+    <ResponsiveModal
+      open={open}
+      onOpenChange={(next) => {
+        // Dismissing mid-broadcast would take the confirmation and the tx hash
+        // with it. Backdrop and Escape are ignored for exactly that moment.
+        if (!next && step !== "sending") onClose()
+      }}
+    >
+      <ResponsiveModalContent
+        className="sm:max-w-md"
+        showCloseButton={step !== "sending"}
+      >
+        <ResponsiveModalHeader>
           <div className="flex items-center gap-3">
             {step === "confirm" && (
-              <button onClick={() => setStep("details")} className="rounded-lg p-1 text-muted-foreground hover:bg-accent transition-colors">
+              <button
+                onClick={() => setStep("details")}
+                aria-label="Back to details"
+                className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-accent"
+              >
                 <HugeiconsIcon icon={ArrowLeft02Icon} size={16} />
               </button>
             )}
-            <img src={asset.icon} alt={asset.symbol} className="size-7 rounded-full" />
-            <div>
-              <h3 className="text-sm font-semibold">
+            <CoinAvatar src={asset.icon} symbol={asset.symbol} size="lg" />
+            <div className="min-w-0">
+              <ResponsiveModalTitle className="text-[15px]">
                 Send {asset.symbol}
-              </h3>
-              <p className="text-[10px] text-muted-foreground">
+              </ResponsiveModalTitle>
+              <ResponsiveModalDescription className="text-[13px]">
                 {step === "details" && "Enter recipient and amount"}
                 {step === "confirm" && "Review your transaction"}
                 {step === "sending" && "Processing…"}
                 {step === "success" && "Sent successfully"}
                 {step === "error" && "Transaction failed"}
-              </p>
+              </ResponsiveModalDescription>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
-            <HugeiconsIcon icon={Cancel01Icon} size={16} />
-          </button>
-        </div>
+        </ResponsiveModalHeader>
 
         {/* ── Body ──────────────────────────────────────────── */}
-        <div className="p-5">
+        <div className="max-h-[70dvh] overflow-y-auto">
 
           {/* STEP: Details */}
           {step === "details" && (
@@ -418,7 +427,7 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   )
 }

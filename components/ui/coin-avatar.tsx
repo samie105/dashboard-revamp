@@ -24,7 +24,7 @@ import { getCoinImage } from "@/lib/coin-images"
  * "UBTC/USDC" → BTC · "kPEPE" → PEPE · "UNI" → UNI (never "NI").
  */
 export function baseAsset(symbol: string): string {
-  let s = (symbol || "").split("/")[0].split("-")[0].trim().toUpperCase()
+  const s = (symbol || "").split("/")[0].split("-")[0].trim().toUpperCase()
   if (!s) return ""
   if (getCoinImage(s)) return s
   // Perps scale some memecoins by 1000 — kPEPE, kBONK.
@@ -45,22 +45,35 @@ export function CoinAvatar({
   symbol,
   size = "md",
   className,
+  src: srcOverride,
 }: {
   symbol: string
   size?: keyof typeof SIZES
   className?: string
+  /** An art URL the caller already has — a chain mark, or a coin image that
+   *  came down with the API row. Needed because the symbol alone can't always
+   *  identify the art: Arbitrum's native asset symbol is ETH, so resolving by
+   *  symbol would put the Ethereum mark on the Arbitrum row. Falls through to
+   *  the symbol lookup, then the monogram, so a dead URL still renders. */
+  src?: string | null
 }) {
   const asset = baseAsset(symbol)
-  const src = getCoinImage(asset)
+  const src = srcOverride || getCoinImage(asset)
   const [failed, setFailed] = React.useState(false)
 
   // A new symbol deserves a fresh attempt — otherwise one broken coin poisons
   // the slot for every coin that scrolls through it.
   React.useEffect(() => setFailed(false), [src])
 
+
   const shell = cn("shrink-0 overflow-hidden rounded-full", SIZES[size], className)
 
-  if (!src || failed) {
+  // An override that 404s falls back to the mark the symbol resolves to, and
+  // only then to the monogram — two chances before we give up on art.
+  const fallbackSrc = srcOverride ? getCoinImage(asset) : ""
+  const resolved = failed ? (fallbackSrc && fallbackSrc !== srcOverride ? fallbackSrc : "") : src
+
+  if (!resolved) {
     return (
       <span
         aria-hidden
@@ -69,7 +82,13 @@ export function CoinAvatar({
           "flex items-center justify-center bg-surface-sunken font-bold uppercase leading-none text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]",
         )}
       >
-        {asset.slice(0, 3)}
+        {/* Four characters, not three: truncating at three renders USDT and
+            USDC as an identical "USD", and telling a stablecoin from a
+            stablecoin is exactly what the mark is there for. The extra
+            character is tracked tighter rather than given more room. */}
+        <span className={asset.length > 3 ? "tracking-[-0.06em] [font-size:0.85em]" : undefined}>
+          {asset.slice(0, 4)}
+        </span>
       </span>
     )
   }
@@ -79,7 +98,7 @@ export function CoinAvatar({
     // marks are 50px thumbnails already — the optimizer costs more than it saves.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={src}
+      src={resolved}
       alt=""
       aria-hidden
       loading="lazy"

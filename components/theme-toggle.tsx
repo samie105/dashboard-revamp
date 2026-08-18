@@ -12,7 +12,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="group relative flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-95"
+      className="group relative flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-all duration-300 hover:bg-accent/60 hover:text-foreground active:scale-95"
       aria-label="Toggle theme"
     >
       <HugeiconsIcon

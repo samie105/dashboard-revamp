@@ -57,6 +57,11 @@
     --sidebar-accent-foreground: oklch(0.214 0.009 43.1);
     --sidebar-border: oklch(0.922 0.005 34.3);
     --sidebar-ring: oklch(0.714 0.014 41.2);
+    /* Atmosphere for the floating rail — a warm bloom at its crown, and the
+       bleed that carries it into the page on desktop. Ambient only: it never
+       sits behind text, so it stays well under the contrast floor. */
+    --sidebar-glow: rgba(234, 179, 8, 0.13);
+    --sidebar-bleed: rgba(234, 179, 8, 0.05);
 }
 
 /* ── Dark theme — the Worldstreet stone ladder.
@@ -112,6 +117,8 @@
     --sidebar-accent-foreground: oklch(0.986 0.002 67.8);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.547 0.021 43.1);
+    --sidebar-glow: rgba(250, 204, 21, 0.10);
+    --sidebar-bleed: rgba(250, 204, 21, 0.045);
 }
 
 @theme inline {
@@ -344,4 +351,296 @@ input[type="range"]::-moz-range-track {
 @media (prefers-reduced-motion: reduce) {
   .roll-in, .roll-out { animation: none; }
   .roll-out { display: none; }
+}
+
+/* ── Sparkline — the account cards' 30d curve draws itself on load (the line
+   uses pathLength=1, so dashoffset 1→0 sweeps left to right), the fill and
+   the "now" dot fade in behind it. See Sparkline in dashboard/user-card. */
+@keyframes spark-draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes spark-fade {
+  to { opacity: 1; }
+}
+.spark-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: spark-draw 1.2s cubic-bezier(0.55, 0, 0.15, 1) 0.15s forwards;
+}
+.spark-fill {
+  opacity: 0;
+  animation: spark-fade 0.8s ease-out 0.55s forwards;
+}
+.spark-dot {
+  opacity: 0;
+  animation: spark-fade 0.4s ease-out 1.25s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spark-line { animation: none; stroke-dashoffset: 0; }
+  .spark-fill, .spark-dot { animation: none; opacity: 1; }
+}
+
+/* ── Modal grammar — every popup in the app shares one entrance.
+   Backdrop: deep frost (bg-black/45 + blur) fading in. Centered dialogs
+   pop with a slight spring overshoot; bottom sheets slide up on a long
+   ease-out. Exits stay per-surface (Base UI transitions / animate-out).
+   Tailwind v4 puts translate utilities on the `translate` property, so a
+   `transform: scale()` keyframe composes safely with -translate-x/y-1/2. */
+@keyframes ws-fade-in {
+  from { opacity: 0; }
+}
+@keyframes ws-pop-in {
+  from { opacity: 0; transform: scale(0.95); }
+}
+@keyframes ws-sheet-in {
+  from { opacity: 0; transform: translateY(28px); }
+}
+.ws-backdrop-in { animation: ws-fade-in 0.3s ease-out; }
+.ws-pop-in { animation: ws-pop-in 0.34s cubic-bezier(0.26, 1.36, 0.42, 1); }
+.ws-sheet-in { animation: ws-sheet-in 0.38s cubic-bezier(0.22, 1, 0.36, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .ws-backdrop-in, .ws-pop-in, .ws-sheet-in { animation: none; }
+}
+
+/* ── Skeletons — a loading state should have the SHAPE of what's coming.
+   A centred spinner leaves a card empty, says nothing about what will fill
+   it, and jolts the layout when data lands. These blocks stand in at the
+   real dimensions, so content arrives in place.
+
+   Neutral by rule: gold means brand, primary CTA and active state — a
+   spinner is none of those, and the old ones were all `border-primary`. */
+@keyframes ws-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.skel {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--foreground) 5%, transparent) 0%,
+    color-mix(in oklab, var(--foreground) 10%, transparent) 50%,
+    color-mix(in oklab, var(--foreground) 5%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: ws-shimmer 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Hold the mid-tone rather than freeze mid-sweep on an edge. */
+  .skel {
+    animation: none;
+    background-image: none;
+    background-color: color-mix(in oklab, var(--foreground) 7%, transparent);
+  }
+}
+
+/* ── Money-flow stage animations ───────────────────────────────────────────
+   A staged transfer is the one place in the product where the user is waiting
+   on someone else's clock, so the checklist has to keep proving it's alive.
+   Three motions, each carrying a different fact:
+
+     ws-stage-sweep  — the active stage's rail; something is happening HERE
+     ws-stage-halo   — the active dot breathes; the flow is still connected
+     (the completed rail and the drawn checkmark are CSS transitions, not
+      keyframes, because they fire once on a state change)
+
+   All three stop under prefers-reduced-motion — the state is still legible
+   from the check marks and the rail colours alone. */
+
+@keyframes ws-stage-sweep {
+  from { background-position: 0 -200%; }
+  to   { background-position: 0 200%; }
+}
+.ws-stage-rail-active {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--primary) 8%, transparent) 0%,
+    color-mix(in oklab, var(--primary) 65%, transparent) 50%,
+    color-mix(in oklab, var(--primary) 8%, transparent) 100%
+  );
+  background-size: 100% 200%;
+  animation: ws-stage-sweep 1.4s linear infinite;
+}
+
+@keyframes ws-stage-halo {
+  0%   { transform: scale(1);   opacity: 0.55; }
+  70%  { transform: scale(2.1); opacity: 0; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+.ws-stage-halo {
+  animation: ws-stage-halo 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-stage-rail-active {
+    animation: none;
+    background-image: none;
+    background-color: color-mix(in oklab, var(--primary) 40%, transparent);
+  }
+  .ws-stage-halo { animation: none; opacity: 0; }
+}
+
+/* ── Trading-workspace motion ──────────────────────────────────────────────
+   ONE RULE GOVERNS THIS WHOLE SECTION: the market is the animator. Every
+   motion below is caused by an event — a tick landed, a level was taken, an
+   order filled, the user armed the ticket. Nothing loops for decoration.
+
+   That's the difference between a terminal that feels ALIVE and one that
+   feels BUSY. A screen full of ambient shimmer says nothing; a screen that is
+   almost still and then flashes exactly where the market moved says "that
+   number just changed" — which is the only thing a trader is looking for.
+   It also means a frozen feed LOOKS frozen instead of hiding behind a loop.
+
+   Every animation here is off under prefers-reduced-motion, and every one of
+   them is redundant: the colour, the arrow and the number carry the same fact
+   without the motion. */
+
+/* Tick flash — fires on a changed number and decays. The wash is what the eye
+   catches at the edge of vision; the colour is what it reads when it lands. */
+@keyframes ws-tick-up {
+  0%   { background-color: color-mix(in oklab, var(--credit) 26%, transparent); }
+  100% { background-color: transparent; }
+}
+@keyframes ws-tick-down {
+  0%   { background-color: color-mix(in oklab, var(--debit) 26%, transparent); }
+  100% { background-color: transparent; }
+}
+.ws-tick-up   { animation: ws-tick-up   620ms cubic-bezier(0.2, 0, 0.35, 1) both; }
+.ws-tick-down { animation: ws-tick-down 620ms cubic-bezier(0.2, 0, 0.35, 1) both; }
+
+/* The direction arrow rides in with the flash and leaves with it, so a stale
+   arrow never claims the market is still moving. */
+@keyframes ws-tick-arrow {
+  0%   { opacity: 0; transform: translateY(var(--ws-arrow-from, 3px)); }
+  22%  { opacity: 1; transform: translateY(0); }
+  70%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(0); }
+}
+.ws-tick-arrow { animation: ws-tick-arrow 900ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* THE SIGNATURE: the ladder builds outward from the mid. Asks climb, bids
+   descend, each level offset by its distance from the touch — the book
+   assembles the way it actually hangs, off the mid price, instead of
+   appearing all at once like a table. Fires on load and on every pair switch,
+   because a new pair IS a new book. */
+@keyframes ws-ladder-in {
+  from { opacity: 0; transform: translateY(var(--ws-ladder-from, 0)) scaleX(0.985); }
+  to   { opacity: 1; transform: translateY(0) scaleX(1); }
+}
+.ws-ladder-row {
+  animation: ws-ladder-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--ws-ladder-delay, 0ms);
+}
+
+/* Depth bars: a poll every 3s snapping to a new width reads as a glitch; the
+   same widths eased read as liquidity moving. 420ms is slower than the eye's
+   saccade and faster than the next poll, so bars are always settled. */
+.ws-depth-bar {
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* A level whose size changed between polls — someone traded there, or pulled.
+   Brief, low-contrast, and only on the bar: the price text must not strobe. */
+@keyframes ws-level-hit {
+  0%   { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+.ws-level-hit {
+  animation: ws-level-hit 520ms ease-out both;
+}
+
+/* Ticket: the submit button ARMS when the order first becomes valid. One
+   pulse, once, at the moment the ticket goes from incomplete to sendable —
+   the physical answer to "am I done filling this in?" */
+@keyframes ws-arm {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 45%, transparent); }
+  100% { box-shadow: 0 0 0 12px color-mix(in oklab, currentColor 0%, transparent); }
+}
+.ws-arm { animation: ws-arm 720ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* In flight: a band travelling across the button. A spinner says "wait"; a
+   band travelling in the direction of the order says "your order is moving". */
+@keyframes ws-inflight {
+  from { background-position: -35% 0; }
+  to   { background-position: 135% 0; }
+}
+.ws-inflight::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.28) 50%,
+    transparent 100%
+  );
+  background-size: 45% 100%;
+  background-repeat: no-repeat;
+  animation: ws-inflight 1.1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* The fill. This is the one moment the screen is allowed to celebrate, and it
+   gets exactly one gesture: a sweep across the confirmation, left to right,
+   the direction the order travelled. No confetti — a fill is a receipt. */
+@keyframes ws-fill-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(200%); }
+}
+.ws-fill-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--credit) 30%, transparent) 50%,
+    transparent 100%
+  );
+  width: 50%;
+  animation: ws-fill-sweep 900ms cubic-bezier(0.22, 1, 0.36, 1) 1 both;
+}
+
+/* Pane entrance — the workspace assembles in reading order (chart, then the
+   book, then the ticket) rather than materialising at once. Same curve as
+   .rise; separate name because these are panes, not page sections, and they
+   travel on X toward their own edge. */
+@keyframes ws-pane-in {
+  from { opacity: 0; transform: translate3d(var(--ws-pane-x, 0), var(--ws-pane-y, 6px), 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.ws-pane {
+  animation: ws-pane-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--ws-pane-delay, 0ms);
+}
+
+/* A row that wasn't there on the last render — a position opened, an order
+   landed on the book. It arrives lit and settles, so a fill is impossible to
+   miss even if you were looking at the chart. */
+@keyframes ws-row-in {
+  0%   { opacity: 0; transform: translateY(-4px); background-color: color-mix(in oklab, var(--primary) 16%, transparent); }
+  55%  { opacity: 1; transform: translateY(0); }
+  100% { background-color: transparent; }
+}
+.ws-row-in { animation: ws-row-in 720ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Liveness: one dot, one pulse PER POLL that lands. A spinner spins whether or
+   not data is arriving — this can only fire when a response came back, so a
+   dead feed goes visibly still instead of pretending. */
+@keyframes ws-heartbeat {
+  0%   { transform: scale(1); opacity: 1; }
+  40%  { transform: scale(2.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 0.55; }
+}
+.ws-heartbeat { animation: ws-heartbeat 900ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-tick-up, .ws-tick-down, .ws-tick-arrow, .ws-ladder-row,
+  .ws-level-hit, .ws-arm, .ws-pane, .ws-row-in, .ws-heartbeat {
+    animation: none;
+  }
+  /* The flash carried the news; without it the tinted text still does. */
+  .ws-tick-arrow, .ws-heartbeat { opacity: 1; }
+  .ws-level-hit { opacity: 0; }
+  .ws-depth-bar { transition: none; }
+  .ws-inflight::after, .ws-fill-sweep::after { content: none; }
 }

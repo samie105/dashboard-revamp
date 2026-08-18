@@ -16,68 +16,34 @@ import {
 import type { CoinData, FuturesMarket } from "@/lib/actions"
 import { getSpotMarkets, getFuturesMarkets } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
-import { useTradeSelector } from "@/components/trade-selector"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
+import { baseAsset } from "@/components/ui/coin-avatar"
+import { num, numOr, qty, usd, usdCompact, price, pct, pctSigned, UNKNOWN } from "@/lib/num"
+import { useSparklines } from "@/hooks/useSparklines"
+import { Sparkline, Skel } from "@/components/ui/system"
 import { useAuth } from "@/components/auth-provider"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
 
-// ── Sparkline generator (deterministic from coin data) ───────────────────
+/* The "7D Chart" column used to be Math.sin() noise seeded from the coin's
+   own symbol — deterministic, so it looked stable and trustworthy, and
+   completely disconnected from any price that has ever existed. It sat under a
+   header naming a timeframe, in a table of otherwise real numbers.
 
-function generateSparkPoints(coin: CoinData, pts = 20, W = 80, H = 32): string {
-  const seed = coin.symbol.split("").reduce((acc, c, i) => acc + c.charCodeAt(0) * (i + 7) * 31, 0)
-  const rng = (i: number) => {
-    const x = Math.sin(seed + i * 127.1 + i * i * 0.7) * 43758.5453
-    return x - Math.floor(x)
-  }
-  const trend = (coin.change24h / 100) * 0.65
-  const values: number[] = []
-  for (let i = 0; i < pts; i++) {
-    const noise = (rng(i) - 0.5) * 0.03
-    const smoothNoise = (rng(i) + rng(i + pts) - 1) * 0.015
-    values.push(1 + (i / (pts - 1)) * trend + noise + smoothNoise)
-  }
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const range = max - min || 0.001
-  return values
-    .map((v, i) => {
-      const x = (i / (pts - 1)) * W
-      const y = H - ((v - min) / range) * (H - 4) - 2
-      return `${x.toFixed(1)},${y.toFixed(1)}`
-    })
-    .join(" ")
-}
-
-function Sparkline({ coin, width = 80, height = 32 }: { coin: CoinData; width?: number; height?: number }) {
-  const pts = generateSparkPoints(coin, 20, width, height)
-  const color = coin.change24h >= 0 ? "#10b981" : "#ef4444"
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="shrink-0">
-      <polyline
-        points={pts}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-// ── Formatters ───────────────────────────────────────────────────────────
+   Real 7-day series now come from useSparklines: one batched request covering
+   every symbol on screen, shared with the Portfolio watchlist through the same
+   module cache. A coin the feed doesn't cover renders nothing rather than a
+   plausible invention. */
 
 function TradeButton({ symbol }: { symbol: string }) {
-  const { openTradeSelector } = useTradeSelector()
   return (
-    <button
-      onClick={() => openTradeSelector(symbol)}
-      className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+    <Link
+      href={`/trade?market=spot&symbol=${symbol}`}
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
     >
       Trade
       <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-    </button>
+    </Link>
   )
 }
 
@@ -85,7 +51,7 @@ function FuturesTradeButton({ symbol }: { symbol: string }) {
   return (
     <Link
       href={`/trade?market=futures&symbol=${symbol}`}
-      className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
     >
       Trade
       <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
@@ -101,17 +67,32 @@ function fmtPrice(n: number): string {
   return n.toFixed(8)
 }
 
-function fmtLarge(n: number): string {
-  if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
-  return `$${n.toLocaleString()}`
+/* The price feed is Hyperliquid-first and carries neither market cap nor
+   volume, so these arrive as 0 — and "$0" beside Bitcoin is a statement about
+   the market, not an admission that we don't have the number. */
+function fmtLarge(n: unknown): string {
+  const v = num(n)
+  if (v === null || v === 0) return UNKNOWN
+  return usdCompact(v)
 }
 
 // ── Ranked List Item ─────────────────────────────────────────────────────
 
-function RankedCoinRow({ coin, rank }: { coin: CoinData; rank: number }) {
-  const isUp = coin.change24h >= 0
+function RankedCoinRow({
+  coin,
+  rank,
+  points,
+  change24h,
+}: {
+  coin: CoinData
+  rank: number
+  /** 7-day series, or undefined while it loads / when the coin isn't covered. */
+  points?: number[]
+  /** Measured from that same series — the primary feed reports 0.00%. */
+  change24h?: number
+}) {
+  const change = numOr(change24h ?? coin.change24h, 0)
+  const isUp = change >= 0
   return (
     <Link
       href={`/trade?symbol=${coin.symbol}`}
@@ -132,7 +113,7 @@ function RankedCoinRow({ coin, rank }: { coin: CoinData; rank: number }) {
         <span className="text-xs font-semibold">{coin.symbol}</span>
         <span className="truncate text-[10px] text-muted-foreground">{coin.name}</span>
       </div>
-      <Sparkline coin={coin} width={64} height={24} />
+      <Sparkline points={points} width={64} height={24} />
       <div className="flex flex-col items-end gap-0.5">
         <span className="text-xs font-bold tabular-nums">${fmtPrice(coin.price)}</span>
         <span
@@ -141,7 +122,7 @@ function RankedCoinRow({ coin, rank }: { coin: CoinData; rank: number }) {
           }`}
         >
           <HugeiconsIcon icon={isUp ? ArrowUp01Icon : ArrowDown01Icon} className="h-2.5 w-2.5" />
-          {Math.abs(coin.change24h).toFixed(2)}%
+          {pct(Math.abs(change))}
         </span>
       </div>
     </Link>
@@ -197,15 +178,15 @@ type Tab = (typeof MARKET_TABS)[number]
 
 type SortKey = "marketCap" | "price" | "change24h" | "volume24h"
 
-function fmtFunding(rate: number): string {
-  return `${(rate * 100).toFixed(4)}%`
+function fmtFunding(rate: unknown): string {
+  const v = num(rate)
+  return v === null ? UNKNOWN : pctSigned(v * 100, 4)
 }
 
-function fmtOI(n: number): string {
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`
-  return `$${n.toFixed(0)}`
+function fmtOI(n: unknown): string {
+  const v = num(n)
+  if (v === null || v === 0) return UNKNOWN
+  return usdCompact(v)
 }
 
 interface MarketsClientProps {
@@ -221,6 +202,10 @@ interface MarketsClientProps {
 }
 
 export function MarketsClient({ coins, globalStats, error }: MarketsClientProps) {
+  /* The holdings table showed "Value $0.00" for a real SOL balance while the
+     market table three inches below priced SOL at $75.78. The value was never
+     unknowable — only the COST BASIS is. Multiplying a known balance by a
+     known price is arithmetic, not invention. */
   const [tab, setTab] = React.useState<Tab>("Total")
   const [search, setSearch] = React.useState("")
   const [sortBy, setSortBy] = React.useState<SortKey>("marketCap")
@@ -229,6 +214,12 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
   const { user } = useAuth()
   const { positions, loading: positionsLoading } = useHyperliquidPositions()
   const { balances: spotHoldings, loading: spotHoldingsLoading } = useHyperliquidBalance(user?.userId, !!user)
+
+  const priceOf = React.useMemo(() => {
+    const map = new Map<string, number>()
+    for (const c of coins) if (num(c.price) !== null) map.set(c.symbol.toUpperCase(), c.price)
+    return (symbol: string) => map.get(baseAsset(symbol)) ?? map.get(symbol.toUpperCase()) ?? null
+  }, [coins])
 
   // Lazy-load spot markets (Hyperliquid spotMeta)
   const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
@@ -336,6 +327,15 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
     return list
   }, [futuresMarkets, search, sortBy, sortAsc])
 
+  /* Real 7-day curves for everything on screen — one batched request, shared
+     with the Portfolio watchlist. The response also carries the 24h change the
+     Hyperliquid feed omits, which is why every row here read "+0.00%". */
+  const visibleSymbols = React.useMemo(
+    () => (isFutures ? filteredFutures.map((m) => m.baseAsset) : filtered.map((c) => c.symbol)),
+    [isFutures, filtered, filteredFutures],
+  )
+  const spark = useSparklines(visibleSymbols)
+
   const toggleSort = (col: SortKey) => {
     if (sortBy === col) setSortAsc((v) => !v)
     else {
@@ -423,7 +423,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
               { label: "24h Volume", value: fmtLarge(globalStats.totalVolume), sub: null, up: null },
               {
                 label: "BTC Dominance",
-                value: `${globalStats.btcDominance.toFixed(1)}%`,
+                value: globalStats.btcDominance > 0 ? pct(globalStats.btcDominance, 1) : UNKNOWN,
                 sub: null,
                 up: null,
               },
@@ -451,14 +451,13 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
       {/* My Positions / Holdings */}
       {(isFutures ? positions.length > 0 || positionsLoading : spotHoldings.length > 0 || spotHoldingsLoading) && (
         <section className="overflow-hidden rounded-2xl bg-card">
+          {/* The gold chip-and-star that used to sit here is gone: the system
+              bans decorative leading icons on a card header, and gold means
+              brand, primary CTA and active state — not "this is a heading".
+              (Both ternaries were also identical on either branch.) */}
           <div className="flex items-center gap-2 border-b border-border/50 px-4 py-3">
-            <div className={`flex h-6 w-6 items-center justify-center rounded-lg ${isFutures ? "bg-primary/10" : "bg-primary/10"}`}>
-              <HugeiconsIcon icon={StarIcon} className={`h-3.5 w-3.5 ${isFutures ? "text-primary" : "text-primary"}`} />
-            </div>
-            <h3 className="text-sm font-semibold">{isFutures ? "My Positions" : "My Holdings"}</h3>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-              isFutures ? "bg-primary/10 text-primary" : "bg-primary/10 text-primary"
-            }`}>
+            <h3 className="text-[15px] font-semibold">{isFutures ? "My positions" : "My holdings"}</h3>
+            <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[11.5px] font-semibold text-muted-foreground">
               {isFutures ? positions.length : spotHoldings.length}
             </span>
             <Link
@@ -557,7 +556,8 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                 </thead>
                 <tbody className="divide-y divide-border/20">
                   {spotHoldings.map((b) => {
-                    const isProfit = b.unrealizedPnl >= 0
+                    const isProfit = (b.unrealizedPnl ?? 0) >= 0
+                    const livePrice = priceOf(b.coin)
                     return (
                       <tr key={b.coin} className="transition-colors hover:bg-accent/20">
                         <td className="px-4 py-2.5">
@@ -578,23 +578,35 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                           </div>
                         </td>
                         <td className="px-4 py-2.5 text-right font-mono font-medium tabular-nums">
-                          {b.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                          {qty(b.total)}
                         </td>
                         <td className="hidden px-4 py-2.5 text-right text-muted-foreground tabular-nums sm:table-cell">
-                          ${b.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: b.entryPrice < 1 ? 6 : 2 })}
+                          {price(b.entryPrice)}
                         </td>
                         <td className="px-4 py-2.5 text-right font-medium tabular-nums">
-                          ${b.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {/* Balance × live price. The hook can't know cost
+                              basis; it can always know what the holding is
+                              worth right now. */}
+                          {usd(livePrice !== null ? b.total * livePrice : b.currentValue)}
                         </td>
                         <td className="px-4 py-2.5 text-right">
-                          <div className="flex flex-col items-end">
-                            <span className={`font-medium tabular-nums ${isProfit ? "text-credit" : "text-debit"}`}>
-                              {isProfit ? "+" : ""}${b.unrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {b.unrealizedPnl === null ? (
+                            <span
+                              className="text-muted-foreground/50"
+                              title="Cost basis isn't recorded for spot holdings yet"
+                            >
+                              {UNKNOWN}
                             </span>
-                            <span className={`text-[10px] tabular-nums ${isProfit ? "text-credit/70" : "text-debit/70"}`}>
-                              {isProfit ? "+" : ""}{b.unrealizedPnlPercent.toFixed(2)}%
-                            </span>
-                          </div>
+                          ) : (
+                            <div className="flex flex-col items-end">
+                              <span className={`font-medium tabular-nums ${isProfit ? "text-credit" : "text-debit"}`}>
+                                {isProfit ? "+" : ""}{usd(b.unrealizedPnl)}
+                              </span>
+                              <span className={`text-[11.5px] tabular-nums ${isProfit ? "text-credit/70" : "text-debit/70"}`}>
+                                {pctSigned(b.unrealizedPnlPercent)}
+                              </span>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )
@@ -612,11 +624,8 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
           {/* Table toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 p-4">
             <div className="flex items-center gap-2">
-              <HugeiconsIcon icon={Chart01Icon} className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold">{isFutures ? "Futures Markets" : tab === "Spot" ? "Spot Markets" : tab === "Main" ? "Main Markets" : "All Markets"}</h2>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                isFutures ? "bg-primary/10 text-primary" : "bg-primary/10 text-primary"
-              }`}>
+              <h2 className="text-[15px] font-semibold">{isFutures ? "Futures markets" : tab === "Spot" ? "Spot markets" : tab === "Main" ? "Main markets" : "All markets"}</h2>
+              <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[11.5px] font-semibold text-muted-foreground">
                 {isFutures ? filteredFutures.length : filtered.length}
               </span>
             </div>
@@ -668,7 +677,12 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                 </thead>
                 <tbody className="divide-y divide-border/20">
                   {filtered.map((coin, idx) => {
-                    const isUp = coin.change24h >= 0
+                    /* Prefer the change that arrives with the 7-day series:
+                       it comes from the same measurement the chart draws, so
+                       the number and the line can never disagree. The primary
+                       feed reports 0.00% for every asset. */
+                    const change = numOr(spark(coin.symbol)?.change24h ?? coin.change24h, 0)
+                    const isUp = change >= 0
                     const isFav = favorites.has(coin.id)
                     return (
                       <tr key={coin.id} className="group/row transition-colors hover:bg-accent/20">
@@ -708,14 +722,20 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                         <td className={`px-4 py-3 text-right font-semibold ${isUp ? "text-credit" : "text-debit"}`}>
                           <span className="flex items-center justify-end gap-0.5">
                             <HugeiconsIcon icon={isUp ? ArrowUp01Icon : ArrowDown01Icon} className="h-3 w-3" />
-                            {Math.abs(coin.change24h).toFixed(2)}%
+                            {pct(Math.abs(change))}
                           </span>
                         </td>
                         <td className="hidden px-4 py-3 text-right text-muted-foreground md:table-cell">{fmtLarge(coin.marketCap)}</td>
                         <td className="hidden px-4 py-3 text-right text-muted-foreground lg:table-cell">{fmtLarge(coin.volume24h)}</td>
                         <td className="hidden px-4 py-3 md:table-cell">
-                          <div className="flex justify-center">
-                            <Sparkline coin={coin} />
+                          <div className="flex h-8 items-center justify-center">
+                            {(() => {
+                              const sp = spark(coin.symbol)
+                              // undefined = still loading, null = no series to
+                              // draw. Neither is an excuse to invent one.
+                              if (sp === undefined) return <Skel className="h-4 w-16 rounded-sm" />
+                              return <Sparkline points={sp?.prices} width={80} height={32} />
+                            })()}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -836,7 +856,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
             </div>
             <div className="flex flex-col divide-y divide-border/20 p-1">
               {!isFutures
-                ? gainers.slice(0, 8).map((c, i) => <RankedCoinRow key={c.id} coin={c} rank={i + 1} />)
+                ? gainers.slice(0, 8).map((c, i) => <RankedCoinRow key={c.id} coin={c} rank={i + 1} points={spark(c.symbol)?.prices} change24h={spark(c.symbol)?.change24h} />)
                 : futuresGainers.slice(0, 8).map((m, i) => <RankedFuturesRow key={m.symbol} market={m} rank={i + 1} />)}
             </div>
           </section>
@@ -856,7 +876,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
             </div>
             <div className="flex flex-col divide-y divide-border/20 p-1">
               {!isFutures
-                ? movers.map((c, i) => <RankedCoinRow key={c.id} coin={c} rank={i + 1} />)
+                ? movers.map((c, i) => <RankedCoinRow key={c.id} coin={c} rank={i + 1} points={spark(c.symbol)?.prices} change24h={spark(c.symbol)?.change24h} />)
                 : futuresMovers.map((m, i) => <RankedFuturesRow key={m.symbol} market={m} rank={i + 1} />)}
             </div>
           </section>

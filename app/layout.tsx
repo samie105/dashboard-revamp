@@ -1,7 +1,22 @@
-import type { Viewport } from "next"
+import type { Metadata, Viewport } from "next"
 import { Geist_Mono, Poppins, Public_Sans } from "next/font/google"
 
 import "./globals.css"
+
+// Same lockup and mark the other ecosystem apps declare (see
+// worldstreet-academy/app/layout.tsx) so the tab icon is identical everywhere.
+export const metadata: Metadata = {
+  title: {
+    default: "WorldStreet",
+    template: "%s | WorldStreet",
+  },
+  description:
+    "Trade, swap, and manage multi-chain crypto, cash, and your Worldstreet portfolio in one dashboard.",
+  icons: {
+    icon: "/worldstreet-logo/WorldStreet1.png",
+    apple: "/worldstreet-logo/WorldStreet1.png",
+  },
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -24,7 +39,9 @@ const publicSans = Public_Sans({subsets:['latin'],variable:'--font-sans'})
 
 // The display/brand voice — the mobile app's `fonts.display*` (Poppins).
 // Headlines and hero figures lead with it; body/labels stay Public Sans.
-const poppins = Poppins({ subsets: ["latin"], weight: ["600", "700", "800"], variable: "--font-display" })
+// 300 is load-bearing: the design system's hero Balance is Poppins LIGHT —
+// without this weight the browser substitutes 600 and the figure turns bold.
+const poppins = Poppins({ subsets: ["latin"], weight: ["300", "600", "700", "800"], variable: "--font-display" })
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
@@ -33,7 +50,6 @@ const fontMono = Geist_Mono({
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { LayoutShell } from "@/components/layout-shell"
-import { TradeSelectorProvider } from "@/components/trade-selector"
 import { VividVoiceProvider } from "@/components/vivid-provider"
 
 export default function RootLayout({
@@ -63,9 +79,7 @@ export default function RootLayout({
                     
                       <TooltipProvider>
                         <VividVoiceProvider>
-                          <TradeSelectorProvider>
                             <LayoutShell>{children}</LayoutShell>
-                          </TradeSelectorProvider>
                         </VividVoiceProvider>
                       </TooltipProvider>
                     

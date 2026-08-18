@@ -45,7 +45,6 @@ import { PositionsPanel } from "@/components/trade/positions-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { BackAction, Eyebrow, Segmented, type SegmentedOption } from "@/components/ui/system"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
 
@@ -747,10 +746,6 @@ export function TradeClient() {
           >
             Withdraw
           </button>
-          <span className="hidden h-6 w-px bg-border/40 sm:block" />
-          {/* The shell's chrome doesn't reach this route, so the theme control
-              travels with it. */}
-          <ThemeToggle />
         </div>
       </div>
 
@@ -884,10 +879,10 @@ export function TradeClient() {
       {/* Ticket sheet (mobile) */}
       <Dialog.Root open={ticketOpen} onOpenChange={setTicketOpen}>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/60 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-sm lg:hidden" />
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/45 transition-opacity duration-300 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-md lg:hidden" />
           <Dialog.Popup
             aria-label={`${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
-            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] translate-y-0 flex-col rounded-t-2xl bg-card outline-none transition-transform duration-300 ease-out data-ending-style:translate-y-full data-starting-style:translate-y-full safe-area-bottom lg:hidden"
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] translate-y-0 flex-col rounded-t-3xl bg-card shadow-2xl outline-none transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-y-full data-starting-style:translate-y-full safe-area-bottom lg:hidden"
           >
             <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/[0.16]" />
             <div className="flex shrink-0 items-center justify-between px-4 pt-2">

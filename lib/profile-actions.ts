@@ -3,6 +3,12 @@
 import { auth, currentUser } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
 import DashboardProfile from "@/models/DashboardProfile"
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+import {
+  getDevMockProfile,
+  updateDevMockProfile,
+  addDevMockOnboarding,
+} from "@/lib/dev-mock-data"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -54,6 +60,13 @@ function toPlain(doc: unknown): ProfileData {
 // ── Server Actions ───────────────────────────────────────────────────────
 
 export async function fetchProfile(): Promise<ProfileResult> {
+  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts):
+  // Clerk auth() has no session on localhost and the profile lives in Mongo,
+  // so serve the in-memory mock profile instead.
+  if (DEV_AUTH_BYPASS) {
+    return { success: true, profile: getDevMockProfile() }
+  }
+
   try {
     let userId: string | null = null
     try {
@@ -116,6 +129,11 @@ export async function fetchProfile(): Promise<ProfileResult> {
 export async function updateProfile(
   updates: Partial<Pick<ProfileData, "displayName" | "avatarUrl" | "bio" | "preferredCurrency" | "watchlist" | "defaultChartInterval" | "notifications" | "theme" | "dashboardLayout" | "onboardingCompleted">>,
 ): Promise<ProfileResult> {
+  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
+  if (DEV_AUTH_BYPASS) {
+    return { success: true, profile: updateDevMockProfile(updates) as ProfileData }
+  }
+
   try {
     const { userId } = await auth()
     if (!userId) return { success: false, error: "Unauthorized" }
@@ -161,6 +179,12 @@ export async function updateProfile(
 export async function markOnboardingComplete(
   key: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
+  if (DEV_AUTH_BYPASS) {
+    addDevMockOnboarding(key)
+    return { success: true }
+  }
+
   try {
     const { userId } = await auth()
     if (!userId) return { success: false, error: "Unauthorized" }

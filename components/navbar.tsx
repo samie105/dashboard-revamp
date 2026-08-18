@@ -8,6 +8,8 @@ import {
   Settings01Icon as Settings,
   Logout01Icon as LogOut,
   ArrowRight01Icon as ArrowRight,
+  ArrowDownLeft01Icon as ArrowDownLeft,
+  BankIcon as Bank,
 } from "@hugeicons/core-free-icons"
 
 import {
@@ -23,16 +25,36 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { useAuth } from "@/components/auth-provider"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { TopNav } from "@/components/top-nav"
 import { NavbarActions } from "@/components/navbar-actions"
+import { useMoneyFlow } from "@/components/flows/money-flow-modal"
+import { useCashBalance } from "@/hooks/useCashBalance"
+import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
 
-export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
+export function Navbar() {
   const isMobile = useIsMobile()
   const [profileOpen, setProfileOpen] = React.useState(false)
   const { user, signOut } = useAuth()
+  const { openFlow } = useMoneyFlow()
+  const { cash, loaded: cashLoaded } = useCashBalance()
+  const { hidden } = useBalancePrivacy()
+
+  // ⌘K / Ctrl-K jumps to search from anywhere. The hint chip renders the
+  // Windows form first and corrects to ⌘ after mount — hydration-safe.
+  const searchRef = React.useRef<HTMLInputElement>(null)
+  const [kbdHint, setKbdHint] = React.useState("Ctrl K")
+  React.useEffect(() => {
+    if (/Mac/i.test(navigator.platform)) setKbdHint("⌘K")
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        searchRef.current?.focus()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
@@ -77,7 +99,7 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   )
 
   const profileTrigger = (
-    <button className="group flex items-center gap-1.5 rounded-lg py-1 pl-1 pr-1.5 transition-colors hover:bg-accent/40 focus:outline-none active:scale-[0.97]">
+    <button className="group flex h-8 items-center gap-1 rounded-full pl-1 pr-1.5 transition-colors hover:bg-accent/60 focus:outline-none active:scale-[0.97]">
       <div className="relative">
         <Avatar className="h-6 w-6">
           <AvatarImage src={user?.imageUrl} alt={displayName} />
@@ -90,34 +112,74 @@ export function Navbar({ hideDiscover }: { hideDiscover?: boolean } = {}) {
   )
 
   return (
-    // Taller, borderless, and transparent so the silk field runs up underneath
-    // it — the mobile header floats on the backdrop rather than sitting in its
-    // own bordered band.
-    <header className="sticky top-0 z-40 flex h-14 w-full shrink-0 items-center gap-2 bg-background/70 px-3 backdrop-blur-2xl md:gap-4 md:px-6">
+    // The band is gone: the header itself is transparent — the silk field is
+    // the ground — and its controls float on it as three glass instruments
+    // (launcher · search · utility cluster), the same grammar as the floating
+    // rail: rounded-full, translucent card fill, hairline ring, blur.
+    <header className="relative z-40 flex h-14 w-full shrink-0 items-center gap-2 px-3 md:h-16 md:gap-3 md:px-6 lg:px-8">
       {/* Mobile: logo */}
       <div className="flex md:hidden items-center gap-2">
         <img src="/worldstreet-logo/WorldStreet4x.png" alt="WS" className="h-5 w-5 rounded-full" />
-        <span className="text-sm font-bold">WorldStreet</span>
+        <span className="font-display text-sm font-semibold">WorldStreet</span>
       </div>
 
-      {/* Desktop: inline top nav */}
-      {!hideDiscover && <TopNav />}
-
-      {/* Desktop: search — the mobile's full-round search pill */}
-      <div className="flex flex-1 items-center gap-4">
-        <div className="hidden md:flex relative max-w-sm w-full">
-          <HugeiconsIcon icon={Search} className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+      {/* Search — the bar's one wide instrument, centered between clusters.
+          ⌘K/Ctrl-K focuses it from anywhere; the chip says so. */}
+      <div className="flex flex-1 justify-center">
+        <div className="relative hidden w-full max-w-md md:block">
+          <HugeiconsIcon icon={Search} className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
           <input
+            ref={searchRef}
             type="search"
             placeholder="Search assets, trades…"
-            className="w-full rounded-full border-0 bg-surface-sunken py-2.5 pl-10 pr-4 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/50 focus:bg-accent/60"
+            onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur() }}
+            className="h-10 w-full rounded-full bg-card/55 pl-11 pr-4 text-[13px] ring-1 ring-border/50 backdrop-blur-xl outline-none transition-all placeholder:text-muted-foreground/50 focus:bg-card/80 focus:ring-primary/40 lg:pr-16"
           />
+          <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 items-center rounded-md bg-surface-sunken/80 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-muted-foreground/70 ring-1 ring-border/40 lg:flex">
+            {kbdHint}
+          </kbd>
         </div>
       </div>
 
-      <div className="ml-auto flex items-center gap-1">
+      {/* Cash — the Dollar Account, which is the money a Deposit actually
+          spends. It sits immediately left of that CTA so the figure and the
+          action read as one thought. Masked by the same eye button as the
+          dashboard hero; withheld until loaded so it never flashes a $0.00
+          it would have to correct. */}
+      {cashLoaded && (
+        <div
+          className="hidden h-10 shrink-0 items-center gap-2 rounded-full bg-card/55 px-3.5 ring-1 ring-border/50 backdrop-blur-xl lg:flex"
+          title="Dollar Account"
+        >
+          {/* The icon replaces the "Cash" label, so the account it names has to
+              survive for screen readers — a title attribute alone doesn't. */}
+          <HugeiconsIcon icon={Bank} aria-hidden className="h-4 w-4 text-muted-foreground/70" />
+          <span className="sr-only">Dollar Account balance:</span>
+          <span className="text-[13px] font-semibold tabular-nums">
+            {hidden
+              ? "$••••"
+              : cash.toLocaleString("en-US", { style: "currency", currency: "USD" })}
+          </span>
+        </div>
+      )}
+
+      {/* Deposit — the one primary action, reachable from every page. The
+          only gold in the bar, exactly as the system intends. */}
+      <button
+        type="button"
+        onClick={() => openFlow("buy")}
+        className="hidden h-10 shrink-0 items-center gap-1.5 rounded-full bg-primary pl-3.5 pr-4 text-[13px] font-bold text-primary-foreground shadow-[0_8px_24px_-10px_color-mix(in_oklab,var(--primary)_60%,transparent)] transition-all hover:bg-primary/90 active:scale-[0.97] motion-reduce:active:scale-100 md:flex"
+      >
+        <HugeiconsIcon icon={ArrowDownLeft} className="h-4 w-4" />
+        Deposit
+      </button>
+
+      {/* Utility cluster — one glass pill: actions · account.
+          (The theme control is gone: the app is dark-only. See
+          components/theme-provider.tsx to restore it.) */}
+      <div className="ml-auto flex shrink-0 items-center gap-0.5 md:h-10 md:rounded-full md:bg-card/55 md:px-1.5 md:ring-1 md:ring-border/50 md:backdrop-blur-xl">
         <NavbarActions />
-        <ThemeToggle />
+        <div className="mx-0.5 hidden h-4 w-px bg-border/60 md:block" />
 
         {/* Profile — bottom sheet on mobile, popover on desktop */}
         {isMobile ? (

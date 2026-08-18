@@ -90,23 +90,38 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
   // not state — the shell doesn't need to re-render when it flips.
   const inFlightRef = React.useRef(false)
 
+  // Both sides of a pair stay mounted (see the panel stack below), so BOTH
+  // report their in-flight state. Track them separately and take the OR: the
+  // idle one always reports false, and only the visible one can ever be busy.
+  const inFlightByMode = React.useRef<Partial<Record<FlowMode, boolean>>>({})
+  const inFlightHandlers = React.useMemo(() => {
+    const modes: FlowMode[] = ["buy", "sell", "fund", "trading-withdraw"]
+    return Object.fromEntries(
+      modes.map((m) => [
+        m,
+        (v: boolean) => {
+          inFlightByMode.current[m] = v
+          inFlightRef.current = Object.values(inFlightByMode.current).some(Boolean)
+        },
+      ]),
+    ) as Record<FlowMode, (v: boolean) => void>
+    // A ref is stable for the component's life, so this never re-runs — but
+    // naming it lets the React Compiler verify that rather than assume it.
+  }, [inFlightByMode])
+
   const openFlow = React.useCallback((next: FlowMode) => {
     inFlightRef.current = false
+    inFlightByMode.current = {}
     setMode(next)
     setOpen(true)
   }, [])
   const closeFlow = React.useCallback(() => setOpen(false), [])
   const ctx = React.useMemo(() => ({ openFlow, closeFlow }), [openFlow, closeFlow])
 
-  const handleInFlightChange = React.useCallback((v: boolean) => {
-    inFlightRef.current = v
-  }, [])
-
   // Direction toggle: swap to the paired flow in place. Ignored while a move
-  // is in flight — switching would unmount a live status screen.
+  // is in flight — switching would hide a live status screen.
   const switchMode = React.useCallback((next: FlowMode) => {
     if (inFlightRef.current) return
-    inFlightRef.current = false
     setMode(next)
   }, [])
 
@@ -172,64 +187,126 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
 
       <Dialog.Root open={open} onOpenChange={handleOpenChange} modal>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/60 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-sm" />
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/45 transition-opacity duration-300 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-md" />
           <Dialog.Popup
             aria-label={FLOW_LABELS[mode]}
             className={cn(
-              "fixed z-50 flex flex-col bg-card outline-none",
+              // overflow-hidden is load-bearing: the sticky CTA footer paints a
+              // solid card fill to the popup's edges, and without clipping it
+              // squared off the bottom corners against a rounded top.
+              "fixed z-50 flex flex-col overflow-hidden bg-card outline-none",
+              "shadow-[0_40px_100px_-24px_rgb(0_0_0/0.65)] ring-1 ring-foreground/10",
               isMobile
-                ? // Bottom drawer — slides up, safe-area padded, capped height.
-                  "inset-x-0 bottom-0 max-h-[90dvh] translate-y-0 rounded-t-2xl safe-area-bottom transition-transform duration-300 ease-out data-ending-style:translate-y-full data-starting-style:translate-y-full"
-                : // Centered modal — subtle opacity + scale entrance.
-                  "left-1/2 top-1/2 max-h-[85dvh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 scale-100 rounded-2xl transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0",
+                ? // Bottom drawer — slides up, safe-area padded. A FIXED height
+                  // (not max-h) so switching direction never resizes the sheet.
+                  "inset-x-0 bottom-0 h-[86dvh] translate-y-0 rounded-t-[28px] safe-area-bottom transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-y-full data-starting-style:translate-y-full"
+                : // Centered modal — the shared spring pop in, quick fade out.
+                  // Fixed height for the same reason; dvh cap keeps it honest
+                  // on short laptop screens.
+                  "ws-pop-in left-1/2 top-1/2 h-[680px] max-h-[86dvh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
             )}
           >
+            {/* Direction wash — the modal breathes the colour of the money's
+                direction: a whisper of credit green when funds arrive, debit
+                red when they leave. BOTH are painted and cross-faded, so
+                flipping direction bleeds one into the other instead of
+                snapping mid-slide. */}
+            {(["in", "out"] as const).map((d) => (
+              <div
+                key={d}
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute inset-x-0 top-0 h-36 rounded-t-[inherit] transition-opacity duration-500",
+                  d === "in"
+                    ? "bg-[radial-gradient(120%_85%_at_50%_0%,color-mix(in_oklab,var(--credit)_13%,transparent)_0%,transparent_70%)]"
+                    : "bg-[radial-gradient(120%_85%_at_50%_0%,color-mix(in_oklab,var(--debit)_13%,transparent)_0%,transparent_70%)]",
+                  (mode === "buy" || mode === "fund") === (d === "in") ? "opacity-100" : "opacity-0",
+                )}
+              />
+            ))}
+
             {/* Grabber — the drawer names its own gesture. */}
             {isMobile && (
-              <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/[0.16]" />
+              <div aria-hidden className="relative mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/[0.16]" />
             )}
 
-            {/* X — always available, even in flight (an explicit choice,
-                unlike a stray backdrop tap). Pinned outside the scroll area. */}
-            <button
-              type="button"
-              onClick={closeFlow}
-              aria-label="Close"
-              className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
-            </button>
-
-            {/* Direction toggle — pinned above the scroll area, clear of the X. */}
-            <div className="flex shrink-0 justify-start px-4 pb-0 pt-4 sm:px-5">
+            {/* Master bar — the direction toggle spans the width (this modal's
+                one top-level choice) with the X inline beside it. The X stays
+                available even in flight: an explicit choice, unlike a stray
+                backdrop tap. Both pinned above the scroll area. */}
+            <div className="relative flex shrink-0 items-center gap-2 px-4 pb-1 pt-4 sm:px-5">
               <Segmented
-                size="sm"
+                grow
                 value={mode}
                 onChange={switchMode}
                 options={mode === "buy" || mode === "sell" ? CASH_DIRECTIONS : TRADING_DIRECTIONS}
               />
+              <button
+                type="button"
+                onClick={closeFlow}
+                aria-label="Close"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
+              </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              {/* Keyed by mode so a half-typed deposit never leaks into a
-                  withdrawal. Each open is a fresh mount regardless — the
-                  portal unmounts the popup once the close transition ends. */}
-              {mode === "buy" || mode === "sell" ? (
-                <BuySellClient
-                  key={mode}
-                  mode={mode}
-                  variant="modal"
-                  onInFlightChange={handleInFlightChange}
-                />
-              ) : (
-                <FundClient
-                  key={mode}
-                  mode={mode === "fund" ? "fund" : "withdraw"}
-                  variant="modal"
-                  onInFlightChange={handleInFlightChange}
-                  onDismiss={closeFlow}
-                />
-              )}
+            {/* scrollbar-none: the shell is a fixed height, so a track would be
+                permanent furniture on a surface that's mostly short enough not
+                to need it. Wheel, trackpad, touch and keys all still scroll. */}
+            <div className="scrollbar-none relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+              {/* Both sides of the pair stay mounted and stack in ONE grid cell.
+                  Swapping is then a pure cross-fade between two already-painted
+                  layers — no unmount, no refetch, no skeleton. (Remounting on
+                  every toggle blocked the main thread for ~130ms, which no
+                  amount of easing can hide.) The grid row also stretches both
+                  to the same height, so the shell never resizes.
+
+                  Each mode keeps its own state, so a half-typed deposit can't
+                  leak into a withdrawal — and comes back if you return to it.
+
+                  `invisible` (not just opacity-0) is load-bearing: visibility
+                  inherits, so the idle panel's controls are unfocusable and
+                  invisible to Vivid's target lookup, which resolves by first
+                  match and would otherwise grab the wrong amount field. */}
+              <div className="grid min-h-full">
+                {(mode === "buy" || mode === "sell" ? CASH_DIRECTIONS : TRADING_DIRECTIONS).map(
+                  (opt, i, pair) => {
+                    const active = opt.key === mode
+                    // Idle panels wait on the side they sit on in the toggle,
+                    // so content travels the same way the tab you pressed did.
+                    const after = i > pair.findIndex((o) => o.key === mode)
+                    return (
+                      <div
+                        key={opt.key}
+                        aria-hidden={!active}
+                        className={cn(
+                          "col-start-1 row-start-1 flex min-h-full flex-col",
+                          "transition-[opacity,translate,visibility] duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+                          active
+                            ? "visible translate-x-0 opacity-100"
+                            : cn("invisible pointer-events-none opacity-0", after ? "translate-x-6" : "-translate-x-6"),
+                        )}
+                      >
+                        {opt.key === "buy" || opt.key === "sell" ? (
+                          <BuySellClient
+                            mode={opt.key}
+                            variant="modal"
+                            onInFlightChange={inFlightHandlers[opt.key]}
+                          />
+                        ) : (
+                          <FundClient
+                            mode={opt.key === "fund" ? "fund" : "withdraw"}
+                            variant="modal"
+                            onInFlightChange={inFlightHandlers[opt.key]}
+                            onDismiss={closeFlow}
+                          />
+                        )}
+                      </div>
+                    )
+                  },
+                )}
+              </div>
             </div>
           </Dialog.Popup>
         </Dialog.Portal>

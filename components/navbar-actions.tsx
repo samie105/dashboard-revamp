@@ -264,27 +264,27 @@ export function NavbarActions() {
       <div ref={pillRef} className="flex items-center gap-0.5 overflow-visible">
         {/* Wallet */}
         {isMobile ? (
-          <button onClick={() => tap("wallet")} className={cn("flex items-center justify-center h-8 w-8 transition-colors", section === "wallet" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
+          <button onClick={() => tap("wallet")} className={cn("flex items-center justify-center h-8 w-8 rounded-full transition-colors", section === "wallet" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
             <HugeiconsIcon icon={Wallet01Icon} size={14} />
           </button>
         ) : (
-          <button onMouseEnter={() => enter("wallet")} className={cn("flex h-9 w-9 items-center justify-center rounded-full transition-colors", section === "wallet" ? "bg-accent text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
-            <HugeiconsIcon icon={Wallet01Icon} size={18} />
+          <button onMouseEnter={() => enter("wallet")} className={cn("flex h-8 w-8 items-center justify-center rounded-full transition-colors", section === "wallet" ? "bg-accent text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
+            <HugeiconsIcon icon={Wallet01Icon} size={16} />
           </button>
         )}
 
         {/* Calls */}
         <div className="relative">
           {isMobile ? (
-            <button onClick={() => tap("calls")} className={cn("flex items-center justify-center h-8 w-8 transition-colors relative", section === "calls" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
+            <button onClick={() => tap("calls")} className={cn("flex items-center justify-center h-8 w-8 rounded-full transition-colors relative", section === "calls" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
               <HugeiconsIcon icon={Call02Icon} size={14} />
               {missedCount > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 h-3 min-w-3 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[7px] flex items-center justify-center font-bold">{missedCount > 9 ? "9+" : missedCount}</div>
               )}
             </button>
           ) : (
-            <button onMouseEnter={() => enter("calls")} className={cn("relative flex h-9 w-9 items-center justify-center rounded-full transition-colors", section === "calls" ? "bg-accent text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
-              <HugeiconsIcon icon={Call02Icon} size={18} />
+            <button onMouseEnter={() => enter("calls")} className={cn("relative flex h-8 w-8 items-center justify-center rounded-full transition-colors", section === "calls" ? "bg-accent text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
+              <HugeiconsIcon icon={Call02Icon} size={16} />
               {missedCount > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[8px] flex items-center justify-center font-bold">{missedCount > 9 ? "9+" : missedCount}</div>
               )}
@@ -295,15 +295,15 @@ export function NavbarActions() {
         {/* Notifications */}
         <div className="relative">
           {isMobile ? (
-            <button onClick={() => tap("notifications")} className={cn("flex items-center justify-center h-8 w-8 transition-colors relative", section === "notifications" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
+            <button onClick={() => tap("notifications")} className={cn("flex items-center justify-center h-8 w-8 rounded-full transition-colors relative", section === "notifications" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
               <HugeiconsIcon icon={Notification01Icon} size={14} />
               {newNotifCount > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 h-3 min-w-3 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[7px] flex items-center justify-center font-bold">{newNotifCount}</div>
               )}
             </button>
           ) : (
-            <button onMouseEnter={() => enter("notifications")} className={cn("relative flex h-9 w-9 items-center justify-center rounded-full transition-colors", section === "notifications" ? "bg-accent text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
-              <HugeiconsIcon icon={Notification01Icon} size={18} />
+            <button onMouseEnter={() => enter("notifications")} className={cn("relative flex h-8 w-8 items-center justify-center rounded-full transition-colors", section === "notifications" ? "bg-accent text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
+              <HugeiconsIcon icon={Notification01Icon} size={16} />
               {newNotifCount > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[8px] flex items-center justify-center font-bold">{newNotifCount}</div>
               )}

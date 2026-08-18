@@ -72,9 +72,11 @@ void main() {
   vec3 col = uBase + uDeep * glow;
   col = mix(col, uTint, hot);
 
-  // vignette, centred high — the light lives in the upper half of the frame
+  // vignette, centred high — the light lives in the upper half of the frame.
+  // Held wide (1.45) so the field keeps energy at the far edges, where it has
+  // to read through the translucent sidebar.
   float d = distance(st, vec2(0.5, 0.32));
-  col *= smoothstep(1.30, 0.06, d);
+  col *= smoothstep(1.45, 0.06, d);
 
   // vertical grade: gentle lift at the top, bottom sinks toward black so the
   // content zone always sits on darkness.
@@ -85,9 +87,13 @@ void main() {
 }
 `
 
-/** Dim ember, not brand gold — the hot core lands near #572e0d. */
-const TINT: [number, number, number] = [0.34, 0.2, 0.04]
-const DEEP: [number, number, number] = [0.1, 0.065, 0.018]
+/**
+ * Yellowish-orange, 5:1 toward brand gold — a 5-part #EAB308 / 1-part
+ * #F97316 blend gives the hue (1, 0.71, 0.04), held at the same dim
+ * brightness as before. Hot core lands near #573e04.
+ */
+const TINT: [number, number, number] = [0.34, 0.245, 0.015]
+const DEEP: [number, number, number] = [0.1, 0.072, 0.01]
 const BASE: [number, number, number] = [0.02, 0.018, 0.016]
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string) {
@@ -234,18 +240,12 @@ export function SilkBackdrop({
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(120% 90% at 50% 18%, rgba(87,46,13,0.55) 0%, rgba(26,17,6,0.35) 42%, rgba(12,10,9,0) 72%)",
+            "radial-gradient(120% 90% at 50% 18%, rgba(87,62,4,0.55) 0%, rgba(26,18,3,0.35) 42%, rgba(12,10,9,0) 72%)",
         }}
       />
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
-      {/* Feather the left/right edges so the field doesn't butt into the rails. */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(to right, var(--background) 0%, rgba(0,0,0,0) 12%, rgba(0,0,0,0) 78%, var(--background) 100%)",
-        }}
-      />
+      {/* No edge feather: the field runs full-bleed behind the sidebar and
+          navbar by design — the shader's own vignette handles the falloff. */}
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   ArrowDown01Icon,
+  ArrowRight01Icon,
   Clock01Icon,
   ArrowUpRight01Icon,
   Search01Icon,
@@ -22,13 +23,19 @@ import { getSpotBalances, getSpotPositions, getTokenPrices, getSpotTradeHistory 
 import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { ErrorState } from "@/components/error-state"
 import {
+  CardHeader,
+  CardShell,
   ChangeText,
   EmptyState as SystemEmptyState,
+  Eyebrow,
   Segmented,
+  SkeletonRows,
+  SkeletonTable,
   type IllustrationKey,
 } from "@/components/ui/system"
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
+import { ActivityCard } from "@/components/dashboard/activity-card"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
@@ -63,12 +70,12 @@ function TradeConfirmDialog({
   return (
     // backdrop
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:hidden"
+      className="ws-backdrop-in fixed inset-0 z-[60] flex items-end justify-center bg-black/45 backdrop-blur-md sm:hidden"
       onClick={onClose}
     >
       {/* sheet */}
       <div
-        className="w-full rounded-t-2xl bg-card px-6 pt-6 pb-28 shadow-2xl"
+        className="ws-sheet-in w-full rounded-t-3xl bg-card px-6 pt-6 pb-28 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* coin header */}
@@ -208,26 +215,26 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
   const hasMoreFutures = visibleCount < filteredFutures.length
 
   return (
-    <div data-onboarding="dash-markets" className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card">
+    <CardShell data-onboarding="dash-markets">
       <TradeConfirmDialog item={tradeItem} onClose={() => setTradeItem(null)} />
-      {/* Header — in-card: the card names itself, no decorative icon */}
-      <div className="flex flex-col gap-3 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-col">
-            <h3 className="text-sm font-semibold leading-tight">Markets</h3>
-            <span className="text-xs text-muted-foreground">Live prices</span>
-          </div>
-          <div className="relative">
-            <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+      <CardHeader
+        title="Markets"
+        subtitle="Live prices"
+        className="pb-2"
+        right={
+          <div className="relative shrink-0">
+            <HugeiconsIcon icon={Search01Icon} className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search..."
-              className="w-36 rounded-lg bg-accent/50 pl-7 pr-2 py-1.5 text-xs outline-none focus:bg-accent"
+              className="w-36 rounded-full bg-surface-sunken py-1.5 pl-8 pr-3 text-xs outline-none transition-colors focus:bg-accent"
             />
           </div>
-        </div>
+        }
+      />
+      <div className="px-4 pb-3">
         <Segmented
           options={MARKET_TABS.map((t) => ({ key: t, label: t }))}
           value={tab}
@@ -239,16 +246,14 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
       {/* Table — Futures */}
       {tab === "Futures" ? (
         futuresLoading ? (
-          <div className="flex flex-1 items-center justify-center">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          </div>
+          <SkeletonTable rows={5} cols={4} label="Loading contracts" />
         ) : filteredFutures.length === 0 ? (
           <EmptyState illustration="cryptoTrade" title="No contracts found" description="Try a different search term" />
         ) : (
           <div className="flex-1 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                <tr className="border-t border-border/30 text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
                   <th className="px-3 sm:px-4 py-2 text-left font-medium">Contract</th>
                   <th className="px-3 sm:px-4 py-2 text-right font-medium">Mark Price</th>
                   <th className="px-3 sm:px-4 py-2 text-right font-medium">24h</th>
@@ -302,7 +307,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                         <a
                           href={`/trade?market=futures&symbol=${market.symbol}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                          className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground ring-1 ring-border transition-colors hover:bg-primary hover:text-primary-foreground hover:ring-primary"
                         >
                           Trade
                         </a>
@@ -330,9 +335,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
       ) : (
         /* Table — Total / Main / Spot */
         (tab === "Spot" && spotLoading) ? (
-          <div className="flex flex-1 items-center justify-center">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          </div>
+          <SkeletonTable rows={5} cols={4} label="Loading markets" />
         ) : error && filtered.length === 0 ? (
           <ErrorState message={error} />
         ) : filtered.length === 0 ? (
@@ -345,7 +348,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
           <div className="flex-1 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-t border-border/30 text-xs text-muted-foreground">
+                <tr className="border-t border-border/30 text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
                   <th className="px-3 sm:px-4 py-2 text-left font-medium">Pair</th>
                   <th className="px-3 sm:px-4 py-2 text-right font-medium">Price</th>
                   <th className="px-3 sm:px-4 py-2 text-right font-medium">24h</th>
@@ -395,7 +398,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                       <a
                         href={`/trade?symbol=${coin.symbol}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                        className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground ring-1 ring-border transition-colors hover:bg-primary hover:text-primary-foreground hover:ring-primary"
                       >
                         Trade
                       </a>
@@ -420,7 +423,7 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
           </div>
         )
       )}
-    </div>
+    </CardShell>
   )
 }
 
@@ -456,8 +459,20 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
     setFuturesLoading(false)
   }, [user])
 
+  /* "2m ago" needs a now to measure against, and reading the clock during
+     render makes the output non-idempotent — two renders in the same tick can
+     disagree, and React is allowed to do exactly that. The clock is state,
+     ticking once a minute, which is also the resolution these labels have: a
+     row that said "Just now" four minutes ago now says "4m ago" on its own,
+     which it never used to do without an unrelated re-render. */
+  const [now, setNow] = React.useState(() => Date.now())
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
   function formatTime(ts: number | Date) {
-    const diff = Date.now() - (typeof ts === "number" ? ts : new Date(ts).getTime())
+    const diff = now - (typeof ts === "number" ? ts : new Date(ts).getTime())
     if (diff < 60_000) return "Just now"
     if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
     if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
@@ -467,25 +482,23 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
   const loading = tab === "spot" ? spotTradesLoading : futuresLoading
 
   return (
-    <div data-onboarding="dash-trades" className="flex h-full flex-col rounded-2xl bg-card">
-      <div className="flex items-center justify-between gap-3 p-4">
-        <div className="flex min-w-0 flex-col">
-          <h3 className="text-sm font-semibold leading-tight">Recent Trades</h3>
-          <span className="text-xs text-muted-foreground">Your latest fills</span>
-        </div>
-        <Segmented
-          options={[
-            { key: "spot", label: "Spot" },
-            { key: "futures", label: "Futures" },
-          ] as const}
-          value={tab}
-          onChange={setTab}
-        />
-      </div>
+    <CardShell data-onboarding="dash-trades">
+      <CardHeader
+        title="Recent Trades"
+        subtitle="Your latest fills"
+        right={
+          <Segmented
+            options={[
+              { key: "spot", label: "Spot" },
+              { key: "futures", label: "Futures" },
+            ] as const}
+            value={tab}
+            onChange={setTab}
+          />
+        }
+      />
       {loading ? (
-        <div className="flex flex-1 items-center justify-center py-12">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </div>
+        <SkeletonRows rows={4} label="Loading trades" />
       ) : tab === "spot" ? (
         spotTrades.length === 0 ? (
           <EmptyState
@@ -500,7 +513,7 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
               const isBuy = trade.side === "buy" || trade.side === "incoming"
               return (
                 <div key={trade.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/30">
-                  <span className={`text-xs font-bold ${isBuy ? "text-credit" : "text-debit"}`}>
+                  <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold ${isBuy ? "bg-credit-chip text-credit" : "bg-debit-chip text-debit"}`}>
                     {isBuy ? "B" : "S"}
                   </span>
                   <div className="flex flex-1 flex-col">
@@ -550,7 +563,7 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
               const isBuy = fill.side === "B"
               return (
                 <div key={`${fill.coin}-${fill.time}-${i}`} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/30">
-                  <span className={`text-xs font-bold ${isBuy ? "text-credit" : "text-debit"}`}>
+                  <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold ${isBuy ? "bg-credit-chip text-credit" : "bg-debit-chip text-debit"}`}>
                     {isBuy ? "B" : "S"}
                   </span>
                   <div className="flex flex-1 flex-col">
@@ -574,7 +587,7 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
           </div>
         )
       )}
-    </div>
+    </CardShell>
   )
 }
 
@@ -601,32 +614,14 @@ function Watchlist({ coins, error }: { coins: CoinData[]; error?: string }) {
   }, [coins, watchlistSymbols])
 
   return (
-    <div data-onboarding="dash-watchlist" className="flex h-full flex-col rounded-2xl bg-card">
-      <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <div className="flex min-w-0 flex-col">
-          <h3 className="text-sm font-semibold leading-tight">Watchlist</h3>
-          <span className="text-xs text-muted-foreground">Starred assets</span>
-        </div>
-        <a href="/trade" className="shrink-0 text-xs font-medium text-primary hover:underline">
-          View all
-        </a>
-      </div>
+    <CardShell data-onboarding="dash-watchlist">
+      <CardHeader
+        title="Watchlist"
+        subtitle="Starred assets"
+        link={{ label: "View all", href: "/trade" }}
+      />
       {items === null ? (
-        <div className="flex flex-1 flex-col divide-y divide-border/30">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 px-3 py-1.5">
-              <div className="h-5 w-5 rounded-full bg-muted animate-pulse" />
-              <div className="flex flex-1 flex-col gap-1">
-                <div className="h-3 w-14 rounded bg-muted animate-pulse" />
-                <div className="h-2.5 w-10 rounded bg-muted animate-pulse" />
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <div className="h-3 w-14 rounded bg-muted animate-pulse" />
-                <div className="h-2.5 w-10 rounded bg-muted animate-pulse" />
-              </div>
-            </div>
-          ))}
-        </div>
+        <SkeletonRows rows={6} label="Loading watchlist" />
       ) : error && items.length === 0 ? (
         <ErrorState message={error} />
       ) : items.length === 0 ? (
@@ -659,7 +654,7 @@ function Watchlist({ coins, error }: { coins: CoinData[]; error?: string }) {
           ))}
         </div>
       )}
-    </div>
+    </CardShell>
   )
 }
 
@@ -731,14 +726,21 @@ function MyPositions() {
 
   const loading = view === "positions" ? posLoading : spotLoading
 
+  // Footer facts — the card always accounts for itself at the bottom edge.
+  const spotHoldingsTotal =
+    spotBalances.reduce((s, b) => s + b.available + b.locked, 0) +
+    spotPositions.reduce((s, p) => s + p.quantity * p.currentPrice, 0)
+  const spotHoldingsCount =
+    spotBalances.filter((b) => b.available + b.locked > 0).length + spotPositions.length
+  const futuresPnlTotal = positions.reduce((s, p) => s + parseFloat(p.unrealizedPnl), 0)
+
   return (
-    <div className="flex h-full flex-col rounded-2xl bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-        <div className="flex min-w-0 flex-col">
-          <h3 className="text-[15px] font-semibold leading-tight">My Holdings</h3>
-          <span className="text-[13px] text-muted-foreground">Everything you hold, across every chain</span>
-        </div>
-        <div className="flex items-center gap-2">
+    <CardShell>
+      <CardHeader
+        className="flex-wrap"
+        title="My Holdings"
+        subtitle="Everything you hold, across every chain"
+        right={
           <Segmented
             options={[
               { key: "spot", label: "Spot" },
@@ -747,16 +749,12 @@ function MyPositions() {
             value={view}
             onChange={setView}
           />
-          <a href="/assets" className="shrink-0 text-[13px] font-medium text-primary hover:underline">
-            View all
-          </a>
-        </div>
-      </div>
+        }
+        link={{ label: "View all", href: "/assets" }}
+      />
 
       {loading ? (
-        <div className="flex flex-1 items-center justify-center p-8">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </div>
+        <SkeletonRows rows={4} label="Loading holdings" />
       ) : view === "positions" ? (
         positions.length === 0 ? (
           <EmptyState
@@ -803,7 +801,7 @@ function MyPositions() {
               )
             })}
             {positions.length > 8 && (
-              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-primary hover:underline">
+              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
                 View all {positions.length} positions
               </a>
             )}
@@ -875,14 +873,38 @@ function MyPositions() {
               )
             })}
             {spotPositions.length > 8 && (
-              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-primary hover:underline">
+              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
                 View all {spotPositions.length} assets
               </a>
             )}
           </div>
         )
       )}
-    </div>
+
+      {/* Bottom line — the card sums itself, so its full height carries
+          information instead of trailing off into empty fill. */}
+      {!loading && view === "spot" && spotHoldingsCount > 0 && (
+        <div className="mt-auto flex items-center justify-between border-t border-border/30 px-4 py-2.5">
+          <span className="text-xs text-muted-foreground">
+            {spotHoldingsCount} {spotHoldingsCount === 1 ? "asset" : "assets"}
+          </span>
+          <span className="text-[13px] font-semibold tabular-nums">
+            ${spotHoldingsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+      )}
+      {!loading && view === "positions" && positions.length > 0 && (
+        <div className="mt-auto flex items-center justify-between border-t border-border/30 px-4 py-2.5">
+          <span className="text-xs text-muted-foreground">
+            {positions.length} open {positions.length === 1 ? "position" : "positions"}
+          </span>
+          <span className={`text-[13px] font-semibold tabular-nums ${futuresPnlTotal >= 0 ? "text-credit" : "text-debit"}`}>
+            {futuresPnlTotal >= 0 ? "+" : "−"}$
+            {Math.abs(futuresPnlTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+      )}
+    </CardShell>
   )
 }
 
@@ -895,23 +917,47 @@ interface DashboardGridProps {
 }
 
 export function DashboardGrid({ coins, initialTrades, prices, error }: DashboardGridProps) {
-  // Information architecture: what the user OWNS leads. You open a dashboard to
-  // see what you've got, not to be sold a market. Holdings and their own
-  // activity take the main column; the market screener, watchlist and swap are
-  // reference material in the rail beside it.
+  // Information architecture: three paired rows, ownership first.
+  // Row 1 — your money in motion: activity beside everything you hold.
+  // Row 2 — the market: the screener beside what you starred.
+  // Row 3 — acting on it: your fills beside the swap desk.
+  // Each row is its own grid so partners stretch to equal height.
   return (
-    <div className="grid w-full gap-4 lg:grid-cols-5">
-      {/* Main — your money */}
-      <div className="flex min-w-0 flex-col gap-4 lg:col-span-3">
-        <MyPositions />
-        <RecentTrades coins={coins} error={error} />
+    <div className="flex w-full flex-col gap-4">
+      <div className="grid w-full gap-4 lg:grid-cols-5">
+        <div className="min-w-0 lg:col-span-2">
+          <ActivityCard />
+        </div>
+        <div className="min-w-0 lg:col-span-3">
+          <MyPositions />
+        </div>
       </div>
 
-      {/* Rail — reference: what you're watching, the market, quick swap */}
-      <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
-        <Watchlist coins={coins} error={error} />
-        <MarketsTable coins={coins} error={error} />
-        <SwapClient coins={coins} prices={prices} error={error} compact />
+      {/* Wayfinding — the page's one break: "your money" above this line,
+          "the market" below it. */}
+      <div className="flex items-center gap-3 pt-1">
+        <Eyebrow>Markets &amp; trading</Eyebrow>
+        <div className="h-px flex-1 bg-border/60" />
+      </div>
+
+      <div className="grid w-full gap-4 lg:grid-cols-5">
+        <div className="min-w-0 lg:col-span-3">
+          <MarketsTable coins={coins} error={error} />
+        </div>
+        <div className="min-w-0 lg:col-span-2">
+          <Watchlist coins={coins} error={error} />
+        </div>
+      </div>
+
+      <div className="grid w-full gap-4 lg:grid-cols-5">
+        <div className="min-w-0 lg:col-span-3">
+          <RecentTrades coins={coins} error={error} />
+        </div>
+        {/* [&>div]:h-full — the compact swap card is shorter than the trades
+            list; stretch its shell so the pair shares one bottom edge. */}
+        <div className="min-w-0 lg:col-span-2 [&>div]:h-full">
+          <SwapClient coins={coins} prices={prices} error={error} compact />
+        </div>
       </div>
     </div>
   )

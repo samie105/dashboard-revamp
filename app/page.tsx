@@ -45,13 +45,15 @@ export default function Page() {
           <WalletCardLoader />
         </Suspense>
       </Rise>
+      {/* Paired grid — activity+holdings, markets+watchlist, trades+swap.
+          Marketing goes last. */}
       <Rise delay={60}>
-        <PromoRow />
-      </Rise>
-      <Rise delay={120}>
         <Suspense fallback={<DashboardGridSkeleton />}>
           <DashboardGridLoader />
         </Suspense>
+      </Rise>
+      <Rise delay={120}>
+        <PromoRow />
       </Rise>
       <DashboardOnboarding />
     </div>

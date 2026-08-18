@@ -1,5 +1,8 @@
 "use server"
 
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+import { DEV_MOCK_USER_BALANCES } from "@/lib/dev-mock-data"
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface CoinData {
@@ -157,6 +160,7 @@ const COINGECKO_IDS: Record<string, string> = {
   TRX: "tron",
   PEPE: "pepe",
   TON: "toncoin",
+  HYPE: "hyperliquid",
   XLM: "stellar",
   WLD: "worldcoin-wld",
   INJ: "injective-protocol",
@@ -1124,6 +1128,9 @@ const TIMEFRAME_TO_DAYS: Record<string, string> = {
   "4H": "0.17",
   "1D": "1",
   "1W": "7",
+  // 30 calendar days ("1M" was already taken by 1-minute). CoinGecko serves
+  // hourly granularity at this range — the account-history sparklines need it.
+  "30D": "30",
 }
 
 function formatVolume(vol: number): string {
@@ -1135,6 +1142,12 @@ function formatVolume(vol: number): string {
 
 const chartCache = new Map<string, { data: ChartResponse; ts: number }>()
 const CHART_TTL = 60_000
+// A 30-day series barely moves minute-to-minute; the long TTL also keeps the
+// dashboard's per-symbol fan-out under CoinGecko's free-tier rate limit.
+const CHART_TTL_LONG = 30 * 60_000
+// Concurrent callers for the same coin share one CoinGecko round-trip — the
+// dashboard fans out per symbol, and dev strict-mode doubles every request.
+const chartInflight = new Map<string, Promise<ChartResponse>>()
 
 export async function getChartData(
   symbol = "BTC",
@@ -1150,11 +1163,31 @@ export async function getChartData(
   console.log(`[getChartData] called for ${symbol} (${coinId}), timeframe: ${timeframe}, days: ${days}`)
 
   const cached = chartCache.get(cacheKey)
-  if (cached && Date.now() - cached.ts < CHART_TTL) {
+  const ttl = days === "30" ? CHART_TTL_LONG : CHART_TTL
+  if (cached && Date.now() - cached.ts < ttl) {
     console.log(`[getChartData] returning cached ${symbol}, age:`, Math.round((Date.now() - cached.ts) / 1000), "s")
     return cached.data
   }
 
+  const inflight = chartInflight.get(cacheKey)
+  if (inflight) return inflight
+
+  const fetchPromise = fetchChartData(symbol, coinId, days, cacheKey, cached)
+  chartInflight.set(cacheKey, fetchPromise)
+  try {
+    return await fetchPromise
+  } finally {
+    chartInflight.delete(cacheKey)
+  }
+}
+
+async function fetchChartData(
+  symbol: string,
+  coinId: string,
+  days: string,
+  cacheKey: string,
+  cached: { data: ChartResponse; ts: number } | undefined,
+): Promise<ChartResponse> {
   try {
     console.log(`[getChartData] fetching ${symbol} from CoinGecko...`)
     const chartUrl = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`
@@ -1203,6 +1236,136 @@ export async function getChartData(
     if (cached) return cached.data
 
     return { data: [], high: 0, low: 0, volume: "0", currentPrice: 0, change: 0, error: "Failed to fetch chart data" }
+  }
+}
+
+// ── getSparklines ─────────────────────────────────────────────────────────
+// The watchlist used to draw its curves from `change24h`'s SIGN — two
+// hard-coded zig-zags, one per direction. The price feed is Hyperliquid-first
+// and `allMids` carries no 24h change, so every coin reported 0.00% and the
+// whole list drew the same flat green tick.
+//
+// CoinGecko's markets endpoint returns a 7-day hourly series for every coin in
+// ONE request when `sparkline=true`, so real curves for a whole watchlist cost
+// a single round-trip — and it carries the 24h change the primary feed lacks.
+// Failure returns {} and the callers draw nothing, which is the honest answer.
+
+export interface SparklinePoint {
+  prices: number[]
+  change24h: number
+}
+
+/** `ok: false` means the request itself failed (rate limit, timeout, network).
+ *  Callers need that separate from "fetched fine, this coin isn't covered" —
+ *  the second is worth remembering, the first must be retried, and conflating
+ *  them let one 429 disable every chart for the rest of the session. */
+export interface SparklineResult {
+  ok: boolean
+  data: Record<string, SparklinePoint>
+}
+
+/** CoinGecko ids for the markets endpoint. Mostly COINGECKO_IDS, with the two
+ *  corrections that matter here: Toncoin's canonical id is `the-open-network`
+ *  (the `toncoin` listing is a different, delisted asset), and the stablecoins
+ *  are dropped outright — a 7-day chart of $1.0000 is a straight line that
+ *  tells the reader nothing they didn't already know from the ticker. */
+const SPARKLINE_IDS: Record<string, string> = (() => {
+  const map: Record<string, string> = { ...COINGECKO_IDS, TON: "the-open-network" }
+  for (const stable of ["USDT", "USDC", "DAI", "BUSD", "TUSD", "FDUSD"]) delete map[stable]
+  return map
+})()
+
+const sparklineCache = new Map<string, { data: SparklinePoint; ts: number }>()
+const SPARKLINE_TTL = 10 * 60_000 // 7d hourly barely moves; stay well under the free-tier limit
+let sparklineInflight: Promise<SparklineResult> | null = null
+
+export async function getSparklines(symbols: string[]): Promise<SparklineResult> {
+  const wanted = [...new Set(symbols.map((s) => s.toUpperCase()))].filter(
+    (s) => SPARKLINE_IDS[s],
+  )
+  if (wanted.length === 0) return { ok: true, data: {} }
+
+  const now = Date.now()
+  const fresh: Record<string, SparklinePoint> = {}
+  const missing: string[] = []
+  for (const sym of wanted) {
+    const hit = sparklineCache.get(sym)
+    if (hit && now - hit.ts < SPARKLINE_TTL) fresh[sym] = hit.data
+    else missing.push(sym)
+  }
+  if (missing.length === 0) return { ok: true, data: fresh }
+
+  // One flight at a time: the watchlist and the markets grid ask at the same
+  // moment, and dev strict-mode doubles every request.
+  if (sparklineInflight) {
+    const shared = await sparklineInflight
+    return { ok: shared.ok, data: { ...fresh, ...shared.data } }
+  }
+
+  const flight = (async (): Promise<SparklineResult> => {
+    try {
+      const ids = missing.map((s) => SPARKLINE_IDS[s]).join(",")
+      const url =
+        `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}` +
+        `&sparkline=true&price_change_percentage=24h&per_page=250`
+      const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(12_000),
+      })
+      if (!res.ok) throw new Error(`CoinGecko sparkline returned ${res.status}`)
+
+      const rows = await res.json()
+      if (!Array.isArray(rows)) return { ok: false, data: {} }
+
+      const out: Record<string, SparklinePoint> = {}
+      for (const row of rows) {
+        const symbol =
+          row.id === "the-open-network"
+            ? "TON"
+            : ID_TO_SYMBOL[row.id] || String(row.symbol || "").toUpperCase()
+        const raw: unknown = row.sparkline_in_7d?.price
+        if (!Array.isArray(raw) || raw.length < 2) continue
+        // ~168 hourly points is far more resolution than 64 CSS pixels can
+        // show; thin to ~48 so the payload and the path both stay small.
+        const series = raw.filter((n): n is number => typeof n === "number" && isFinite(n))
+        if (series.length < 2) continue
+        const step = Math.max(1, Math.floor(series.length / 48))
+        const thinned = series.filter((_, i) => i % step === 0)
+        if (thinned[thinned.length - 1] !== series[series.length - 1]) {
+          thinned.push(series[series.length - 1])
+        }
+        /* CoinGecko intermittently reports `price_change_percentage_24h: 0`
+           for coins whose 7-day series has visibly moved. Printing 0.00% in
+           credit green beside a rising curve is the sort of contradiction a
+           reader notices and stops trusting the whole page over, so when the
+           feed says exactly zero we measure it ourselves: the series is hourly
+           over seven days, and the point 24 hours back is the one 24 samples
+           from the end — full resolution, before the thinning above. */
+        const reported = row.price_change_percentage_24h
+        let change24h = typeof reported === "number" ? reported : 0
+        if (change24h === 0 && series.length > 25) {
+          const then = series[series.length - 25]
+          const now = series[series.length - 1]
+          if (then > 0) change24h = ((now - then) / then) * 100
+        }
+
+        const entry: SparklinePoint = { prices: thinned, change24h }
+        out[symbol] = entry
+        sparklineCache.set(symbol, { data: entry, ts: Date.now() })
+      }
+      return { ok: true, data: out }
+    } catch (err) {
+      console.error("[getSparklines]", err)
+      return { ok: false, data: {} }
+    }
+  })()
+
+  sparklineInflight = flight
+  try {
+    const fetched = await flight
+    return { ok: fetched.ok, data: { ...fresh, ...fetched.data } }
+  } finally {
+    sparklineInflight = null
   }
 }
 
@@ -1471,6 +1634,14 @@ export interface UserBalance {
 export async function getUserBalances(
   userId: string,
 ): Promise<{ success: boolean; balances: UserBalance[]; totalUsd: number; error?: string }> {
+  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts):
+  // the legacy trading backend has no record for the bypass user.
+  if (DEV_AUTH_BYPASS) {
+    const balances = DEV_MOCK_USER_BALANCES
+    const totalUsd = balances.reduce((sum, b) => sum + b.available + b.locked, 0)
+    return { success: true, balances, totalUsd }
+  }
+
   try {
     const res = await fetch(
       `${BACKEND_URL}/api/users/${encodeURIComponent(userId)}/balances`,

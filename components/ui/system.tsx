@@ -18,7 +18,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
+import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { RollingAmount } from "@/components/ui/rolling-amount"
 
@@ -153,6 +153,7 @@ export function Segmented<T extends string>({
   value,
   onChange,
   size = "md",
+  grow = false,
   className,
   vividPrefix,
 }: {
@@ -161,6 +162,9 @@ export function Segmented<T extends string>({
   onChange: (key: T) => void
   /** md = the mobile 40px bar. sm = compact, for inside card headers. */
   size?: "sm" | "md"
+  /** Fill the row: the track goes full-width and options split it evenly.
+   *  For master tab bars (e.g. the money-flow modal's direction toggle). */
+  grow?: boolean
   className?: string
   /** Registers each option with Vivid as `${prefix}-${key}` so the assistant
    *  can press tabs. Omit on controls Vivid has no business touching. */
@@ -176,6 +180,9 @@ export function Segmented<T extends string>({
       className={cn(
         "inline-flex shrink-0 items-center rounded-full bg-surface-sunken",
         md ? "gap-1 p-1" : "gap-0.5 p-0.5",
+        // flex-1 (basis 0) rather than a bare w-full: inside a flex row, 100%
+        // would claim the whole line and squeeze out anything beside it.
+        grow && "flex w-full min-w-0 flex-1",
         className,
       )}
     >
@@ -194,6 +201,7 @@ export function Segmented<T extends string>({
             className={cn(
               "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
               md ? "px-3.5 py-2 text-[13px]" : "px-2.5 py-1 text-xs",
+              grow && "flex-1 justify-center",
               active
                 ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent"
                 : "text-muted-foreground hover:text-foreground",
@@ -281,17 +289,50 @@ export function IconAction({
   )
 }
 
+/* ── CardShell — the dashboard card surface: translucent fill + a neutral
+   corner-light ring (the hero account cards' gold ring, de-tinted — family
+   resemblance without spending gold on a container). ─────────────────────── */
+
+export function CardShell({ className, children, ...rest }: React.ComponentProps<"div">) {
+  return (
+    <div
+      className={cn(
+        "relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card/80",
+        className,
+      )}
+      {...rest}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-2xl p-px"
+        style={{
+          background:
+            "linear-gradient(135deg, color-mix(in oklab, var(--foreground) 14%, transparent), color-mix(in oklab, var(--foreground) 4%, transparent) 40%, transparent 65%)",
+          WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          WebkitMaskComposite: "xor",
+          mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          maskComposite: "exclude",
+        }}
+      />
+      {children}
+    </div>
+  )
+}
+
 /* ── CardHeader — the in-card header idiom (no decorative icon) ────────── */
 
 export function CardHeader({
   title,
   subtitle,
+  badge,
   link,
   right,
   className,
 }: {
   title: string
   subtitle?: string
+  /** Small status chip rendered beside the title (e.g. "2 in flight"). */
+  badge?: React.ReactNode
   link?: { label: string; href: string }
   right?: React.ReactNode
   className?: string
@@ -299,13 +340,22 @@ export function CardHeader({
   return (
     <div className={cn("flex items-center justify-between gap-3 px-4 py-3.5", className)}>
       <div className="flex min-w-0 flex-col">
-        <h3 className="text-[15px] font-semibold leading-tight">{title}</h3>
+        <span className="flex items-center gap-2.5">
+          <h3 className="text-[15px] font-semibold leading-tight">{title}</h3>
+          {badge}
+        </span>
         {subtitle && <span className="text-[13px] text-muted-foreground">{subtitle}</span>}
       </div>
       {right}
       {link && (
-        <a href={link.href} className="shrink-0 text-[13px] font-medium text-primary hover:underline">
+        // Navigation stays muted — gold is for brand, primary CTA and active
+        // state, never a "View all".
+        <a
+          href={link.href}
+          className="inline-flex shrink-0 items-center gap-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
           {link.label}
+          <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5" />
         </a>
       )}
     </div>
@@ -445,4 +495,214 @@ export function ListRow({
   if (href) return <a href={href} className={cls}>{inner}</a>
   if (onClick) return <button onClick={onClick} className={cls}>{inner}</button>
   return <div className={cls}>{inner}</div>
+}
+
+/* ── Skeletons — the shape of what's loading ───────────────────────────── */
+
+/** One shimmering block. Neutral; never gold. */
+export function Skel({ className }: { className?: string }) {
+  return <span aria-hidden className={cn("skel block rounded-md", className)} />
+}
+
+/**
+ * A list of rows in the ListRow shape: leading avatar, two stacked lines, a
+ * right-aligned figure. Rows fade toward the bottom so the card reads as
+ * continuing past the fold rather than stopping dead.
+ *
+ * `aria-busy` + a polite label so a screen reader is told the region is
+ * loading instead of being read a wall of empty boxes.
+ */
+export function SkeletonRows({
+  rows = 4,
+  label = "Loading",
+  className,
+}: {
+  rows?: number
+  label?: string
+  className?: string
+}) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label={label}
+      className={cn("flex flex-1 flex-col divide-y divide-border/15", className)}
+    >
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 px-4 py-3"
+          style={{ opacity: 1 - i * (0.55 / Math.max(1, rows - 1)) }}
+        >
+          <Skel className="h-8 w-8 shrink-0 rounded-full" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <Skel className="h-3 w-24 max-w-[40%]" />
+            <Skel className="h-2.5 w-16 max-w-[28%]" />
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <Skel className="h-3 w-16" />
+            <Skel className="h-2.5 w-10" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Rows of figures with no avatar — market tables and stat lists. */
+export function SkeletonTable({
+  rows = 5,
+  cols = 3,
+  label = "Loading",
+  className,
+}: {
+  rows?: number
+  cols?: number
+  label?: string
+  className?: string
+}) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label={label}
+      className={cn("flex flex-1 flex-col divide-y divide-border/15", className)}
+    >
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 px-4 py-3"
+          style={{ opacity: 1 - i * (0.55 / Math.max(1, rows - 1)) }}
+        >
+          <Skel className="h-7 w-7 shrink-0 rounded-full" />
+          <Skel className="h-3 w-20 max-w-[30%]" />
+          <div className="flex flex-1 items-center justify-end gap-6">
+            {Array.from({ length: Math.max(1, cols - 1) }).map((_, c) => (
+              <Skel key={c} className="h-3 w-14" />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ── Allocation palette ────────────────────────────────────────────────────
+   A composition chart needs its slices told apart, and the system's rule is
+   that gold means brand / primary CTA / active state — never a data colour.
+   The escape is that this ramp isn't a *categorical* palette: nothing here
+   says "SOL is gold". It's an ordinal ladder, gold at the top rung and
+   walking down through amber, bronze and brown as the share shrinks, so the
+   colour encodes RANK. Read it like a heat scale, not a key.
+
+   One ladder, used by both the Assets donut and the Portfolio weight bars, so
+   the two pages describe composition in the same voice. ─────────────────── */
+
+export const ALLOCATION_RAMP = [
+  "oklch(0.825 0.172 88)",   // 1st — brand gold
+  "oklch(0.745 0.152 78)",   // 2nd — amber
+  "oklch(0.660 0.128 68)",   // 3rd — deep amber
+  "oklch(0.575 0.100 60)",   // 4th — bronze
+  "oklch(0.490 0.072 55)",   // 5th — brown
+  "oklch(0.410 0.048 50)",   // 6th — deep brown
+] as const
+
+/** Colour for rank `i`. Anything past the ladder (the "Other" bucket) settles
+ *  into warm stone so it reads as a remainder rather than a holding. */
+export function allocationColor(i: number) {
+  return ALLOCATION_RAMP[i] ?? "oklch(0.330 0.020 48)"
+}
+
+/* ── Sparkline — a real series, or nothing ─────────────────────────────────
+   The previous version took a 24h percentage and drew one of two hard-coded
+   zig-zags from its SIGN. Every coin with the same direction got an identical
+   curve, and when the price feed reported 0.00% across the board (Hyperliquid
+   carries no 24h change) the whole watchlist drew the same flat green tick.
+   A chart that isn't reading data is worse than no chart, so this one renders
+   only when it's handed points, and says so by returning null when it isn't. */
+
+export function Sparkline({
+  points,
+  width = 64,
+  height = 24,
+  className,
+}: {
+  points: number[] | undefined
+  width?: number
+  height?: number
+  className?: string
+}) {
+  const id = React.useId()
+  if (!points || points.length < 2) return null
+
+  const min = Math.min(...points)
+  const max = Math.max(...points)
+  const span = max - min || 1
+  // A dead-flat series would otherwise pin to the top edge; centre it instead.
+  const flat = max - min < Number.EPSILON
+  const pad = 1.5
+  const y = (v: number) =>
+    flat ? height / 2 : height - pad - ((v - min) / span) * (height - pad * 2)
+  const x = (i: number) => (i / (points.length - 1)) * width
+
+  const line = points.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(" ")
+  const up = points[points.length - 1] >= points[0]
+  const stroke = up ? "var(--credit)" : "var(--debit)"
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      aria-hidden
+      className={cn("shrink-0 overflow-visible", className)}
+    >
+      <defs>
+        <linearGradient id={`sl-${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={`0,${height} ${line} ${width},${height}`} fill={`url(#sl-${id})`} />
+      <polyline
+        points={line}
+        fill="none"
+        stroke={stroke}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  )
+}
+
+/* ── WeightBar — one row's share of a whole ────────────────────────────────
+   A number in a column tells you a holding's value; it takes arithmetic to
+   learn whether that's most of the portfolio or a rounding error. The bar
+   answers that at a glance, and shares the allocation ladder so a row's
+   colour matches its slice in the donut on Assets. ───────────────────────── */
+
+export function WeightBar({
+  pct,
+  rank = 0,
+  className,
+}: {
+  pct: number
+  rank?: number
+  className?: string
+}) {
+  return (
+    <span
+      className={cn(
+        "block h-1.5 w-full overflow-hidden rounded-full bg-foreground/[0.07]",
+        className,
+      )}
+    >
+      <span
+        className="block h-full rounded-full transition-[width] duration-700 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+        style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: allocationColor(rank) }}
+      />
+    </span>
+  )
 }

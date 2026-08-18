@@ -192,24 +192,21 @@ export type Sell = {
 
 // ── Transactions ────────────────────────────────────────────────────────────
 
-export type UnifiedTransaction = {
-  id: string
-  type: "p2p" | "deposit" | "withdrawal" | "swap" | "transfer" | string
-  subType?: string
-  amount: number
-  token: string
-  chain?: string
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "expired"
-  fiatAmount?: number
-  fiatCurrency?: string
-  fromAddress?: string
-  toAddress?: string
-  txHash?: string
-  side?: string
-  direction?: string
-  createdAt: string
-  completedAt?: string
-}
+/**
+ * The unified transaction row.
+ *
+ * This file used to carry its own narrower copy of this shape, missing every
+ * swap-specific field — `fromToken`, `toToken`, `toAmount`, `fromChain`,
+ * `toChain` — along with `pair`, `price`, `exchangeRate` and `bankDetails`.
+ * Two types for one payload is how the swap history ended up rendering every
+ * row as a literal "? → ?": nothing in the typed path could carry the pair, so
+ * nothing populated it.
+ *
+ * There is one definition now, in types/transactions.ts, and it is re-exported
+ * here so existing importers of `@/lib/crypto-api` keep working unchanged.
+ */
+import type { UnifiedTransaction } from "@/types/transactions"
+export type { UnifiedTransaction }
 
 export type TransactionsPage = {
   success: boolean

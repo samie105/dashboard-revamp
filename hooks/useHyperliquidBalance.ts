@@ -12,12 +12,16 @@ interface HyperliquidBalance {
   total: number
   available: number
   hold: number
-  entryNtl: number
-  entryPrice: number
-  currentPrice: number
-  currentValue: number
-  unrealizedPnl: number
-  unrealizedPnlPercent: number
+  entryNtl: number | null
+  /** null = not served by the account endpoint, which is different from zero.
+   *  These were zeros, and the UI dutifully rendered "Entry Price $0.00" and
+   *  "+0.00%" beside a real balance — a claim that the user paid nothing and
+   *  has made nothing. null forces every reader to decide what to show. */
+  entryPrice: number | null
+  currentPrice: number | null
+  currentValue: number | null
+  unrealizedPnl: number | null
+  unrealizedPnlPercent: number | null
 }
 
 interface UseHyperliquidBalanceResult {
@@ -46,14 +50,16 @@ export function useHyperliquidBalance(
       total: t.total,
       available: t.available,
       hold: t.hold,
-      // Cost-basis fields aren't served by /api/trade/account (mobile doesn't
-      // show them either) — zeros keep the legacy shape without inventing data.
-      entryNtl: 0,
-      entryPrice: 0,
-      currentPrice: 0,
-      currentValue: 0,
-      unrealizedPnl: 0,
-      unrealizedPnlPercent: 0,
+      /* Cost basis isn't served by /api/trade/account (mobile doesn't show it
+         either). It used to be filled with zeros to "keep the legacy shape
+         without inventing data" — but a zero IS invented data once something
+         renders it as a dollar figure. null says what's true: unknown. */
+      entryNtl: null,
+      entryPrice: null,
+      currentPrice: null,
+      currentValue: null,
+      unrealizedPnl: null,
+      unrealizedPnlPercent: null,
     })),
     usdcBalance: {
       total: spotUsdc + spotUsdcHold,

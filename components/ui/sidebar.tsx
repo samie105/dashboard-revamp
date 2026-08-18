@@ -89,6 +89,28 @@ function SidebarProvider({
     [setOpenProp, open]
   )
 
+  /* Tablet default: collapsed to icons.
+     
+     Between 768px and 1180px the expanded rail costs 256px — very nearly a
+     third of an iPad's portrait width — for navigation that is one tap away in
+     icon form. Above that band there's room for both; below it the rail is
+     already replaced by the bottom nav.
+
+     Runs once, on mount, and only when the user has never expressed a
+     preference: the toggle writes a cookie, so a single manual expand pins the
+     rail open for good. Doing it in an effect rather than in `defaultOpen`
+     keeps the server and client render identical — the collapse happens after
+     hydration, which is also when the viewport width first becomes knowable. */
+  const autoCollapsed = React.useRef(false)
+  React.useEffect(() => {
+    if (autoCollapsed.current || openProp !== undefined) return
+    autoCollapsed.current = true
+    if (document.cookie.includes(`${SIDEBAR_COOKIE_NAME}=`)) return
+    if (window.matchMedia("(min-width: 768px) and (max-width: 1179px)").matches) {
+      _setOpen(false)
+    }
+  }, [openProp])
+
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)

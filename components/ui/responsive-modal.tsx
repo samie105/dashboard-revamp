@@ -53,19 +53,19 @@ function ResponsiveModalContent({
 
   return (
     <DialogPrimitive.Portal>
-      {/* Overlay / backdrop */}
+      {/* Overlay / backdrop — the app-wide frost */}
       <DialogPrimitive.Backdrop
-        className="data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 z-50"
+        className="ws-backdrop-in data-closed:animate-out data-closed:fade-out-0 data-closed:duration-200 bg-black/45 backdrop-blur-md fixed inset-0 z-50"
       />
 
       {/* Popup — dialog on desktop, bottom sheet on mobile */}
       <DialogPrimitive.Popup
         data-slot="responsive-modal-content"
         className={cn(
-          "bg-background outline-none text-sm z-50 fixed",
+          "bg-card outline-none text-sm z-50 fixed shadow-2xl ring-1 ring-foreground/10",
           isDesktop
-            ? "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-xl p-4 ring-1 duration-100 sm:max-w-sm top-1/2 left-1/2 w-full -translate-x-1/2 -translate-y-1/2"
-            : "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:slide-out-to-bottom-10 data-open:slide-in-from-bottom-10 flex flex-col gap-4 shadow-lg transition duration-200 ease-in-out inset-x-0 bottom-0 rounded-t-xl border-t p-4",
+            ? "ws-pop-in data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[0.97] data-closed:duration-200 grid max-w-[calc(100%-2rem)] gap-4 rounded-2xl p-4 sm:max-w-sm top-1/2 left-1/2 w-full -translate-x-1/2 -translate-y-1/2"
+            : "ws-sheet-in data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom-10 data-closed:duration-200 flex flex-col gap-4 inset-x-0 bottom-0 rounded-t-3xl p-4",
           className
         )}
         {...props}

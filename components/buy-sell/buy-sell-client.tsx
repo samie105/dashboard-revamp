@@ -15,6 +15,7 @@ import { ReceivePanel } from "@/components/ui/receive-panel"
 import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
 import {
   FlowShell,
+  FlowHeader,
   AnnouncementBanner,
   ErrorDetail,
   ContextPanel,
@@ -24,8 +25,15 @@ import {
   FlowCta,
   StatusScreen,
   FlowSkeleton,
+  useStageProgress,
   type Stage,
 } from "@/components/ui/flow"
+import { useOnline } from "@/hooks/useOnline"
+import {
+  savePendingFlow,
+  readPendingFlow,
+  clearPendingFlow,
+} from "@/lib/pending-flow"
 import {
   fetchBuyAvailability,
   fetchSellInfo,
@@ -89,11 +97,6 @@ const SELL_STAGES: Stage[] = [
   { key: "completed", label: "Dollars credited" },
 ]
 
-function stageIndex(stages: Stage[], status: string) {
-  const i = stages.findIndex((s) => s.key === status)
-  return i === -1 ? 0 : i
-}
-
 /**
  * Backend and chain errors arrive as raw payloads (Privy validation blobs,
  * RPC 429s). Map the ones we can recognise onto something actionable; the
@@ -129,7 +132,9 @@ type Mode = "buy" | "sell"
 /** The modal variant's column — same children as FlowShell, none of the page
  *  margins (the modal/drawer shell already frames it). */
 function ModalBody({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("p-4 sm:p-5", className)}>{children}</div>
+  // Fills the fixed-height shell so the sticky CTA settles at the bottom on
+  // short screens instead of floating mid-modal above dead space.
+  return <div className={cn("flex flex-1 flex-col p-4 sm:p-5", className)}>{children}</div>
 }
 
 export function BuySellClient({
@@ -166,6 +171,14 @@ export function BuySellClient({
   const [submitting, setSubmitting] = React.useState(false)
   const [submitError, setSubmitError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<Buy | Sell | null>(null)
+  /* Set the moment the CTA is pressed, cleared when the flow resets. Its
+     presence is what puts the status screen on screen BEFORE the service has
+     answered — see the status block below. */
+  const [submittedAt, setSubmittedAt] = React.useState<number | null>(null)
+  /* True only while a remembered order is being looked up, so a recovering
+     flow shows a skeleton instead of flashing the empty form first. */
+  const [recovering, setRecovering] = React.useState(false)
+  const online = useOnline()
   // Deposit has two halves: buy with your Dollar Account (needs the treasury)
   // and receive from an external wallet (only needs your own address). The
   // second keeps working when the first is paused.
@@ -205,6 +218,43 @@ export function BuySellClient({
     return () => { cancelled = true }
   }, [isBuy])
 
+  /* Pick up an order this browser started and never saw finish. The modal
+     lives in a portal that unmounts on close and the X stays live mid-transfer,
+     so the reference used to exist only in React state — closing at the wrong
+     moment left a charge in progress and nothing to quote. The service is the
+     authority on how it ended; this only asks. */
+  React.useEffect(() => {
+    const kind = isBuy ? "buy" : "sell"
+    const pending = readPendingFlow(kind)
+    if (!pending) return
+    let cancelled = false
+    setRecovering(true)
+    ;(isBuy ? fetchBuy(pending.reference) : fetchSell(pending.reference))
+      .then((r) => {
+        if (cancelled) return
+        const terminal = isBuy ? BUY_TERMINAL : SELL_TERMINAL
+        if (terminal.includes(r.status)) {
+          // Finished while we weren't looking. History has it; don't hijack
+          // the form to announce old news.
+          clearPendingFlow(kind)
+        } else {
+          pollStartedAt.current = pending.startedAt
+          setWaitedMs(Date.now() - pending.startedAt)
+          setSubmittedAt(pending.startedAt)
+          setResult(r)
+        }
+      })
+      .catch(() => {
+        // A reference the service won't acknowledge is worse than none — it
+        // would strand the user on a status screen that can never advance.
+        if (!cancelled) clearPendingFlow(kind)
+      })
+      .finally(() => {
+        if (!cancelled) setRecovering(false)
+      })
+    return () => { cancelled = true }
+  }, [isBuy])
+
   // Keep the selected network valid as availability loads.
   React.useEffect(() => {
     if (enabled.length && !enabled.includes(network)) setNetwork(enabled[0])
@@ -237,18 +287,30 @@ export function BuySellClient({
      the initiate call is awaiting, or the status screen is still non-terminal.
      Success/failure screens are safe to dismiss. */
   const terminalStatuses = isBuy ? BUY_TERMINAL : SELL_TERMINAL
-  const inFlight = submitting || (!!result && !terminalStatuses.includes(result.status))
+  const isTerminal = !!result && terminalStatuses.includes(result.status)
+  const inFlight = submitting || (!!result && !isTerminal)
+
+  /* Once an order reaches a terminal state there is nothing left to recover,
+     and a stale entry would greet the next visit with a lookup for an order
+     that finished last week. */
+  React.useEffect(() => {
+    if (isTerminal) clearPendingFlow(isBuy ? "buy" : "sell")
+  }, [isTerminal, isBuy])
   React.useEffect(() => {
     onInFlightChange?.(inFlight)
   }, [inFlight, onInFlightChange])
 
   /** Back to the form, with the poll clock wound back. */
   function resetFlow() {
+    clearPendingFlow(isBuy ? "buy" : "sell")
     pollStartedAt.current = null
     setWaitedMs(0)
     setResult(null)
+    setSubmittedAt(null)
     setAmount("")
   }
+
+
 
   /** Resume after giving up, at the backed-off cadence rather than from zero. */
   function resumePolling() {
@@ -283,7 +345,8 @@ export function BuySellClient({
 
   /* The blocker ladder — the CTA always says WHY it can't proceed. */
   const blocker =
-    inert ? (isBuy ? "Buying unavailable right now" : "Selling unavailable right now")
+    !online ? "You're offline"
+    : inert ? (isBuy ? "Buying unavailable right now" : "Selling unavailable right now")
     : walletsLoading ? "Checking your wallet…"
     : missingWallet ? `No ${networkLabel} wallet yet`
     : effectiveMax <= 0 ? `No USDT available on ${networkLabel} right now`
@@ -311,40 +374,70 @@ export function BuySellClient({
     : null
 
   async function submit() {
+    const startedAt = Date.now()
     setSubmitting(true)
+    setSubmittedAt(startedAt)
     setSubmitError(null)
     try {
+      // The field already caps decimals; this guards the arithmetic path
+      // (percentage chips divide a balance and can land on a long tail).
+      const usdtAmount = Math.round(amt * 100) / 100
       const res = isBuy
-        ? await initiateBuy({ usdtAmount: amt, network: network as BuyNetwork })
-        : await initiateSell({ usdtAmount: amt, network: network as SellNetwork })
+        ? await initiateBuy({ usdtAmount, network: network as BuyNetwork })
+        : await initiateSell({ usdtAmount, network: network as SellNetwork })
+      // Written down BEFORE it reaches React state: from here on the order
+      // survives a close, a refresh, or the tab being killed outright.
+      savePendingFlow(isBuy ? "buy" : "sell", res.reference, startedAt)
+      pollStartedAt.current = startedAt
       setResult(res)
     } catch (e) {
+      setSubmittedAt(null)
       setSubmitError(e instanceof CryptoApiError ? e.message : "Something went wrong before anything was charged — it's safe to try again.")
     } finally {
       setSubmitting(false)
     }
   }
 
+  /* The checklist's position, kept monotonic and timestamped. Computed before
+     the early return so the hook runs on every render, form included. */
+  const activeStages = isBuy ? BUY_STAGES : SELL_STAGES
+  const rawStageIndex =
+    result?.status === "completed"
+      ? activeStages.length
+      : Math.max(0, activeStages.findIndex((st) => st.key === (result?.status ?? "pending")))
+  const stageProgress = useStageProgress(rawStageIndex, submittedAt)
+
   /* ── Status screen — the poll's progress report ─────────────────────── */
-  if (result) {
-    const stages = isBuy ? BUY_STAGES : SELL_STAGES
-    const done = result.status === "completed"
+  /* Rendered from the moment the CTA is pressed, not from the moment the
+     service answers. Initiating a buy charges a real account and can take a
+     handful of seconds; leaving the user on a greyed-out button for those
+     seconds is the least reassuring possible response to "I just spent money".
+     The checklist opens on stage one and the service catches up to it. */
+  if (result || submittedAt !== null) {
+    const stages = activeStages
+    const status = result?.status ?? "pending"
+    const done = status === "completed"
     const terminal = isBuy ? BUY_TERMINAL : SELL_TERMINAL
-    const failed = terminal.includes(result.status) && !done
-    const cancelled = result.status === "cancelled"
+    const failed = !!result && terminal.includes(status) && !done
+    const cancelled = status === "cancelled"
+    const activeIndex = done ? stages.length : stageProgress.index
 
     const failureCaption = isBuy
       ? cancelled
         ? "This order was cancelled. Nothing was charged to your Dollar Account."
-        : ("deliveryError" in result && result.deliveryError) ||
+        : (result && "deliveryError" in result && result.deliveryError) ||
           "Your payment went through but delivery didn't complete — support has been notified and will retry or refund automatically."
-      : ("error" in result && result.error) ||
+      : (result && "error" in result && result.error) ||
         "The transfer couldn't be completed. Your USDT hasn't left — it's safe to try again."
 
     /* Still running, long past "under a minute". Say so rather than let the
        spinner keep making a promise the flow has already broken. */
     const stalled = !done && !failed && waitedMs >= POLL_GIVE_UP_MS
     const slow = !done && !failed && !stalled && waitedMs >= POLL_SLOW_AFTER_MS
+    /* Offline is a different stall with different advice: nothing is wrong
+       with the order, we simply can't see it. Saying "updates automatically"
+       here would be a promise the browser can't keep. */
+    const blind = !done && !failed && !online
 
     return (
       <Shell>
@@ -352,7 +445,7 @@ export function BuySellClient({
           state={done ? "success" : failed ? "failure" : "processing"}
           headline={
             done
-              ? isBuy ? `Bought ${result.usdtAmount} USDT` : `Sold ${result.usdtAmount} USDT`
+              ? isBuy ? `Bought ${result!.usdtAmount} USDT` : `Sold ${result!.usdtAmount} USDT`
               : failed
                 ? cancelled ? "Order cancelled" : isBuy ? "Delivery didn't complete" : "Transfer didn't complete"
                 : isBuy ? "Buying your USDT" : "Selling your USDT"
@@ -360,24 +453,32 @@ export function BuySellClient({
           caption={
             done
               ? isBuy
-                ? `$${(result as Buy).usdCharged.toFixed(2)} was charged to your Dollar Account. The USDT is in your ${NETWORKS.find((n) => n.key === result.network)?.label} wallet.`
+                ? `$${(result as Buy).usdCharged.toFixed(2)} was charged to your Dollar Account. The USDT is in your ${NETWORKS.find((nw) => nw.key === result!.network)?.label} wallet.`
                 : `$${(result as Sell).usdProceeds.toFixed(2)} was credited to your Dollar Account.`
               : failed
                 ? failureCaption
-                : stalled || slow
-                  ? "Your order is still open — this is taking longer than it usually does."
-                  : "This usually takes under a minute."
+                : blind
+                  ? "You're offline, so we can't check on this right now. The order carries on without you."
+                  : stalled || slow
+                    ? "Your order is still open — this is taking longer than it usually does."
+                    : !result
+                      ? "Placing your order…"
+                      : "This usually takes under a minute."
           }
           stages={!failed ? stages : undefined}
-          activeIndex={done ? stages.length : stageIndex(stages, result.status)}
-          txHash={result.txHash}
-          autoUpdating={!stalled}
+          activeIndex={activeIndex}
+          stageStartedAt={stageProgress.since}
+          reference={result?.reference}
+          txHash={result?.txHash}
+          autoUpdating={!stalled && !blind}
           notice={
-            stalled
-              ? `We've stopped checking automatically. Nothing is lost — reference ${result.reference}. Check again, or find it in your history.`
-              : slow
-                ? "You can leave this page. The order carries on either way, and history will show how it ends."
-                : undefined
+            blind
+              ? "We'll pick up where we left off as soon as you're back online."
+              : stalled
+                ? `We've stopped checking automatically. Nothing is lost — the reference below identifies this order. Check again, or find it in your history.`
+                : slow
+                  ? "You can leave this page. The order carries on either way, and history will show how it ends."
+                  : undefined
           }
           primary={
             done
@@ -409,12 +510,14 @@ export function BuySellClient({
   return (
     <Shell>
       {isModal ? (
-        /* Compact header — sits left of the shell's close button (pr-10
-           keeps the title clear of it). */
-        <div className="mb-4 flex flex-col gap-0.5 pr-10">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
-        </div>
+        /* Direction-coloured header — deposit arrives in credit green,
+           withdrawal leaves in debit red. */
+        <FlowHeader
+          direction={isBuy ? "in" : "out"}
+          title={title}
+          subtitle={subtitle}
+          className="mb-5"
+        />
       ) : (
         <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
       )}
@@ -434,10 +537,10 @@ export function BuySellClient({
 
       {isBuy && tab === "receive" ? (
         <ReceivePanel only={["tron", "solana", "ethereum"]} asset="USDT" />
-      ) : loading ? (
+      ) : loading || recovering ? (
         <FlowSkeleton />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-1 flex-col gap-4">
           {loadError && (
             <AnnouncementBanner
               title="We couldn't load live limits"
@@ -454,6 +557,22 @@ export function BuySellClient({
                   ? { label: "Receive from another wallet instead", onClick: () => setTab("receive") }
                   : undefined
               }
+            />
+          )}
+          {!online && (
+            <AnnouncementBanner
+              title="You're offline"
+              detail="We can't reach the service or read live limits. Nothing here will submit until you're back."
+              tone="error"
+            />
+          )}
+          {online && !inert && cashUsd === null && !loading && (
+            /* Silence here used to read as "no constraint": with cashUsd null
+               the insufficient-funds check is skipped entirely and the CTA
+               happily offers to spend money we never confirmed was there. */
+            <AnnouncementBanner
+              title="We couldn't read your Dollar Account balance"
+              detail="You can still place an order, but we can't warn you in advance if there isn't enough — the service will decline it if so."
             />
           )}
           {!inert && missingWallet && (
@@ -475,7 +594,10 @@ export function BuySellClient({
             ]}
           />
 
-          <div className="rounded-2xl bg-card px-4 py-5">
+          {/* The hero figure stays unboxed — a borderless amount breathing on
+              the surface, per the house rule. (A bg-card box here was
+              invisible inside the bg-card modal anyway.) */}
+          <div className="py-1">
             <AmountField
               value={amount}
               onChange={setAmount}
@@ -516,7 +638,16 @@ export function BuySellClient({
 
           {submitError && <ErrorDetail message={humanError(submitError)} raw={submitError} />}
 
-          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
+          {isModal ? (
+            /* Pinned confirm — a money modal never hides its button below the
+               fold. A solid footer with a hairline: content slides cleanly
+               under it instead of ghosting through a gradient. */
+            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card px-4 pb-4 pt-3 sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
+              <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
+            </div>
+          ) : (
+            <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
+          )}
         </div>
       )}
     </Shell>
