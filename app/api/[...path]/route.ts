@@ -1,6 +1,4 @@
 import { auth } from "@clerk/nextjs/server"
-import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
-import { devMockApiResponse } from "@/lib/dev-mock-data"
 
 /**
  * Proxy to worldstreet-crypto.
@@ -118,15 +116,6 @@ async function forwardDollarBalances(userId: string, token: string) {
 async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
   const { path: segments } = await ctx.params
   const path = segments.join("/")
-
-  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts):
-  // the external services reject the bypass's fake token, so serve realistic
-  // mock data instead of forwarding. Unmocked paths fall through and fail
-  // loudly rather than silently.
-  if (DEV_AUTH_BYPASS) {
-    const mock = await devMockApiResponse(req, path)
-    if (mock) return mock
-  }
 
   const isDollarBalances = path === "dollar/balances" && req.method === "GET"
 

@@ -1,8 +1,5 @@
 "use server"
 
-import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
-import { DEV_MOCK_USER_BALANCES } from "@/lib/dev-mock-data"
-
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface CoinData {
@@ -1634,14 +1631,6 @@ export interface UserBalance {
 export async function getUserBalances(
   userId: string,
 ): Promise<{ success: boolean; balances: UserBalance[]; totalUsd: number; error?: string }> {
-  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts):
-  // the legacy trading backend has no record for the bypass user.
-  if (DEV_AUTH_BYPASS) {
-    const balances = DEV_MOCK_USER_BALANCES
-    const totalUsd = balances.reduce((sum, b) => sum + b.available + b.locked, 0)
-    return { success: true, balances, totalUsd }
-  }
-
   try {
     const res = await fetch(
       `${BACKEND_URL}/api/users/${encodeURIComponent(userId)}/balances`,

@@ -4,8 +4,6 @@ import { PrivyClient } from "@privy-io/node"
 import { UserWallet } from "@/models/UserWallet"
 import { connectDB } from "@/lib/mongodb"
 import { auth } from "@clerk/nextjs/server"
-import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
-import { DEV_MOCK_WALLETS, DEV_MOCK_TRADING_WALLET } from "@/lib/dev-mock-data"
 
 // The Privy app new signups are created in (0 = old, 1 = second, 2 = third).
 // Bump when the current app hits Privy's account limit.
@@ -108,18 +106,6 @@ function hasCompleteWallets(wallets: unknown): boolean {
 // ── Server Actions ───────────────────────────────────────────────────────
 
 export async function pregenerateWallet(email: string): Promise<WalletResult> {
-  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts):
-  // Privy and Mongo are real services, so hand back mock wallets instead.
-  if (DEV_AUTH_BYPASS) {
-    return {
-      success: true,
-      privyUserId: "did:privy:dev-bypass",
-      privy_type: 2,
-      wallets: DEV_MOCK_WALLETS,
-      tradingWallet: DEV_MOCK_TRADING_WALLET,
-    }
-  }
-
   try {
     const { userId: clerkUserId } = await auth()
 
@@ -224,15 +210,6 @@ export type TradingWalletStatus = {
 }
 
 export async function getTradingWalletStatus(email: string): Promise<TradingWalletStatus> {
-  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
-  if (DEV_AUTH_BYPASS) {
-    return {
-      success: true,
-      hasTradingWallet: true,
-      tradingWallet: { ...DEV_MOCK_TRADING_WALLET, initialized: true },
-    }
-  }
-
   try {
     const { userId: clerkUserId } = await auth()
     if (!email || !clerkUserId) {
@@ -279,17 +256,6 @@ export async function getTradingWalletStatus(email: string): Promise<TradingWall
 }
 
 export async function refreshWallet(email: string): Promise<WalletResult> {
-  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
-  if (DEV_AUTH_BYPASS) {
-    return {
-      success: true,
-      privyUserId: "did:privy:dev-bypass",
-      privy_type: 2,
-      wallets: DEV_MOCK_WALLETS,
-      tradingWallet: DEV_MOCK_TRADING_WALLET,
-    }
-  }
-
   try {
     if (!email) {
       return { success: false, error: "Email is required" }
