@@ -33,6 +33,35 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Two components, not one branch: under the bypass ClerkProvider isn't in
+  // the tree at all (see app/layout.tsx), so Clerk's hooks would throw before
+  // clerk-js even got the chance to fail its domain check. The flag is a
+  // module-level constant, so the same component mounts for the app's lifetime.
+  if (DEV_AUTH_BYPASS) return <BypassAuthProvider>{children}</BypassAuthProvider>
+  return <ClerkAuthProvider>{children}</ClerkAuthProvider>
+}
+
+function BypassAuthProvider({ children }: { children: React.ReactNode }) {
+  const { fetchProfile } = useProfile()
+
+  React.useEffect(() => {
+    fetchProfile()
+  }, [fetchProfile])
+
+  const value = React.useMemo(
+    () => ({
+      user: { ...DEV_BYPASS_USER, isLoaded: true },
+      isSignedIn: true,
+      isLoaded: true,
+      signOut: async () => {},
+    }),
+    [],
+  )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+function ClerkAuthProvider({ children }: { children: React.ReactNode }) {
   const { user, isSignedIn, isLoaded } = useUser()
   const { signOut: clerkSignOut } = useClerk()
   const { fetchProfile } = useProfile()
@@ -71,24 +100,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clerkSignOut({ redirectUrl: "https://www.worldstreetgold.com/login" })
   }, [clerkSignOut])
 
-  const value = React.useMemo(() => {
-    // Dev-only bypass: present a fake signed-in user so AuthGate and the UI
-    // render without Clerk (which is domain-locked and fails on localhost).
-    if (DEV_AUTH_BYPASS) {
-      return {
-        user: { ...DEV_BYPASS_USER, isLoaded: true },
-        isSignedIn: true,
-        isLoaded: true,
-        signOut: async () => {},
-      }
-    }
-    return {
+  const value = React.useMemo(
+    () => ({
       user: authUser,
       isSignedIn: isSignedIn ?? false,
       isLoaded,
       signOut,
-    }
-  }, [authUser, isSignedIn, isLoaded, signOut])
+    }),
+    [authUser, isSignedIn, isLoaded, signOut],
+  )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

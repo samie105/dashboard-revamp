@@ -2,7 +2,8 @@
 
 import { useEffect } from "react"
 import { VividProvider } from "@worldstreet/vivid-voice"
-import { useUser, useAuth } from "@clerk/nextjs"
+import { useUser as useClerkUser, useAuth as useClerkAuth } from "@clerk/nextjs"
+import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
 import { usePathname, useRouter } from "next/navigation"
 import { useProfile } from "@/components/profile-provider"
 import { allFunctions } from "@/lib/vivid-functions"
@@ -31,6 +32,21 @@ const HOSTED = process.env.NEXT_PUBLIC_VIVID_MODE !== "inrepo"
 // Hide the floating mic on auth/full-chat routes. It STAYS on /trade — driving
 // the trading workspace by voice is the whole point of Vivid on this app.
 const HIDE_MIC_ROUTES = ["/login", "/register", "/vivid", "/community"]
+
+// Under the dev bypass ClerkProvider isn't mounted (see app/layout.tsx), so
+// Clerk's hooks would throw. The pick is a module-level constant — the same
+// implementation runs on every render, so the rules of hooks hold.
+const useUser = DEV_AUTH_BYPASS
+  ? () => ({
+      user: {
+        id: DEV_BYPASS_USER.userId,
+        firstName: DEV_BYPASS_USER.firstName,
+        lastName: DEV_BYPASS_USER.lastName,
+        primaryEmailAddress: { emailAddress: DEV_BYPASS_USER.email },
+      },
+    })
+  : useClerkUser
+const useAuth = DEV_AUTH_BYPASS ? () => ({ isSignedIn: true }) : useClerkAuth
 
 export function VividVoiceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser()
