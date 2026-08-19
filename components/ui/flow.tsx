@@ -24,6 +24,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   AlertCircleIcon,
   ArrowDownLeft01Icon,
+  ArrowRight01Icon,
   ArrowUpRight01Icon,
 } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
@@ -95,6 +96,67 @@ export function ContextPanel({
   )
 }
 
+/* ── RouteStrip — where the money starts and where it lands ────────────── */
+
+/**
+ * The flow's story told as a route: source on the left, destination on the
+ * right, the direction arrow between them in the colour of the money. The
+ * endpoints are LIVE — pick a different network or venue below and the
+ * destination updates in place, so the strip always states exactly what the
+ * CTA is about to do.
+ */
+export function RouteStrip({
+  from,
+  to,
+  direction,
+  className,
+}: {
+  from: { label: string; sub?: React.ReactNode }
+  to: { label: string; sub?: React.ReactNode }
+  direction: "in" | "out"
+  className?: string
+}) {
+  const isIn = direction === "in"
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl bg-surface-sunken/70 px-4 py-3 ring-1 ring-border/25",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">From</span>
+        {/* Keyed by label: when the endpoint changes (network flip, venue
+            swap) the new name takes a small rise instead of teleporting. */}
+        <span key={from.label} className="ws-microswap truncate text-[13px] font-semibold leading-tight">
+          {from.label}
+        </span>
+        {from.sub && (
+          <span className="truncate text-[11.5px] tabular-nums leading-tight text-muted-foreground">{from.sub}</span>
+        )}
+      </div>
+      <span
+        aria-hidden
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+          isIn ? "bg-credit-chip text-credit" : "bg-debit-chip text-debit",
+        )}
+      >
+        <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5" />
+      </span>
+      <div className="flex min-w-0 flex-col items-end gap-0.5 text-right">
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">To</span>
+        <span key={to.label} className="ws-microswap truncate text-[13px] font-semibold leading-tight">
+          {to.label}
+        </span>
+        {to.sub && (
+          <span className="truncate text-[11.5px] tabular-nums leading-tight text-muted-foreground">{to.sub}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── AmountField — the hero figure ─────────────────────────────────────── */
 
 export function AmountField({
@@ -103,6 +165,7 @@ export function AmountField({
   unit,
   hint,
   problem,
+  approx,
   /** When the spendable max is known, chips are 25/50/75/Max of it.
    *  Otherwise pass `presets` for fixed amounts. */
   maxSpend,
@@ -117,6 +180,10 @@ export function AmountField({
   hint?: string
   /** Validation message — replaces the hint, in warning tone. */
   problem?: string | null
+  /** Live conversion for the typed amount ("≈ $101.00 charged to your Dollar
+   *  Account") — the answer to "what does this figure cost me", right where
+   *  the figure is. Takes the hint's line while present; problem outranks it. */
+  approx?: string | null
   maxSpend?: number | null
   presets?: number[]
   autoFocus?: boolean
@@ -136,7 +203,7 @@ export function AmountField({
     onChange(frac !== undefined ? `${w}.${frac}` : w)
   }
   return (
-    <div className="flex flex-col items-center gap-3 py-2">
+    <div className="flex flex-col items-center gap-2.5 py-1.5">
       <div className="flex w-full items-baseline justify-center gap-2">
         <input
           value={value}
@@ -150,7 +217,9 @@ export function AmountField({
           className="w-full min-w-0 bg-transparent text-center font-display text-[clamp(2.75rem,8vw,3.5rem)] font-light leading-none tracking-[-0.02em] tabular-nums outline-none placeholder:text-muted-foreground/30"
         />
       </div>
-      <span className="text-[13px] font-semibold text-muted-foreground">{unit}</span>
+      <span className="rounded-full bg-surface-sunken px-2.5 py-1 text-[11px] font-bold tracking-[0.04em] text-muted-foreground ring-1 ring-border/25">
+        {unit}
+      </span>
 
       {(maxSpend != null && maxSpend > 0) ? (
         <div className="flex items-center gap-1.5">
@@ -180,6 +249,12 @@ export function AmountField({
 
       {problem ? (
         <p className="text-center text-[13px] font-medium text-warning">{problem}</p>
+      ) : approx ? (
+        /* Mounted once when an amount first exists (not keyed by text — that
+           would replay the rise on every keystroke). */
+        <p className="ws-microswap text-center text-[13px] font-medium tabular-nums text-muted-foreground">
+          {approx}
+        </p>
       ) : hint ? (
         <p className="text-center text-xs text-subtle">{hint}</p>
       ) : null}
@@ -209,18 +284,27 @@ export function ChoiceRow<T extends string>({
             key={o.key}
             onClick={() => onChange(o.key)}
             className={cn(
-              "flex items-center justify-center gap-2 rounded-2xl px-3 py-3 transition-all active:scale-[0.97] motion-reduce:active:scale-100",
+              "relative flex flex-col items-center gap-1.5 rounded-2xl px-3 pb-3 pt-3.5 transition-all active:scale-[0.97] motion-reduce:active:scale-100",
               active
-                ? // The chosen network floats: a half-step lift + a real
+                ? // The chosen option floats: a half-step lift + a real
                   // shadow, so selection reads as depth, not just tint.
                   "-translate-y-0.5 bg-accent shadow-[0_8px_20px_-10px_rgb(0_0_0/0.6)] ring-1 ring-foreground/[0.10] motion-reduce:translate-y-0"
                 : "bg-surface-sunken/70 hover:bg-accent/60",
             )}
           >
-            {o.icon && <img src={o.icon} alt="" className="h-5 w-5 rounded-full" />}
-            <span className="flex min-w-0 flex-col items-start leading-tight">
+            {/* Gold = active state, exactly what this dot means. It pops in
+                when the choice lands rather than being painted in place. */}
+            {active && (
+              <span className="ws-pop-in absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </span>
+            )}
+            {o.icon && <img src={o.icon} alt="" className="h-6 w-6 rounded-full" />}
+            <span className="flex min-w-0 flex-col items-center leading-tight">
               <span className={cn("text-[13px] font-semibold", !active && "text-foreground/80")}>{o.label}</span>
-              {o.sub && <span className="text-[11px] text-subtle">{o.sub}</span>}
+              {o.sub && <span className="mt-0.5 text-[11px] tabular-nums text-subtle">{o.sub}</span>}
             </span>
           </button>
         )
@@ -238,12 +322,28 @@ export function DetailPanel({
   rows: { label: string; value: React.ReactNode; strong?: boolean }[]
   className?: string
 }) {
+  // A receipt, not a table: dotted leaders run label to value the way a
+  // printed ticket does, and the total row separates itself with a hairline
+  // and a size step instead of just bolding in place.
   return (
-    <div className={cn("divide-y divide-border/15 rounded-2xl bg-surface-sunken/70 px-4 ring-1 ring-border/25", className)}>
+    <div className={cn("rounded-2xl bg-surface-sunken/70 px-4 py-1.5 ring-1 ring-border/25", className)}>
       {rows.map((r) => (
-        <div key={r.label} className="flex items-center justify-between py-2.5">
-          <span className={cn("text-[13px]", r.strong ? "font-semibold" : "text-muted-foreground")}>{r.label}</span>
-          <span className={cn("text-[13px] tabular-nums", r.strong ? "font-bold" : "font-medium")}>{r.value}</span>
+        <div
+          key={r.label}
+          className={cn("flex items-baseline gap-2.5 py-2.5", r.strong && "mt-0.5 border-t border-border/40")}
+        >
+          <span className={cn("shrink-0 text-[13px]", r.strong ? "font-semibold" : "text-muted-foreground")}>
+            {r.label}
+          </span>
+          <span aria-hidden className="mb-1 flex-1 self-end border-b border-dotted border-foreground/15" />
+          <span
+            className={cn(
+              "shrink-0 tabular-nums",
+              r.strong ? "text-[15px] font-bold" : "text-[13px] font-medium",
+            )}
+          >
+            {r.value}
+          </span>
         </div>
       ))}
     </div>

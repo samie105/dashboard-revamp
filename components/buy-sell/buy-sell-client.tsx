@@ -18,7 +18,7 @@ import {
   FlowHeader,
   AnnouncementBanner,
   ErrorDetail,
-  ContextPanel,
+  RouteStrip,
   AmountField,
   ChoiceRow,
   DetailPanel,
@@ -516,7 +516,7 @@ export function BuySellClient({
           direction={isBuy ? "in" : "out"}
           title={title}
           subtitle={subtitle}
-          className="ws-casc ws-casc-1 mb-5"
+          className="ws-casc ws-casc-1 mb-4"
         />
       ) : (
         <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
@@ -586,14 +586,33 @@ export function BuySellClient({
               action={{ label: "Try again", onClick: () => { void refreshWallets() } }}
             />
           )}
-          <ContextPanel
-            className="ws-casc ws-casc-3"
-            rows={[
-              ...(cashUsd !== null
-                ? [{ label: "Dollar Account", value: `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}` }]
-                : []),
-            ]}
-          />
+          {/* The route: where the money starts, where it lands. The wallet
+              endpoint tracks the network picker below — including the actual
+              address it will use, which is the strongest "this is real"
+              detail the form can show. */}
+          {(() => {
+            const dollarSide = {
+              label: "Dollar Account",
+              sub:
+                cashUsd !== null
+                  ? `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} available`
+                  : undefined,
+            }
+            const walletSide = {
+              label: `${networkLabel} wallet`,
+              sub: walletAddress
+                ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`
+                : "USDT",
+            }
+            return (
+              <RouteStrip
+                className="ws-casc ws-casc-3"
+                direction={isBuy ? "in" : "out"}
+                from={isBuy ? dollarSide : walletSide}
+                to={isBuy ? walletSide : dollarSide}
+              />
+            )
+          })()}
 
           {/* The hero figure stays unboxed — a borderless amount breathing on
               the surface, per the house rule. (A bg-card box here was
@@ -609,6 +628,13 @@ export function BuySellClient({
                   : `Min ${limits.min} · Max ${limits.max.toLocaleString()}`
               }
               problem={amountProblem}
+              approx={
+                amt > 0
+                  ? isBuy
+                    ? `≈ $${usdSide.toFixed(2)} charged to your Dollar Account`
+                    : `≈ $${usdSide.toFixed(2)} to your Dollar Account`
+                  : undefined
+              }
               maxSpend={maxSpendUsdt}
               presets={!maxSpendUsdt ? [10, 50, 100, 500].filter((p) => p >= limits.min && p <= effectiveMax) : undefined}
             />
@@ -624,12 +650,17 @@ export function BuySellClient({
           </div>
 
           {amt > 0 && (
+            /* The receipt — every choice the order will be placed with,
+               itemised, with the fee in dollars rather than a bare percent. */
             <DetailPanel
               rows={[
                 { label: isBuy ? "You receive" : "You sell", value: `${amt.toLocaleString()} USDT` },
-                ...(limits.feePercent > 0 ? [{ label: "Fee", value: `${limits.feePercent}%` }] : []),
+                { label: "Network", value: networkLabel },
+                ...(limits.feePercent > 0
+                  ? [{ label: `Fee (${limits.feePercent}%)`, value: `$${Math.abs(usdSide - amt).toFixed(2)}` }]
+                  : []),
                 {
-                  label: isBuy ? "You pay" : "You receive",
+                  label: isBuy ? "Charged to Dollar Account" : "Credited to Dollar Account",
                   value: `$${usdSide.toFixed(2)}`,
                   strong: true,
                 },

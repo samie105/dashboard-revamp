@@ -17,7 +17,7 @@ import {
   FlowHeader,
   AnnouncementBanner,
   ErrorDetail,
-  ContextPanel,
+  RouteStrip,
   AmountField,
   ChoiceRow,
   DetailPanel,
@@ -474,7 +474,7 @@ export function FundClient({
           direction={isFund ? "in" : "out"}
           title={title}
           subtitle={subtitle}
-          className="ws-casc ws-casc-1 mb-5"
+          className="ws-casc ws-casc-1 mb-4"
         />
       ) : (
         <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
@@ -525,17 +525,32 @@ export function FundClient({
               detail={limits.reason || "This is usually brief — everything below is disabled until it's back."}
             />
           )}
-          <ContextPanel
-            className="ws-casc ws-casc-3"
-            rows={[
-              ...(cashUsd !== null
-                ? [{ label: "Dollar Account", value: `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}` }]
-                : []),
-              ...(hl
-                ? [{ label: "Trading balance", value: `Spot $${hl.spot.toFixed(2)} · Futures $${hl.perps.toFixed(2)}` }]
-                : []),
-            ]}
-          />
+          {/* The route: Dollar Account on one side, the Hyperliquid venue on
+              the other. The venue endpoint tracks the Spot/Futures picker
+              below, balance included. */}
+          {(() => {
+            const sideLabel = side === "spot" ? "Spot" : "Futures"
+            const sideBalance = hl ? (side === "spot" ? hl.spot : hl.perps) : null
+            const dollarSide = {
+              label: "Dollar Account",
+              sub:
+                cashUsd !== null
+                  ? `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} available`
+                  : undefined,
+            }
+            const venueSide = {
+              label: `Hyperliquid ${sideLabel}`,
+              sub: sideBalance !== null ? `$${sideBalance.toFixed(2)} balance` : "Trading account",
+            }
+            return (
+              <RouteStrip
+                className="ws-casc ws-casc-3"
+                direction={isFund ? "in" : "out"}
+                from={isFund ? dollarSide : venueSide}
+                to={isFund ? venueSide : dollarSide}
+              />
+            )
+          })()}
 
           {/* Unboxed hero amount — same treatment as buy/sell. */}
           <div className="ws-casc-pop ws-casc-4 py-1">
@@ -545,6 +560,13 @@ export function FundClient({
               unit="USDC"
               hint={`Min ${limits.min} · Max ${limits.max.toLocaleString()}`}
               problem={amountProblem}
+              approx={
+                amt > 0
+                  ? isFund
+                    ? `≈ $${costUsd.toFixed(2)} charged to your Dollar Account`
+                    : `≈ $${costUsd.toFixed(2)} to your Dollar Account`
+                  : undefined
+              }
               maxSpend={maxSpend}
             />
           </div>
@@ -563,10 +585,14 @@ export function FundClient({
           </div>
 
           {amt > 0 && (
+            /* The receipt — the transfer itemised, fee in dollars. */
             <DetailPanel
               rows={[
-                { label: isFund ? "To your trading balance" : "From your trading balance", value: `${amt.toLocaleString()} USDC` },
-                ...(limits.feePercent > 0 ? [{ label: "Fee", value: `${limits.feePercent}%` }] : []),
+                { label: isFund ? "You transfer" : "You withdraw", value: `${amt.toLocaleString()} USDC` },
+                { label: isFund ? "Destination" : "From", value: `Hyperliquid ${side === "spot" ? "Spot" : "Futures"}` },
+                ...(limits.feePercent > 0
+                  ? [{ label: `Fee (${limits.feePercent}%)`, value: `$${Math.abs(costUsd - amt).toFixed(2)}` }]
+                  : []),
                 {
                   label: isFund ? "Charged to Dollar Account" : "Credited to Dollar Account",
                   value: `$${costUsd.toFixed(2)}`,

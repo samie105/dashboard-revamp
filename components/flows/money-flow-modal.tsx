@@ -227,15 +227,15 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                 ? // Bottom drawer — slides up, safe-area padded. A FIXED height
                   // (not max-h) so switching direction never resizes the sheet.
                   "inset-x-0 bottom-0 h-[86dvh] translate-y-0 rounded-t-[28px] safe-area-bottom transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-y-full data-starting-style:translate-y-full"
-                : // Centered modal — springy pop with a blur-to-focus resolve,
-                  // quick fade out. Fixed height for the same reason; dvh cap
-                  // keeps it honest on short laptop screens.
-                  "ws-modal-in left-1/2 top-1/2 h-[680px] max-h-[86dvh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
+                : // Centered modal — springy push-up with a blur-to-focus
+                  // resolve, quick fade out. Fixed height for the same reason;
+                  // dvh cap keeps it honest on short laptop screens.
+                  "ws-modal-in left-1/2 top-1/2 h-[720px] max-h-[86dvh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
             )}
           >
-            {/* The vault unlocking — one gold arc runs the rim and burns out.
-                An event (this open), never a standing gold border. */}
-            <span aria-hidden className="ws-ring-sweep" />
+            {/* Gold rim shimmer — a faint standing stroke with a slow glint
+                walking the border. The money surface's one standing gold. */}
+            <span aria-hidden className="ws-ring-shimmer" />
 
             {/* Direction wash — the modal breathes the colour of the money's
                 direction. BOTH directions are painted and cross-faded, so
