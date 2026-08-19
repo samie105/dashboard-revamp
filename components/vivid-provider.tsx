@@ -86,7 +86,10 @@ export function VividVoiceProvider({ children }: { children: React.ReactNode }) 
     return (
       <>
         {children}
-        {!hideMic && <VividWidget />}
+        {/* The hosted widget's config is domain-locked like Clerk's keys were —
+            on localhost it can only 403 into the console, so the bypass build
+            drops it entirely. */}
+        {!hideMic && !DEV_AUTH_BYPASS && <VividWidget />}
       </>
     )
   }
