@@ -75,7 +75,7 @@ function TradeConfirmDialog({
     >
       {/* sheet */}
       <div
-        className="ws-sheet-in ws-glass ws-glass-edge w-full rounded-t-3xl px-6 pt-6 pb-28 shadow-2xl"
+        className="ws-sheet-in ws-glass ws-glass-edge relative w-full rounded-t-3xl px-6 pt-6 pb-28 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* coin header */}

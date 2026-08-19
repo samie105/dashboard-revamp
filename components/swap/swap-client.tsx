@@ -64,7 +64,7 @@ function TokenSelectModal({
 
   return (
     <div className="ws-backdrop-in fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-md">
-      <div ref={ref} className="ws-modal-in ws-glass ws-glass-edge w-full max-w-md rounded-2xl shadow-2xl ring-1 ring-foreground/10">
+      <div ref={ref} className="ws-modal-in ws-glass ws-glass-edge relative w-full max-w-md rounded-2xl shadow-2xl ring-1 ring-foreground/10">
         <div className="flex items-center justify-between border-b border-border/30 p-4">
           <h3 className="text-sm font-semibold">Select Token</h3>
           <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
