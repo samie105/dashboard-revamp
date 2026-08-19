@@ -107,8 +107,8 @@ export type WalletInfo = {
   privyUserId: string
   email: string
   wallets: Partial<Record<Chain, ChainWallet>>
-  /** Which Privy app the user's wallets live in (0 = old, 1 = second, 2 = third). */
-  privy_type: 0 | 1 | 2
+  /** Which Privy app the user's wallets live in (0 = old, 1 = second, 2 = third, 3 = fourth). */
+  privy_type: 0 | 1 | 2 | 3
 }
 
 export type TokenBalance = {
