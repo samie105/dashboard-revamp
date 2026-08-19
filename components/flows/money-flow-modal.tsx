@@ -188,6 +188,31 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
       <Dialog.Root open={open} onOpenChange={handleOpenChange} modal>
         <Dialog.Portal>
           <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/45 transition-opacity duration-300 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-md" />
+
+          {/* Backlight — a direction-coloured bloom BEHIND the glass, so the
+              modal reads as lit from the money's side of the wall. The wrapper
+              carries the scale-in; the two tints cross-fade inside it. */}
+          {!isMobile && (
+            <div
+              aria-hidden
+              className="ws-modal-glow pointer-events-none fixed left-1/2 top-1/2 z-50 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2"
+            >
+              {(["in", "out"] as const).map((d) => (
+                <div
+                  key={d}
+                  className={cn(
+                    "absolute inset-0 rounded-full transition-opacity duration-500",
+                    (mode === "buy" || mode === "fund") === (d === "in") ? "opacity-100" : "opacity-0",
+                  )}
+                  style={{
+                    background: `radial-gradient(closest-side, color-mix(in oklab, ${
+                      d === "in" ? "var(--credit)" : "var(--debit)"
+                    } 15%, transparent), transparent 72%)`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
           <Dialog.Popup
             aria-label={FLOW_LABELS[mode]}
             className={cn(
@@ -208,24 +233,48 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                   "ws-modal-in left-1/2 top-1/2 h-[680px] max-h-[86dvh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
             )}
           >
+            {/* The vault unlocking — one gold arc runs the rim and burns out.
+                An event (this open), never a standing gold border. */}
+            <span aria-hidden className="ws-ring-sweep" />
+
             {/* Direction wash — the modal breathes the colour of the money's
-                direction: a whisper of credit green when funds arrive, debit
-                red when they leave. BOTH are painted and cross-faded, so
-                flipping direction bleeds one into the other instead of
-                snapping mid-slide. */}
-            {(["in", "out"] as const).map((d) => (
-              <div
-                key={d}
-                aria-hidden
-                className={cn(
-                  "pointer-events-none absolute inset-x-0 top-0 h-36 rounded-t-[inherit] transition-opacity duration-500",
-                  d === "in"
-                    ? "bg-[radial-gradient(120%_85%_at_50%_0%,color-mix(in_oklab,var(--credit)_13%,transparent)_0%,transparent_70%)]"
-                    : "bg-[radial-gradient(120%_85%_at_50%_0%,color-mix(in_oklab,var(--debit)_13%,transparent)_0%,transparent_70%)]",
-                  (mode === "buy" || mode === "fund") === (d === "in") ? "opacity-100" : "opacity-0",
-                )}
-              />
-            ))}
+                direction. BOTH directions are painted and cross-faded, so
+                flipping bleeds one into the other instead of snapping. Inside
+                each: the base radial plus two aurora blobs drifting on slow,
+                offset orbits — the same alive-surface register as the
+                dashboard's silk field. */}
+            {(["in", "out"] as const).map((d) => {
+              const tone = d === "in" ? "var(--credit)" : "var(--debit)"
+              return (
+                <div
+                  key={d}
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute inset-x-0 top-0 h-44 overflow-hidden rounded-t-[inherit] transition-opacity duration-500",
+                    (mode === "buy" || mode === "fund") === (d === "in") ? "opacity-100" : "opacity-0",
+                  )}
+                >
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background: `radial-gradient(120% 85% at 50% 0%, color-mix(in oklab, ${tone} 13%, transparent) 0%, transparent 70%)`,
+                    }}
+                  />
+                  <div
+                    className="ws-aurora-a absolute -left-12 -top-16 h-44 w-80 rounded-full blur-2xl"
+                    style={{
+                      background: `radial-gradient(closest-side, color-mix(in oklab, ${tone} 20%, transparent), transparent)`,
+                    }}
+                  />
+                  <div
+                    className="ws-aurora-b absolute -right-10 -top-8 h-36 w-64 rounded-full blur-2xl"
+                    style={{
+                      background: `radial-gradient(closest-side, color-mix(in oklab, ${tone} 13%, transparent), transparent)`,
+                    }}
+                  />
+                </div>
+              )
+            })}
 
             {/* Direction pulse — keyed by mode, so every switch (and the first
                 open) remounts it and the modal takes ONE breath in the colour
@@ -251,7 +300,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                 one top-level choice) with the X inline beside it. The X stays
                 available even in flight: an explicit choice, unlike a stray
                 backdrop tap. Both pinned above the scroll area. */}
-            <div className="relative flex shrink-0 items-center gap-2 px-4 pb-1 pt-4 sm:px-5">
+            <div className="ws-casc ws-casc-0 relative flex shrink-0 items-center gap-2 px-4 pb-1 pt-4 sm:px-5">
               <Segmented
                 grow
                 value={mode}
