@@ -202,14 +202,23 @@ export function AmountField({
     if (frac !== undefined && frac.length > maxDecimals) return
     onChange(frac !== undefined ? `${w}.${frac}` : w)
   }
+
+  // Focus by hand with preventScroll, never via the autoFocus attribute: the
+  // attribute's focus scrolls ancestors to reveal the input, and this field
+  // mounts late (skeleton → form) inside overlays — one positioning accident
+  // and that scroll yanks the whole page (it did).
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  React.useEffect(() => {
+    if (autoFocus) inputRef.current?.focus({ preventScroll: true })
+  }, [autoFocus])
   return (
     <div className="flex flex-col items-center gap-2.5 py-1.5">
       <div className="flex w-full items-baseline justify-center gap-2">
         <input
+          ref={inputRef}
           value={value}
           onChange={(e) => set(e.target.value)}
           inputMode="decimal"
-          autoFocus={autoFocus}
           placeholder="0"
           aria-label={`Amount in ${unit}`}
           data-vivid-target="flow-amount"

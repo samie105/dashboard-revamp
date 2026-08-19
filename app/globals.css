@@ -681,13 +681,16 @@ input[type="range"]::-moz-range-track {
    the top-left where the (imaginary) light source sits, faint again at the
    bottom edge — is what makes the surface read as material, not as a low
    opacity mistake. */
-/* In @layer components so Tailwind's position utilities (utilities layer,
-   higher) still win: un-layered, this `relative` silently overrode `fixed`
-   on every dialog popup, dropping them into normal flow at the end of body —
-   the page grew by the modal's height and autofocus scrolled down to it. */
-@layer components {
-  .ws-glass-edge { position: relative; }
-}
+/* .ws-glass-edge declares NO position on purpose. Its ::before is absolute,
+   so every caller must be positioned itself — the dialog popups are `fixed`,
+   in-page cards say `relative` explicitly. An earlier `position: relative`
+   here silently overrode `fixed` on every popup (un-layered author CSS beats
+   Tailwind's layered utilities), dropping modals into normal flow at the end
+   of body — the page grew by the modal's height and autofocus scrolled down
+   to it. Wrapping the rule in @layer components did NOT fix it: Tailwind v4
+   compiles author @layer blocks away and re-emits the rules un-layered, so
+   the override came back on every clean build. Don't reintroduce position
+   here in any form. */
 .ws-glass-edge::before {
   content: "";
   position: absolute;
