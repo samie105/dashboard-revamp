@@ -856,6 +856,22 @@ input[type="range"]::-moz-range-track {
   100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
 }
 .ws-casc-pop { animation: ws-casc-pop 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* ── Flow terminal ────────────────────────────────────────────────────────
+   The money modal's instrument layout. Two standing motions, both quiet:
+   a light beam travels the route rail in the direction of the money, and
+   the amount takes a tiny pop as each digit lands. */
+@keyframes ws-flow-beam {
+  from { transform: translateY(-150%); }
+  to   { transform: translateY(400%); }
+}
+.ws-flow-beam { animation: ws-flow-beam 1.9s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+
+@keyframes ws-digit-pop {
+  from { transform: scale(1.035); }
+  to   { transform: scale(1); }
+}
+.ws-digit-pop { transform-origin: left center; animation: ws-digit-pop 0.16s ease-out; }
+
 /* Micro swap — a small rise for a LABEL that changed in place (the route
    strip's endpoint when the network flips, the live conversion line). Sized
    for 13px text: 6px of travel, no blur, done in 0.28s. */
@@ -875,7 +891,9 @@ input[type="range"]::-moz-range-track {
 
 @media (prefers-reduced-motion: reduce) {
   .ws-modal-in, .ws-badge-pop, .ws-cta-breathe, .ws-modal-glow,
-  .ws-aurora-a, .ws-aurora-b, .ws-casc, .ws-casc-pop, .ws-microswap { animation: none; }
+  .ws-aurora-a, .ws-aurora-b, .ws-casc, .ws-casc-pop, .ws-microswap,
+  .ws-digit-pop { animation: none; }
+  .ws-flow-beam { animation: none; opacity: 0; }
   .ws-wash-pulse { animation: none; opacity: 0; }
   /* The standing gold stroke stays; only the travelling glint stops. */
   .ws-ring-shimmer::before { animation: none; opacity: 0; }

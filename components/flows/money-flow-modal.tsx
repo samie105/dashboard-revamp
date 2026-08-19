@@ -228,68 +228,19 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                   // (not max-h) so switching direction never resizes the sheet.
                   "inset-x-0 bottom-0 h-[86dvh] translate-y-0 rounded-t-[28px] safe-area-bottom transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-y-full data-starting-style:translate-y-full"
                 : // Centered modal — springy push-up with a blur-to-focus
-                  // resolve, quick fade out. Fixed height for the same reason;
-                  // dvh cap keeps it honest on short laptop screens.
-                  "ws-modal-in left-1/2 top-1/2 h-[720px] max-h-[86dvh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
+                  // resolve, quick fade out. WIDE: the terminal layout puts
+                  // the stage and the keypad side by side. Fixed height for
+                  // the same reason; dvh cap keeps it honest on laptops.
+                  "ws-modal-in left-1/2 top-1/2 h-[680px] max-h-[86dvh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
             )}
           >
             {/* Gold rim shimmer — a faint standing stroke with a slow glint
                 walking the border. The money surface's one standing gold. */}
             <span aria-hidden className="ws-ring-shimmer" />
 
-            {/* Direction wash — the modal breathes the colour of the money's
-                direction. BOTH directions are painted and cross-faded, so
-                flipping bleeds one into the other instead of snapping. Inside
-                each: the base radial plus two aurora blobs drifting on slow,
-                offset orbits — the same alive-surface register as the
-                dashboard's silk field. */}
-            {(["in", "out"] as const).map((d) => {
-              const tone = d === "in" ? "var(--credit)" : "var(--debit)"
-              return (
-                <div
-                  key={d}
-                  aria-hidden
-                  className={cn(
-                    "pointer-events-none absolute inset-x-0 top-0 h-44 overflow-hidden rounded-t-[inherit] transition-opacity duration-500",
-                    (mode === "buy" || mode === "fund") === (d === "in") ? "opacity-100" : "opacity-0",
-                  )}
-                >
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      background: `radial-gradient(120% 85% at 50% 0%, color-mix(in oklab, ${tone} 13%, transparent) 0%, transparent 70%)`,
-                    }}
-                  />
-                  <div
-                    className="ws-aurora-a absolute -left-12 -top-16 h-44 w-80 rounded-full blur-2xl"
-                    style={{
-                      background: `radial-gradient(closest-side, color-mix(in oklab, ${tone} 20%, transparent), transparent)`,
-                    }}
-                  />
-                  <div
-                    className="ws-aurora-b absolute -right-10 -top-8 h-36 w-64 rounded-full blur-2xl"
-                    style={{
-                      background: `radial-gradient(closest-side, color-mix(in oklab, ${tone} 13%, transparent), transparent)`,
-                    }}
-                  />
-                </div>
-              )
-            })}
-
-            {/* Direction pulse — keyed by mode, so every switch (and the first
-                open) remounts it and the modal takes ONE breath in the colour
-                of the new direction: a bloom from the toggle that decays. An
-                event, not ambience — it can only fire when direction changed. */}
-            <div
-              key={mode}
-              aria-hidden
-              className={cn(
-                "ws-wash-pulse pointer-events-none absolute inset-x-0 top-0 h-44 rounded-t-[inherit]",
-                mode === "buy" || mode === "fund"
-                  ? "bg-[radial-gradient(130%_90%_at_50%_0%,color-mix(in_oklab,var(--credit)_26%,transparent)_0%,transparent_72%)]"
-                  : "bg-[radial-gradient(130%_90%_at_50%_0%,color-mix(in_oklab,var(--debit)_26%,transparent)_0%,transparent_72%)]",
-              )}
-            />
+            {/* The direction atmosphere lives in each panel's STAGE now (see
+                flow-terminal.tsx) — it swaps with the panels, so no wash is
+                painted at the shell level. */}
 
             {/* Grabber — the drawer names its own gesture. */}
             {isMobile && (

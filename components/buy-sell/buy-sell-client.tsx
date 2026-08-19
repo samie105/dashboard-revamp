@@ -15,7 +15,6 @@ import { ReceivePanel } from "@/components/ui/receive-panel"
 import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
 import {
   FlowShell,
-  FlowHeader,
   AnnouncementBanner,
   ErrorDetail,
   RouteStrip,
@@ -28,6 +27,7 @@ import {
   useStageProgress,
   type Stage,
 } from "@/components/ui/flow"
+import { FlowTerminal, ChipRow } from "@/components/flows/flow-terminal"
 import { useOnline } from "@/hooks/useOnline"
 import {
   savePendingFlow,
@@ -507,23 +507,177 @@ export function BuySellClient({
     ? "Pay from your Dollar Account — USDT lands in your wallet."
     : "USDT leaves your wallet — dollars land in your Dollar Account."
 
-  return (
-    <Shell>
-      {isModal ? (
-        /* Direction-coloured header — deposit arrives in credit green,
-           withdrawal leaves in debit red. */
-        <FlowHeader
-          direction={isBuy ? "in" : "out"}
-          title={title}
-          subtitle={subtitle}
-          className="ws-casc ws-casc-1 mb-4"
+  /* Everything below is shared verbatim by both presentations — the modal's
+     terminal layout and the page's single column — so the two can never
+     drift apart on copy, math or gating. */
+  const banners = (
+    <>
+      {loadError && (
+        <AnnouncementBanner
+          title="We couldn't load live limits"
+          detail={`${humanError(loadError)} You can still see the form, but orders are disabled until this recovers.`}
+          tone="error"
         />
-      ) : (
-        <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
       )}
+      {!loadError && enabled.length === 0 && (
+        <AnnouncementBanner
+          title={isBuy ? "Buying is paused right now" : "Selling is paused right now"}
+          detail="The treasury is topping up. This is usually brief — everything below is disabled until it's back."
+          action={
+            isBuy
+              ? { label: "Receive from another wallet instead", onClick: () => setTab("receive") }
+              : undefined
+          }
+        />
+      )}
+      {!online && (
+        <AnnouncementBanner
+          title="You're offline"
+          detail="We can't reach the service or read live limits. Nothing here will submit until you're back."
+          tone="error"
+        />
+      )}
+      {online && !inert && cashUsd === null && !loading && (
+        /* Silence here used to read as "no constraint": with cashUsd null
+           the insufficient-funds check is skipped entirely and the CTA
+           happily offers to spend money we never confirmed was there. */
+        <AnnouncementBanner
+          title="We couldn't read your Dollar Account balance"
+          detail="You can still place an order, but we can't warn you in advance if there isn't enough — the service will decline it if so."
+        />
+      )}
+      {!inert && missingWallet && (
+        <AnnouncementBanner
+          title={`Your ${networkLabel} wallet isn't ready`}
+          detail={
+            isBuy
+              ? `We create a wallet per network, and this one hasn't finished. Pick another network, or try again — the USDT needs somewhere to land.`
+              : `We create a wallet per network, and this one hasn't finished. Pick another network, or try again.`
+          }
+          action={{ label: "Try again", onClick: () => { void refreshWallets() } }}
+        />
+      )}
+    </>
+  )
+
+  /* The route's endpoints — the wallet side tracks the network picker,
+     address included: the strongest "this is real" detail the form has. */
+  const dollarSide = {
+    label: "Dollar Account",
+    sub:
+      cashUsd !== null
+        ? `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} available`
+        : undefined,
+  }
+  const walletSide = {
+    label: `${networkLabel} wallet`,
+    sub: walletAddress ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : "USDT",
+  }
+
+  const approxLine =
+    amt > 0
+      ? isBuy
+        ? `≈ $${usdSide.toFixed(2)} charged to your Dollar Account`
+        : `≈ $${usdSide.toFixed(2)} to your Dollar Account`
+      : undefined
+  const hintLine = treasuryCapped
+    ? `Min ${limits.min} · Up to ${fmtUsdt(effectiveMax)} on ${networkLabel} right now`
+    : `Min ${limits.min} · Max ${limits.max.toLocaleString()}`
+  const presetsList = !maxSpendUsdt
+    ? [10, 50, 100, 500].filter((p) => p >= limits.min && p <= effectiveMax)
+    : undefined
+
+  /* The receipt — every choice the order will be placed with, itemised,
+     with the fee in dollars rather than a bare percent. */
+  const receiptRows =
+    amt > 0
+      ? [
+          { label: isBuy ? "You receive" : "You sell", value: `${amt.toLocaleString()} USDT` },
+          { label: "Network", value: networkLabel },
+          ...(limits.feePercent > 0
+            ? [{ label: `Fee (${limits.feePercent}%)`, value: `$${Math.abs(usdSide - amt).toFixed(2)}` }]
+            : []),
+          {
+            label: isBuy ? "Charged to Dollar Account" : "Credited to Dollar Account",
+            value: `$${usdSide.toFixed(2)}`,
+            strong: true,
+          },
+        ]
+      : null
+
+  const networkOptions = NETWORKS.filter((n) => enabled.includes(n.key)).map((n) => ({
+    key: n.key as string,
+    label: n.label,
+    icon: n.icon,
+  }))
+
+  /* ── Modal presentation: the terminal ─────────────────────────────────── */
+  if (isModal) {
+    const tabs = isBuy ? (
+      <div className="ws-casc ws-casc-1">
+        <Segmented
+          options={[
+            { key: "buy" as const, label: "Buy with cash" },
+            { key: "receive" as const, label: "Receive" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </div>
+    ) : null
+
+    if (isBuy && tab === "receive") {
+      return (
+        <ModalBody>
+          <div className="mb-4">{tabs}</div>
+          <ReceivePanel only={["tron", "solana", "ethereum"]} asset="USDT" />
+        </ModalBody>
+      )
+    }
+    if (loading || recovering) {
+      return (
+        <ModalBody>
+          {tabs && <div className="mb-4">{tabs}</div>}
+          <FlowSkeleton />
+        </ModalBody>
+      )
+    }
+    return (
+      <FlowTerminal
+        direction={isBuy ? "in" : "out"}
+        title={title}
+        amount={amount}
+        onAmountChange={setAmount}
+        unit="USDT"
+        approx={approxLine}
+        problem={amountProblem}
+        hint={hintLine}
+        maxSpend={maxSpendUsdt}
+        presets={presetsList}
+        route={{ from: isBuy ? dollarSide : walletSide, to: isBuy ? walletSide : dollarSide }}
+        topSlot={tabs}
+        banners={banners}
+        picker={
+          <div className="flex flex-col gap-2">
+            <Eyebrow>{isBuy ? "Receive on" : "Send from"}</Eyebrow>
+            <ChipRow options={networkOptions} value={network} onChange={setNetwork} />
+          </div>
+        }
+        receipt={receiptRows}
+        errorSlot={submitError ? <ErrorDetail message={humanError(submitError)} raw={submitError} /> : undefined}
+        cta={<FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />}
+        disabled={inert}
+      />
+    )
+  }
+
+  /* ── Page presentation (/buy, /sell): the single column ──────────────── */
+  return (
+    <FlowShell>
+      <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
 
       {isBuy && (
-        <div className="ws-casc ws-casc-2 mb-4">
+        <div className="mb-4">
           <Segmented
             options={[
               { key: "buy" as const, label: "Buy with cash" },
@@ -541,106 +695,30 @@ export function BuySellClient({
         <FlowSkeleton />
       ) : (
         <div className="flex flex-1 flex-col gap-4">
-          {loadError && (
-            <AnnouncementBanner
-              title="We couldn't load live limits"
-              detail={`${humanError(loadError)} You can still see the form, but orders are disabled until this recovers.`}
-              tone="error"
-            />
-          )}
-          {!loadError && enabled.length === 0 && (
-            <AnnouncementBanner
-              title={isBuy ? "Buying is paused right now" : "Selling is paused right now"}
-              detail="The treasury is topping up. This is usually brief — everything below is disabled until it's back."
-              action={
-                isBuy
-                  ? { label: "Receive from another wallet instead", onClick: () => setTab("receive") }
-                  : undefined
-              }
-            />
-          )}
-          {!online && (
-            <AnnouncementBanner
-              title="You're offline"
-              detail="We can't reach the service or read live limits. Nothing here will submit until you're back."
-              tone="error"
-            />
-          )}
-          {online && !inert && cashUsd === null && !loading && (
-            /* Silence here used to read as "no constraint": with cashUsd null
-               the insufficient-funds check is skipped entirely and the CTA
-               happily offers to spend money we never confirmed was there. */
-            <AnnouncementBanner
-              title="We couldn't read your Dollar Account balance"
-              detail="You can still place an order, but we can't warn you in advance if there isn't enough — the service will decline it if so."
-            />
-          )}
-          {!inert && missingWallet && (
-            <AnnouncementBanner
-              title={`Your ${networkLabel} wallet isn't ready`}
-              detail={
-                isBuy
-                  ? `We create a wallet per network, and this one hasn't finished. Pick another network, or try again — the USDT needs somewhere to land.`
-                  : `We create a wallet per network, and this one hasn't finished. Pick another network, or try again.`
-              }
-              action={{ label: "Try again", onClick: () => { void refreshWallets() } }}
-            />
-          )}
-          {/* The route: where the money starts, where it lands. The wallet
-              endpoint tracks the network picker below — including the actual
-              address it will use, which is the strongest "this is real"
-              detail the form can show. */}
-          {(() => {
-            const dollarSide = {
-              label: "Dollar Account",
-              sub:
-                cashUsd !== null
-                  ? `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} available`
-                  : undefined,
-            }
-            const walletSide = {
-              label: `${networkLabel} wallet`,
-              sub: walletAddress
-                ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`
-                : "USDT",
-            }
-            return (
-              <RouteStrip
-                className="ws-casc ws-casc-3"
-                direction={isBuy ? "in" : "out"}
-                from={isBuy ? dollarSide : walletSide}
-                to={isBuy ? walletSide : dollarSide}
-              />
-            )
-          })()}
+          {banners}
+
+          <RouteStrip
+            direction={isBuy ? "in" : "out"}
+            from={isBuy ? dollarSide : walletSide}
+            to={isBuy ? walletSide : dollarSide}
+          />
 
           {/* The hero figure stays unboxed — a borderless amount breathing on
-              the surface, per the house rule. (A bg-card box here was
-              invisible inside the bg-card modal anyway.) */}
-          <div className="ws-casc-pop ws-casc-4 py-1">
+              the surface, per the house rule. */}
+          <div className="py-1">
             <AmountField
               value={amount}
               onChange={setAmount}
               unit="USDT"
-              hint={
-                treasuryCapped
-                  ? `Min ${limits.min} · Up to ${fmtUsdt(effectiveMax)} on ${networkLabel} right now`
-                  : `Min ${limits.min} · Max ${limits.max.toLocaleString()}`
-              }
+              hint={hintLine}
               problem={amountProblem}
-              approx={
-                amt > 0
-                  ? isBuy
-                    ? `≈ $${usdSide.toFixed(2)} charged to your Dollar Account`
-                    : `≈ $${usdSide.toFixed(2)} to your Dollar Account`
-                  : undefined
-              }
+              approx={approxLine}
               maxSpend={maxSpendUsdt}
-              presets={!maxSpendUsdt ? [10, 50, 100, 500].filter((p) => p >= limits.min && p <= effectiveMax) : undefined}
+              presets={presetsList}
             />
           </div>
 
-          <div className="ws-casc ws-casc-5 flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             <Eyebrow>{isBuy ? "Receive on" : "Send from"}</Eyebrow>
             <ChoiceRow
               options={NETWORKS.filter((n) => enabled.includes(n.key)).map((n) => ({ key: n.key, label: n.label, icon: n.icon }))}
@@ -649,39 +727,13 @@ export function BuySellClient({
             />
           </div>
 
-          {amt > 0 && (
-            /* The receipt — every choice the order will be placed with,
-               itemised, with the fee in dollars rather than a bare percent. */
-            <DetailPanel
-              rows={[
-                { label: isBuy ? "You receive" : "You sell", value: `${amt.toLocaleString()} USDT` },
-                { label: "Network", value: networkLabel },
-                ...(limits.feePercent > 0
-                  ? [{ label: `Fee (${limits.feePercent}%)`, value: `$${Math.abs(usdSide - amt).toFixed(2)}` }]
-                  : []),
-                {
-                  label: isBuy ? "Charged to Dollar Account" : "Credited to Dollar Account",
-                  value: `$${usdSide.toFixed(2)}`,
-                  strong: true,
-                },
-              ]}
-            />
-          )}
+          {receiptRows && <DetailPanel rows={receiptRows} />}
 
           {submitError && <ErrorDetail message={humanError(submitError)} raw={submitError} />}
 
-          {isModal ? (
-            /* Pinned confirm — a money modal never hides its button below the
-               fold. A solid footer with a hairline: content slides cleanly
-               under it instead of ghosting through a gradient. */
-            <div className="ws-casc ws-casc-6 sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card/85 px-4 pb-4 pt-3 backdrop-blur-xl sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
-              <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
-            </div>
-          ) : (
-            <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
-          )}
+          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
         </div>
       )}
-    </Shell>
+    </FlowShell>
   )
 }
