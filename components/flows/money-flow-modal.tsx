@@ -194,16 +194,18 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
               // overflow-hidden is load-bearing: the sticky CTA footer paints a
               // solid card fill to the popup's edges, and without clipping it
               // squared off the bottom corners against a rounded top.
-              "fixed z-50 flex flex-col overflow-hidden bg-card outline-none",
+              // ws-glass: heavy frost — the dashboard stays present as blurred
+              // material behind the money, which is what sells the elevation.
+              "ws-glass ws-glass-edge fixed z-50 flex flex-col overflow-hidden outline-none",
               "shadow-[0_40px_100px_-24px_rgb(0_0_0/0.65)] ring-1 ring-foreground/10",
               isMobile
                 ? // Bottom drawer — slides up, safe-area padded. A FIXED height
                   // (not max-h) so switching direction never resizes the sheet.
                   "inset-x-0 bottom-0 h-[86dvh] translate-y-0 rounded-t-[28px] safe-area-bottom transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-y-full data-starting-style:translate-y-full"
-                : // Centered modal — the shared spring pop in, quick fade out.
-                  // Fixed height for the same reason; dvh cap keeps it honest
-                  // on short laptop screens.
-                  "ws-pop-in left-1/2 top-1/2 h-[680px] max-h-[86dvh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
+                : // Centered modal — springy pop with a blur-to-focus resolve,
+                  // quick fade out. Fixed height for the same reason; dvh cap
+                  // keeps it honest on short laptop screens.
+                  "ws-modal-in left-1/2 top-1/2 h-[680px] max-h-[86dvh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
             )}
           >
             {/* Direction wash — the modal breathes the colour of the money's
@@ -224,6 +226,21 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                 )}
               />
             ))}
+
+            {/* Direction pulse — keyed by mode, so every switch (and the first
+                open) remounts it and the modal takes ONE breath in the colour
+                of the new direction: a bloom from the toggle that decays. An
+                event, not ambience — it can only fire when direction changed. */}
+            <div
+              key={mode}
+              aria-hidden
+              className={cn(
+                "ws-wash-pulse pointer-events-none absolute inset-x-0 top-0 h-44 rounded-t-[inherit]",
+                mode === "buy" || mode === "fund"
+                  ? "bg-[radial-gradient(130%_90%_at_50%_0%,color-mix(in_oklab,var(--credit)_26%,transparent)_0%,transparent_72%)]"
+                  : "bg-[radial-gradient(130%_90%_at_50%_0%,color-mix(in_oklab,var(--debit)_26%,transparent)_0%,transparent_72%)]",
+              )}
+            />
 
             {/* Grabber — the drawer names its own gesture. */}
             {isMobile && (
@@ -282,10 +299,20 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                         aria-hidden={!active}
                         className={cn(
                           "col-start-1 row-start-1 flex min-h-full flex-col",
-                          "transition-[opacity,translate,visibility] duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+                          // The swap is a spring, not a fade: the incoming
+                          // panel travels in from the side its tab sits on,
+                          // resolves from a soft blur, and kisses a hair past
+                          // centre before settling (the >1 bezier). The idle
+                          // panel waits slightly scaled-down and out of focus,
+                          // so depth — not just position — says which side is
+                          // live.
+                          "transition-[opacity,translate,visibility,scale,filter] duration-[420ms] [transition-timing-function:cubic-bezier(0.3,1.25,0.4,1)] motion-reduce:transition-none",
                           active
-                            ? "visible translate-x-0 opacity-100"
-                            : cn("invisible pointer-events-none opacity-0", after ? "translate-x-6" : "-translate-x-6"),
+                            ? "visible translate-x-0 scale-100 opacity-100 blur-none"
+                            : cn(
+                                "invisible pointer-events-none opacity-0 scale-[0.96] blur-[6px]",
+                                after ? "translate-x-14" : "-translate-x-14",
+                              ),
                         )}
                       >
                         {opt.key === "buy" || opt.key === "sell" ? (

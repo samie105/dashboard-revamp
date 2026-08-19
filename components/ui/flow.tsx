@@ -55,7 +55,9 @@ export function FlowHeader({
     <div className={cn("flex items-center gap-3", className)}>
       <span
         className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+          // ws-badge-pop: the direction badge lands with a small rotational
+          // settle when the flow first appears — placed, not painted.
+          "ws-badge-pop flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
           isIn ? "bg-credit-chip text-credit" : "bg-debit-chip text-debit",
         )}
       >
@@ -156,7 +158,7 @@ export function AmountField({
             <button
               key={pct}
               onClick={() => onChange(pct === 1 ? String(Math.floor(maxSpend * 100) / 100) : (maxSpend * pct).toFixed(2))}
-              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100"
             >
               {pct === 1 ? "Max" : `${pct * 100}%`}
             </button>
@@ -168,7 +170,7 @@ export function AmountField({
             <button
               key={p}
               onClick={() => onChange(String(p))}
-              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100"
             >
               {p.toLocaleString()}
             </button>
@@ -209,7 +211,9 @@ export function ChoiceRow<T extends string>({
             className={cn(
               "flex items-center justify-center gap-2 rounded-2xl px-3 py-3 transition-all active:scale-[0.97] motion-reduce:active:scale-100",
               active
-                ? "bg-accent shadow-sm ring-1 ring-foreground/[0.08]"
+                ? // The chosen network floats: a half-step lift + a real
+                  // shadow, so selection reads as depth, not just tint.
+                  "-translate-y-0.5 bg-accent shadow-[0_8px_20px_-10px_rgb(0_0_0/0.6)] ring-1 ring-foreground/[0.10] motion-reduce:translate-y-0"
                 : "bg-surface-sunken/70 hover:bg-accent/60",
             )}
           >
@@ -298,7 +302,9 @@ export function FlowCta({
         disabled || busy
           ? "cursor-not-allowed opacity-40 hover:bg-primary"
           : // Armed: the CTA glows — the one gold moment in the flow earns it.
-            "shadow-[0_10px_28px_-10px_color-mix(in_oklab,var(--primary)_55%,transparent)] active:scale-[0.985] motion-reduce:active:scale-100",
+            // ws-cta-breathe swells that glow on a slow loop; the static
+            // shadow beneath is the reduced-motion resting state.
+            "ws-cta-breathe shadow-[0_10px_28px_-10px_color-mix(in_oklab,var(--primary)_55%,transparent)] active:scale-[0.985] motion-reduce:active:scale-100",
       )}
     >
       {busy && (

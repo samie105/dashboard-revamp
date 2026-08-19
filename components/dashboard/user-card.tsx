@@ -487,7 +487,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   href={a.href}
                   data-vivid-target={`balance-view-${a.key}`}
                   data-vivid-label={`Open the ${a.label} account`}
-                  className="group relative flex min-w-[200px] flex-1 shrink-0 flex-col gap-3 rounded-2xl bg-card/70 p-4 pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0 sm:min-w-0"
+                  className="ws-card-glass group relative flex min-w-[200px] flex-1 shrink-0 flex-col gap-3 rounded-2xl bg-card/70 p-4 pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0 sm:min-w-0"
                 >
                   {/* Gradient stroke — brand gold dissolving diagonally to
                       nothing. Masked ring (padding-box XOR) instead of a

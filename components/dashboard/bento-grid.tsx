@@ -75,7 +75,7 @@ function TradeConfirmDialog({
     >
       {/* sheet */}
       <div
-        className="ws-sheet-in w-full rounded-t-3xl bg-card px-6 pt-6 pb-28 shadow-2xl"
+        className="ws-sheet-in ws-glass ws-glass-edge w-full rounded-t-3xl px-6 pt-6 pb-28 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* coin header */}
@@ -922,40 +922,46 @@ export function DashboardGrid({ coins, initialTrades, prices, error }: Dashboard
   // Row 2 — the market: the screener beside what you starred.
   // Row 3 — acting on it: your fills beside the swap desk.
   // Each row is its own grid so partners stretch to equal height.
+  // Each card carries its own `rise` delay, stepping down the page in reading
+  // order — the grid assembles card by card instead of landing as one slab.
+  // (This plays when the streamed data mounts, after the skeleton, so it also
+  // marks the moment the numbers became real.)
+  const cell = (delay: number): React.CSSProperties =>
+    ({ "--rise-delay": `${delay}ms` }) as React.CSSProperties
   return (
     <div className="flex w-full flex-col gap-4">
       <div className="grid w-full gap-4 lg:grid-cols-5">
-        <div className="min-w-0 lg:col-span-2">
+        <div className="rise min-w-0 lg:col-span-2" style={cell(0)}>
           <ActivityCard />
         </div>
-        <div className="min-w-0 lg:col-span-3">
+        <div className="rise min-w-0 lg:col-span-3" style={cell(70)}>
           <MyPositions />
         </div>
       </div>
 
       {/* Wayfinding — the page's one break: "your money" above this line,
           "the market" below it. */}
-      <div className="flex items-center gap-3 pt-1">
+      <div className="rise flex items-center gap-3 pt-1" style={cell(140)}>
         <Eyebrow>Markets &amp; trading</Eyebrow>
         <div className="h-px flex-1 bg-border/60" />
       </div>
 
       <div className="grid w-full gap-4 lg:grid-cols-5">
-        <div className="min-w-0 lg:col-span-3">
+        <div className="rise min-w-0 lg:col-span-3" style={cell(180)}>
           <MarketsTable coins={coins} error={error} />
         </div>
-        <div className="min-w-0 lg:col-span-2">
+        <div className="rise min-w-0 lg:col-span-2" style={cell(250)}>
           <Watchlist coins={coins} error={error} />
         </div>
       </div>
 
       <div className="grid w-full gap-4 lg:grid-cols-5">
-        <div className="min-w-0 lg:col-span-3">
+        <div className="rise min-w-0 lg:col-span-3" style={cell(320)}>
           <RecentTrades coins={coins} error={error} />
         </div>
         {/* [&>div]:h-full — the compact swap card is shorter than the trades
             list; stretch its shell so the pair shares one bottom edge. */}
-        <div className="min-w-0 lg:col-span-2 [&>div]:h-full">
+        <div className="rise min-w-0 lg:col-span-2 [&>div]:h-full" style={cell(390)}>
           <SwapClient coins={coins} prices={prices} error={error} compact />
         </div>
       </div>

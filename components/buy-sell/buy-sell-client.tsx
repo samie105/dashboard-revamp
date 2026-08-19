@@ -642,7 +642,7 @@ export function BuySellClient({
             /* Pinned confirm — a money modal never hides its button below the
                fold. A solid footer with a hairline: content slides cleanly
                under it instead of ghosting through a gradient. */
-            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card px-4 pb-4 pt-3 sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
+            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card/85 px-4 pb-4 pt-3 backdrop-blur-xl sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
               <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
             </div>
           ) : (
