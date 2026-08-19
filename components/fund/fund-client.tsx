@@ -14,7 +14,6 @@ import { Clock01Icon, Wallet01Icon } from "@hugeicons/core-free-icons"
 import { Eyebrow, PageHeader } from "@/components/ui/system"
 import {
   FlowShell,
-  FlowHeader,
   AnnouncementBanner,
   ErrorDetail,
   RouteStrip,
@@ -35,6 +34,7 @@ import {
   readPendingFlow,
   clearPendingFlow,
 } from "@/lib/pending-flow"
+import { FlowTerminal, ChipRow } from "@/components/flows/flow-terminal"
 import {
   fetchFundAvailability,
   fetchTradingWithdrawInfo,
@@ -465,156 +465,176 @@ export function FundClient({
     ? "Pay from your Dollar Account — funds land in Hyperliquid ready to trade."
     : "Move funds from Hyperliquid back to your Dollar Account."
 
-  return (
-    <Shell>
-      {isModal ? (
-        /* Direction-coloured header — funding flows toward the trading
-           account (credit green); withdrawing flows out of it (debit red). */
-        <FlowHeader
-          direction={isFund ? "in" : "out"}
-          title={title}
-          subtitle={subtitle}
-          className="ws-casc ws-casc-1 mb-4"
+  /* Shared by both presentations — the modal's terminal layout and the
+     page's single column — so they can't drift apart on copy or gating. */
+  const banners = (
+    <>
+      {!online && (
+        <AnnouncementBanner
+          title="You're offline"
+          detail="We can't reach the service right now. Nothing here will submit until you're back."
+          tone="error"
         />
-      ) : (
-        <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
       )}
-
-      {loading || recovering ? (
-        <FlowSkeleton />
-      ) : loadError ? (
-        <UnavailablePanel
-          title="We couldn't load this screen"
-          reason={`${loadError} — refresh to try again.`}
-          tone="muted"
-          action={isModal && onDismiss ? { label: "Close", onClick: onDismiss } : undefined}
+      {!limits.enabled && (
+        <AnnouncementBanner
+          title={isFund ? "Funding is paused right now" : "Withdrawals are paused right now"}
+          detail={limits.reason || "This is usually brief — everything below is disabled until it's back."}
         />
-      ) : walletReady === false ? (
-        /* One-time setup gate — a real screen with a single clear action.
-           No fill of its own: bg-card was invisible inside the bg-card modal. */
-        <div className="flex flex-col items-center gap-3 rounded-2xl px-6 py-8 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
-            <HugeiconsIcon icon={Wallet01Icon} className="h-6 w-6" />
-          </span>
-          <p className="text-[15px] font-semibold">Set up your trading account</p>
-          <p className="mx-auto max-w-xs text-[13px] leading-relaxed text-muted-foreground">
-            A one-time step that designates your wallet for Hyperliquid trading. Takes a few seconds.
-          </p>
-          {submitError && <InlineNotice tone="error" className="w-full text-left">{submitError}</InlineNotice>}
-          <button
-            onClick={handleSetup}
-            disabled={settingUp}
-            className="mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
-          >
-            {settingUp && <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" />}
-            {settingUp ? "Setting up…" : "Set up trading account"}
-          </button>
-        </div>
-      ) : (
+      )}
+    </>
+  )
+
+  /* The route's endpoints — the venue side tracks the Spot/Futures picker,
+     balance included. */
+  const sideLabel = side === "spot" ? "Spot" : "Futures"
+  const sideBalance = hl ? (side === "spot" ? hl.spot : hl.perps) : null
+  const dollarSide = {
+    label: "Dollar Account",
+    sub:
+      cashUsd !== null
+        ? `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} available`
+        : undefined,
+  }
+  const venueSide = {
+    label: `Hyperliquid ${sideLabel}`,
+    sub: sideBalance !== null ? `$${sideBalance.toFixed(2)} balance` : "Trading account",
+  }
+
+  const approxLine =
+    amt > 0
+      ? isFund
+        ? `≈ $${costUsd.toFixed(2)} charged to your Dollar Account`
+        : `≈ $${costUsd.toFixed(2)} to your Dollar Account`
+      : undefined
+  const hintLine = `Min ${limits.min} · Max ${limits.max.toLocaleString()}`
+
+  /* The receipt — the transfer itemised, fee in dollars. */
+  const receiptRows =
+    amt > 0
+      ? [
+          { label: isFund ? "You transfer" : "You withdraw", value: `${amt.toLocaleString()} USDC` },
+          { label: isFund ? "Destination" : "From", value: `Hyperliquid ${sideLabel}` },
+          ...(limits.feePercent > 0
+            ? [{ label: `Fee (${limits.feePercent}%)`, value: `$${Math.abs(costUsd - amt).toFixed(2)}` }]
+            : []),
+          {
+            label: isFund ? "Charged to Dollar Account" : "Credited to Dollar Account",
+            value: `$${costUsd.toFixed(2)}`,
+            strong: true,
+          },
+        ]
+      : null
+
+  const venueOptions = [
+    { key: "spot" as const, label: "Spot", sub: hl ? `$${hl.spot.toFixed(2)}` : undefined },
+    { key: "perps" as const, label: "Futures", sub: hl ? `$${hl.perps.toFixed(2)}` : undefined },
+  ]
+
+  /* Dead-end screens render the same in both presentations. */
+  const gate =
+    loading || recovering ? (
+      <FlowSkeleton />
+    ) : loadError ? (
+      <UnavailablePanel
+        title="We couldn't load this screen"
+        reason={`${loadError} — refresh to try again.`}
+        tone="muted"
+        action={isModal && onDismiss ? { label: "Close", onClick: onDismiss } : undefined}
+      />
+    ) : walletReady === false ? (
+      /* One-time setup gate — a real screen with a single clear action.
+         No fill of its own: bg-card was invisible inside the bg-card modal. */
+      <div className="flex flex-col items-center gap-3 rounded-2xl px-6 py-8 text-center">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
+          <HugeiconsIcon icon={Wallet01Icon} className="h-6 w-6" />
+        </span>
+        <p className="text-[15px] font-semibold">Set up your trading account</p>
+        <p className="mx-auto max-w-xs text-[13px] leading-relaxed text-muted-foreground">
+          A one-time step that designates your wallet for Hyperliquid trading. Takes a few seconds.
+        </p>
+        {submitError && <InlineNotice tone="error" className="w-full text-left">{submitError}</InlineNotice>}
+        <button
+          onClick={handleSetup}
+          disabled={settingUp}
+          className="mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+        >
+          {settingUp && <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" />}
+          {settingUp ? "Setting up…" : "Set up trading account"}
+        </button>
+      </div>
+    ) : null
+
+  /* ── Modal presentation: the terminal ─────────────────────────────────── */
+  if (isModal) {
+    if (gate) return <ModalBody>{gate}</ModalBody>
+    return (
+      <FlowTerminal
+        direction={isFund ? "in" : "out"}
+        title={title}
+        amount={amount}
+        onAmountChange={setAmount}
+        unit="USDC"
+        approx={approxLine}
+        problem={amountProblem}
+        hint={hintLine}
+        maxSpend={maxSpend}
+        route={{ from: isFund ? dollarSide : venueSide, to: isFund ? venueSide : dollarSide }}
+        banners={banners}
+        picker={
+          <div className="flex flex-col gap-2">
+            <Eyebrow>{isFund ? "Destination" : "Withdraw from"}</Eyebrow>
+            <ChipRow options={venueOptions} value={side} onChange={setSide} />
+          </div>
+        }
+        receipt={receiptRows}
+        errorSlot={submitError ? <ErrorDetail message={submitError} raw={submitError} /> : undefined}
+        cta={<FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />}
+        disabled={inert}
+      />
+    )
+  }
+
+  /* ── Page presentation (/fund, /trading-withdraw): the single column ─── */
+  return (
+    <FlowShell>
+      <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
+
+      {gate ?? (
         <div className="flex flex-1 flex-col gap-4">
-          {!online && (
-            <AnnouncementBanner
-              title="You're offline"
-              detail="We can't reach the service right now. Nothing here will submit until you're back."
-              tone="error"
-            />
-          )}
-          {!limits.enabled && (
-            <AnnouncementBanner
-              title={isFund ? "Funding is paused right now" : "Withdrawals are paused right now"}
-              detail={limits.reason || "This is usually brief — everything below is disabled until it's back."}
-            />
-          )}
-          {/* The route: Dollar Account on one side, the Hyperliquid venue on
-              the other. The venue endpoint tracks the Spot/Futures picker
-              below, balance included. */}
-          {(() => {
-            const sideLabel = side === "spot" ? "Spot" : "Futures"
-            const sideBalance = hl ? (side === "spot" ? hl.spot : hl.perps) : null
-            const dollarSide = {
-              label: "Dollar Account",
-              sub:
-                cashUsd !== null
-                  ? `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} available`
-                  : undefined,
-            }
-            const venueSide = {
-              label: `Hyperliquid ${sideLabel}`,
-              sub: sideBalance !== null ? `$${sideBalance.toFixed(2)} balance` : "Trading account",
-            }
-            return (
-              <RouteStrip
-                className="ws-casc ws-casc-3"
-                direction={isFund ? "in" : "out"}
-                from={isFund ? dollarSide : venueSide}
-                to={isFund ? venueSide : dollarSide}
-              />
-            )
-          })()}
+          {banners}
+
+          <RouteStrip
+            direction={isFund ? "in" : "out"}
+            from={isFund ? dollarSide : venueSide}
+            to={isFund ? venueSide : dollarSide}
+          />
 
           {/* Unboxed hero amount — same treatment as buy/sell. */}
-          <div className="ws-casc-pop ws-casc-4 py-1">
+          <div className="py-1">
             <AmountField
               value={amount}
               onChange={setAmount}
               unit="USDC"
-              hint={`Min ${limits.min} · Max ${limits.max.toLocaleString()}`}
+              hint={hintLine}
               problem={amountProblem}
-              approx={
-                amt > 0
-                  ? isFund
-                    ? `≈ $${costUsd.toFixed(2)} charged to your Dollar Account`
-                    : `≈ $${costUsd.toFixed(2)} to your Dollar Account`
-                  : undefined
-              }
+              approx={approxLine}
               maxSpend={maxSpend}
             />
           </div>
 
-          <div className="ws-casc ws-casc-5 flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             <Eyebrow>{isFund ? "Destination" : "Withdraw from"}</Eyebrow>
-            <ChoiceRow
-              columns={2}
-              options={[
-                { key: "spot" as const, label: "Spot", sub: hl ? `$${hl.spot.toFixed(2)}` : undefined },
-                { key: "perps" as const, label: "Futures", sub: hl ? `$${hl.perps.toFixed(2)}` : undefined },
-              ]}
-              value={side}
-              onChange={setSide}
-            />
+            <ChoiceRow columns={2} options={venueOptions} value={side} onChange={setSide} />
           </div>
 
-          {amt > 0 && (
-            /* The receipt — the transfer itemised, fee in dollars. */
-            <DetailPanel
-              rows={[
-                { label: isFund ? "You transfer" : "You withdraw", value: `${amt.toLocaleString()} USDC` },
-                { label: isFund ? "Destination" : "From", value: `Hyperliquid ${side === "spot" ? "Spot" : "Futures"}` },
-                ...(limits.feePercent > 0
-                  ? [{ label: `Fee (${limits.feePercent}%)`, value: `$${Math.abs(costUsd - amt).toFixed(2)}` }]
-                  : []),
-                {
-                  label: isFund ? "Charged to Dollar Account" : "Credited to Dollar Account",
-                  value: `$${costUsd.toFixed(2)}`,
-                  strong: true,
-                },
-              ]}
-            />
-          )}
+          {receiptRows && <DetailPanel rows={receiptRows} />}
 
           {submitError && <ErrorDetail message={submitError} raw={submitError} />}
 
-          {isModal ? (
-            /* Pinned confirm — same solid sticky footer as buy/sell: the
-               button never hides below the fold. */
-            <div className="ws-casc ws-casc-6 sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card/85 px-4 pb-4 pt-3 backdrop-blur-xl sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
-              <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
-            </div>
-          ) : (
-            <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
-          )}
+          <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
         </div>
       )}
-    </Shell>
+    </FlowShell>
   )
 }
