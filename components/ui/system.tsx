@@ -171,14 +171,50 @@ export function Segmented<T extends string>({
   vividPrefix?: string
 }) {
   const md = size === "md"
+  const trackRef = React.useRef<HTMLDivElement>(null)
+  const [thumb, setThumb] = React.useState<{ left: number; width: number } | null>(null)
+  const [settled, setSettled] = React.useState(false)
+
+  const measure = React.useCallback(() => {
+    const track = trackRef.current
+    if (!track) return
+    const btn = track.querySelector<HTMLElement>(`[data-seg-key="${CSS.escape(value)}"]`)
+    if (!btn) return
+    setThumb({ left: btn.offsetLeft, width: btn.offsetWidth })
+  }, [value])
+
+  React.useLayoutEffect(() => {
+    measure()
+  }, [measure, options.length, size, grow])
+
+  // grow-bars resize with the viewport, and late font loads reflow labels.
+  React.useEffect(() => {
+    const track = trackRef.current
+    if (!track || typeof ResizeObserver === "undefined") return
+    const ro = new ResizeObserver(measure)
+    ro.observe(track)
+    return () => ro.disconnect()
+  }, [measure])
+
+  // The thumb must not slide on first paint — springs are for changes, not
+  // arrivals. The transition switches on one frame after the first measure.
+  React.useEffect(() => {
+    if (!thumb || settled) return
+    const id = requestAnimationFrame(() => setSettled(true))
+    return () => cancelAnimationFrame(id)
+  }, [thumb, settled])
+
   return (
     // The track is the SUNKEN step of the stone ladder and the thumb is the
     // RAISED one — two full steps apart, so the selection stays legible on a
     // card, on the page, and on top of the silk field. A translucent track
     // (foreground/6%) picked up whatever was behind it and the thumb vanished.
+    // The thumb is ONE element that slides between options on a spring —
+    // selection travels, it doesn't teleport.
     <div
+      ref={trackRef}
       className={cn(
-        "inline-flex shrink-0 items-center rounded-full bg-surface-sunken",
+        "relative inline-flex shrink-0 items-center rounded-full bg-surface-sunken",
         md ? "gap-1 p-1" : "gap-0.5 p-0.5",
         // flex-1 (basis 0) rather than a bare w-full: inside a flex row, 100%
         // would claim the whole line and squeeze out anything beside it.
@@ -186,6 +222,18 @@ export function Segmented<T extends string>({
         className,
       )}
     >
+      {thumb && (
+        <span
+          aria-hidden
+          className={cn(
+            "absolute rounded-full bg-card shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent",
+            md ? "inset-y-1" : "inset-y-0.5",
+            settled &&
+              "transition-[left,width] duration-[340ms] [transition-timing-function:cubic-bezier(0.3,1.4,0.4,1)] motion-reduce:transition-none",
+          )}
+          style={{ left: thumb.left, width: thumb.width }}
+        />
+      )}
       {options.map((opt) => {
         const active = value === opt.key
         const Icon = opt.icon
@@ -193,18 +241,21 @@ export function Segmented<T extends string>({
           <button
             key={opt.key}
             type="button"
+            data-seg-key={opt.key}
             aria-pressed={active}
             {...(vividPrefix
               ? { "data-vivid-target": `${vividPrefix}-${opt.key}`, "data-vivid-label": `${opt.label} tab` }
               : {})}
             onClick={() => onChange(opt.key)}
             className={cn(
-              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              "relative z-10 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              "active:scale-[0.96] motion-reduce:active:scale-100",
               md ? "px-3.5 py-2 text-[13px]" : "px-2.5 py-1 text-xs",
               grow && "flex-1 justify-center",
-              active
-                ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent"
-                : "text-muted-foreground hover:text-foreground",
+              active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+              // Before the first client measure (SSR, fonts still loading) the
+              // active button paints its own fill so selection never vanishes.
+              !thumb && active && "bg-card shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent",
             )}
           >
             {Icon && <Icon className={cn(md ? "h-4 w-4" : "h-3.5 w-3.5", active && "text-primary")} />}
@@ -297,7 +348,10 @@ export function CardShell({ className, children, ...rest }: React.ComponentProps
   return (
     <div
       className={cn(
-        "relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card/80",
+        // ws-card-glass: light frost so the silk field genuinely shows through
+        // the translucent fill instead of just tinting it — the in-page grade
+        // of the overlay glass the modals wear.
+        "ws-card-glass relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card/80",
         className,
       )}
       {...rest}
@@ -377,7 +431,9 @@ export function ActionPill({
   onClick?: () => void
 } & Record<`data-${string}`, string>) {
   const cls =
-    "flex shrink-0 items-center gap-2.5 rounded-full bg-card py-2 pl-2 pr-4 transition-colors hover:bg-accent"
+    // Glass pill — same floating-surface dialect as the nav controls, with a
+    // press squish so the rail feels like buttons rather than chips.
+    "ws-card-glass flex shrink-0 items-center gap-2.5 rounded-full bg-card/70 py-2 pl-2 pr-4 ring-1 ring-border/40 transition-all hover:bg-accent/70 active:scale-[0.96] motion-reduce:active:scale-100"
   const inner = (
     <>
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/[0.12]">
