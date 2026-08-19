@@ -516,14 +516,14 @@ export function BuySellClient({
           direction={isBuy ? "in" : "out"}
           title={title}
           subtitle={subtitle}
-          className="mb-5"
+          className="ws-casc ws-casc-1 mb-5"
         />
       ) : (
         <PageHeader title={title} subtitle={subtitle} back="/" className="mb-5" />
       )}
 
       {isBuy && (
-        <div className="mb-4">
+        <div className="ws-casc ws-casc-2 mb-4">
           <Segmented
             options={[
               { key: "buy" as const, label: "Buy with cash" },
@@ -587,6 +587,7 @@ export function BuySellClient({
             />
           )}
           <ContextPanel
+            className="ws-casc ws-casc-3"
             rows={[
               ...(cashUsd !== null
                 ? [{ label: "Dollar Account", value: `$${cashUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}` }]
@@ -597,7 +598,7 @@ export function BuySellClient({
           {/* The hero figure stays unboxed — a borderless amount breathing on
               the surface, per the house rule. (A bg-card box here was
               invisible inside the bg-card modal anyway.) */}
-          <div className="py-1">
+          <div className="ws-casc-pop ws-casc-4 py-1">
             <AmountField
               value={amount}
               onChange={setAmount}
@@ -613,7 +614,7 @@ export function BuySellClient({
             />
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="ws-casc ws-casc-5 flex flex-col gap-2">
             <Eyebrow>{isBuy ? "Receive on" : "Send from"}</Eyebrow>
             <ChoiceRow
               options={NETWORKS.filter((n) => enabled.includes(n.key)).map((n) => ({ key: n.key, label: n.label, icon: n.icon }))}
@@ -642,7 +643,7 @@ export function BuySellClient({
             /* Pinned confirm — a money modal never hides its button below the
                fold. A solid footer with a hairline: content slides cleanly
                under it instead of ghosting through a gradient. */
-            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card/85 px-4 pb-4 pt-3 backdrop-blur-xl sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
+            <div className="ws-casc ws-casc-6 sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card/85 px-4 pb-4 pt-3 backdrop-blur-xl sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
               <FlowCta label={ctaLabel} onClick={submit} disabled={!!blocker || inert} busy={submitting} />
             </div>
           ) : (
