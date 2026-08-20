@@ -27,7 +27,7 @@ import {
   useStageProgress,
   type Stage,
 } from "@/components/ui/flow"
-import { FlowTerminal, ChipRow } from "@/components/flows/flow-terminal"
+import { FlowTerminal, OptionRows } from "@/components/flows/flow-terminal"
 import { useOnline } from "@/hooks/useOnline"
 import {
   savePendingFlow,
@@ -602,14 +602,31 @@ export function BuySellClient({
             value: `$${usdSide.toFixed(2)}`,
             strong: true,
           },
+          /* What the account holds AFTER the move — the number a person
+             actually checks before committing. Skipped when it would be
+             negative (the blocker already says there isn't enough). */
+          ...(cashUsd !== null && !(isBuy && insufficientCash)
+            ? [
+                {
+                  label: "Dollar Account after",
+                  value: `$${(isBuy ? cashUsd - usdSide : cashUsd + usdSide).toFixed(2)}`,
+                },
+              ]
+            : []),
         ]
       : null
 
-  const networkOptions = NETWORKS.filter((n) => enabled.includes(n.key)).map((n) => ({
-    key: n.key as string,
-    label: n.label,
-    icon: n.icon,
-  }))
+  /* Each network row carries its real wallet address — the strongest "this
+     is where it lands" detail the picker can show. */
+  const networkOptions = NETWORKS.filter((n) => enabled.includes(n.key)).map((n) => {
+    const addr = addresses?.[n.key as keyof WalletAddresses]
+    return {
+      key: n.key as string,
+      label: n.label,
+      icon: n.icon,
+      sub: addr ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : walletsLoading ? "Checking wallet…" : "Wallet not ready",
+    }
+  })
 
   /* ── Modal presentation: the terminal ─────────────────────────────────── */
   if (isModal) {
@@ -660,7 +677,7 @@ export function BuySellClient({
         picker={
           <div className="flex flex-col gap-2">
             <Eyebrow>{isBuy ? "Receive on" : "Send from"}</Eyebrow>
-            <ChipRow options={networkOptions} value={network} onChange={setNetwork} />
+            <OptionRows options={networkOptions} value={network} onChange={setNetwork} disabled={inert} />
           </div>
         }
         receipt={receiptRows}
