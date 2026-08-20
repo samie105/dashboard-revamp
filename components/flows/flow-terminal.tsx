@@ -5,22 +5,24 @@
  * rather than a form. Two zones:
  *
  *   STAGE (left / top on mobile): the emotional half. Direction-coloured
- *   atmosphere, the amount huge with its live conversion, and the route
- *   drawn as a vertical transit line with a light beam forever travelling
- *   from source to destination.
+ *   atmosphere, the amount huge with its live conversion and quick-amount
+ *   chips, and the route drawn as a vertical transit line with a light
+ *   beam forever travelling from source to destination.
  *
- *   CONTROLS (right / below): the working half. Picker chips, quick-amount
- *   chips, a full 3×4 keypad (physical typing still works — the amount is a
- *   real input and every control returns focus to it), the receipt collapsed
- *   to its total, and the CTA pinned at the bottom.
+ *   CONTROLS (right / below): the decisions. Full-width option rows for
+ *   the network / venue (each carrying its real wallet address or balance,
+ *   with a radio that turns into the gold check), the receipt always open
+ *   — ending with what the Dollar Account will hold AFTER the move — and
+ *   the CTA pinned at the bottom.
  *
- * The page variants (/buy, /sell, /fund) keep the single-column composition —
- * this is the overlay's native shape. State machines stay in the clients;
- * this component is layout + input affordances only.
+ * The page variants (/buy, /sell, /fund) keep the single-column
+ * composition — this is the overlay's native shape. State machines stay
+ * in the clients; this component is layout + input affordances only.
  */
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { DetailPanel } from "@/components/ui/flow"
 
 type Endpoint = { label: string; sub?: React.ReactNode }
 export type ReceiptRow = { label: string; value: React.ReactNode; strong?: boolean }
@@ -63,154 +65,60 @@ function RouteRail({ from, to, tone, className }: { from: Endpoint; to: Endpoint
   )
 }
 
-/* ── Keypad ─────────────────────────────────────────────────────────────── */
+/* ── Option rows — the network / venue decision, one row per choice ────── */
 
-const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "back"] as const
-
-export function AmountKeypad({
-  value,
-  onChange,
-  maxDecimals = 2,
-  disabled,
-}: {
-  value: string
-  onChange: (v: string) => void
-  maxDecimals?: number
-  disabled?: boolean
-}) {
-  const press = (k: string) => {
-    if (k === "back") {
-      onChange(value.slice(0, -1))
-      return
-    }
-    if (k === ".") {
-      if (value.includes(".")) return
-      onChange(value === "" ? "0." : value + ".")
-      return
-    }
-    const next = value === "0" ? k : value + k
-    const [whole = "", frac] = next.split(".")
-    if (frac !== undefined && frac.length > maxDecimals) return
-    if (whole.length > 7) return
-    onChange(frac !== undefined ? `${whole}.${frac}` : whole)
-  }
-  return (
-    <div className="grid grid-cols-3 gap-1.5">
-      {KEYS.map((k) => (
-        <button
-          key={k}
-          type="button"
-          tabIndex={-1}
-          disabled={disabled}
-          /* preventDefault on mousedown: the amount input keeps focus, so
-             physical typing and the keypad interleave without a caret hop. */
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => press(k)}
-          aria-label={k === "back" ? "Delete last digit" : k}
-          className={cn(
-            "flex h-12 items-center justify-center rounded-xl font-display text-lg font-medium tabular-nums",
-            "transition-all duration-150 hover:bg-accent/70 active:scale-90 active:bg-accent motion-reduce:active:scale-100",
-            "disabled:pointer-events-none disabled:opacity-40",
-            k === "back" && "text-muted-foreground",
-          )}
-        >
-          {k === "back" ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 6H9l-5 6 5 6h11a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1Z" />
-              <path d="m12 9 6 6M18 9l-6 6" />
-            </svg>
-          ) : (
-            k
-          )}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-/* ── Chip row — network / venue selection as compact pills ─────────────── */
-
-export function ChipRow<T extends string>({
+export function OptionRows<T extends string>({
   options,
   value,
   onChange,
+  disabled,
 }: {
-  options: { key: T; label: string; sub?: string; icon?: string }[]
+  options: { key: T; label: string; sub?: React.ReactNode; icon?: string }[]
   value: T
   onChange: (k: T) => void
+  disabled?: boolean
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-col gap-1.5">
       {options.map((o) => {
         const active = o.key === value
         return (
           <button
             key={o.key}
             type="button"
+            disabled={disabled}
+            /* preventDefault on mousedown keeps focus on the amount input,
+               so picking a network never interrupts typing. */
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onChange(o.key)}
             className={cn(
-              "flex items-center gap-2 rounded-full px-3 py-2 text-[13px] font-semibold transition-all active:scale-[0.96] motion-reduce:active:scale-100",
+              "flex items-center gap-3 rounded-xl px-3.5 py-3 text-left transition-all active:scale-[0.99] motion-reduce:active:scale-100",
+              "disabled:pointer-events-none disabled:opacity-40",
               active
-                ? "bg-accent shadow-[0_6px_16px_-8px_rgb(0_0_0/0.6)] ring-1 ring-foreground/[0.10]"
-                : "bg-surface-sunken/70 text-foreground/75 hover:bg-accent/60",
+                ? // Selection = raised fill + a half-step of depth, per the
+                  // house rule — never a gold border.
+                  "bg-accent shadow-[0_8px_20px_-10px_rgb(0_0_0/0.6)] ring-1 ring-foreground/[0.10]"
+                : "bg-surface-sunken/60 hover:bg-accent/60",
             )}
           >
-            {o.icon && <img src={o.icon} alt="" className="h-[18px] w-[18px] rounded-full" />}
-            {o.label}
-            {o.sub && <span className="text-[11px] font-medium tabular-nums text-subtle">{o.sub}</span>}
-            {active && (
+            {o.icon && <img src={o.icon} alt="" className="h-6 w-6 shrink-0 rounded-full" />}
+            <span className="flex min-w-0 flex-1 flex-col leading-tight">
+              <span className={cn("text-[13.5px] font-semibold", !active && "text-foreground/85")}>{o.label}</span>
+              {o.sub && <span className="mt-0.5 truncate text-[11.5px] tabular-nums text-muted-foreground">{o.sub}</span>}
+            </span>
+            {active ? (
               /* Gold = active state; pops in when the choice lands. */
-              <span className="ws-pop-in flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+              <span className="ws-pop-in flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
               </span>
+            ) : (
+              <span className="h-4 w-4 shrink-0 rounded-full ring-1 ring-inset ring-border" />
             )}
           </button>
         )
       })}
-    </div>
-  )
-}
-
-/* ── Mini receipt — the total always visible, the itemisation one tap away ─ */
-
-function MiniReceipt({ rows }: { rows: ReceiptRow[] }) {
-  const [open, setOpen] = React.useState(false)
-  const total = rows.find((r) => r.strong) ?? rows[rows.length - 1]
-  const detail = rows.filter((r) => r !== total)
-  return (
-    <div className="rounded-xl bg-surface-sunken/70 ring-1 ring-border/25">
-      <button
-        type="button"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5"
-      >
-        <span className="text-[12.5px] text-muted-foreground">{total.label}</span>
-        <span className="flex items-center gap-1.5 text-[13px] font-bold tabular-nums">
-          {total.value}
-          <svg
-            className={cn("h-3 w-3 text-subtle transition-transform duration-200", open && "rotate-180")}
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-          >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </span>
-      </button>
-      {open && (
-        <div className="border-t border-border/30 px-3.5 py-1">
-          {detail.map((r) => (
-            <div key={r.label} className="flex items-baseline gap-2.5 py-1.5">
-              <span className="shrink-0 text-[12.5px] text-muted-foreground">{r.label}</span>
-              <span aria-hidden className="mb-1 flex-1 self-end border-b border-dotted border-foreground/15" />
-              <span className="shrink-0 text-[12.5px] font-medium tabular-nums">{r.value}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -257,10 +165,11 @@ export function FlowTerminal({
   banners?: React.ReactNode
   /** The network / venue picker, eyebrow included. */
   picker?: React.ReactNode
+  /** Always-open ticket; the clients end it with the balance-after line. */
   receipt?: ReceiptRow[] | null
   errorSlot?: React.ReactNode
   cta: React.ReactNode
-  /** Inert form (paused / failed to load): keypad and chips disable. */
+  /** Inert form (paused / failed to load): chips disable. */
   disabled?: boolean
 }) {
   const isIn = direction === "in"
@@ -331,7 +240,7 @@ export function FlowTerminal({
           <h2 className="font-display text-[17px] font-bold tracking-[-0.01em]">{title}</h2>
         </div>
 
-        <div className="ws-casc-pop ws-casc-2 relative flex flex-col items-start gap-1.5">
+        <div className="ws-casc-pop ws-casc-2 relative flex flex-col items-start gap-2">
           <input
             ref={inputRef}
             value={amount}
@@ -343,9 +252,23 @@ export function FlowTerminal({
             data-vivid-label={`The amount to move, in ${unit}`}
             className="w-full min-w-0 bg-transparent font-display text-[clamp(2.6rem,5vw,3.4rem)] font-light leading-none tracking-[-0.02em] tabular-nums caret-primary outline-none placeholder:text-muted-foreground/30"
           />
-          <span className="rounded-full bg-surface-sunken/80 px-2.5 py-1 text-[11px] font-bold tracking-[0.04em] text-muted-foreground ring-1 ring-border/25">
-            {unit}
-          </span>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="rounded-full bg-surface-sunken/80 px-2 py-1 text-[10.5px] font-bold tracking-[0.04em] text-muted-foreground ring-1 ring-border/25">
+              {unit}
+            </span>
+            {chips.map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                disabled={disabled}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onAmountChange(c.value)}
+                className="rounded-full bg-surface-sunken/80 px-2 py-1 text-[10.5px] font-semibold text-muted-foreground ring-1 ring-border/25 transition-all hover:bg-accent hover:text-foreground active:scale-90 disabled:pointer-events-none disabled:opacity-40 motion-reduce:active:scale-100"
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
           {problem ? (
             <p className="text-[12.5px] font-medium leading-snug text-warning">{problem}</p>
           ) : approx ? (
@@ -359,35 +282,17 @@ export function FlowTerminal({
       </div>
 
       {/* ── Controls ── */}
-      <div className="relative flex min-w-0 flex-1 flex-col gap-3 px-4 pb-4 pt-3 sm:px-5">
+      <div className="relative flex min-w-0 flex-1 flex-col gap-3.5 px-4 pb-4 pt-3 sm:px-5">
         {topSlot}
         {banners}
-        {picker && <div className="ws-casc ws-casc-3">{picker}</div>}
-
-        {chips.length > 0 && (
-          <div className="ws-casc ws-casc-4 flex flex-wrap items-center gap-1.5">
-            {chips.map((c) => (
-              <button
-                key={c.label}
-                type="button"
-                disabled={disabled}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onAmountChange(c.value)}
-                className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 disabled:pointer-events-none disabled:opacity-40 motion-reduce:active:scale-100"
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="ws-casc ws-casc-5">
-          <AmountKeypad value={amount} onChange={onAmountChange} maxDecimals={maxDecimals} disabled={disabled} />
-        </div>
+        {picker && <div className="ws-casc ws-casc-4">{picker}</div>}
 
         {receipt && receipt.length > 0 && (
-          <div className="ws-casc ws-casc-6">
-            <MiniReceipt rows={receipt} />
+          /* ws-microswap, NOT a cascade beat: this mounts on the first typed
+             digit, and a delay-laddered entrance would hold it invisible for
+             its whole delay every time. The ladder is for modal-open only. */
+          <div className="ws-microswap">
+            <DetailPanel rows={receipt} />
           </div>
         )}
         {errorSlot}

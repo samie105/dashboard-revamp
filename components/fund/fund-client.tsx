@@ -34,7 +34,7 @@ import {
   readPendingFlow,
   clearPendingFlow,
 } from "@/lib/pending-flow"
-import { FlowTerminal, ChipRow } from "@/components/flows/flow-terminal"
+import { FlowTerminal, OptionRows } from "@/components/flows/flow-terminal"
 import {
   fetchFundAvailability,
   fetchTradingWithdrawInfo,
@@ -523,6 +523,17 @@ export function FundClient({
             value: `$${costUsd.toFixed(2)}`,
             strong: true,
           },
+          /* What the account holds AFTER the move — the number a person
+             actually checks before committing. Skipped when it would be
+             negative (the blocker already says there isn't enough). */
+          ...(cashUsd !== null && !(isFund && insufficient)
+            ? [
+                {
+                  label: "Dollar Account after",
+                  value: `$${(isFund ? cashUsd - costUsd : cashUsd + costUsd).toFixed(2)}`,
+                },
+              ]
+            : []),
         ]
       : null
 
@@ -584,7 +595,7 @@ export function FundClient({
         picker={
           <div className="flex flex-col gap-2">
             <Eyebrow>{isFund ? "Destination" : "Withdraw from"}</Eyebrow>
-            <ChipRow options={venueOptions} value={side} onChange={setSide} />
+            <OptionRows options={venueOptions} value={side} onChange={setSide} disabled={inert} />
           </div>
         }
         receipt={receiptRows}
