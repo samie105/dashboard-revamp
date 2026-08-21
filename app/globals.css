@@ -872,36 +872,56 @@ input[type="range"]::-moz-range-track {
 }
 .ws-digit-pop { transform-origin: left center; animation: ws-digit-pop 0.16s ease-out; }
 
-/* ── Payment stream — the processing screen's emblem ──────────────────────
-   Not a spinner: packets of value travel a track from the source node to
-   the destination node, each fading in, crossing, and being absorbed. The
-   tone inherits the flow's direction colour (gold when direction unknown).
-   Three packets on staggered delays = a continuous, unhurried stream. */
-@keyframes ws-packet {
-  0%   { left: 0%; opacity: 0; transform: scale(0.5); }
-  14%  { opacity: 1; transform: scale(1); }
-  82%  { opacity: 1; transform: scale(1); }
-  100% { left: calc(100% - 7px); opacity: 0; transform: scale(0.5); }
+/* ── The transfer core — the processing screen's hero ─────────────────────
+   A large orbital machine with the user's own amount at its heart. Layers,
+   outermost first: a breathing glow field · a comet arc sweeping the rim ·
+   two counter-rotating dashed gyros · orbiting sparks · an SVG progress
+   ring that FILLS as stages complete (real state, not ambience) · the
+   figure itself, breathing. A burst ripple fires on every stage advance.
+   Everything wears the flow's direction colour via --ws-stream-tone. */
+@keyframes ws-rot {
+  to { transform: rotate(360deg); }
 }
-.ws-packet {
-  position: absolute;
-  top: 50%;
-  margin-top: -3.5px;
-  height: 7px;
-  width: 7px;
-  border-radius: 9999px;
-  background: var(--ws-stream-tone, var(--primary));
-  box-shadow: 0 0 10px color-mix(in oklab, var(--ws-stream-tone, var(--primary)) 70%, transparent);
-  animation: ws-packet 1.7s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-}
+.ws-orbit { animation: ws-rot var(--ws-orbit-dur, 9s) linear infinite; }
+.ws-orbit-rev { animation-direction: reverse; }
 
-/* Destination node swallows the stream: a slow satisfied pulse. */
-@keyframes ws-node-pulse {
-  0%, 100% { transform: scale(1); }
-  12%      { transform: scale(1.25); }
-  30%      { transform: scale(1); }
+@keyframes ws-core-breathe {
+  from { transform: scale(1); }
+  to   { transform: scale(1.045); }
 }
-.ws-node-pulse { animation: ws-node-pulse 1.7s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.ws-core-breathe { animation: ws-core-breathe 2.2s ease-in-out infinite alternate; }
+
+@keyframes ws-glow-breathe {
+  from { opacity: 0.45; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1.08); }
+}
+.ws-glow-breathe { animation: ws-glow-breathe 3.2s ease-in-out infinite alternate; }
+
+/* Comet arc — a bright head with a long fading tail, sweeping the rim. */
+.ws-core-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  padding: 2px;
+  overflow: hidden;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+.ws-core-arc::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 200deg,
+    color-mix(in oklab, var(--ws-stream-tone, var(--primary)) 45%, transparent) 300deg,
+    color-mix(in oklab, var(--ws-stream-tone, var(--primary)) 95%, transparent) 350deg,
+    transparent 360deg
+  );
+  animation: ws-rot 3.6s linear infinite;
+}
 
 /* Success burst — two rings ripple out from the verdict icon, once. */
 @keyframes ws-ripple {
@@ -939,8 +959,8 @@ input[type="range"]::-moz-range-track {
   .ws-aurora-a, .ws-aurora-b, .ws-casc, .ws-casc-pop, .ws-microswap,
   .ws-digit-pop { animation: none; }
   .ws-flow-beam { animation: none; opacity: 0; }
-  .ws-packet { animation: none; opacity: 0; }
-  .ws-node-pulse, .ws-ripple { animation: none; }
+  .ws-orbit, .ws-core-breathe, .ws-glow-breathe, .ws-ripple { animation: none; }
+  .ws-core-arc { display: none; }
   .ws-wash-pulse { animation: none; opacity: 0; }
   /* The standing gold stroke stays; only the travelling glint stops. */
   .ws-ring-shimmer::before { animation: none; opacity: 0; }

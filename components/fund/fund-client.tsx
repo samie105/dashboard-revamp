@@ -391,6 +391,7 @@ export function FundClient({
       <Shell>
         <StatusScreen
           direction={isFund ? "in" : "out"}
+          figure={`${(result?.amountUsdc ?? amt).toLocaleString()} USDC`}
           state={done ? "success" : failed ? "failure" : "processing"}
           headline={
             done
