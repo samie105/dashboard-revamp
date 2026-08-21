@@ -872,6 +872,51 @@ input[type="range"]::-moz-range-track {
 }
 .ws-digit-pop { transform-origin: left center; animation: ws-digit-pop 0.16s ease-out; }
 
+/* ── Payment stream — the processing screen's emblem ──────────────────────
+   Not a spinner: packets of value travel a track from the source node to
+   the destination node, each fading in, crossing, and being absorbed. The
+   tone inherits the flow's direction colour (gold when direction unknown).
+   Three packets on staggered delays = a continuous, unhurried stream. */
+@keyframes ws-packet {
+  0%   { left: 0%; opacity: 0; transform: scale(0.5); }
+  14%  { opacity: 1; transform: scale(1); }
+  82%  { opacity: 1; transform: scale(1); }
+  100% { left: calc(100% - 7px); opacity: 0; transform: scale(0.5); }
+}
+.ws-packet {
+  position: absolute;
+  top: 50%;
+  margin-top: -3.5px;
+  height: 7px;
+  width: 7px;
+  border-radius: 9999px;
+  background: var(--ws-stream-tone, var(--primary));
+  box-shadow: 0 0 10px color-mix(in oklab, var(--ws-stream-tone, var(--primary)) 70%, transparent);
+  animation: ws-packet 1.7s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* Destination node swallows the stream: a slow satisfied pulse. */
+@keyframes ws-node-pulse {
+  0%, 100% { transform: scale(1); }
+  12%      { transform: scale(1.25); }
+  30%      { transform: scale(1); }
+}
+.ws-node-pulse { animation: ws-node-pulse 1.7s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+
+/* Success burst — two rings ripple out from the verdict icon, once. */
+@keyframes ws-ripple {
+  from { transform: scale(1); opacity: 0.5; }
+  to   { transform: scale(2); opacity: 0; }
+}
+.ws-ripple { animation: ws-ripple 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Stage check draws itself on completion (keyframed — the path mounts in
+   its done state, so a transition would never fire). */
+@keyframes ws-check-draw {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+
 /* Micro swap — a small rise for a LABEL that changed in place (the route
    strip's endpoint when the network flips, the live conversion line). Sized
    for 13px text: 6px of travel, no blur, done in 0.28s. */
@@ -894,6 +939,8 @@ input[type="range"]::-moz-range-track {
   .ws-aurora-a, .ws-aurora-b, .ws-casc, .ws-casc-pop, .ws-microswap,
   .ws-digit-pop { animation: none; }
   .ws-flow-beam { animation: none; opacity: 0; }
+  .ws-packet { animation: none; opacity: 0; }
+  .ws-node-pulse, .ws-ripple { animation: none; }
   .ws-wash-pulse { animation: none; opacity: 0; }
   /* The standing gold stroke stays; only the travelling glint stops. */
   .ws-ring-shimmer::before { animation: none; opacity: 0; }

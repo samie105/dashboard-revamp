@@ -390,6 +390,7 @@ export function FundClient({
     return (
       <Shell>
         <StatusScreen
+          direction={isFund ? "in" : "out"}
           state={done ? "success" : failed ? "failure" : "processing"}
           headline={
             done
