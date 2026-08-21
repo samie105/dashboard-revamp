@@ -494,16 +494,19 @@ export function useStageProgress(rawIndex: number, resetKey: unknown) {
   return { index, since: state.since }
 }
 
-/** A checkmark that draws itself in rather than popping. */
+/** A checkmark that draws itself in rather than popping. Keyframed, not a
+ *  transition: the check only exists once the stage is done, so it MOUNTS in
+ *  its final state — a transition from the undone state never fires. */
 function StageCheck({ done }: { done: boolean }) {
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
       <path
         d="M20 6L9 17l-5-5"
         pathLength={1}
         strokeDasharray={1}
         strokeDashoffset={done ? 0 : 1}
-        className="transition-[stroke-dashoffset] duration-500 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+        style={done ? { animation: "ws-check-draw 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both" } : undefined}
+        className="motion-reduce:animate-none"
       />
     </svg>
   )
@@ -520,11 +523,14 @@ export function StageList({
   /** Wait this long before showing a counter, so a stage that resolves in two
    *  seconds never flashes one. */
   countAfterMs = 8_000,
+  /** Stagger the rows in on mount — for the status screen's entrance. */
+  cascade = false,
 }: {
   stages: Stage[]
   activeIndex: number
   stageStartedAt?: number | null
   countAfterMs?: number
+  cascade?: boolean
 }) {
   const elapsed = useElapsed(stageStartedAt)
   const showCount = stageStartedAt !== null && elapsed >= countAfterMs
@@ -536,15 +542,21 @@ export function StageList({
         const current = i === activeIndex
         const last = i === stages.length - 1
         return (
-          <div key={s.key} className="flex gap-3">
+          <div
+            key={s.key}
+            className={cn("flex gap-3", cascade && "ws-casc")}
+            style={cascade ? { animationDelay: `${240 + i * 90}ms` } : undefined}
+          >
             <div className="flex flex-col items-center">
               <span
                 className={cn(
-                  "relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                  "relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
                   // The wash transitions too, so a stage completing is one
                   // continuous change rather than three simultaneous swaps.
                   "transition-colors duration-500",
-                  done && "bg-credit-chip text-credit",
+                  // ws-pop-in joins the class list the moment the stage
+                  // completes, so the node takes a small victorious bounce.
+                  done && "ws-pop-in bg-credit-chip text-credit",
                   current && "bg-primary/15 text-primary",
                   !done && !current && "bg-foreground/[0.06] text-subtle",
                 )}
@@ -621,8 +633,11 @@ export function StatusScreen({
   autoUpdating = true,
   primary,
   secondary,
+  direction,
 }: {
   state: "processing" | "success" | "failure"
+  /** Tints the payment stream in the money's colour; gold when omitted. */
+  direction?: "in" | "out"
   headline: string
   caption?: React.ReactNode
   stages?: Stage[]
@@ -645,27 +660,56 @@ export function StatusScreen({
   const [copied, setCopied] = React.useState(false)
   const [refCopied, setRefCopied] = React.useState(false)
 
+  /* The stream and the current-stage accents wear the money's colour. */
+  const tone =
+    direction === "in" ? "var(--credit)" : direction === "out" ? "var(--debit)" : "var(--primary)"
+
   return (
     // No card fill of its own — this screen IS the surface it sits on, whether
-    // that's the modal or the page column. The icon pops in: the flow's verdict
-    // deserves a beat of ceremony.
+    // that's the modal or the page column. The whole screen enters as a
+    // sequence: emblem, verdict, stages one by one, then the paperwork.
     <div className="flex flex-col items-center gap-4 rounded-2xl px-6 py-8 text-center">
       {state === "success" ? (
-        <span className="ws-pop-in flex h-16 w-16 items-center justify-center rounded-full bg-credit-chip">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-credit"><path d="M20 6L9 17l-5-5" /></svg>
+        /* The verdict pops, and a double ring ripples out — the one moment
+           in the flow that has earned a small celebration. */
+        <span className="relative flex h-16 w-16">
+          <span aria-hidden className="ws-ripple absolute inset-0 rounded-full bg-credit/25" />
+          <span aria-hidden className="ws-ripple absolute inset-0 rounded-full bg-credit/15" style={{ animationDelay: "0.18s" }} />
+          <span className="ws-pop-in relative flex h-16 w-16 items-center justify-center rounded-full bg-credit-chip">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-credit"><path d="M20 6L9 17l-5-5" /></svg>
+          </span>
         </span>
       ) : state === "failure" ? (
         <span className="ws-pop-in flex h-16 w-16 items-center justify-center rounded-full bg-debit-chip">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-debit"><path d="M18 6L6 18M6 6l12 12" /></svg>
         </span>
       ) : (
-        <span className="relative flex h-16 w-16 items-center justify-center">
-          <span className="absolute inset-0 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
-          <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+        /* The payment stream — packets of value leave the source node, cross,
+           and are absorbed by the destination, which pulses as each lands.
+           A statement of what is happening, not a spinner's shrug. */
+        <span
+          aria-hidden
+          className="ws-casc ws-casc-0 relative flex h-14 w-44 items-center"
+          style={{ "--ws-stream-tone": tone } as React.CSSProperties}
+        >
+          <span
+            className="absolute left-0 h-3.5 w-3.5 rounded-full"
+            style={{ boxShadow: `inset 0 0 0 2px ${tone}` }}
+          />
+          <span
+            className="ws-node-pulse absolute right-0 h-3.5 w-3.5 rounded-full"
+            style={{ background: tone, animationDelay: "1.45s" }}
+          />
+          <span className="absolute inset-x-6 top-1/2 h-px bg-border" />
+          <span className="absolute inset-x-6 top-0 h-full">
+            <span className="ws-packet" />
+            <span className="ws-packet" style={{ animationDelay: "0.57s" }} />
+            <span className="ws-packet" style={{ animationDelay: "1.14s" }} />
+          </span>
         </span>
       )}
 
-      <div className="flex flex-col gap-1">
+      <div className={cn("flex flex-col gap-1", state === "processing" && "ws-casc ws-casc-1")}>
         <h2 className="font-display text-xl font-bold tracking-[-0.01em]">{headline}</h2>
         {caption && <p className="mx-auto max-w-xs text-[13px] leading-relaxed text-muted-foreground">{caption}</p>}
       </div>
@@ -676,6 +720,7 @@ export function StatusScreen({
             stages={stages}
             activeIndex={activeIndex}
             stageStartedAt={state === "processing" ? stageStartedAt : null}
+            cascade={state === "processing"}
           />
         </div>
       )}
@@ -689,7 +734,7 @@ export function StatusScreen({
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
           }}
-          className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent"
+          className="ws-microswap inline-flex max-w-full items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent"
           title="Copy transaction hash"
         >
           <span className="truncate">{txHash.slice(0, 10)}…{txHash.slice(-8)}</span>
@@ -708,7 +753,7 @@ export function StatusScreen({
             setRefCopied(true)
             setTimeout(() => setRefCopied(false), 1500)
           }}
-          className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent"
+          className="ws-microswap inline-flex max-w-full items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent"
           title="Copy reference"
         >
           <span className="shrink-0 text-subtle">Ref</span>
@@ -720,7 +765,9 @@ export function StatusScreen({
       )}
 
       {state === "processing" && autoUpdating && (
-        <p className="text-[11px] text-subtle">Updates automatically — you can leave this page.</p>
+        <p className="ws-casc text-[11px] text-subtle" style={{ animationDelay: "620ms" }}>
+          Updates automatically — you can leave this page.
+        </p>
       )}
 
       {(primary || secondary) && (

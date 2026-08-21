@@ -442,6 +442,7 @@ export function BuySellClient({
     return (
       <Shell>
         <StatusScreen
+          direction={isBuy ? "in" : "out"}
           state={done ? "success" : failed ? "failure" : "processing"}
           headline={
             done
