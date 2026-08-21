@@ -443,6 +443,7 @@ export function BuySellClient({
       <Shell>
         <StatusScreen
           direction={isBuy ? "in" : "out"}
+          figure={`${(result?.usdtAmount ?? amt).toLocaleString()} USDT`}
           state={done ? "success" : failed ? "failure" : "processing"}
           headline={
             done

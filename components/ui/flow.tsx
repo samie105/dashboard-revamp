@@ -634,10 +634,13 @@ export function StatusScreen({
   primary,
   secondary,
   direction,
+  figure,
 }: {
   state: "processing" | "success" | "failure"
-  /** Tints the payment stream in the money's colour; gold when omitted. */
+  /** Tints the transfer core in the money's colour; gold when omitted. */
   direction?: "in" | "out"
+  /** The amount in transit ("250.75 USDT") — sits at the core's heart. */
+  figure?: string
   headline: string
   caption?: React.ReactNode
   stages?: Stage[]
@@ -668,7 +671,7 @@ export function StatusScreen({
     // No card fill of its own — this screen IS the surface it sits on, whether
     // that's the modal or the page column. The whole screen enters as a
     // sequence: emblem, verdict, stages one by one, then the paperwork.
-    <div className="flex flex-col items-center gap-4 rounded-2xl px-6 py-8 text-center">
+    <div className="flex flex-col items-center gap-3.5 rounded-2xl px-6 py-6 text-center">
       {state === "success" ? (
         /* The verdict pops, and a double ring ripples out — the one moment
            in the flow that has earned a small celebration. */
@@ -684,29 +687,102 @@ export function StatusScreen({
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-debit"><path d="M18 6L6 18M6 6l12 12" /></svg>
         </span>
       ) : (
-        /* The payment stream — packets of value leave the source node, cross,
-           and are absorbed by the destination, which pulses as each lands.
-           A statement of what is happening, not a spinner's shrug. */
-        <span
-          aria-hidden
-          className="ws-casc ws-casc-0 relative flex h-14 w-44 items-center"
+        /* The transfer core — the money inside the machine that is moving
+           it. The outer SVG ring is REAL state: it fills as stages complete
+           (the half-step credits the stage currently in flight). Everything
+           else is the machine running: comet arc, counter-rotating gyros,
+           orbiting sparks, the figure breathing in a glow field. A ripple
+           bursts from the core every time a stage lands (keyed remount). */
+        <div
+          className="ws-casc ws-casc-0 relative flex h-[196px] w-[196px] items-center justify-center"
           style={{ "--ws-stream-tone": tone } as React.CSSProperties}
         >
+          {/* Glow field */}
           <span
-            className="absolute left-0 h-3.5 w-3.5 rounded-full"
-            style={{ boxShadow: `inset 0 0 0 2px ${tone}` }}
+            aria-hidden
+            className="ws-glow-breathe absolute -inset-10 rounded-full"
+            style={{
+              background: `radial-gradient(closest-side, color-mix(in oklab, ${tone} 22%, transparent), transparent 70%)`,
+            }}
+          />
+          {/* Stage-advance burst — remounts on every advance and replays. */}
+          <span
+            key={activeIndex}
+            aria-hidden
+            className="ws-ripple absolute inset-3 rounded-full"
+            style={{ background: `color-mix(in oklab, ${tone} 16%, transparent)` }}
+          />
+          {/* Comet arc sweeping the rim */}
+          <span aria-hidden className="ws-core-arc" />
+          {/* Counter-rotating dashed gyros */}
+          <span
+            aria-hidden
+            className="ws-orbit absolute inset-[14px] rounded-full border border-dashed"
+            style={{ borderColor: `color-mix(in oklab, ${tone} 30%, transparent)`, "--ws-orbit-dur": "17s" } as React.CSSProperties}
           />
           <span
-            className="ws-node-pulse absolute right-0 h-3.5 w-3.5 rounded-full"
-            style={{ background: tone, animationDelay: "1.45s" }}
+            aria-hidden
+            className="ws-orbit ws-orbit-rev absolute inset-[30px] rounded-full border border-dashed"
+            style={{ borderColor: `color-mix(in oklab, ${tone} 18%, transparent)`, "--ws-orbit-dur": "26s" } as React.CSSProperties}
           />
-          <span className="absolute inset-x-6 top-1/2 h-px bg-border" />
-          <span className="absolute inset-x-6 top-0 h-full">
-            <span className="ws-packet" />
-            <span className="ws-packet" style={{ animationDelay: "0.57s" }} />
-            <span className="ws-packet" style={{ animationDelay: "1.14s" }} />
-          </span>
-        </span>
+          {/* Orbiting sparks — three, staggered so they start scattered. */}
+          {[
+            { inset: "6px", dur: "6.5s", delay: "0s", size: 6 },
+            { inset: "22px", dur: "9s", delay: "-3s", size: 5 },
+            { inset: "38px", dur: "12s", delay: "-7s", size: 4 },
+          ].map((p, i) => (
+            <span
+              key={i}
+              aria-hidden
+              className={cn("ws-orbit absolute rounded-full", i === 1 && "ws-orbit-rev")}
+              style={{ inset: p.inset, "--ws-orbit-dur": p.dur, animationDelay: p.delay } as React.CSSProperties}
+            >
+              <span
+                className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{
+                  height: p.size,
+                  width: p.size,
+                  background: tone,
+                  boxShadow: `0 0 10px color-mix(in oklab, ${tone} 80%, transparent)`,
+                }}
+              />
+            </span>
+          ))}
+          {/* Progress ring — fills per completed stage. */}
+          <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
+            <circle cx="50" cy="50" r="46" fill="none" strokeWidth="1.5" className="stroke-border/50" />
+            <circle
+              cx="50"
+              cy="50"
+              r="46"
+              fill="none"
+              strokeWidth="3"
+              strokeLinecap="round"
+              stroke={tone}
+              strokeDasharray={2 * Math.PI * 46}
+              strokeDashoffset={
+                2 * Math.PI * 46 *
+                (1 - (stages && stages.length > 0 ? Math.min(1, (activeIndex + 0.45) / stages.length) : 0.12))
+              }
+              className="transition-[stroke-dashoffset] duration-1000 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+            />
+          </svg>
+          {/* The heart: the money itself. */}
+          <div className="ws-core-breathe relative flex flex-col items-center gap-1">
+            {figure ? (
+              <>
+                <span className="font-display text-[26px] font-light leading-none tracking-[-0.01em] tabular-nums">
+                  {figure}
+                </span>
+                <span className="text-[9.5px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+                  in transit
+                </span>
+              </>
+            ) : (
+              <span className="h-3 w-3 rounded-full" style={{ background: tone }} />
+            )}
+          </div>
+        </div>
       )}
 
       <div className={cn("flex flex-col gap-1", state === "processing" && "ws-casc ws-casc-1")}>
