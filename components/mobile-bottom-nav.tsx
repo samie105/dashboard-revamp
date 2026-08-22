@@ -200,9 +200,11 @@ export function MobileBottomNav() {
 
   return (
     <>
-      {/* ── Bottom Nav Bar ── */}
-      <nav className="fixed inset-x-0 bottom-0 z-50 md:hidden border-t border-border/15 bg-background/90 backdrop-blur-2xl safe-area-bottom">
-        <div className="flex w-full items-center justify-around py-1.5">
+      {/* ── Bottom Nav — a floating glass capsule, iOS-26 style: inset from
+             the edges, content scrolls UNDER it, the active tab lives in a
+             raised lozenge. ── */}
+      <nav className="pointer-events-none fixed inset-x-4 bottom-3 z-50 md:hidden safe-area-bottom">
+        <div className="ws-glass ws-glass-edge pointer-events-auto relative mx-auto flex max-w-sm items-center justify-between gap-0.5 rounded-full p-1.5 shadow-[0_18px_44px_-16px_rgb(0_0_0/0.65)] ring-1 ring-foreground/10">
           {NAV_ITEMS.map((item) => {
             /* "Trade" used to be a sentinel href that opened a modal listing
                the trading destinations — a tab that answered a tap with a
@@ -215,18 +217,17 @@ export function MobileBottomNav() {
                 key={item.label}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-1 min-w-14",
-                  active ? "text-foreground" : "text-muted-foreground",
+                  "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-full px-1 py-1.5 transition-all active:scale-95 motion-reduce:active:scale-100",
+                  active
+                    ? "bg-accent text-foreground shadow-sm ring-1 ring-foreground/[0.08]"
+                    : "text-muted-foreground",
                 )}
               >
                 <HugeiconsIcon
                   icon={item.icon}
-                  className={cn("h-5.5 w-5.5", active && "text-primary")}
+                  className={cn("h-5 w-5", active && "text-primary")}
                 />
-                <span className={cn(
-                  "text-[11px] font-medium",
-                  active ? "text-foreground" : "text-muted-foreground",
-                )}>
+                <span className="text-[10px] font-semibold leading-none">
                   {item.label}
                 </span>
               </Link>
@@ -239,14 +240,14 @@ export function MobileBottomNav() {
               render={
                 <button
                   className={cn(
-                    "flex flex-col items-center gap-1 py-1 min-w-14",
+                    "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-full px-1 py-1.5 transition-all active:scale-95 motion-reduce:active:scale-100",
                     menuOpen ? "text-foreground" : "text-muted-foreground",
                   )}
                 />
               }
             >
-              <HugeiconsIcon icon={Menu01Icon} className="h-5.5 w-5.5" />
-              <span className="text-[11px] font-medium">Menu</span>
+              <HugeiconsIcon icon={Menu01Icon} className="h-5 w-5" />
+              <span className="text-[10px] font-semibold leading-none">Menu</span>
             </SheetTrigger>
 
             {/* ── Mobile Sidebar Sheet ── */}

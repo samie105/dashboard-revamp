@@ -304,7 +304,8 @@ export function PageHeader({
       <div className="flex min-w-0 items-start gap-2">
         {back !== undefined && <BackAction to={back} />}
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h1 className="font-display text-2xl font-bold tracking-[-0.01em]">{title}</h1>
+          {/* Large-title scale — the iOS register: big, bold, tight. */}
+          <h1 className="font-display text-[28px] font-bold leading-[1.15] tracking-[-0.02em]">{title}</h1>
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
       </div>
