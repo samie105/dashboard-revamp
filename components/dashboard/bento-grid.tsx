@@ -36,6 +36,7 @@ import {
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
 import { ActivityCard } from "@/components/dashboard/activity-card"
+import { WorldstreetTokenCard } from "@/components/dashboard/worldstreet-token-card"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
@@ -950,8 +951,15 @@ export function DashboardGrid({ coins, initialTrades, prices, error }: Dashboard
         <div className="rise min-w-0 lg:col-span-3" style={cell(180)}>
           <MarketsTable coins={coins} error={error} />
         </div>
-        <div className="rise min-w-0 lg:col-span-2" style={cell(250)}>
-          <Watchlist coins={coins} error={error} />
+        {/* Right column carries two cards: the user's stars, then the house
+            token — the screener is tall enough to partner both. */}
+        <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
+          <div className="rise min-w-0" style={cell(250)}>
+            <Watchlist coins={coins} error={error} />
+          </div>
+          <div className="rise min-w-0 flex-1 [&>div]:h-full" style={cell(320)}>
+            <WorldstreetTokenCard />
+          </div>
         </div>
       </div>
 
