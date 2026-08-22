@@ -49,7 +49,8 @@ export function WorldstreetTokenCard() {
   const balances = data?.balances ?? null
 
   return (
-    <CardShell>
+    // The id is the banner CTA's scroll target ("Get MNA" up top).
+    <CardShell id="worldstreet-token-card">
       <CardHeader
         title="Worldstreet token"
         subtitle="WMNA on Solana"

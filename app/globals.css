@@ -937,6 +937,25 @@ input[type="range"]::-moz-range-track {
   to   { stroke-dashoffset: 0; }
 }
 
+/* ── House-token banner ───────────────────────────────────────────────────
+   The one marketing surface above the fold. A narrow light band sweeps the
+   strip every ~7s and rests; gold here is brand, which is exactly what the
+   banner is. */
+@keyframes ws-banner-sheen {
+  0%        { transform: translateX(-180%) skewX(-18deg); opacity: 0; }
+  6%        { opacity: 1; }
+  30%       { transform: translateX(340%) skewX(-18deg); opacity: 1; }
+  34%, 100% { transform: translateX(340%) skewX(-18deg); opacity: 0; }
+}
+.ws-banner-sheen { animation: ws-banner-sheen 7s cubic-bezier(0.4, 0, 0.6, 1) 1.4s infinite; }
+
+/* One-shot ring pulse on the element a CTA just scrolled to. */
+@keyframes ws-target-flash {
+  from { box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 50%, transparent); }
+  to   { box-shadow: 0 0 0 16px transparent; }
+}
+.ws-target-flash { animation: ws-target-flash 0.9s cubic-bezier(0.22, 1, 0.36, 1) 2; }
+
 /* Micro swap — a small rise for a LABEL that changed in place (the route
    strip's endpoint when the network flips, the live conversion line). Sized
    for 13px text: 6px of travel, no blur, done in 0.28s. */
@@ -959,8 +978,9 @@ input[type="range"]::-moz-range-track {
   .ws-aurora-a, .ws-aurora-b, .ws-casc, .ws-casc-pop, .ws-microswap,
   .ws-digit-pop { animation: none; }
   .ws-flow-beam { animation: none; opacity: 0; }
-  .ws-orbit, .ws-core-breathe, .ws-glow-breathe, .ws-ripple { animation: none; }
+  .ws-orbit, .ws-core-breathe, .ws-glow-breathe, .ws-ripple, .ws-target-flash { animation: none; }
   .ws-core-arc { display: none; }
+  .ws-banner-sheen { animation: none; opacity: 0; }
   .ws-wash-pulse { animation: none; opacity: 0; }
   /* The standing gold stroke stays; only the travelling glint stops. */
   .ws-ring-shimmer::before { animation: none; opacity: 0; }
