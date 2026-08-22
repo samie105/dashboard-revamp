@@ -78,9 +78,16 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
               </div>
               <div className="flex flex-1 flex-col w-full overflow-hidden">
                 <Navbar />
-                <main onScroll={handleMainScroll} className="flex-1 overflow-y-auto w-full pb-16 md:pb-0">
-                  {children}
-                </main>
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                  {/* iOS scroll-edge: content frosts progressively as it
+                      slides under the chrome instead of hitting a line. */}
+                  <div aria-hidden className="ws-scroll-edge pointer-events-none absolute inset-x-0 top-0 z-20 h-16" />
+                  {/* pb-28: the floating capsule tab bar needs clearance on
+                      mobile; desktop has no bar. */}
+                  <main onScroll={handleMainScroll} className="flex-1 overflow-y-auto w-full pb-28 md:pb-0">
+                    {children}
+                  </main>
+                </div>
               </div>
             </SidebarProvider>
           </div>
