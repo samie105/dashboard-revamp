@@ -3,6 +3,7 @@ import { WalletCard } from "@/components/dashboard/user-card"
 import { DashboardGrid } from "@/components/dashboard/bento-grid"
 import { WalletCardSkeleton, DashboardGridSkeleton } from "@/components/dashboard/skeletons"
 import { DashboardOnboarding } from "@/components/dashboard/dashboard-onboarding"
+import { MnaBanner } from "@/components/dashboard/mna-banner"
 import { Rise } from "@/components/ui/system"
 import { PromoRow } from "@/components/ui/promo-row"
 import { getPrices, getTrades } from "@/lib/actions"
@@ -38,7 +39,9 @@ export default function Page() {
     // overflow-x-hidden clips the hero's full-bleed negative margins; without
     // it the -mx-4 bleed widens the document by 32px on a phone.
     <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
-      {/* Pending deposit banner (client component) */}
+      {/* House-token strip — the one marketing surface above the balance
+          hero (it renders nothing once dismissed). */}
+      <MnaBanner />
 
       <Rise>
         <Suspense fallback={<WalletCardSkeleton />}>
