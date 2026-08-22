@@ -204,6 +204,19 @@ export function Segmented<T extends string>({
     return () => cancelAnimationFrame(id)
   }, [thumb, settled])
 
+  // Droplet: while the thumb travels it stretches like liquid and relaxes
+  // as it lands — fired only on a value CHANGE, never on first paint.
+  const [stretching, setStretching] = React.useState(false)
+  const prevValue = React.useRef(value)
+  React.useEffect(() => {
+    if (prevValue.current === value) return
+    prevValue.current = value
+    if (!settled) return
+    setStretching(true)
+    const id = setTimeout(() => setStretching(false), 360)
+    return () => clearTimeout(id)
+  }, [value, settled])
+
   return (
     // The track is the SUNKEN step of the stone ladder and the thumb is the
     // RAISED one — two full steps apart, so the selection stays legible on a
@@ -230,6 +243,7 @@ export function Segmented<T extends string>({
             md ? "inset-y-1" : "inset-y-0.5",
             settled &&
               "transition-[left,width] duration-[340ms] [transition-timing-function:cubic-bezier(0.3,1.4,0.4,1)] motion-reduce:transition-none",
+            stretching && "ws-thumb-stretch",
           )}
           style={{ left: thumb.left, width: thumb.width }}
         />

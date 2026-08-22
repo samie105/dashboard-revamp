@@ -133,7 +133,7 @@ export function Navbar() {
             type="search"
             placeholder="Search assets, trades…"
             onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur() }}
-            className="h-10 w-full rounded-full bg-card/55 pl-11 pr-4 text-[13px] ring-1 ring-border/50 backdrop-blur-xl outline-none transition-all placeholder:text-muted-foreground/50 focus:bg-card/80 focus:ring-primary/40 lg:pr-16"
+            className="ws-nav-glass h-10 w-full rounded-full bg-card/55 pl-11 pr-4 text-[13px] ring-1 ring-border/50 backdrop-blur-xl outline-none transition-all placeholder:text-muted-foreground/50 focus:bg-card/80 focus:ring-primary/40 lg:pr-16"
           />
           <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 items-center rounded-md bg-surface-sunken/80 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-muted-foreground/70 ring-1 ring-border/40 lg:flex">
             {kbdHint}
@@ -148,7 +148,7 @@ export function Navbar() {
           it would have to correct. */}
       {cashLoaded && (
         <div
-          className="hidden h-10 shrink-0 items-center gap-2 rounded-full bg-card/55 px-3.5 ring-1 ring-border/50 backdrop-blur-xl lg:flex"
+          className="ws-nav-glass hidden h-10 shrink-0 items-center gap-2 rounded-full bg-card/55 px-3.5 ring-1 ring-border/50 backdrop-blur-xl lg:flex"
           title="Dollar Account"
         >
           {/* The icon replaces the "Cash" label, so the account it names has to

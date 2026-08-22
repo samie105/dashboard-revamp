@@ -9,6 +9,7 @@ import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { IncomingCallProvider } from "@/components/community/incoming-call-provider"
 import { MoneyFlowProvider } from "@/components/flows/money-flow-modal"
 import { SilkBackdrop } from "@/components/ui/silk-backdrop"
+import { LiquidGlassPointer } from "@/components/liquid-glass"
 
 /** Routes that render full-bleed (no sidebar / top-nav / navbar). */
 const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
@@ -16,6 +17,14 @@ const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isFullBleed = FULL_BLEED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
+
+  // Scroll-adaptive chrome: content moving beneath the nav pills firms
+  // their glass up ([data-ws-scrolled] .ws-nav-glass). Attribute toggled
+  // directly — a per-scroll-event React state would re-render the shell.
+  const rootRef = React.useRef<HTMLDivElement>(null)
+  const handleMainScroll = React.useCallback((e: React.UIEvent<HTMLElement>) => {
+    rootRef.current?.toggleAttribute("data-ws-scrolled", (e.target as HTMLElement).scrollTop > 8)
+  }, [])
   // The silk atmosphere belongs to the dashboard hero only, but it must live
   // HERE, under the z-10 content layer, so the translucent sidebar and navbar
   // blur it through — inside <main> it could never reach behind the rail.
@@ -36,7 +45,8 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   return (
     <IncomingCallProvider>
       <MoneyFlowProvider>
-        <div className="relative flex flex-col h-screen overflow-hidden">
+        <div ref={rootRef} className="relative flex flex-col h-screen overflow-hidden">
+          <LiquidGlassPointer />
           {/* Desktop atmosphere — the rail's warm bloom spilling into the page.
               Fixed and non-interactive so it never intercepts a click. */}
           <div
@@ -68,7 +78,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
               </div>
               <div className="flex flex-1 flex-col w-full overflow-hidden">
                 <Navbar />
-                <main className="flex-1 overflow-y-auto w-full pb-16 md:pb-0">
+                <main onScroll={handleMainScroll} className="flex-1 overflow-y-auto w-full pb-16 md:pb-0">
                   {children}
                 </main>
               </div>
