@@ -2,11 +2,11 @@
 
 /**
  * House-token banner — the one marketing surface allowed above the balance
- * hero. WorldStreet's own take on the classic "buy the token" strip: stone
- * glass with a gold wash bleeding in from the right, a minted MNA coin, a
- * light band sweeping the strip every few seconds, and a gold CTA that
- * scrolls to the Worldstreet token card (price, holdings, explainer) and
- * flashes it. When the Buy-MNA flow ships, the CTA points there instead.
+ * hero. A gold dusk gathers on the right with ghost coins drifting in it,
+ * a minted MNA coin glints on the left, the live WMNA price ticks beside
+ * the CTA (real data, from the same hook as the token card), and a light
+ * band sweeps the strip. The CTA scrolls to the Worldstreet token card and
+ * flashes it; when the Buy-MNA flow ships it points there instead.
  *
  * Dismissible, and it stays dismissed (localStorage) — a promo that
  * reappears every visit trains people to stop seeing it.
@@ -15,28 +15,39 @@
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Cancel01Icon } from "@hugeicons/core-free-icons"
+import { useWorldstreetToken } from "@/hooks/useWorldstreetToken"
 
 const DISMISS_KEY = "ws-mna-banner-dismissed"
 
-/** A minted coin, drawn in CSS: gold conic rim, dark face, monogram. */
+function fmtPrice(p: number): string {
+  return p >= 1 ? p.toLocaleString(undefined, { maximumFractionDigits: 2 }) : p.toPrecision(3)
+}
+
+/** A minted coin, drawn in CSS: gold conic rim, dark face, monogram — with
+ *  a shine band sweeping across it on the banner's cadence. */
 function MnaCoin() {
   return (
     <span
       aria-hidden
-      className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-[0_6px_16px_-6px_color-mix(in_oklab,var(--primary)_55%,transparent)]"
+      className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full shadow-[0_10px_26px_-8px_color-mix(in_oklab,var(--primary)_70%,transparent)]"
       style={{
         background:
           "conic-gradient(from 220deg, #8a6d1f, #f3d97c 22%, #a8842a 46%, #f7e29a 68%, #8a6d1f)",
       }}
     >
       <span
-        className="flex h-[38px] w-[38px] items-center justify-center rounded-full font-display text-[15px] font-bold text-primary"
+        className="flex h-[48px] w-[48px] items-center justify-center rounded-full font-display text-lg font-bold text-primary"
         style={{
           background: "radial-gradient(120% 120% at 30% 25%, #2a2416, #171310 70%)",
         }}
       >
         M
       </span>
+      {/* The coin glints on the same clock as the strip's sheen. */}
+      <span
+        className="ws-banner-sheen absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-white/25 to-transparent"
+        style={{ animationDelay: "1.7s" }}
+      />
     </span>
   )
 }
@@ -45,6 +56,8 @@ export function MnaBanner() {
   // "unknown" until localStorage has been read — rendering nothing first
   // avoids a hydration mismatch and a flash-then-vanish for dismissers.
   const [state, setState] = React.useState<"unknown" | "show" | "hidden">("unknown")
+  const { data } = useWorldstreetToken()
+  const price = data?.market?.price
 
   React.useEffect(() => {
     try {
@@ -81,44 +94,79 @@ export function MnaBanner() {
   if (state !== "show") return null
 
   return (
-    <div className="rise ws-card-glass relative overflow-hidden rounded-2xl bg-card/80 ring-1 ring-primary/25">
-      {/* Gold bleeding in from the right — atmosphere, not a photograph. */}
+    <div className="rise ws-card-glass ws-glass-edge relative overflow-hidden rounded-2xl bg-card/80 ring-1 ring-primary/30">
+      {/* Gold dusk — a real scene, not a tint: deep wash from the right,
+          an answering glow behind the coin, and three ghost coins drifting
+          in the field (the Kash photo's coins, rebuilt as material). */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div
           className="absolute inset-0"
           style={{
-            background:
-              "radial-gradient(90% 160% at 100% 50%, color-mix(in oklab, var(--primary) 16%, transparent) 0%, transparent 55%)",
+            background: `
+              radial-gradient(110% 220% at 100% 50%, color-mix(in oklab, var(--primary) 30%, transparent) 0%, color-mix(in oklab, var(--primary) 10%, transparent) 34%, transparent 62%),
+              radial-gradient(40% 160% at 4% 50%, color-mix(in oklab, var(--primary) 14%, transparent) 0%, transparent 70%)`,
           }}
         />
-        <div
-          className="ws-aurora-b absolute -right-10 -top-10 h-32 w-72 rounded-full blur-2xl"
+        <span
+          className="ws-aurora-a absolute right-[6.5rem] top-1/2 hidden h-16 w-16 -translate-y-1/2 rounded-full sm:block"
           style={{
-            background:
-              "radial-gradient(closest-side, color-mix(in oklab, var(--primary) 20%, transparent), transparent)",
+            border: "1px solid color-mix(in oklab, var(--primary) 45%, transparent)",
+            background: "radial-gradient(closest-side, color-mix(in oklab, var(--primary) 18%, transparent), transparent)",
+          }}
+        />
+        <span
+          className="ws-aurora-b absolute right-44 top-0 hidden h-10 w-10 rounded-full lg:block"
+          style={{
+            border: "1px solid color-mix(in oklab, var(--primary) 30%, transparent)",
+            background: "radial-gradient(closest-side, color-mix(in oklab, var(--primary) 12%, transparent), transparent)",
+            animationDelay: "-6s",
+          }}
+        />
+        <span
+          className="ws-aurora-a absolute -bottom-4 right-6 hidden h-12 w-12 rounded-full sm:block"
+          style={{
+            border: "1px solid color-mix(in oklab, var(--primary) 35%, transparent)",
+            background: "radial-gradient(closest-side, color-mix(in oklab, var(--primary) 15%, transparent), transparent)",
+            animationDelay: "-9s",
           }}
         />
       </div>
-      {/* The sweeping light band. */}
+      {/* The sweeping light band — gold-warmed, brighter than before. */}
       <span
         aria-hidden
-        className="ws-banner-sheen pointer-events-none absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-transparent via-white/[0.07] to-transparent"
+        className="ws-banner-sheen pointer-events-none absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-transparent via-[color-mix(in_oklab,var(--primary)_22%,rgb(255_255_255/0.10))] to-transparent"
       />
 
-      <div className="relative flex items-center gap-3.5 px-4 py-3.5 sm:gap-4 sm:px-5">
+      <div className="relative flex items-center gap-4 px-4 py-4 sm:px-5">
         <MnaCoin />
         <div className="min-w-0 flex-1">
-          <p className="font-display text-[14.5px] font-semibold leading-tight tracking-[-0.01em] sm:text-[15.5px]">
-            Own a piece of Worldstreet
+          <p className="font-display text-[15.5px] font-bold leading-tight tracking-[-0.01em] sm:text-[17px]">
+            Own a piece of{" "}
+            <span className="bg-gradient-to-r from-primary via-[#f5d97a] to-primary bg-clip-text text-transparent">
+              Worldstreet
+            </span>
           </p>
-          <p className="mt-0.5 hidden text-[12.5px] leading-snug text-muted-foreground sm:block">
+          <p className="mt-1 hidden text-[12.5px] leading-snug text-muted-foreground sm:block">
             MNA is the house token — buy it with your Dollar Account, or trade WMNA on the open market.
           </p>
         </div>
+
+        {/* Live price — proof the token is a market, not a poster. */}
+        {price != null && (
+          <span className="ws-microswap hidden shrink-0 items-center gap-2 rounded-full bg-surface-sunken/70 px-3.5 py-2 ring-1 ring-border/30 lg:flex">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inset-0 animate-ping rounded-full bg-credit/60 motion-reduce:hidden" />
+              <span className="relative h-1.5 w-1.5 rounded-full bg-credit" />
+            </span>
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">WMNA</span>
+            <span className="text-[12.5px] font-semibold tabular-nums">${fmtPrice(price)}</span>
+          </span>
+        )}
+
         <button
           type="button"
           onClick={goToToken}
-          className="flex h-9 shrink-0 items-center rounded-full bg-primary px-4 text-[13px] font-bold text-primary-foreground shadow-[0_8px_20px_-8px_color-mix(in_oklab,var(--primary)_60%,transparent)] transition-all hover:bg-primary/90 active:scale-[0.97] motion-reduce:active:scale-100"
+          className="ws-cta-breathe flex h-10 shrink-0 items-center rounded-full bg-primary px-5 text-[13.5px] font-bold text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_oklab,var(--primary)_55%,transparent)] transition-all hover:bg-primary/90 active:scale-[0.97] motion-reduce:active:scale-100"
         >
           Get MNA
         </button>
