@@ -699,13 +699,24 @@ input[type="range"]::-moz-range-track {
   padding: 1px;
   pointer-events: none;
   z-index: 1;
-  background: linear-gradient(
-    160deg,
-    rgb(255 255 255 / 0.16),
-    rgb(255 255 255 / 0.05) 34%,
-    transparent 55%,
-    rgb(255 255 255 / 0.06) 92%
-  );
+  /* Two coats: the base gradient (light from the fixed top-left source),
+     plus a specular hotspot that FOLLOWS THE POINTER via --ws-spec-x/y —
+     set per-element by LiquidGlassPointer. The defaults park the hotspot
+     off the top edge, so touch devices and no-JS render the classic rim. */
+  background:
+    radial-gradient(
+      150px circle at var(--ws-spec-x, 25%) var(--ws-spec-y, -12%),
+      rgb(255 255 255 / 0.42),
+      rgb(255 255 255 / 0.1) 45%,
+      transparent 72%
+    ),
+    linear-gradient(
+      160deg,
+      rgb(255 255 255 / 0.16),
+      rgb(255 255 255 / 0.05) 34%,
+      transparent 55%,
+      rgb(255 255 255 / 0.06) 92%
+    );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -937,6 +948,41 @@ input[type="range"]::-moz-range-track {
   to   { stroke-dashoffset: 0; }
 }
 
+/* ── Liquid chrome ────────────────────────────────────────────────────────
+   Apple-grade glass behaviours for the CONTROL layer (nav pills, sidebar):
+
+   1. A whisper of gold in the chrome's glass — the silk field behind it,
+      acknowledged (background-image, so it stacks on the utility fill).
+   2. Content scrolled beneath the chrome firms the glass up for
+      legibility. The override rides on the cascade fact this codebase
+      already learned the hard way: un-layered author CSS beats Tailwind's
+      layered utilities — here, deliberately, over bg-card/55. */
+.ws-nav-glass {
+  background-image: linear-gradient(
+    color-mix(in oklab, var(--primary) 4%, transparent) 0 0
+  );
+  transition: background-color 0.35s ease;
+}
+[data-ws-scrolled] .ws-nav-glass {
+  background-color: color-mix(in oklab, var(--card) 84%, transparent);
+}
+
+/* The floating sidebar takes the same gold whisper. */
+[data-slot="sidebar-inner"] {
+  background-image: linear-gradient(
+    color-mix(in oklab, var(--primary) 3%, transparent) 0 0
+  );
+}
+
+/* Droplet thumb — the Segmented thumb stretches like liquid mid-slide and
+   relaxes as it lands. Fired for the travel only, never at rest. */
+@keyframes ws-thumb-stretch {
+  0%   { transform: scaleX(1); }
+  45%  { transform: scaleX(1.16); }
+  100% { transform: scaleX(1); }
+}
+.ws-thumb-stretch { animation: ws-thumb-stretch 0.34s cubic-bezier(0.3, 1.2, 0.4, 1); }
+
 /* ── House-token banner ───────────────────────────────────────────────────
    The one marketing surface above the fold. A narrow light band sweeps the
    strip every ~7s and rests; gold here is brand, which is exactly what the
@@ -981,6 +1027,7 @@ input[type="range"]::-moz-range-track {
   .ws-orbit, .ws-core-breathe, .ws-glow-breathe, .ws-ripple, .ws-target-flash { animation: none; }
   .ws-core-arc { display: none; }
   .ws-banner-sheen { animation: none; opacity: 0; }
+  .ws-thumb-stretch { animation: none; }
   .ws-wash-pulse { animation: none; opacity: 0; }
   /* The standing gold stroke stays; only the travelling glint stops. */
   .ws-ring-shimmer::before { animation: none; opacity: 0; }
