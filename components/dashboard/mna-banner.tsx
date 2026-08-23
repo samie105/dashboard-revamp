@@ -86,7 +86,7 @@ export function MnaBanner() {
   if (state !== "show") return null
 
   return (
-    <div className="rise ws-card-glass ws-glass-edge relative overflow-hidden rounded-2xl bg-card/80 ring-1 ring-primary/30">
+    <div className="rise ws-card-glass ws-glass-edge relative overflow-hidden rounded-2xl bg-card/50 ring-1 ring-primary/30">
       {/* Gold dusk — a real scene, not a tint: deep wash from the right,
           an answering glow behind the coin, and three ghost coins drifting
           in the field (the Kash photo's coins, rebuilt as material). */}

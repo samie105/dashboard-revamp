@@ -662,15 +662,15 @@ input[type="range"]::-moz-range-track {
      legibility work, with saturation pushed so whatever shows through
      glows rather than grays out. */
   .ws-glass {
-    background-color: color-mix(in oklab, var(--card) 38%, transparent);
-    -webkit-backdrop-filter: blur(36px) saturate(1.7);
-    backdrop-filter: blur(36px) saturate(1.7);
+    background-color: color-mix(in oklab, var(--card) 26%, transparent);
+    -webkit-backdrop-filter: blur(40px) saturate(1.7);
+    backdrop-filter: blur(40px) saturate(1.7);
   }
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .ws-card-glass {
-    -webkit-backdrop-filter: blur(22px) saturate(1.5);
-    backdrop-filter: blur(22px) saturate(1.5);
+    -webkit-backdrop-filter: blur(26px) saturate(1.5);
+    backdrop-filter: blur(26px) saturate(1.5);
   }
 }
 /* Cards carry a LOW utility fill (bg-card/45) that only works with a blur
@@ -1003,7 +1003,7 @@ input[type="range"]::-moz-range-track {
   transition: background-color 0.35s ease;
 }
 [data-ws-scrolled] .ws-nav-glass {
-  background-color: color-mix(in oklab, var(--card) 84%, transparent);
+  background-color: color-mix(in oklab, var(--card) 78%, transparent);
 }
 
 /* iOS scroll-edge effect — content sliding under the chrome doesn't hit a
