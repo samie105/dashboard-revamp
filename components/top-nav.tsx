@@ -93,7 +93,7 @@ export function TopNav() {
             <NavigationMenuItem key={item.label}>
               {/* Glass-pill grammar — matches the navbar's search field and
                   utility cluster so the three instruments read as one set. */}
-              <NavigationMenuTrigger className="ws-nav-glass h-10 rounded-full bg-card/45 px-4 text-[13px] font-medium text-muted-foreground ring-1 ring-border/50 backdrop-blur-xl hover:bg-card/80 hover:text-foreground focus:bg-card/80 data-open:bg-card/80 data-open:text-foreground data-popup-open:bg-card/80 data-popup-open:text-foreground">
+              <NavigationMenuTrigger className="ws-nav-glass h-10 rounded-full bg-card/35 px-4 text-[13px] font-medium text-muted-foreground ring-1 ring-border/50 backdrop-blur-xl hover:bg-card/80 hover:text-foreground focus:bg-card/80 data-open:bg-card/80 data-open:text-foreground data-popup-open:bg-card/80 data-popup-open:text-foreground">
                 {item.label}
               </NavigationMenuTrigger>
               <NavigationMenuContent>

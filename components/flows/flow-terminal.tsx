@@ -299,7 +299,7 @@ export function FlowTerminal({
 
         {/* Pinned confirm — a money modal never hides its button below the
             fold. Solid footer with a hairline; content slides under it. */}
-        <div className="ws-casc ws-casc-6 sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card/85 px-4 pb-4 pt-3 backdrop-blur-xl sm:-mx-5 sm:px-5">
+        <div className="ws-casc ws-casc-6 sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto border-t border-border/40 bg-card/70 px-4 pb-4 pt-3 backdrop-blur-xl sm:-mx-5 sm:px-5">
           {cta}
         </div>
       </div>
