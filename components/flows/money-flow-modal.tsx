@@ -109,6 +109,22 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
     // naming it lets the React Compiler verify that rather than assume it.
   }, [inFlightByMode])
 
+  // Which width the ACTIVE panel wants: the two-pane terminal needs the wide
+  // frame; the status / receive / setup screens are single columns that
+  // drown in it, so they ask for the narrow one and the popup morphs.
+  const [compactByMode, setCompactByMode] = React.useState<Partial<Record<FlowMode, boolean>>>({})
+  const compactHandlers = React.useMemo(() => {
+    const modes: FlowMode[] = ["buy", "sell", "fund", "trading-withdraw"]
+    return Object.fromEntries(
+      modes.map((m) => [
+        m,
+        (v: boolean) =>
+          setCompactByMode((prev) => (prev[m] === v ? prev : { ...prev, [m]: v })),
+      ]),
+    ) as Record<FlowMode, (v: boolean) => void>
+  }, [])
+  const compact = !!compactByMode[mode]
+
   const openFlow = React.useCallback((next: FlowMode) => {
     inFlightRef.current = false
     inFlightByMode.current = {}
@@ -228,10 +244,14 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                   // (not max-h) so switching direction never resizes the sheet.
                   "inset-x-0 bottom-0 h-[86dvh] translate-y-0 rounded-t-[28px] safe-area-bottom transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-y-full data-starting-style:translate-y-full"
                 : // Centered modal — springy push-up with a blur-to-focus
-                  // resolve, quick fade out. WIDE: the terminal layout puts
-                  // the stage and the keypad side by side. Fixed height for
-                  // the same reason; dvh cap keeps it honest on laptops.
-                  "ws-modal-in left-1/2 top-1/2 h-[680px] max-h-[86dvh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-200 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
+                  // resolve, quick fade out. WIDE for the two-pane terminal;
+                  // MORPHS narrow when the active panel shows a single-column
+                  // screen (status, receive, setup). Fixed height either way;
+                  // dvh cap keeps it honest on laptops.
+                  cn(
+                    "ws-modal-in left-1/2 top-1/2 h-[680px] max-h-[86dvh] w-full -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-300 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
+                    compact ? "max-w-md" : "max-w-2xl",
+                  ),
             )}
           >
             {/* Gold rim shimmer — a faint standing stroke with a slow glint
@@ -320,12 +340,14 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                             mode={opt.key}
                             variant="modal"
                             onInFlightChange={inFlightHandlers[opt.key]}
+                            onCompactChange={compactHandlers[opt.key]}
                           />
                         ) : (
                           <FundClient
                             mode={opt.key === "fund" ? "fund" : "withdraw"}
                             variant="modal"
                             onInFlightChange={inFlightHandlers[opt.key]}
+                            onCompactChange={compactHandlers[opt.key]}
                             onDismiss={closeFlow}
                           />
                         )}
