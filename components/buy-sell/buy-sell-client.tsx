@@ -141,6 +141,7 @@ export function BuySellClient({
   mode,
   variant = "page",
   onInFlightChange,
+  onCompactChange,
 }: {
   mode: Mode
   /** "page" = the /buy and /sell routes (FlowShell + PageHeader — deep links
@@ -151,6 +152,10 @@ export function BuySellClient({
    *  or a processing (non-terminal) status screen. The modal shell uses this
    *  to ignore backdrop clicks and Escape at exactly those moments. */
   onInFlightChange?: (inFlight: boolean) => void
+  /** Reports when this panel is showing a single-column screen (status,
+   *  receive) rather than the two-pane terminal — the modal shell narrows
+   *  its frame to match. */
+  onCompactChange?: (compact: boolean) => void
 }) {
   const isBuy = mode === "buy"
   const isModal = variant === "modal"
@@ -299,6 +304,13 @@ export function BuySellClient({
   React.useEffect(() => {
     onInFlightChange?.(inFlight)
   }, [inFlight, onInFlightChange])
+
+  /* Status and receive are single columns — ask the shell for the narrow
+     frame while they're up; the terminal form takes the wide one back. */
+  const statusVisible = !!result || submittedAt !== null
+  React.useEffect(() => {
+    onCompactChange?.(statusVisible || (isBuy && tab === "receive"))
+  }, [statusVisible, tab, isBuy, onCompactChange])
 
   /** Back to the form, with the poll clock wound back. */
   function resetFlow() {

@@ -120,6 +120,7 @@ export function FundClient({
   mode,
   variant = "page",
   onInFlightChange,
+  onCompactChange,
   onDismiss,
 }: {
   mode: Mode
@@ -129,6 +130,10 @@ export function FundClient({
   /** Reports when dismissing would abandon an in-flight transfer, so the modal
    *  shell can ignore backdrop clicks and Escape at exactly those moments. */
   onInFlightChange?: (inFlight: boolean) => void
+  /** Reports when this panel is showing a single-column screen (status,
+   *  setup gate, load error) rather than the two-pane terminal — the modal
+   *  shell narrows its frame to match. */
+  onCompactChange?: (compact: boolean) => void
   /** Closes the containing modal. Dead-end screens use it instead of a link so
    *  they don't navigate away from whatever the modal opened over. */
   onDismiss?: () => void
@@ -273,6 +278,13 @@ export function FundClient({
   React.useEffect(() => {
     onInFlightChange?.(inFlight)
   }, [inFlight, onInFlightChange])
+
+  /* Status, the setup gate and the load-error screen are single columns —
+     ask the shell for the narrow frame while they're up. */
+  const statusVisible = !!result || submittedAt !== null
+  React.useEffect(() => {
+    onCompactChange?.(statusVisible || !!loadError || walletReady === false)
+  }, [statusVisible, loadError, walletReady, onCompactChange])
 
   React.useEffect(() => {
     if (terminalNow) clearPendingFlow(isFund ? "fund" : "trading-withdraw")
