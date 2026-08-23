@@ -12,9 +12,11 @@
  * token — expect empty data states, which is enough for frontend work.
  */
 
-export const DEV_AUTH_BYPASS =
-  process.env.NODE_ENV === "development" &&
-  process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true"
+// On THIS branch (dev/mock-auth-bypass) the bypass is hard-enabled so the
+// branch can be deployed as a shareable mock-data demo without any env
+// configuration. This branch must NEVER be merged into master — the clean
+// history lives on feat/frontend-dev, which contains none of this code.
+export const DEV_AUTH_BYPASS: boolean = true
 
 export const DEV_BYPASS_USER = {
   userId: "dev_bypass_user",

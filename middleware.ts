@@ -25,12 +25,7 @@ const isWebhookRoute = createRouteMatcher([
   "/api/webhooks(.*)",
 ])
 
-export default clerkMiddleware(async (auth, req) => {
-  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
-  if (DEV_AUTH_BYPASS) {
-    return NextResponse.next()
-  }
-
+const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
   // Skip auth for webhook routes (called by external services)
   if (isWebhookRoute(req)) {
     return NextResponse.next()
@@ -62,6 +57,14 @@ export default clerkMiddleware(async (auth, req) => {
     }
   }
 })
+
+// Under the hard-enabled bypass, clerkMiddleware() must never wrap the
+// request: without Clerk keys in the environment it throws before the
+// handler's own bypass check could run. Every request waves through — the
+// mocked server seams answer downstream.
+export default DEV_AUTH_BYPASS
+  ? () => NextResponse.next()
+  : clerkAuthMiddleware
 
 export const config = {
   matcher: [
