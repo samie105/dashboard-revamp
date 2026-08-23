@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { Suspense, useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import gsap from "gsap"
 import { AnimatePresence, motion } from "motion/react"
@@ -52,7 +52,7 @@ import type { MessageEventPayload, TypingEventPayload } from "@/lib/community/ev
 
 type OptimisticMessage = MessageWithDetails & { status?: "pending" | "sent" | "error"; uploadProgress?: number; isNew?: boolean }
 
-export default function CommunityPage() {
+function CommunityPageInner() {
   const { profile } = useProfile()
   const userId = profile?.authUserId ?? ""
   const searchParams = useSearchParams()
@@ -895,5 +895,16 @@ export default function CommunityPage() {
 
 
     </>
+  )
+}
+
+// useSearchParams() forces a CSR bailout during static prerender, which is a
+// build error unless it sits below a Suspense boundary. The boundary lives
+// here (not in a server wrapper) so the whole page stays a client module.
+export default function CommunityPage() {
+  return (
+    <Suspense fallback={null}>
+      <CommunityPageInner />
+    </Suspense>
   )
 }
