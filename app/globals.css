@@ -79,44 +79,48 @@
     --convert-chip: rgba(234, 179, 8, 0.14);
     --warning: #F59E0B;
     --warning-chip: rgba(245, 158, 11, 0.14);
-    /* Written as HEX on purpose — these are the exact values the hub's cards
-       and the mobile app both use, and oklch round numbers don't map to them
-       (oklch(0.09 0 0) is #020202, not #111111). */
+    /* Dark went NEUTRAL on 2026-08-23 (owner call: "dark and yellow, not
+       brown"). The warm stone ladder (#0C0A09/#1C1917/#292524) tinted every
+       surface brown, and the clear glass amplified it to amber. Same
+       lightness steps, zinc register — the gold now reads as yellow on
+       black instead of baking into the surfaces. */
     /* Panels that sit UNDER a primary one (the transactions sheet). */
-    --surface-sunken: #141110;
+    --surface-sunken: #101013;
 
-    --background: #0C0A09;                /* canvas   — hub `bg-canvas` */
-    --foreground: oklch(0.986 0.002 67.8);
-    --card: #1C1917;                      /* surface  — hub `bg-elev` */
-    --card-foreground: oklch(0.986 0.002 67.8);
-    --popover: #1C1917;
-    --popover-foreground: oklch(0.986 0.002 67.8);
-    --primary: oklch(0.795 0.184 86.047);
+    --background: #09090B;                /* canvas — true near-black */
+    --foreground: oklch(0.985 0 0);
+    --card: #18181B;                      /* surface */
+    --card-foreground: oklch(0.985 0 0);
+    --popover: #18181B;
+    --popover-foreground: oklch(0.985 0 0);
+    /* The brighter yellow the light theme already uses — on near-black it
+       glows instead of smouldering. */
+    --primary: oklch(0.852 0.199 91.936);
     --primary-foreground: oklch(0.147 0.004 49.3);
-    --secondary: #292524;
+    --secondary: #27272A;
     --secondary-foreground: oklch(0.985 0 0);
-    --muted: #292524;
-    --muted-foreground: #A8A29E;          /* hub `ink-muted` */
-    --subtle: #78716C;                    /* hub `ink-subtle` — eyebrows */
-    --accent: #292524;                    /* raised   — hub `elev-2` */
-    --accent-foreground: oklch(0.986 0.002 67.8);
+    --muted: #27272A;
+    --muted-foreground: #A1A1AA;          /* neutral ink-muted */
+    --subtle: #71717A;                    /* neutral ink-subtle — eyebrows */
+    --accent: #27272A;                    /* raised */
+    --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.547 0.021 43.1);
+    --ring: oklch(0.552 0.016 285.938);
     --chart-1: oklch(0.905 0.182 98.111);
     --chart-2: oklch(0.795 0.184 86.047);
     --chart-3: oklch(0.681 0.162 75.834);
     --chart-4: oklch(0.554 0.135 66.442);
     --chart-5: oklch(0.476 0.114 61.907);
-    --sidebar: #141110;
-    --sidebar-foreground: oklch(0.986 0.002 67.8);
-    --sidebar-primary: oklch(0.795 0.184 86.047);
-    --sidebar-primary-foreground: oklch(0.987 0.026 102.212);
-    --sidebar-accent: #292524;
-    --sidebar-accent-foreground: oklch(0.986 0.002 67.8);
+    --sidebar: #101013;
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.852 0.199 91.936);
+    --sidebar-primary-foreground: oklch(0.147 0.004 49.3);
+    --sidebar-accent: #27272A;
+    --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.547 0.021 43.1);
+    --sidebar-ring: oklch(0.552 0.016 285.938);
     --sidebar-glow: rgba(250, 204, 21, 0.10);
     --sidebar-bleed: rgba(250, 204, 21, 0.045);
 }
