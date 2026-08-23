@@ -5,11 +5,25 @@ import { UserWallet } from "@/models/UserWallet"
 import { connectDB } from "@/lib/mongodb"
 import { auth } from "@clerk/nextjs/server"
 
-// The Privy app new signups are created in (0 = old, 1 = second, 2 = third).
-// Bump when the current app hits Privy's account limit.
-const SIGNUP_PRIVY_TYPE = 2
+// The Privy app new signups are created in (0 = old, 1 = second, 2 = third,
+// 3 = fourth). Bump when the current app hits Privy's account limit.
+const SIGNUP_PRIVY_TYPE = 3
 
 function createPrivyClient(privyType: number = 0) {
+  if (privyType === 3) {
+    if (!process.env.FOURTH_PRIVY_APP_ID) {
+      throw new Error("FOURTH_PRIVY_APP_ID is not set")
+    }
+    if (!process.env.FOURTH_PRIVY_APP_SECRET) {
+      throw new Error("FOURTH_PRIVY_APP_SECRET is not set")
+    }
+
+    return new PrivyClient({
+      appId: process.env.FOURTH_PRIVY_APP_ID,
+      appSecret: process.env.FOURTH_PRIVY_APP_SECRET,
+    })
+  }
+
   if (privyType === 2) {
     if (!process.env.THIRD_PRIVY_APP_ID) {
       throw new Error("THIRD_PRIVY_APP_ID is not set")
