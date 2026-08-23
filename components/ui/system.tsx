@@ -363,10 +363,14 @@ export function CardShell({ className, children, ...rest }: React.ComponentProps
   return (
     <div
       className={cn(
-        // ws-card-glass: light frost so the silk field genuinely shows through
-        // the translucent fill instead of just tinting it — the in-page grade
-        // of the overlay glass the modals wear.
-        "ws-card-glass relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card/80",
+        // ws-card-glass: the iOS-26 clear grade — a LOW fill (45%) so the
+        // silk field genuinely transmits through the pane, with the heavy
+        // blur+saturate in ws-card-glass doing the legibility work. The
+        // no-backdrop-filter fallback in globals re-solidifies the fill.
+        "ws-card-glass relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card/45",
+        // The lens: a lit bevel at the top edge, soft occlusion at the
+        // bottom — what makes clear glass read as a pane, not a tint.
+        "shadow-[inset_0_1px_0_rgb(255_255_255/0.07),inset_0_12px_24px_-20px_rgb(255_255_255/0.12),inset_0_-14px_26px_-22px_rgb(0_0_0/0.35)]",
         className,
       )}
       {...rest}
@@ -448,7 +452,7 @@ export function ActionPill({
   const cls =
     // Glass pill — same floating-surface dialect as the nav controls, with a
     // press squish so the rail feels like buttons rather than chips.
-    "ws-card-glass flex shrink-0 items-center gap-2.5 rounded-full bg-card/70 py-2 pl-2 pr-4 ring-1 ring-border/40 transition-all hover:bg-accent/70 active:scale-[0.96] motion-reduce:active:scale-100"
+    "ws-card-glass flex shrink-0 items-center gap-2.5 rounded-full bg-card/55 py-2 pl-2 pr-4 ring-1 ring-border/40 transition-all hover:bg-accent/70 active:scale-[0.96] motion-reduce:active:scale-100"
   const inner = (
     <>
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/[0.12]">

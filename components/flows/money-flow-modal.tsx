@@ -203,7 +203,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
 
       <Dialog.Root open={open} onOpenChange={handleOpenChange} modal>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/45 transition-opacity duration-300 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-md" />
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/35 transition-opacity duration-300 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-md" />
 
           {/* Backlight — a direction-coloured bloom BEHIND the glass, so the
               modal reads as lit from the money's side of the wall. The wrapper
