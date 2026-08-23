@@ -3,8 +3,7 @@
 /**
  * House-token banner — the one marketing surface allowed above the balance
  * hero. A gold dusk gathers on the right with ghost coins drifting in it,
- * a minted MNA coin glints on the left, the live WMNA price ticks beside
- * the CTA (real data, from the same hook as the token card), and a light
+ * a minted MNA coin glints on the left, and a light
  * band sweeps the strip. The CTA scrolls to the Worldstreet token card and
  * flashes it; when the Buy-MNA flow ships it points there instead.
  *
@@ -15,13 +14,8 @@
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Cancel01Icon } from "@hugeicons/core-free-icons"
-import { useWorldstreetToken } from "@/hooks/useWorldstreetToken"
 
 const DISMISS_KEY = "ws-mna-banner-dismissed"
-
-function fmtPrice(p: number): string {
-  return p >= 1 ? p.toLocaleString(undefined, { maximumFractionDigits: 2 }) : p.toPrecision(3)
-}
 
 /** A minted coin, drawn in CSS: gold conic rim, dark face, monogram — with
  *  a shine band sweeping across it on the banner's cadence. */
@@ -56,8 +50,6 @@ export function MnaBanner() {
   // "unknown" until localStorage has been read — rendering nothing first
   // avoids a hydration mismatch and a flash-then-vanish for dismissers.
   const [state, setState] = React.useState<"unknown" | "show" | "hidden">("unknown")
-  const { data } = useWorldstreetToken()
-  const price = data?.market?.price
 
   React.useEffect(() => {
     try {
@@ -150,18 +142,6 @@ export function MnaBanner() {
             MNA is the house token — buy it with your Dollar Account, or trade WMNA on the open market.
           </p>
         </div>
-
-        {/* Live price — proof the token is a market, not a poster. */}
-        {price != null && (
-          <span className="ws-microswap hidden shrink-0 items-center gap-2 rounded-full bg-surface-sunken/70 px-3.5 py-2 ring-1 ring-border/30 lg:flex">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inset-0 animate-ping rounded-full bg-credit/60 motion-reduce:hidden" />
-              <span className="relative h-1.5 w-1.5 rounded-full bg-credit" />
-            </span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">WMNA</span>
-            <span className="text-[12.5px] font-semibold tabular-nums">${fmtPrice(price)}</span>
-          </span>
-        )}
 
         <button
           type="button"
