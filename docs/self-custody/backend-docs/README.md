@@ -11,14 +11,17 @@ guide's own drift warning.
 Docker Desktop is not installed on this machine, so the backend's own
 `docker-compose.yml` path was not used. What actually runs locally instead:
 
-**MongoDB** — a portable MongoDB 8.0.12, no Docker, no auth:
+**MongoDB** — a portable MongoDB 8.0.12, no Docker, no auth. `.local-tools/`
+is a sibling of both this repo and the backend clone, not inside either, so
+run this from `C:\Users\owen\Downloads\Projects\worldstreet\` (separate
+terminal, leave running):
 
 ```bash
 .local-tools/mongodb-win32-x86_64-windows-8.0.12/bin/mongod.exe \
   --dbpath .local-tools/mongo-data --port 27017 --bind_ip 127.0.0.1
 ```
 
-Run in the background, listening unauthenticated on `127.0.0.1:27017`.
+Listens unauthenticated on `127.0.0.1:27017`.
 
 **Backend clone**, sibling of this repo at
 `C:\Users\owen\Downloads\Projects\worldstreet\worldstreet-crypto-backend`:
@@ -70,7 +73,7 @@ directly against the `networks` collection: 9 documents total, exactly 3
 `enabled: true` — `ethereum-sepolia`, `base-sepolia`, `solana-devnet` —
 matching the three networks this doc set expects.
 
-**Run:**
+**Run** (leave this terminal running):
 
 ```bash
 npm run dev
