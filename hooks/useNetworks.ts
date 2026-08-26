@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import type { Network } from "@/lib/crypto/client"
+import { CryptoApiError, type Network } from "@/lib/crypto/client"
 import { useCryptoApi } from "./useCryptoApi"
 
 /** Server-driven network list (guide §5: never hardcode the enabled set). */
@@ -18,7 +18,7 @@ export function useNetworks() {
       .listNetworks()
       .then(setNetworks)
       .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Failed to load networks"),
+        setError(e instanceof CryptoApiError ? e.message : "Failed to load networks"),
       )
       .finally(() => setLoading(false))
   }, [api])

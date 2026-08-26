@@ -26,3 +26,14 @@
 8. **Mainnet timeline.** Both gates (`ENABLE_MAINNET`,
    `MAINNET_RELEASE_APPROVED`) are off. Rough timeline, so we can stage the
    "move your funds" messaging?
+9. **Bugs found while standing the backend up locally (snapshot 5a88660).**
+   (a) `src/config/env.ts`: zod `.optional()` fields (`.url()`/`.min(1)`)
+   reject the empty strings your own `.env.example` ships
+   (`CLERK_SECRET_KEY=`, blank `*_RPC_URL=`), so a clean checkout fails env
+   validation before boot — a blank-string→undefined preprocess would fix it.
+   (b) `sdk/src/index.ts` `request()`: on a non-JSON response (e.g. a proxy
+   502 HTML page), `body` is `undefined` and `body.success` /
+   `body.error?.code` throw a raw `TypeError` instead of a `CryptoApiError`
+   — `body?.` guards would fix it; we'd re-vendor the client after.
+   (c) FYI: `npm audit` reports 8 vulnerabilities (5 moderate, 3 high) at
+   that snapshot.

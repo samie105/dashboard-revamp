@@ -23,6 +23,17 @@ const AddGlyph = (p: { className?: string }) => (
   <HugeiconsIcon icon={Add01Icon} {...p} />
 )
 
+// Raw transport failures (a proxy's HTML 502, the vendored client's TypeError
+// on non-JSON bodies) must not reach the UI verbatim — only the API's own
+// error envelope and timeouts carry user-appropriate text.
+function friendlyError(e: unknown, fallback: string): string {
+  if (e instanceof CryptoApiError) return e.message
+  if (e instanceof DOMException && e.name === "TimeoutError") {
+    return "The wallet service timed out — is it running?"
+  }
+  return fallback
+}
+
 export function WalletSetup() {
   const api = useCryptoApi()
   const { networks, loading: networksLoading, error: networksError } = useNetworks()
@@ -37,7 +48,7 @@ export function WalletSetup() {
     try {
       setIdentity(await api.getAuthMe())
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Crypto backend unreachable")
+      setError(friendlyError(e, "Crypto backend unreachable"))
       return
     }
     try {
@@ -46,7 +57,7 @@ export function WalletSetup() {
     } catch (e) {
       // 404 NOT_FOUND before first creation is the documented normal state.
       if (e instanceof CryptoApiError && e.code === "NOT_FOUND") setWalletState("absent")
-      else setError(e instanceof Error ? e.message : "Failed to load wallet")
+      else setError(friendlyError(e, "Failed to load wallet"))
     }
   }, [api])
 
@@ -61,7 +72,7 @@ export function WalletSetup() {
       await api.client.createWalletWithAccounts(["evm", "solana"])
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Wallet creation failed")
+      setError(friendlyError(e, "Wallet creation failed"))
     } finally {
       setBusy(false)
     }
