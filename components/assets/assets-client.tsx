@@ -131,6 +131,7 @@ interface TokenInfo {
   chain: string
   isNative: boolean
   contractAddress?: string
+  decimals?: number
 }
 
 const ALL_TOKENS: TokenInfo[] = [
@@ -153,6 +154,21 @@ const ALL_TOKENS: TokenInfo[] = [
 const CHAIN_TABS = ["All", "Tron", "Solana", "Ethereum", "Arbitrum", "Sui", "TON"] as const
 type ChainTab = (typeof CHAIN_TABS)[number]
 const CHAIN_TAB_MAP: Record<ChainTab, string | null> = { All: null, Tron: "tron", Solana: "solana", Ethereum: "ethereum", Arbitrum: "arbitrum", Sui: "sui", TON: "ton" }
+
+function displayChainKey(value: string) {
+  const chain = value.toLowerCase()
+  if (chain.includes("arbitrum")) return "arbitrum"
+  if (chain.includes("ethereum")) return "ethereum"
+  if (chain.includes("solana")) return "solana"
+  if (chain.includes("sui")) return "sui"
+  if (chain.includes("ton")) return "ton"
+  if (chain.includes("tron")) return "tron"
+  return value
+}
+
+function assetIdentity(symbol: string, contractAddress?: string) {
+  return contractAddress ? contractAddress.toLowerCase() : `native:${symbol.toUpperCase()}`
+}
 
 // ── Wallet view tabs ─────────────────────────────────────────────────────
 
@@ -647,14 +663,45 @@ export default function AssetsClient() {
   const balanceMap = React.useMemo(() => {
     const map = new Map<string, number>()
     for (const b of onChainBalances) {
-      const key = `${b.chain}:${b.symbol}:${b.contractAddress ?? "native"}`
+      const key = `${displayChainKey(b.chain)}:${assetIdentity(b.symbol, b.contractAddress)}`
       map.set(key, (map.get(key) ?? 0) + b.balance)
     }
     return map
   }, [onChainBalances])
 
+  // Keep the known-token catalogue for receive/send affordances, but merge in
+  // what the backend actually discovered. This prevents the page from hiding
+  // a token simply because it was not hard-coded in the frontend.
+  const assetCatalog = React.useMemo<TokenInfo[]>(() => {
+    const map = new Map<string, TokenInfo>()
+    for (const token of ALL_TOKENS) {
+      const normalized = { ...token, chain: displayChainKey(token.chain), symbol: token.symbol.toUpperCase() }
+      map.set(`${normalized.chain}:${assetIdentity(normalized.symbol, normalized.contractAddress)}`, normalized)
+    }
+    for (const balance of onChainBalances) {
+      const chain = displayChainKey(balance.chain)
+      const symbol = balance.symbol.toUpperCase()
+      const contractAddress = balance.contractAddress
+      const key = `${chain}:${assetIdentity(symbol, contractAddress)}`
+      const previous = map.get(key) ?? [...map.values()].find((token) => token.chain === chain && contractAddress && token.contractAddress?.toLowerCase() === contractAddress.toLowerCase())
+      if (previous && previous.contractAddress && previous.contractAddress.toLowerCase() !== (contractAddress ?? "").toLowerCase()) {
+        map.delete(`${chain}:${assetIdentity(previous.symbol, previous.contractAddress)}`)
+      }
+      map.set(key, {
+        symbol: previous?.symbol || symbol,
+        name: balance.name || previous?.name || symbol,
+        icon: balance.logo || previous?.icon || getCoinImage(symbol) || coinFallback(symbol),
+        chain,
+        isNative: balance.isNative,
+        contractAddress,
+        decimals: balance.decimals,
+      })
+    }
+    return [...map.values()]
+  }, [onChainBalances])
+
   function getTokenBalance(token: TokenInfo): number {
-    const key = `${token.chain}:${token.symbol}:${token.contractAddress ?? "native"}`
+    const key = `${displayChainKey(token.chain)}:${assetIdentity(token.symbol, token.contractAddress)}`
     return balanceMap.get(key) ?? 0
   }
 
@@ -675,10 +722,10 @@ export default function AssetsClient() {
   // On-chain total: all tokens valued in USD
   const onChainTotal = React.useMemo(() => {
     let total = 0
-    for (const token of ALL_TOKENS) total += tokenUsd(token, getTokenBalance(token))
+    for (const token of assetCatalog) total += tokenUsd(token, getTokenBalance(token))
     return total
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [balanceMap, tokenUsd])
+  }, [assetCatalog, balanceMap, tokenUsd])
 
   /* Allocation by SYMBOL, not by row: USDT on three chains is one holding to a
      human, even though it's three lines in the table. Top six, rest folded into
@@ -686,7 +733,7 @@ export default function AssetsClient() {
   const allocation = React.useMemo<Slice[]>(() => {
     if (onChainTotal <= 0) return []
     const bySymbol = new Map<string, { usd: number; icon: string; name: string }>()
-    for (const token of ALL_TOKENS) {
+    for (const token of assetCatalog) {
       const usd = tokenUsd(token, getTokenBalance(token))
       if (usd <= 0) continue
       const prev = bySymbol.get(token.symbol)
@@ -719,7 +766,7 @@ export default function AssetsClient() {
     }
     return slices
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [balanceMap, tokenUsd, onChainTotal])
+  }, [assetCatalog, balanceMap, tokenUsd, onChainTotal])
 
   // Spot balance = sum of SpotV2 USDC (available + locked) + positions value
   const spotBalance = React.useMemo(() => {
@@ -757,7 +804,7 @@ export default function AssetsClient() {
      whole point of an assets list: what you own most of should not be found by
      scanning a hard-coded token order. */
   const filteredTokens = React.useMemo(() => {
-    let list = [...ALL_TOKENS]
+    let list = [...assetCatalog]
     const chainKey = CHAIN_TAB_MAP[chainTab]
     if (chainKey) list = list.filter((t) => t.chain === chainKey)
     if (search) {
@@ -766,7 +813,7 @@ export default function AssetsClient() {
     }
     return list.sort((a, b) => tokenUsd(b, getTokenBalance(b)) - tokenUsd(a, getTokenBalance(a)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chainTab, search, balanceMap, tokenUsd])
+  }, [assetCatalog, chainTab, search, balanceMap, tokenUsd])
 
   /* Most of the token list is chains you haven't touched yet — eight of the
      fourteen rows read $0.00 on a fresh wallet, burying the six that hold real
@@ -1042,10 +1089,11 @@ export default function AssetsClient() {
             </div>
             {balancesLoading && onChainBalances.length === 0 ? (
               <SkeletonRows rows={5} label="Loading your assets" />
-            ) : filteredTokens.length === 0 ? (
+            ) : fundedTokens.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-14">
                 <HugeiconsIcon icon={Search01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
-                <p className="text-xs font-medium text-muted-foreground">No tokens found</p>
+                <p className="text-xs font-medium text-muted-foreground">No tokens held yet</p>
+                <p className="mt-1 text-[11px] text-muted-foreground/70">Deposit an asset or refresh after receiving one.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -1077,7 +1125,7 @@ export default function AssetsClient() {
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2.5">
                               <div className={`relative shrink-0 ${empty ? "opacity-50" : ""}`}>
-                                <img src={token.icon} alt={token.symbol} className="h-8 w-8 rounded-full"
+                                <img src={token.icon || getCoinImage(token.symbol) || coinFallback(token.symbol)} alt={token.symbol} className="h-8 w-8 rounded-full"
                                   onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(token.symbol) }} />
                                 {chainInfo && (
                                   <img src={chainInfo.icon} alt="" className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-card"
@@ -1136,7 +1184,7 @@ export default function AssetsClient() {
                               {!empty && (
                                 <button onClick={() => setSendModal({ open: true, asset: { symbol: token.symbol, name: token.name, balance: bal,
                                   chain: token.chain as SendableAsset["chain"], icon: token.icon, contractAddress: token.contractAddress,
-                                  decimals: token.isNative ? undefined : 18 } })}
+                                  decimals: token.isNative ? undefined : token.decimals } })}
                                   aria-label={`Send ${token.symbol}`}
                                   className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-debit-chip hover:text-debit">
                                   <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />

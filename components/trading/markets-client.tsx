@@ -221,7 +221,8 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
     return (symbol: string) => map.get(baseAsset(symbol)) ?? map.get(symbol.toUpperCase()) ?? null
   }, [coins])
 
-  // Lazy-load spot markets (Hyperliquid spotMeta)
+  // Lazy-load the broad Worldstreet spot feed. Hyperliquid is reserved for
+  // perpetual futures and is intentionally not used to populate this list.
   const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
   const [spotLoading, setSpotLoading] = React.useState(false)
   const hasFetchedSpot = React.useRef(false)
@@ -372,7 +373,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
             isFutures
               ? `Hyperliquid perpetual futures · ${futuresMarkets.length} contracts`
               : tab === "Spot"
-              ? `Hyperliquid spot markets · ${spotMarkets.length} pairs`
+              ? `Worldstreet spot markets · ${spotMarkets.length} assets`
               : tab === "Main"
               ? `Top 20 assets by market cap`
               : `Real-time prices for ${coins.length} assets`

@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/components/auth-provider"
 import {
@@ -20,6 +20,9 @@ export interface TokenBalance {
   /** Exact backend value, retained for future precision-safe formatting. */
   rawAmountBaseUnits?: string
   decimals?: number
+  logo?: string
+  networkName?: string
+  accountId?: string
 }
 
 interface UseWalletBalancesReturn {
@@ -34,7 +37,7 @@ function formatBalance(amountBaseUnits: string, decimals: number) {
   return Number.isFinite(amount) ? amount : 0
 }
 
-async function fetchCryptoBalances(signal?: AbortSignal): Promise<TokenBalance[]> {
+async function fetchCryptoBalances(signal?: AbortSignal, forceRefresh = false): Promise<TokenBalance[]> {
   let wallet
   try {
     wallet = await cryptoBackendClient.getWallet(signal)
@@ -46,28 +49,21 @@ async function fetchCryptoBalances(signal?: AbortSignal): Promise<TokenBalance[]
     throw error
   }
 
-  const networks = await cryptoBackendClient.listNetworks(signal)
-  const activeAccounts = wallet.accounts.filter((account) => account.state === "active")
-  const requests = activeAccounts.flatMap((account) =>
-    networks
-      .filter((network) => network.family === account.chainFamily && network.capabilities.balance !== false)
-      .map(async (network) => ({
-        network,
-        balances: await cryptoBackendClient.listBalances(account.id, network.id, [], signal),
-      })),
-  )
-  const results = await Promise.all(requests)
+  const snapshot = await cryptoBackendClient.listBalanceSnapshot(forceRefresh, signal)
 
-  return results.flatMap(({ network, balances }) =>
+  return snapshot.results.flatMap(({ networkId, networkName, accountId, balances }) =>
     balances.map((balance) => ({
       symbol: balance.symbol,
-      name: balance.symbol,
-      chain: network.id,
+      name: balance.name || balance.symbol,
+      chain: networkId,
       balance: formatBalance(balance.amountBaseUnits, balance.decimals),
       contractAddress: balance.asset.kind === "token" ? balance.asset.identifier : undefined,
       isNative: balance.asset.kind === "native",
       rawAmountBaseUnits: balance.amountBaseUnits,
       decimals: balance.decimals,
+      logo: balance.logo,
+      networkName,
+      accountId,
     })),
   )
 }
@@ -87,18 +83,25 @@ async function fetchLegacyBalances(signal?: AbortSignal): Promise<TokenBalance[]
  * Reads balances through TanStack Query when the new backend flag is enabled.
  * The legacy endpoint remains the default until phases 3–7 complete.
  */
-export function useWalletBalances(refreshInterval = 30_000): UseWalletBalancesReturn {
+export function useWalletBalances(refreshInterval = 0): UseWalletBalancesReturn {
   const { user, isLoaded, isSignedIn } = useAuth()
   const userId = user?.userId ?? "anonymous"
   const backendEnabled = isCryptoBackendEnabled && isLoaded && isSignedIn
+  const queryClient = useQueryClient()
+  const queryKey = backendEnabled
+    ? cryptoQueryKeys.balances(userId)
+    : ["legacy", "wallet-balances", userId, refreshInterval]
 
   const query = useQuery({
-    queryKey: backendEnabled
-      ? cryptoQueryKeys.balances(userId)
-      : ["legacy", "wallet-balances", userId, refreshInterval],
+    queryKey,
     queryFn: ({ signal }) => (backendEnabled ? fetchCryptoBalances(signal) : fetchLegacyBalances(signal)),
     enabled: isLoaded && isSignedIn,
-    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+    staleTime: backendEnabled ? 5 * 60_000 : 60_000,
+    gcTime: 30 * 60_000,
+    refetchInterval: backendEnabled ? false : (refreshInterval > 0 ? refreshInterval : false),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 1,
   })
 
   return {
@@ -106,6 +109,11 @@ export function useWalletBalances(refreshInterval = 30_000): UseWalletBalancesRe
     isLoading: query.isLoading,
     error: query.error instanceof Error ? query.error.message : query.error ? "Failed to fetch balances" : null,
     refetch: async () => {
+      if (backendEnabled) {
+        const fresh = await fetchCryptoBalances(undefined, true)
+        queryClient.setQueryData(queryKey, fresh)
+        return
+      }
       await query.refetch()
     },
   }

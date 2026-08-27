@@ -1,10 +1,10 @@
 "use client"
 
 /**
- * Hyperliquid spot & futures trading — the web equivalent of mobile's
- * HlTradeScreen. Orders execute via the crypto service's /api/trade/* (signed
- * server-side with the caller's session authority); the order book comes
- * straight from Hyperliquid's public info API, exactly as mobile does.
+ * Worldstreet trading workspace. Modern-wallet futures orders use the
+ * crypto backend's Hyperliquid intent flow; spot discovery comes from the
+ * broader Worldstreet market feed and is never sourced from Hyperliquid.
+ * Legacy Privy trading remains available through the existing routes.
  *
  * URL contract: /trade?market=spot|futures&symbol=BTC — nav and the trade
  * selector deep-link into it.
@@ -17,6 +17,7 @@
  */
 
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import Image from "next/image"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -28,11 +29,17 @@ import {
   placeFuturesOrder,
   closePosition,
   cancelOrder,
+  fetchPrices,
   CryptoApiError,
   type HlMarkets,
   type HlAccount,
   type HlOrderOutcome,
 } from "@/lib/crypto-api"
+import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { signHyperliquidIntent, signEvmIntent } from "@/lib/crypto-wallet"
+import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
+import { useAuth } from "@/components/auth-provider"
+import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import {
   fetchHlOrderBook,
   fetchHl24hStats,
@@ -47,6 +54,9 @@ import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { BackAction, Eyebrow, Segmented, type SegmentedOption } from "@/components/ui/system"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
+import { getSpotMarkets } from "@/lib/actions"
+import { ModernFundingPanel } from "./modern-funding-panel"
+import { ModernJupiterPanel } from "./modern-jupiter-panel"
 
 type Market = "spot" | "futures"
 type Side = "buy" | "sell"
@@ -86,6 +96,14 @@ export function TradeClient() {
   const params = useSearchParams()
   const router = useRouter()
   const { openFlow } = useMoneyFlow()
+  const { user } = useAuth()
+  const modernWallet = useCryptoWalletState()
+  const modernPackage = useQuery({
+    queryKey: ["crypto", "wallet-package", user?.userId ?? "anonymous"],
+    queryFn: () => cryptoBackendClient.getWalletPackage(),
+    enabled: isCryptoBackendEnabled && !!modernWallet.data,
+    staleTime: 3 * 60_000,
+  })
 
   const market: Market = params.get("market") === "futures" ? "futures" : "spot"
   const urlSymbol = params.get("symbol") ?? params.get("pair") ?? ""
@@ -103,6 +121,7 @@ export function TradeClient() {
   const [limitPrice, setLimitPrice] = React.useState("")
   const [leverage, setLeverage] = React.useState(1)
   const [tpPrice, setTpPrice] = React.useState("")
+  const [modernFundingOpen, setModernFundingOpen] = React.useState(false)
   const [slPrice, setSlPrice] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [pickerOpen, setPickerOpen] = React.useState(false)
@@ -118,23 +137,51 @@ export function TradeClient() {
   // must never be mistaken for an account that exists but isn't set up.
   const [marketsError, setMarketsError] = React.useState(false)
   const [accountError, setAccountError] = React.useState(false)
+  const [walletSource, setWalletSource] = React.useState<"modern" | "legacy">(
+    params.get("wallet") === "legacy" ? "legacy" : "modern",
+  )
+
+  const usingModern = walletSource === "modern" && isCryptoBackendEnabled
 
   // Markets + account
   const refreshAccount = React.useCallback(() => {
-    fetchHlAccount()
-      .then((a) => { setAccount(a); setAccountError(false) })
+    if (market === "spot") { setAccount(null); setAccountError(false); return }
+    const request = usingModern ? cryptoBackendClient.getHyperliquidAccount() : fetchHlAccount()
+    request
+      .then((a) => { setAccount(a as HlAccount); setAccountError(false) })
       .catch(() => setAccountError(true))
-  }, [])
+  }, [usingModern, market])
 
   const loadMarkets = React.useCallback(() => {
     setMarketsError(false)
-    fetchHlMarkets().then(setMarkets).catch(() => setMarketsError(true))
-  }, [])
+    if (!usingModern) {
+      fetchHlMarkets().then(setMarkets).catch(() => setMarketsError(true))
+      return
+    }
+    if (market === "spot") {
+      cryptoBackendClient.getModernSpotMarkets()
+        .then((result) => setMarkets({ minOrderUsd: 1, futures: [], spot: result.markets.filter((coin) => coin.chartSupported).map((coin) => ({ id: coin.id, symbol: coin.symbol.toUpperCase(), coinName: `${coin.symbol.toUpperCase()} · ${coin.networkId}`, price: coin.price ?? 0, icon: coin.icon, networkId: coin.networkId, venue: coin.venue })) }))
+        .catch(() => setMarketsError(true))
+      return
+    }
+    cryptoBackendClient.getHyperliquidMarkets()
+      .then((modern) => {
+        // Hyperliquid's spot catalogue is intentionally not used. The broad
+        // Worldstreet market feed supplies spot discovery; Hyperliquid is
+        // reserved for its deep perpetual futures venue.
+        setMarkets({
+          minOrderUsd: modern.minOrderUsd,
+          futures: modern.futures.map((item) => ({ symbol: item.symbol, price: item.price, maxLeverage: item.maxLeverage ?? 1 })),
+          spot: [],
+        })
+      })
+      .catch(() => setMarketsError(true))
+  }, [usingModern, market])
 
   React.useEffect(() => {
     loadMarkets()
     refreshAccount()
-    const id = setInterval(refreshAccount, 15_000)
+    const id = setInterval(refreshAccount, 30_000)
     return () => clearInterval(id)
   }, [loadMarkets, refreshAccount])
 
@@ -172,9 +219,9 @@ export function TradeClient() {
 
   // Order book — futures use the bare symbol; spot uses the coinName.
   const bookCoin = React.useMemo(() => {
-    if (!current) return null
+    if (!current || (usingModern && market === "spot")) return null
     return market === "spot" ? (current as { coinName: string }).coinName : current.symbol
-  }, [current, market])
+  }, [current, market, usingModern])
 
   React.useEffect(() => {
     if (!bookCoin) return
@@ -228,9 +275,10 @@ export function TradeClient() {
   }, [market, entryRef, tp, sl, side])
 
   const minOrder = markets?.minOrderUsd ?? 10
+  const modernSpotUnavailable = false
   const canSubmit =
     !submitting && !!current && amt >= minOrder &&
-    (orderType === "market" || parseFloat(limitPrice) > 0) && !tpslError
+    (orderType === "market" || parseFloat(limitPrice) > 0) && !tpslError && !modernSpotUnavailable
 
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's
@@ -259,17 +307,53 @@ export function TradeClient() {
         amountUsd: amt,
         ...(orderType === "limit" ? { limitPrice: parseFloat(limitPrice) } : {}),
       }
-      const res =
-        market === "spot"
+      if (usingModern) {
+        const evmAccount = modernWallet.data?.accounts.find((item) => item.chainFamily === "evm" && item.state === "active")
+        const packageValue = modernPackage.data
+        if (!user?.userId || !modernWallet.data?.id || !evmAccount || !packageValue) throw new Error("Set up and unlock the modern wallet before trading")
+        if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) throw new Error("Unlock the modern wallet locally before trading")
+        if (market === "spot") {
+          if (!current.symbol.toUpperCase().includes("ETH")) throw new Error("Modern spot currently supports ETH/USDC through 0x. Choose ETH/USDC or use the legacy spot router for other pairs.")
+          const networkId = "arbitrum-one" as const
+          const sellToken = side === "buy" ? "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" : "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+          const buyToken = side === "buy" ? "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1" : "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+          const intent = await cryptoBackendClient.createModernSpotIntent({ networkId, sellToken, buyToken, sellAmountBaseUnits: side === "buy" ? String(Math.round(amt * 1e6)) : String(Math.round((amt / Math.max(price, 1)) * 1e18)), slippagePercentage: 0.01, idempotencyKey: crypto.randomUUID() })
+          const signed = await signEvmIntent(user.userId, modernWallet.data.id, packageValue, intent, evmAccount.id)
+          await cryptoBackendClient.submitIntent(intent.id, signed)
+          setOutcome({ success: true, symbol: current.symbol, side, size: 0, executionPrice: price, filledSize: 0, avgFillPrice: price, resting: false })
+          refreshAccount()
+          return
+        }
+        const intent = await cryptoBackendClient.createHyperliquidIntent({
+          type: "order", market: "futures", symbol: current.symbol, side, orderType, amountUsd: amt,
+          ...(orderType === "limit" ? { limitPrice: parseFloat(limitPrice) } : {}),
+          leverage,
+          ...(tp > 0 ? { takeProfitPrice: tp } : {}),
+          ...(sl > 0 ? { stopLossPrice: sl } : {}),
+          idempotencyKey: crypto.randomUUID(),
+        })
+        const signatures = await signHyperliquidIntent(user.userId, modernWallet.data.id, packageValue, evmAccount.id, intent.steps)
+        const submitted = await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
+        const result = submitted.results[submitted.results.length - 1] as { response?: { data?: { statuses?: unknown[] } } }
+        const status = result?.response?.data?.statuses?.[0] as Record<string, unknown> | undefined
+        const filled = status && "filled" in status ? status.filled as Record<string, unknown> : undefined
+        const resting = status && "resting" in status
+        const res: HlOrderOutcome = {
+          success: true, symbol: current.symbol, side,
+          size: parseFloat(String((intent.summary?.size ?? 0))),
+          executionPrice: parseFloat(String((intent.summary?.price ?? price))),
+          filledSize: filled ? parseFloat(String(filled.totalSz ?? 0)) : 0,
+          avgFillPrice: filled ? parseFloat(String(filled.avgPx ?? 0)) : 0,
+          resting: Boolean(resting),
+        }
+        setOutcome(res)
+      } else {
+        const res = market === "spot"
           ? await placeSpotOrder(base)
-          : await placeFuturesOrder({
-              ...base,
-              leverage,
-              ...(tp > 0 ? { takeProfitPrice: tp } : {}),
-              ...(sl > 0 ? { stopLossPrice: sl } : {}),
-            })
-      setOutcome(res)
-      if (!res.success && res.error) setError(res.error)
+          : await placeFuturesOrder({ ...base, leverage, ...(tp > 0 ? { takeProfitPrice: tp } : {}), ...(sl > 0 ? { stopLossPrice: sl } : {}) })
+        setOutcome(res)
+        if (!res.success && res.error) setError(res.error)
+      }
       refreshAccount()
     } catch (e) {
       setError(e instanceof CryptoApiError ? e.message : "Order failed. Try again.")
@@ -281,7 +365,14 @@ export function TradeClient() {
   async function handleClose(sym: string) {
     setBusyKey(`close:${sym}`)
     try {
-      await closePosition({ symbol: sym })
+      const position = account?.positions.find((item) => item.symbol === sym)
+      if (usingModern) {
+        const evmAccount = modernWallet.data?.accounts.find((item) => item.chainFamily === "evm" && item.state === "active")
+        if (!user?.userId || !modernWallet.data?.id || !modernPackage.data || !evmAccount || !position) throw new Error("Unlock the modern wallet before closing a position")
+        const intent = await cryptoBackendClient.createHyperliquidIntent({ type: "order", market: "futures", symbol: sym, side: position.side === "long" ? "sell" : "buy", orderType: "market", size: Math.abs(Number(position.size)), reduceOnly: true, idempotencyKey: crypto.randomUUID() })
+        const signatures = await signHyperliquidIntent(user.userId, modernWallet.data.id, modernPackage.data, evmAccount.id, intent.steps)
+        await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
+      } else await closePosition({ symbol: sym })
       refreshAccount()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Close failed")
@@ -293,7 +384,14 @@ export function TradeClient() {
   async function handleCancel(oid: number, sym: string, mkt: Market) {
     setBusyKey(`cancel:${oid}`)
     try {
-      await cancelOrder({ oid, symbol: sym, market: mkt })
+      if (usingModern) {
+        if (mkt === "spot") throw new Error("Modern spot orders are not managed by Hyperliquid")
+        const evmAccount = modernWallet.data?.accounts.find((item) => item.chainFamily === "evm" && item.state === "active")
+        if (!user?.userId || !modernWallet.data?.id || !modernPackage.data || !evmAccount) throw new Error("Unlock the modern wallet before cancelling an order")
+        const intent = await cryptoBackendClient.createHyperliquidIntent({ type: "cancel", market: "futures", symbol: sym, oid, idempotencyKey: crypto.randomUUID() })
+        const signatures = await signHyperliquidIntent(user.userId, modernWallet.data.id, modernPackage.data, evmAccount.id, intent.steps)
+        await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
+      } else await cancelOrder({ oid, symbol: sym, market: mkt })
       refreshAccount()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cancel failed")
@@ -382,7 +480,7 @@ export function TradeClient() {
                 className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent ${m.symbol === symbol ? "bg-accent" : ""}`}
               >
                 <span className="flex items-center gap-2 font-semibold">
-                  <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} size="md" />
+                  <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} src={"icon" in m ? m.icon : undefined} size="md" />
                   {m.symbol}
                   <span className="ml-1 text-[10px] font-medium text-subtle">
                     {market === "futures" ? "PERP" : "USDC"}
@@ -653,6 +751,8 @@ export function TradeClient() {
       >
         {submitting
           ? "Placing…"
+          : modernSpotUnavailable
+          ? "Spot execution unavailable"
           : `${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
       </button>
     </div>
@@ -681,6 +781,18 @@ export function TradeClient() {
           className="order-4 shrink-0 lg:order-none"
           vividPrefix="market-tab"
         />
+
+        {isCryptoBackendEnabled && modernWallet.data ? (
+          <Segmented
+            value={walletSource}
+            onChange={(value) => {
+              setWalletSource(value)
+              router.replace(`/trade?market=${market}${symbol ? `&symbol=${symbol}` : ""}&wallet=${value}`)
+            }}
+            options={[{ key: "modern", label: "Modern wallet" }, { key: "legacy", label: "Legacy Privy" }]}
+            className="order-5 shrink-0 lg:order-none"
+          />
+        ) : null}
 
         {/* Pair — the rail owns switching on wide screens; this dropdown
             covers every width below xl and still works above it. */}
@@ -731,7 +843,7 @@ export function TradeClient() {
           {/* Funding is a detour from trading, not a destination — it opens
               over the workspace so the chart and the ticket keep their state. */}
           <button
-            onClick={() => openFlow("fund")}
+            onClick={() => usingModern ? setModernFundingOpen(true) : openFlow("fund")}
             data-vivid-target="trade-fund-button"
             data-vivid-label="Open the fund-trading-account modal"
             className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
@@ -739,7 +851,7 @@ export function TradeClient() {
             Fund
           </button>
           <button
-            onClick={() => openFlow("trading-withdraw")}
+            onClick={() => usingModern ? setModernFundingOpen(true) : openFlow("trading-withdraw")}
             data-vivid-target="trade-withdraw-button"
             data-vivid-label="Open the withdraw-trading-balance modal"
             className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
@@ -789,7 +901,11 @@ export function TradeClient() {
               </div>
             ) : !bookCoin ? (
               <div className="flex h-full items-center justify-center">
-                <span className="h-5 w-5 animate-spin rounded-full border-2 border-border/40 border-t-primary" />
+                <p className="max-w-sm px-6 text-center text-xs leading-relaxed text-muted-foreground">
+                  {usingModern && market === "spot"
+                    ? "Spot discovery uses Worldstreet’s broader spot market feed. Hyperliquid is used here for perpetual futures only."
+                    : "Select a market to load its chart."}
+                </p>
               </div>
             ) : (
               <CandleChart coin={bookCoin} />
@@ -855,6 +971,12 @@ export function TradeClient() {
         </aside>
       </div>
 
+      {usingModern && market === "spot" && user?.userId && modernWallet.data && modernPackage.data ? (
+        <div className="border-t border-border/30 px-3 py-3 lg:block">
+          <ModernJupiterPanel userId={user.userId} wallet={modernWallet.data} packageValue={modernPackage.data} />
+        </div>
+      ) : null}
+
       {/* Mobile action bar — the ticket is one tap away at all times, and the
           tap already says which side you meant. */}
       <div className="flex shrink-0 items-center gap-2 border-t border-border/30 bg-background px-3 py-2.5 safe-area-bottom lg:hidden">
@@ -906,6 +1028,7 @@ export function TradeClient() {
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
+      {usingModern && user?.userId && modernWallet.data && modernPackage.data && <ModernFundingPanel open={modernFundingOpen} onOpenChange={setModernFundingOpen} userId={user.userId} wallet={modernWallet.data} packageValue={modernPackage.data} />}
     </div>
   )
 }

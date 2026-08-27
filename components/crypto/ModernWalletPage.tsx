@@ -29,7 +29,7 @@ export function ModernWalletPage() {
     enabled: isCryptoBackendEnabled && Boolean(wallet.data?.id),
     staleTime: 60_000,
   })
-  const balances = useCryptoBalances(wallet.data?.accounts, networks.data)
+  const balances = useCryptoBalances()
 
   if (!isCryptoBackendEnabled) {
     return <p className="text-sm text-muted-foreground">Modern wallet tools are disabled. Set NEXT_PUBLIC_CRYPTO_ENABLED=true to enable them.</p>
@@ -42,7 +42,7 @@ export function ModernWalletPage() {
       <div className="flex flex-wrap gap-2">
         <ActionPill icon={({ className }) => <HugeiconsIcon icon={ArrowDownLeft01Icon} className={className} />} label="Deposit" href="/assets" />
         <ActionPill icon={({ className }) => <HugeiconsIcon icon={ArrowUpRight01Icon} className={className} />} label="Send" href="/assets" />
-        <ActionPill icon={({ className }) => <HugeiconsIcon icon={RefreshIcon} className={className} />} label="Refresh" onClick={() => { void wallet.refetch(); void networks.refetch() }} />
+        <ActionPill icon={({ className }) => <HugeiconsIcon icon={RefreshIcon} className={className} />} label="Refresh" onClick={() => { void wallet.refetch(); void networks.refetch(); void balances.refetch() }} />
       </div>
 
       <WalletSetupFlow walletExists={Boolean(wallet.data)} />
@@ -82,7 +82,8 @@ export function ModernWalletPage() {
         </div>
       ) : null}
 
-      {wallet.data && networks.data ? <CardShell><CardHeader title="Balances" subtitle="Every enabled network and asset returned by the backend" /><div className="px-4 pb-4">{balances.isLoading ? <p className="text-sm text-muted-foreground">Loading balances…</p> : balances.error ? <p className="text-sm text-destructive">Balance service unavailable. Retry when the backend/RPC is healthy.</p> : balances.balances.length === 0 ? <p className="text-sm text-muted-foreground">No balances returned for the enabled account/network pairs.</p> : <div className="grid gap-2 sm:grid-cols-2">{balances.balances.map((balance) => <div key={`${balance.accountId}:${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`} className="rounded-xl bg-surface-sunken/70 p-3"><div className="font-medium">{balance.symbol} · {balance.networkName}</div><div className="mt-1 text-lg tabular-nums">{formatCryptoAmount(balance.amountBaseUnits, balance.decimals)}</div></div>)}</div>}</div></CardShell> : null}
+      {wallet.data && networks.data ? <CardShell><CardHeader title="Balances" subtitle="Live response from the crypto backend · refresh reads the providers again" /><div className="px-4 pb-4">{balances.isLoading ? <p className="text-sm text-muted-foreground">Loading balances…</p> : balances.error ? <p className="text-sm text-destructive">Balance endpoint failed: {balances.error instanceof Error ? balances.error.message : "unknown error"}</p> : balances.balances.length === 0 ? <p className="text-sm text-muted-foreground">The endpoint returned no non-zero balances.</p> : <><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{balances.balances.map((balance) => <div key={`${balance.accountId}:${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`} className="rounded-xl bg-surface-sunken/70 p-3"><div className="flex items-center justify-between gap-2"><span className="font-medium">{balance.symbol}</span><span className="text-xs text-muted-foreground">{balance.networkName}</span></div><div className="mt-1 text-lg tabular-nums">{formatCryptoAmount(balance.amountBaseUnits, balance.decimals)}</div><div className="mt-1 truncate text-[11px] text-muted-foreground">{balance.name || (balance.asset.kind === "native" ? "Native asset" : balance.asset.identifier)}</div></div>)}</div>{balances.unavailableNetworks.length > 0 ? <p className="mt-3 text-xs text-amber-500">Some networks could not be read: {balances.unavailableNetworks.map((network) => network.networkName).join(", ")}. Their balances will appear after that provider recovers.</p> : null}</>}</div></CardShell> : null}
+      {process.env.NODE_ENV !== "production" && balances.snapshot ? <details className="rounded-2xl border border-border/60 bg-surface p-4"><summary className="cursor-pointer text-sm font-medium">Balance endpoint response</summary><pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-muted-foreground">{JSON.stringify(balances.snapshot, null, 2)}</pre></details> : null}
       {wallet.data && packageQuery.data ? (
         <>
           <WalletUnlockDialog walletId={wallet.data.id} packageValue={packageQuery.data} />
@@ -90,7 +91,7 @@ export function ModernWalletPage() {
           <WalletChainProvisioningPanel walletId={wallet.data.id} packageValue={packageQuery.data} accounts={wallet.data.accounts} />
           <RecoveryPanel walletId={wallet.data.id} packageValue={packageQuery.data} />
           <CryptoSecurityPanel walletId={wallet.data.id} packageValue={packageQuery.data} />
-          {networks.data ? <ModernTransferFlow walletId={wallet.data.id} packageValue={packageQuery.data} accounts={wallet.data.accounts} networks={networks.data} /> : null}
+          {networks.data ? <ModernTransferFlow walletId={wallet.data.id} packageValue={packageQuery.data} accounts={wallet.data.accounts} networks={networks.data} balances={balances.balances} /> : null}
         </>
       ) : null}
     </div>

@@ -16,7 +16,13 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^transactions\/intents\/[^/]+$/,
     /^transactions\/[^/]+$/,
     /^wallets\/me\/accounts\/[^/]+\/balances$/,
+    /^wallets\/me\/balances$/,
     /^wallets\/me\/sessions$/,
+    /^sponsorship\/config$/,
+    /^sponsorship\/operations\/[^/]+$/,
+    /^trading\/spot\/markets$/,
+    /^trading\/hyperliquid\/markets$/,
+    /^trading\/hyperliquid\/account$/,
   ],
   POST: [
     /^wallets$/,
@@ -41,6 +47,14 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^transactions\/intents$/,
     /^transactions\/intents\/[^/]+\/simulate$/,
     /^transactions\/intents\/[^/]+\/submit$/,
+    /^sponsorship\/quote$/,
+    /^sponsorship\/operations\/[^/]+\/prepare$/,
+    /^sponsorship\/operations\/[^/]+\/submit$/,
+    /^trading\/spot\/evm\/intents$/,
+    /^trading\/spot\/solana\/intents$/,
+    /^trading\/hyperliquid\/deposit\/intents$/,
+    /^trading\/hyperliquid\/intents$/,
+    /^trading\/hyperliquid\/intents\/[^/]+\/submit$/,
   ],
 }
 

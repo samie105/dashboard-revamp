@@ -41,3 +41,35 @@ export async function signSolanaIntent(
     wipeBytes(secret)
   }
 }
+
+/** Signs only the user's authority on a sponsor-fee-payer transaction. */
+export async function signSponsoredSolanaTransaction(
+  userId: string,
+  walletId: string,
+  packageValue: CryptoWalletPackageDocument,
+  signingPayload: Record<string, unknown>,
+  accountId: string,
+) {
+  const serialized = typeof signingPayload.serializedTransaction === "string" ? signingPayload.serializedTransaction : ""
+  const userAddress = typeof signingPayload.userAddress === "string" ? signingPayload.userAddress : ""
+  const sponsorAddress = typeof signingPayload.sponsorAddress === "string" ? signingPayload.sponsorAddress : ""
+  if (signingPayload.kind !== "solana-transaction" || !serialized || !userAddress || !sponsorAddress) {
+    throw new Error("The sponsorship provider returned an incomplete Solana signing payload")
+  }
+
+  const secret = await decryptLocalAccountKey(userId, walletId, packageValue, accountId)
+  try {
+    const keypair = Keypair.fromSecretKey(secret)
+    if (keypair.publicKey.toBase58() !== userAddress) throw new Error("Local key does not match the sponsored Solana signer")
+    const transaction = VersionedTransaction.deserialize(fromBase64(serialized))
+    const feePayer = transaction.message.staticAccountKeys[0]
+    if (!feePayer || feePayer.toBase58() !== sponsorAddress) throw new Error("Sponsored Solana transaction fee payer does not match the provider payload")
+    const requiredSigners = transaction.message.staticAccountKeys.slice(0, transaction.message.header.numRequiredSignatures)
+    if (!requiredSigners.some((signer) => signer.equals(keypair.publicKey))) throw new Error("Sponsored Solana transaction does not require this wallet signer")
+    transaction.sign([keypair])
+    const bytes = transaction.serialize()
+    return { kind: signingPayload.kind, userAddress, sponsorAddress, serializedTransaction: toBase64(bytes) }
+  } finally {
+    wipeBytes(secret)
+  }
+}

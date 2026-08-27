@@ -1,7 +1,11 @@
 import { CryptoBackendError } from "./errors"
 import type {
   CryptoBalance,
+  CryptoBalanceSnapshot,
   Device,
+  HyperliquidMarkets,
+  HyperliquidAccount,
+  HyperliquidIntent,
   CryptoNetwork,
   CryptoServiceHealth,
   CryptoTransactionIntent,
@@ -20,6 +24,8 @@ import type {
   PasskeyRegistrationResult,
   RecoveryStartResult,
   RecoveryStatus,
+  SponsorshipConfig,
+  SponsorshipOperation,
 } from "./types"
 
 type RequestOptions = {
@@ -81,6 +87,11 @@ export class CryptoBackendClient {
       {},
       { signal },
     )
+  }
+
+  async listBalanceSnapshot(refresh = false, signal?: AbortSignal): Promise<CryptoBalanceSnapshot> {
+    const query = refresh ? "?refresh=1" : ""
+    return this.request<CryptoBalanceSnapshot>(`/wallets/me/balances${query}`, {}, { signal })
   }
 
   async listTransactions(limit = 50, signal?: AbortSignal): Promise<CryptoTransactionRecord[]> {
@@ -243,6 +254,98 @@ export class CryptoBackendClient {
     return this.request<CryptoTransactionRecord>(`/transactions/intents/${encodeURIComponent(intentId)}/submit`, {
       method: "POST",
       body: JSON.stringify({ signedTransaction }),
+    }, { signal })
+  }
+
+  async getSponsorshipConfig(signal?: AbortSignal): Promise<SponsorshipConfig> {
+    return this.request<SponsorshipConfig>("/sponsorship/config", {}, { signal })
+  }
+
+  async quoteSponsorship(input: {
+    accountId: string
+    networkId: string
+    operation: "native-transfer" | "token-transfer" | "contract-call"
+    intentId?: string
+  }, signal?: AbortSignal): Promise<SponsorshipOperation> {
+    return this.request<SponsorshipOperation>("/sponsorship/quote", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }, { signal })
+  }
+
+  async prepareSponsorship(operationId: string, intentId: string, signal?: AbortSignal): Promise<SponsorshipOperation> {
+    return this.request<SponsorshipOperation>(`/sponsorship/operations/${encodeURIComponent(operationId)}/prepare`, {
+      method: "POST",
+      body: JSON.stringify({ intentId }),
+    }, { signal })
+  }
+
+  async submitSponsorship(operationId: string, signedPayload: Record<string, unknown>, signal?: AbortSignal) {
+    return this.request<{ operation: SponsorshipOperation; txHash?: string; providerStatus: string }>(`/sponsorship/operations/${encodeURIComponent(operationId)}/submit`, {
+      method: "POST",
+      body: JSON.stringify({ signedPayload }),
+    }, { signal })
+  }
+
+  async getSponsorshipStatus(operationId: string, signal?: AbortSignal): Promise<SponsorshipOperation> {
+    return this.request<SponsorshipOperation>(`/sponsorship/operations/${encodeURIComponent(operationId)}`, {}, { signal })
+  }
+
+  async getHyperliquidMarkets(signal?: AbortSignal): Promise<HyperliquidMarkets> {
+    return this.request<HyperliquidMarkets>("/trading/hyperliquid/markets", {}, { signal })
+  }
+
+  async getHyperliquidAccount(signal?: AbortSignal): Promise<HyperliquidAccount> {
+    return this.request<HyperliquidAccount>("/trading/hyperliquid/account", {}, { signal })
+  }
+
+  async createHyperliquidIntent(input: Record<string, unknown>, signal?: AbortSignal): Promise<HyperliquidIntent> {
+    return this.request<HyperliquidIntent>("/trading/hyperliquid/intents", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }, { signal })
+  }
+
+  async submitHyperliquidIntent(intentId: string, signatures: Array<{ r: string; s: string; v: number }>, signal?: AbortSignal) {
+    return this.request<{ intentId: string; status: string; results: unknown[] }>(`/trading/hyperliquid/intents/${encodeURIComponent(intentId)}/submit`, {
+      method: "POST",
+      body: JSON.stringify({ signatures }),
+    }, { signal })
+  }
+
+  async createModernSpotIntent(input: {
+    networkId: "ethereum-mainnet" | "arbitrum-one"
+    sellToken: string
+    buyToken: string
+    sellAmountBaseUnits: string
+    slippagePercentage?: number
+    idempotencyKey?: string
+  }, signal?: AbortSignal): Promise<CryptoTransactionIntent> {
+    return this.request<CryptoTransactionIntent>("/trading/spot/evm/intents", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }, { signal })
+  }
+
+  async getModernSpotMarkets(signal?: AbortSignal) {
+    return this.request<{ markets: Array<{ id: string; symbol: string; quote: string; networkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta"; venue: "0x" | "jupiter"; chartSymbol: string; chartSupported: boolean; price?: number; icon?: string | null; sellToken?: string; buyToken?: string; inputMint?: string; outputMint?: string }> }>("/trading/spot/markets", {}, { signal })
+  }
+
+  async createModernSolanaSpotIntent(input: {
+    inputMint: string
+    outputMint: string
+    amountBaseUnits: string
+    slippageBps?: number
+    idempotencyKey?: string
+  }, signal?: AbortSignal): Promise<CryptoTransactionIntent> {
+    return this.request<CryptoTransactionIntent>("/trading/spot/solana/intents", {
+      method: "POST", body: JSON.stringify(input),
+    }, { signal })
+  }
+
+  async createHyperliquidDepositIntents(input: { amount: number; idempotencyKey?: string }, signal?: AbortSignal) {
+    return this.request<{ networkId: string; amount: number; intents: CryptoTransactionIntent[] }>("/trading/hyperliquid/deposit/intents", {
+      method: "POST", body: JSON.stringify(input),
     }, { signal })
   }
 

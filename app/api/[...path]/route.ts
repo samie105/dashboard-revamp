@@ -56,6 +56,7 @@ const FORWARDED = [
   // Mobile-parity surfaces (the service is the only implementation).
   "prices",
   "trade/",
+  "trading/spot/",
   "trading-wallet/",
   "agent/",
   "buy",

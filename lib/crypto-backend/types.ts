@@ -49,6 +49,25 @@ export interface CryptoBalance {
   amountBaseUnits: string
   decimals: number
   symbol: string
+  name?: string
+  logo?: string
+}
+
+export interface CryptoBalanceSnapshotItem {
+  accountId: string
+  networkId: string
+  networkName: string
+  family: string
+  address: string
+  status: "ready" | "unavailable" | string
+  balances: CryptoBalance[]
+  error?: { code?: string; message?: string }
+}
+
+export interface CryptoBalanceSnapshot {
+  generatedAt: string
+  cachedUntil?: string
+  results: CryptoBalanceSnapshotItem[]
 }
 
 export interface CryptoTransactionIntent {
@@ -157,6 +176,38 @@ export interface CryptoIntentSimulation {
   simulation: { ok: boolean; error?: string; gasEstimate?: string; logs?: unknown[] }
 }
 
+export interface SponsorshipConfig {
+  enabled: boolean
+  provider: string
+  allowedNetworks: string[]
+  allowedOperations: string[]
+  maxGasUsd: number
+  dailyUserLimitUsd: number
+  supportedFamilies: string[]
+}
+
+export interface SponsorshipOperation {
+  id: string
+  walletId: string
+  accountId: string
+  networkId: string
+  chainFamily: "evm" | "solana" | string
+  operation: "native-transfer" | "token-transfer" | "contract-call" | string
+  providerOperationId?: string
+  quote?: {
+    sponsor?: { address?: string; estimatedCostUsd?: string | number }
+    [key: string]: unknown
+  }
+  estimatedCostUsd?: number
+  policyVersion?: string
+  signingPayload?: Record<string, unknown>
+  status: "quoted" | "prepared" | "submitted" | "confirmed" | "failed" | "expired" | string
+  expiresAt: string
+  providerStatus?: string
+  txHash?: string
+  providerError?: string
+}
+
 export interface RecoveryStatus {
   configured: boolean
   configuredAt?: string
@@ -177,4 +228,59 @@ export interface Device {
   lastSeenAt?: string
   createdAt?: string
   revokedAt?: string
+}
+
+export interface HyperliquidMarket {
+  symbol: string
+  price: number
+  maxLeverage?: number
+  szDecimals?: number
+  onlyIsolated?: boolean
+  coinName?: string
+}
+
+export interface HyperliquidMarkets {
+  venue: "Hyperliquid"
+  environment: "mainnet" | "testnet"
+  futures: HyperliquidMarket[]
+  /** Spot is intentionally supplied by the Worldstreet spot router. */
+  spot: HyperliquidMarket[]
+  spotVenue: string
+  minOrderUsd: number
+}
+
+export interface HyperliquidIntentStep {
+  kind: string
+  action: Record<string, unknown>
+  signingMode?: "l1" | "user"
+  types?: Record<string, Array<{ name: string; type: string }>>
+  nonce: number
+  expiresAfter?: number
+}
+
+export interface HyperliquidIntent {
+  id: string
+  walletId: string
+  accountId: string
+  address: string
+  intentType: string
+  request: Record<string, unknown>
+  steps: HyperliquidIntentStep[]
+  status: string
+  expiresAt: string
+  summary?: Record<string, unknown>
+}
+
+export interface HyperliquidAccount {
+  ready: boolean
+  address?: string
+  balances: {
+    perpsWithdrawableUsdc: number
+    perpsAccountValueUsdc: number
+    spotUsdc: number
+    spotUsdcHold?: number
+    spotTokens?: Array<{ symbol: string; total: number; hold: number; available: number }>
+  } | null
+  positions: Array<Record<string, unknown>>
+  openOrders: Array<Record<string, unknown>>
 }

@@ -16,8 +16,8 @@ export function CryptoQueryProvider({ children }: { children: React.ReactNode })
             staleTime: 60_000,
             gcTime: 15 * 60_000,
             networkMode: "offlineFirst",
-            refetchOnWindowFocus: true,
-            refetchOnReconnect: true,
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
             retry: (failureCount, error) => {
               if (error instanceof CryptoBackendError && error.status >= 400 && error.status < 500) return false
               return failureCount < 2

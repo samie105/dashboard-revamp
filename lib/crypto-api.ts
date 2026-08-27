@@ -465,7 +465,7 @@ export function fetchTransactions(params?: Record<string, string>): Promise<Tran
 
 // ── Hyperliquid trading (/api/trade/*) — mirrors mobile's trade.ts 1:1 ──────
 
-export type HlSpotMarket = { symbol: string; coinName: string; price: number }
+export type HlSpotMarket = { id?: string; symbol: string; coinName: string; price: number; icon?: string | null; networkId?: string; venue?: string }
 export type HlFuturesMarket = { symbol: string; price: number; maxLeverage: number }
 
 export type HlMarkets = {
