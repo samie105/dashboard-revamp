@@ -38,6 +38,11 @@ export interface TradingWallet {
   chainType: string
 }
 
+function isPermanentPrivySetupError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /max_accounts_reached|APP_ID is not set|APP_SECRET is not set/i.test(message)
+}
+
 interface WalletContextType {
   wallets: PrivyWallets | null
   addresses: WalletAddresses | null
@@ -125,11 +130,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (data.error) throw new Error(data.error)
       } catch (err) {
         console.warn(`[Wallet] Attempt ${attempt + 1}/${MAX_RETRIES + 1} failed:`, err)
-        if (attempt < MAX_RETRIES) {
+        if (attempt < MAX_RETRIES && !isPermanentPrivySetupError(err)) {
           await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]))
         } else {
-          console.error("[Wallet] All retries exhausted:", err)
+          if (attempt >= MAX_RETRIES) console.error("[Wallet] All retries exhausted:", err)
           setError(err instanceof Error ? err.message : "Failed to load wallets")
+          break
         }
       }
     }

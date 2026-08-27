@@ -6,8 +6,21 @@ import { connectDB } from "@/lib/mongodb"
 import { auth } from "@clerk/nextjs/server"
 
 // The Privy app new signups are created in (0 = old, 1 = second, 2 = third,
-// 3 = fourth). Bump when the current app hits Privy's account limit.
-const SIGNUP_PRIVY_TYPE = 3
+// 3 = fourth). Prefer an explicit tier, then fall back to the highest tier
+// that is actually configured locally. This keeps legacy wallet support alive
+// without retrying forever against a missing FOURTH_PRIVY_APP_ID.
+function configuredSignupPrivyType() {
+  const requested = Number(process.env.SIGNUP_PRIVY_TYPE)
+  const candidates = Number.isInteger(requested) && requested >= 0 && requested <= 3
+    ? [requested]
+    : [3, 2, 1, 0]
+  return candidates.find((type) => {
+    const prefix = type === 0 ? "PRIVY" : type === 1 ? "NEW_PRIVY" : type === 2 ? "THIRD_PRIVY" : "FOURTH_PRIVY"
+    return Boolean(process.env[`${prefix}_APP_ID`] && process.env[`${prefix}_APP_SECRET`])
+  }) ?? 0
+}
+
+const SIGNUP_PRIVY_TYPE = configuredSignupPrivyType()
 
 function createPrivyClient(privyType: number = 0) {
   if (privyType === 3) {

@@ -76,7 +76,7 @@ export function MarketsRail({
             const active = m.symbol === symbol
             return (
               <button
-                key={m.symbol}
+                key={"id" in m && m.id ? m.id : m.symbol}
                 role="option"
                 aria-selected={active}
                 aria-label={`Switch to the ${m.symbol} market`}
@@ -89,7 +89,7 @@ export function MarketsRail({
                 )}
               >
                 <span className="flex min-w-0 items-center gap-2 truncate text-sm font-semibold">
-                  <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} size="md" />
+                  <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} src={"icon" in m ? m.icon : undefined} size="md" />
                   {m.symbol}
                   <span className="ml-1 text-[10px] font-medium text-subtle">
                     {market === "futures" ? "PERP" : "USDC"}

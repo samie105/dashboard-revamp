@@ -67,7 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== "undefined") {
       localStorage.removeItem("worldstreet_temp_pin")
     }
-    await clerkSignOut({ redirectUrl: "https://www.worldstreetgold.com/login" })
+    const redirectUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
+      ? `${window.location.origin}/login`
+      : "https://www.worldstreetgold.com/login"
+    await clerkSignOut({ redirectUrl })
   }, [clerkSignOut])
 
   const value = React.useMemo(
