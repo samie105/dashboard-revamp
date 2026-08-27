@@ -39,7 +39,7 @@ export const NETWORKS: NetworkMeta[] = [
     key: "arbitrum",
     label: "Arbitrum",
     chain: "ethereum",
-    nativeSymbol: "ARB",
+    nativeSymbol: "ETH",
     hue: "#2D374B",
     explorerName: "Arbiscan",
     explorerUrl: (a) => `https://arbiscan.io/address/${a}`,

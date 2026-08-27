@@ -13,10 +13,13 @@ import { LiquidGlassPointer } from "@/components/liquid-glass"
 
 /** Routes that render full-bleed (no sidebar / top-nav / navbar). */
 const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
+const AUTH_ROUTES = ["/login", "/register"]
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const isAuthRoute = AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
   const isFullBleed = FULL_BLEED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
+
 
   // Scroll-adaptive chrome: content moving beneath the nav pills firms
   // their glass up ([data-ws-scrolled] .ws-nav-glass). Attribute toggled
@@ -25,6 +28,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   const handleMainScroll = React.useCallback((e: React.UIEvent<HTMLElement>) => {
     rootRef.current?.toggleAttribute("data-ws-scrolled", (e.target as HTMLElement).scrollTop > 8)
   }, [])
+  if (isAuthRoute) return <>{children}</>
   // The silk atmosphere belongs to the dashboard hero only, but it must live
   // HERE, under the z-10 content layer, so the translucent sidebar and navbar
   // blur it through — inside <main> it could never reach behind the rail.

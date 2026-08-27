@@ -12,6 +12,14 @@ const isPublicRoute = createRouteMatcher([
   "/register(.*)",
 ])
 
+// The crypto backend's health/readiness probes are public by design. They are
+// used by local smoke tests and platform checks; wallet and security routes
+// remain protected by the API branch below.
+const isCryptoHealthRoute = createRouteMatcher([
+  "/api/crypto/health",
+  "/api/crypto/ready",
+])
+
 // Everything under /api (webhooks excepted, below) is authenticated and answers
 // in JSON. It is matched as one prefix rather than an endpoint-by-endpoint list
 // because the list has to stay in sync with FORWARDED in
@@ -30,6 +38,10 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next()
   }
 
+  if (isCryptoHealthRoute(req)) {
+    return NextResponse.next()
+  }
+
   // API before pages. An expired session on /api/* has to come back as a JSON
   // 401 the client can recognise: fetch() follows a redirect, so answering with
   // one returns the login page's HTML under a 200, which every JSON caller
@@ -39,6 +51,12 @@ export default clerkMiddleware(async (auth, req) => {
     try {
       await auth.protect()
     } catch {
+      if (req.nextUrl.pathname.startsWith("/api/crypto/")) {
+        return NextResponse.json(
+          { success: false, error: { code: "UNAUTHORIZED", message: "Unauthorized" } },
+          { status: 401 },
+        )
+      }
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     return NextResponse.next()

@@ -375,6 +375,7 @@ export function NavbarActions() {
                       { label: "Spot Wallet", href: "/portfolio", icon: Wallet01Icon },
                       { label: "Futures Wallet", href: "/trade?market=futures", icon: Activity01Icon },
                       { label: "Funding", href: "/assets", icon: Wallet01Icon },
+                      { label: "Modern Wallet", href: "/wallet/modern", icon: Wallet01Icon },
                     ].map(w => (
                       <a key={w.label} href={w.href} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors group/link">
                         <HugeiconsIcon icon={w.icon} className="h-3.5 w-3.5 text-primary" />
