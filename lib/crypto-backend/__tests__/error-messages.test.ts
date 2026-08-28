@@ -29,7 +29,7 @@ describe("describeCryptoError", () => {
     expect(describeCryptoError(err("DUPLICATE_REQUEST", 409)).action).toBe("view-existing")
   })
   it("never emits the phrase 'backend unreachable' for coded errors", () => {
-    for (const code of ["AUTH_REQUIRED", "WALLET_NOT_FOUND", "RPC_UNAVAILABLE", "INTENT_EXPIRED"]) {
+    for (const code of ["AUTH_REQUIRED", "WALLET_NOT_FOUND", "RPC_UNAVAILABLE", "INTENT_EXPIRED", "CRYPTO_BACKEND_UNREACHABLE"]) {
       expect(describeCryptoError(err(code)).message.toLowerCase()).not.toContain("backend unreachable")
     }
   })
@@ -37,5 +37,21 @@ describe("describeCryptoError", () => {
     const d = describeCryptoError(err("SOMETHING_NEW", 500))
     expect(d.action).toBe("retry")
     expect(d.requestId).toBe("req-123")
+  })
+  it("gives an honest, non-technical message for CRYPTO_BACKEND_UNREACHABLE and offers retry", () => {
+    // Mirrors what client.ts actually throws when fetch() itself fails
+    // (network down, DNS failure, etc.) before any HTTP response exists.
+    const raw = new CryptoBackendError(
+      "Crypto backend request failed before a response (GET http://localhost:3020/v1/wallets/me): TypeError: fetch failed",
+      0,
+      "CRYPTO_BACKEND_UNREACHABLE",
+      { endpoint: "http://localhost:3020/v1/wallets/me", method: "GET", reason: "TypeError: fetch failed" },
+      "req-123",
+    )
+    const d = describeCryptoError(raw)
+    expect(d.action).toBe("retry")
+    expect(d.requestId).toBe("req-123")
+    expect(d.message.toLowerCase()).not.toContain("fetch failed")
+    expect(d.message.toLowerCase()).not.toContain("http")
   })
 })

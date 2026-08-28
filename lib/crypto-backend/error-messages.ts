@@ -43,6 +43,8 @@ export function describeCryptoError(error: unknown): CryptoErrorDescription {
         return { title: "Already in progress", message: "This request was already submitted — showing the existing operation.", action: "view-existing", requestId }
       case "PROXY_DISABLED":
         return { title: "Wallet service disabled", message: "The modern wallet is switched off right now. Try again later.", action: "none", requestId }
+      case "CRYPTO_BACKEND_UNREACHABLE":
+        return { title: "Can't reach the wallet service", message: "The wallet service didn't respond. Check your connection and try again shortly.", action: "retry", requestId }
     }
     if (error.status === 429) return { title: "Too many requests", message: "Give it a moment, then try again.", action: "retry", requestId }
     if (error.status >= 500) return { title: "Wallet service issue", message: "The wallet service hit a problem. Try again shortly.", action: "retry", requestId }
