@@ -180,12 +180,24 @@ export function ModernWalletPage() {
         <PageHeader title="Wallet" subtitle={SUBTITLE} actions={<ModeBadge mode="modern" />} />
       </Rise>
 
-      {/* Fixed position on purpose: this component owns the one-time
-          recovery-secret modal, which is shown from mutation state AFTER the
-          wallet query flips to "exists". Moving or re-mounting it across that
-          transition would destroy the only copy of the secret. It renders
-          nothing once a wallet exists and no secret is pending. */}
-      <WalletSetupFlow walletExists={hasWallet} />
+      {/* Two invariants live on this one line — read both before editing it.
+          (1) FIXED POSITION, MOUNTED UNCONDITIONALLY: this component owns the
+          one-time recovery-secret modal, and it renders that from *mutation*
+          state (WalletSetupFlow.tsx:49-56) which dies with the instance. The
+          wallet query is invalidated the moment creation succeeds, so gating
+          the mount on `wallet.needsSetup` would unmount it exactly then and
+          destroy the user's only copy of the secret. Suppression is the
+          PROP's job, never the mount's.
+          (2) LOADING-AWARE PROP: `walletExists` is what hides the "create a
+          wallet" CTA, and `Boolean(wallet.data)` is false during the first
+          fetch as well as on a confirmed 404 — so a bare `hasWallet` offered
+          setup on every cold load, beside the skeleton cards. Claiming the
+          wallet "exists" while the query is unsettled keeps the CTA away
+          until a 404 actually says setup is needed. It fails open on purpose:
+          any settled non-404 state still offers setup, and creation is
+          idempotent (`setup.data.existing`), so a weird backend answer can
+          never strand a user with no way to make a wallet. */}
+      <WalletSetupFlow walletExists={hasWallet || walletLoading} />
 
       {wallet.error && !wallet.needsSetup ? (
         <Rise delay={40}>
