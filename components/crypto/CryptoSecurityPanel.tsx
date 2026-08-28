@@ -9,10 +9,14 @@
 
 import { useId, useRef, useState } from "react"
 
-import type { CryptoWalletPackageDocument, Device } from "@/lib/crypto-backend"
+import type { CryptoWalletPackage, CryptoWalletPackageDocument, Device } from "@/lib/crypto-backend"
 import { useWalletSecurity } from "@/hooks/crypto/useWalletSecurity"
 import { useAuth } from "@/components/auth-provider"
-import { restoreEncryptedWalletPackage, serializeEncryptedWalletPackage } from "@/lib/crypto-wallet/local-storage"
+import {
+  commitWalletBackupRestore,
+  previewWalletBackupRestore,
+  serializeEncryptedWalletPackage,
+} from "@/lib/crypto-wallet/local-storage"
 import { CardHeader, CardShell, ListRow, Skel } from "@/components/ui/system"
 import { InlineNotice } from "@/components/ui/flow"
 import { SectionMessage } from "@/components/crypto/primitives"
@@ -32,6 +36,9 @@ const FIELD =
 
 const ROTATE_DESCRIPTION =
   "Every account key is re-encrypted with a fresh key. Your addresses don't change."
+
+const RESTORE_CONFIRM_DESCRIPTION =
+  "Your current local package is overwritten. Your funds and addresses are unaffected — this only changes the encrypted copy stored in this browser."
 
 const RECOVERY_SECRET_NOTICE =
   "Only enter your recovery secret for security changes you started yourself."
@@ -60,6 +67,7 @@ export function CryptoSecurityPanel({
   const [busy, setBusy] = useState(false)
   const [confirmRotate, setConfirmRotate] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<Device | null>(null)
+  const [pendingRestore, setPendingRestore] = useState<{ packageValue: CryptoWalletPackage; warnings: string[] } | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const recoverySecretId = useId()
   const passphraseId = useId()
@@ -96,32 +104,70 @@ export function CryptoSecurityPanel({
     }
   }
 
-  function exportBackup() {
-    const blob = new Blob([serializeEncryptedWalletPackage(packageValue)], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = `worldstreet-wallet-${walletId}-encrypted-backup.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
+  async function exportBackup() {
+    if (busy) return
+    setBusy(true)
     setError(null)
-    setSuccess("Encrypted wallet backup downloaded. Keep it with the recovery secret.")
+    setSuccess(null)
+    try {
+      if (!user?.userId) throw new Error("Sign in before exporting a wallet backup")
+      const serialized = await serializeEncryptedWalletPackage(user.userId, packageValue)
+      const blob = new Blob([serialized], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `worldstreet-wallet-${walletId}-encrypted-backup.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setSuccess("Encrypted wallet backup downloaded. Keep it with the recovery secret.")
+    } catch (cause) {
+      setError(cause)
+    } finally {
+      setBusy(false)
+    }
   }
 
-  async function importBackup(file: File | undefined) {
+  // Step 1: parse + validate only — nothing is written yet. A problem (wrong
+  // wallet, wrong user, tampered checksum, unrecognized format…) surfaces
+  // through SectionMessage and the flow stops here. A clean file queues the
+  // confirmation dialog instead of writing immediately.
+  async function prepareRestore(file: File | undefined) {
     if (!file) return
     setBusy(true)
     setError(null)
     setSuccess(null)
     try {
       if (!user?.userId) throw new Error("Sign in before restoring a wallet backup")
-      await restoreEncryptedWalletPackage(user.userId, walletId, await file.text())
-      setSuccess("Encrypted package restored to this browser. The server package remains authoritative until a recovery/commit flow completes.")
+      const preview = await previewWalletBackupRestore(user.userId, walletId, await file.text())
+      setPendingRestore(preview)
     } catch (cause) {
       setError(cause)
     } finally {
       setBusy(false)
       if (fileInput.current) fileInput.current.value = ""
+    }
+  }
+
+  // Step 2: the write, run only after the AlertDialog confirms. The DEK is
+  // locked first — a stale in-memory key from the package being replaced
+  // must never be used to sign against the restored package's ciphertext —
+  // so the success state always ends with the wallet needing to be unlocked
+  // again.
+  async function confirmRestore() {
+    if (busy || !pendingRestore) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (!user?.userId) throw new Error("Sign in before restoring a wallet backup")
+      security.clear()
+      await commitWalletBackupRestore(user.userId, walletId, pendingRestore.packageValue)
+      const warningPrefix = pendingRestore.warnings.length > 0 ? `${pendingRestore.warnings.join(" ")} ` : ""
+      setSuccess(`${warningPrefix}Encrypted package restored to this browser. The server package remains authoritative until a recovery/commit flow completes. Unlock the wallet to continue.`)
+      setPendingRestore(null)
+    } catch (cause) {
+      setError(cause)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -184,8 +230,9 @@ export function CryptoSecurityPanel({
         <div className="flex flex-wrap gap-2 border-t border-border/20 pt-3.5">
           <button
             type="button"
-            onClick={exportBackup}
-            className="rounded-full bg-surface-sunken px-3.5 py-1.5 text-[12px] font-semibold transition-colors hover:bg-accent"
+            onClick={() => void exportBackup()}
+            disabled={busy}
+            className="rounded-full bg-surface-sunken px-3.5 py-1.5 text-[12px] font-semibold transition-colors hover:bg-accent disabled:opacity-50"
           >
             Download encrypted backup
           </button>
@@ -194,7 +241,7 @@ export function CryptoSecurityPanel({
             type="file"
             accept="application/json,.json"
             className="hidden"
-            onChange={(event) => void importBackup(event.target.files?.[0])}
+            onChange={(event) => void prepareRestore(event.target.files?.[0])}
           />
           <button
             type="button"
@@ -273,6 +320,31 @@ export function CryptoSecurityPanel({
             >
               Revoke
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingRestore !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRestore(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace the wallet package on this device?</AlertDialogTitle>
+            <AlertDialogDescription>{RESTORE_CONFIRM_DESCRIPTION}</AlertDialogDescription>
+          </AlertDialogHeader>
+          {pendingRestore && pendingRestore.warnings.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              {pendingRestore.warnings.map((warning) => (
+                <InlineNotice key={warning} tone="warning">{warning}</InlineNotice>
+              ))}
+            </div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={busy} onClick={() => void confirmRestore()}>Replace</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -1,6 +1,7 @@
 export * from "./encoding"
 export * from "./key-generation"
 export * from "./package-crypto"
+export * from "./backup-validation"
 export * from "./local-storage"
 export * from "./passkey"
 export * from "./unlock-state"
