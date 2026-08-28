@@ -28,6 +28,7 @@ import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useAuth } from "@/components/auth-provider"
 import { useWalletMode } from "@/components/wallet-mode-provider"
 import { Segmented } from "@/components/ui/system"
+import { MigrationNotice } from "@/components/crypto/MigrationNotice"
 import { getPrices } from "@/lib/actions"
 import {
   getSpotBalances,
@@ -587,6 +588,11 @@ export function NavbarActions() {
               {/* ══════ Notifications ══════ */}
               {section === "notifications" && (
                 <div className="max-h-72 overflow-y-auto">
+                  {/* Spec §2 — pinned above fetched notifications for
+                      confirmed legacy-wallet owners; renders nothing
+                      otherwise (modern-only users, unclassifiable lookups,
+                      dismissed/confirmed). */}
+                  <MigrationNotice variant="notification" />
                   {notifs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
                       <HugeiconsIcon icon={Megaphone01Icon} className="h-8 w-8 text-muted-foreground/40" />

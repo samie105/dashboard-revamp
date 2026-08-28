@@ -30,3 +30,21 @@ export function canChooseWalletMode(input: {
 }): boolean {
   return input.modernEnabled && input.legacyEnabled && input.legacyWalletExists === true
 }
+
+// Spec §2: nudge confirmed legacy-wallet owners to migrate once both wallet
+// systems are live. Never for modern-only (new) users (legacyWalletExists:
+// false) and never for an inconclusive lookup (null) — don't nag a user we
+// can't classify.
+export function shouldShowMigrationNotice(input: {
+  modernEnabled: boolean
+  legacyEnabled: boolean
+  legacyWalletExists: boolean | null
+  dismissed: boolean
+}): boolean {
+  return (
+    input.modernEnabled &&
+    input.legacyEnabled &&
+    input.legacyWalletExists === true &&
+    !input.dismissed
+  )
+}
