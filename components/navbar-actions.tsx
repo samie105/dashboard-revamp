@@ -26,6 +26,8 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useAuth } from "@/components/auth-provider"
+import { useWalletMode } from "@/components/wallet-mode-provider"
+import { Segmented } from "@/components/ui/system"
 import { getPrices } from "@/lib/actions"
 import {
   getSpotBalances,
@@ -87,6 +89,7 @@ const INITIAL_ANNOUNCEMENTS = [
    ───────────────────────────────────────────────── */
 export function NavbarActions() {
   const { user } = useAuth()
+  const { mode: walletMode, setMode: setWalletMode, canChoose: canChooseWallet } = useWalletMode()
   const { profile } = useProfile()
   const { startCall } = useGlobalCall()
   const { openFlow } = useMoneyFlow()
@@ -349,6 +352,20 @@ export function NavbarActions() {
                       <span className="text-xs font-normal text-muted-foreground ml-1">USD</span>
                     </p>
                   </div>
+                  {canChooseWallet && (
+                    <div className="mb-3">
+                      <Segmented
+                        size="sm"
+                        grow
+                        value={walletMode}
+                        onChange={setWalletMode}
+                        options={[
+                          { key: "modern", label: "Worldstreet wallet" },
+                          { key: "legacy", label: "Legacy wallet" },
+                        ]}
+                      />
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     {/* Opens the money-flow modal in place — the popover
                         closes first so it isn't left hanging underneath. */}
@@ -375,7 +392,6 @@ export function NavbarActions() {
                       { label: "Spot Wallet", href: "/portfolio", icon: Wallet01Icon },
                       { label: "Futures Wallet", href: "/trade?market=futures", icon: Activity01Icon },
                       { label: "Funding", href: "/assets", icon: Wallet01Icon },
-                      { label: "Modern Wallet", href: "/wallet/modern", icon: Wallet01Icon },
                     ].map(w => (
                       <a key={w.label} href={w.href} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors group/link">
                         <HugeiconsIcon icon={w.icon} className="h-3.5 w-3.5 text-primary" />
@@ -383,6 +399,11 @@ export function NavbarActions() {
                         <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 opacity-0 -translate-x-1 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all" />
                       </a>
                     ))}
+                    <Link href="/wallet/modern" className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors group/link">
+                      <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary" />
+                      <span className="flex-1 font-medium">Worldstreet Wallet</span>
+                      <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 opacity-0 -translate-x-1 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all" />
+                    </Link>
                   </div>
                 </div>
               )}

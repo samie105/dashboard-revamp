@@ -39,6 +39,7 @@ import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backen
 import { signHyperliquidIntent, signEvmIntent } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { useAuth } from "@/components/auth-provider"
+import { useWalletMode } from "@/components/wallet-mode-provider"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import {
   fetchHlOrderBook,
@@ -137,9 +138,7 @@ export function TradeClient() {
   // must never be mistaken for an account that exists but isn't set up.
   const [marketsError, setMarketsError] = React.useState(false)
   const [accountError, setAccountError] = React.useState(false)
-  const [walletSource, setWalletSource] = React.useState<"modern" | "legacy">(
-    params.get("wallet") === "legacy" ? "legacy" : "modern",
-  )
+  const { mode: walletSource, setMode: setWalletSource, canChoose: canChooseWallet } = useWalletMode()
 
   const usingModern = walletSource === "modern" && isCryptoBackendEnabled
 
@@ -782,15 +781,16 @@ export function TradeClient() {
           vividPrefix="market-tab"
         />
 
-        {isCryptoBackendEnabled && modernWallet.data ? (
+        {canChooseWallet ? (
           <Segmented
             value={walletSource}
             onChange={(value) => {
               setWalletSource(value)
               router.replace(`/trade?market=${market}${symbol ? `&symbol=${symbol}` : ""}&wallet=${value}`)
             }}
-            options={[{ key: "modern", label: "Modern wallet" }, { key: "legacy", label: "Legacy Privy" }]}
-            className="order-5 shrink-0 lg:order-none"
+            options={[{ key: "modern", label: "Worldstreet wallet" }, { key: "legacy", label: "Legacy wallet" }]}
+            vividPrefix="wallet-tab"
+            className="order-4 shrink-0 lg:order-none"
           />
         ) : null}
 
