@@ -120,6 +120,9 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
     },
     retry: false,
     onSuccess: async (record) => {
+      // Spec §5: a confirmed transaction is one of the explicit triggers that
+      // invalidates the balance snapshot (otherwise it stays cached).
+      await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balanceSnapshot(userId) })
       await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balances(userId) })
       await queryClient.invalidateQueries({ queryKey: ["crypto", "balance", userId] })
       await queryClient.invalidateQueries({ queryKey: ["crypto", "transactions", userId] })

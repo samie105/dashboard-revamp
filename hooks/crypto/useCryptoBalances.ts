@@ -1,72 +1,54 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import * as React from "react"
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/components/auth-provider"
-import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backend"
-import type { CryptoBalance, CryptoBalanceSnapshot } from "@/lib/crypto-backend"
+import { CryptoBackendError, cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { flattenSnapshot, unavailableNetworksOf } from "@/hooks/crypto/balance-policy"
 
-export type CryptoBalanceResult = CryptoBalance & {
-  accountId: string
-  networkId: string
-  networkName: string
-}
+export type { CryptoBalanceResult } from "@/hooks/crypto/balance-policy"
 
+// Spec §5: balances refresh only on initial load, explicit user refresh,
+// after a confirmed transaction, or a wallet/network context change — never
+// on a poll or window focus. The last snapshot stays on screen while a
+// refresh is in flight, and its `generatedAt` timestamp is exposed so
+// callers can show it.
 export function useCryptoBalances() {
   const { user, isLoaded, isSignedIn } = useAuth()
+  const userId = user?.userId ?? "anonymous"
   const enabled = isCryptoBackendEnabled && isLoaded && isSignedIn
-  const [snapshot, setSnapshot] = useState<CryptoBalanceSnapshot | null>(null)
-  const [error, setError] = useState<unknown>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isFetching, setIsFetching] = useState(false)
+  const queryClient = useQueryClient()
 
-  const fetchSnapshot = useCallback(async (signal?: AbortSignal) => {
-    if (!enabled) return
-    setIsFetching(true)
-    setIsLoading(true)
-    try {
-      // Deliberately bypass both frontend and backend snapshot caches while
-      // the balance response is being verified end-to-end.
-      const next = await cryptoBackendClient.listBalanceSnapshot(true, signal)
-      setSnapshot(next)
-      setError(null)
-    } catch (nextError) {
-      if (nextError instanceof Error && nextError.name === "AbortError") return
-      setError(nextError)
-    } finally {
-      setIsLoading(false)
-      setIsFetching(false)
-    }
-  }, [enabled])
+  const query = useQuery({
+    queryKey: cryptoQueryKeys.balanceSnapshot(userId),
+    // Spec §5: reads hit the backend cache; refresh=true is reserved for the
+    // explicit triggers (user refresh, post-transaction invalidation).
+    queryFn: ({ signal }) => cryptoBackendClient.listBalanceSnapshot(false, signal),
+    enabled,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    placeholderData: keepPreviousData,
+    retry: (failureCount, error) =>
+      failureCount < 2 && !(error instanceof CryptoBackendError && error.status < 500),
+  })
 
-  useEffect(() => {
-    setSnapshot(null)
-    setError(null)
-    if (!enabled) return
-    const controller = new AbortController()
-    void fetchSnapshot(controller.signal)
-    return () => controller.abort()
-  }, [enabled, fetchSnapshot])
-
-  // Treat an incomplete payload as an empty snapshot instead of crashing the
-  // page while the fresh aggregate request is in flight.
-  const results = Array.isArray(snapshot?.results) ? snapshot.results : []
-  const balances: CryptoBalanceResult[] = results.flatMap((result) => result.balances.map((balance) => ({
-      ...balance,
-      accountId: result.accountId,
-      networkId: result.networkId,
-      networkName: result.networkName,
-    }))) ?? []
+  const refresh = React.useCallback(async () => {
+    const fresh = await cryptoBackendClient.listBalanceSnapshot(true)
+    queryClient.setQueryData(cryptoQueryKeys.balanceSnapshot(userId), fresh)
+  }, [queryClient, userId])
 
   return {
-    balances,
-    unavailableNetworks: results.filter((result) => result.status === "unavailable"),
-    snapshot,
-    isLoading,
-    isFetching,
-    isStale: false,
-    error,
-    refetch: async () => { await fetchSnapshot() },
+    balances: flattenSnapshot(query.data),
+    unavailableNetworks: unavailableNetworksOf(query.data),
+    snapshot: query.data ?? null,
+    generatedAt: query.data?.generatedAt ?? null,
+    isLoading: query.isLoading,
+    isRefreshing: query.isFetching && !query.isLoading,
+    error: query.error,
+    refresh,
   }
 }
 

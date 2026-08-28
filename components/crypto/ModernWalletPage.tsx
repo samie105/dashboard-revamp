@@ -44,7 +44,7 @@ export function ModernWalletPage() {
       <div className="flex flex-wrap gap-2">
         <ActionPill icon={({ className }) => <HugeiconsIcon icon={ArrowDownLeft01Icon} className={className} />} label="Deposit" href="/assets" />
         <ActionPill icon={({ className }) => <HugeiconsIcon icon={ArrowUpRight01Icon} className={className} />} label="Send" href="/assets" />
-        <ActionPill icon={({ className }) => <HugeiconsIcon icon={RefreshIcon} className={className} />} label="Refresh" onClick={() => { void wallet.refetch(); void networks.refetch(); void balances.refetch() }} />
+        <ActionPill icon={({ className }) => <HugeiconsIcon icon={RefreshIcon} className={className} />} label="Refresh" onClick={() => { void wallet.refetch(); void networks.refetch(); void balances.refresh() }} />
       </div>
 
       <WalletSetupFlow walletExists={Boolean(wallet.data)} />
