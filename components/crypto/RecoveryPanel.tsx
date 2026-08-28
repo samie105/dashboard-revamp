@@ -1,26 +1,55 @@
 "use client"
 
-import { useState } from "react"
+/**
+ * Wallet recovery ceremony. The `useWalletSecurity` calls — `startRecovery`,
+ * `prepareRecoveryPackage`, `makeRecoveryProof`, `completeRecovery` — and
+ * their arguments/sequencing are unchanged; the ceremony now renders as a
+ * `StageList` instead of a flat button + text message.
+ */
+
+import { useId, useState } from "react"
 
 import type { CryptoWalletPackageDocument } from "@/lib/crypto-backend"
 import { useWalletSecurity } from "@/hooks/crypto/useWalletSecurity"
+import { CardHeader, CardShell } from "@/components/ui/system"
+import { StageList, type Stage } from "@/components/ui/flow"
+import { SectionMessage } from "@/components/crypto/primitives"
 
-export function RecoveryPanel({ walletId, packageValue }: { walletId: string; packageValue: CryptoWalletPackageDocument }) {
+const FIELD =
+  "w-full rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] outline-none ring-1 ring-border/25 transition-shadow focus-visible:ring-2 focus-visible:ring-primary/40"
+
+const RECOVERY_STAGES: Stage[] = [
+  { key: "verify", label: "Verify recovery secret" },
+  { key: "rewrap", label: "Re-wrap wallet key" },
+  { key: "confirm", label: "Confirm with the service" },
+]
+
+export function RecoveryPanel({
+  walletId,
+  packageValue,
+}: {
+  walletId: string
+  packageValue: CryptoWalletPackageDocument
+}) {
   const security = useWalletSecurity(walletId)
   const [recoverySecret, setRecoverySecret] = useState("")
   const [ceremony, setCeremony] = useState<{ recoveryId: string; challenge: string } | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const [stageIndex, setStageIndex] = useState(0)
+  const [error, setError] = useState<unknown>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const recoverySecretId = useId()
 
   async function beginRecovery() {
     setBusy(true)
-    setMessage(null)
+    setError(null)
+    setSuccess(null)
     try {
       const result = await security.startRecovery()
       setCeremony({ recoveryId: result.recoveryId, challenge: result.challenge })
-      setMessage("Recovery ceremony started. Enter the recovery secret to continue.")
+      setStageIndex(0)
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Could not start recovery")
+      setError(cause)
     } finally {
       setBusy(false)
     }
@@ -29,46 +58,72 @@ export function RecoveryPanel({ walletId, packageValue }: { walletId: string; pa
   async function completeRecovery() {
     if (!ceremony || !recoverySecret) return
     setBusy(true)
-    setMessage(null)
+    setError(null)
+    setSuccess(null)
+    setStageIndex(0)
     try {
       const nextPackage = await security.prepareRecoveryPackage(packageValue, recoverySecret)
+      // Unwrapping the recovery envelope above is also where a wrong secret
+      // fails — so it verifies the secret and re-wraps the key in one pass.
+      setStageIndex(2)
       const proof = security.makeRecoveryProof(recoverySecret, ceremony.challenge)
       await security.completeRecovery({ ...proof, recoveryId: ceremony.recoveryId, package: nextPackage })
+      setStageIndex(3)
       setRecoverySecret("")
       setCeremony(null)
-      setMessage("Wallet recovery completed. The recovery envelope was rotated.")
+      setSuccess("Wallet recovery completed. The recovery envelope was rotated.")
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Could not complete recovery")
+      setError(cause)
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <section className="space-y-3 rounded-lg border p-4">
-      <div>
-        <h2 className="font-semibold">Wallet recovery</h2>
-        <p className="text-sm text-muted-foreground">The recovery secret is used locally to unwrap the DEK and sign the recovery challenge.</p>
-      </div>
-      <button type="button" onClick={beginRecovery} disabled={busy} className="rounded-md border px-4 py-2 text-sm disabled:opacity-50">
-        Start recovery
-      </button>
-      {ceremony ? (
-        <div className="space-y-2">
-          <input
-            type="password"
-            value={recoverySecret}
-            onChange={(event) => setRecoverySecret(event.target.value)}
-            autoComplete="off"
-            placeholder="Recovery secret"
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-          />
-          <button type="button" onClick={completeRecovery} disabled={busy || !recoverySecret} className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50">
-            Complete recovery
+    <CardShell>
+      <CardHeader
+        title="Wallet recovery"
+        subtitle="The recovery secret is used locally to unwrap the DEK and sign the recovery challenge"
+      />
+      <div className="flex flex-col gap-4 px-4 pb-4">
+        {!ceremony ? (
+          <button
+            type="button"
+            onClick={() => void beginRecovery()}
+            disabled={busy}
+            className="self-start rounded-full bg-surface-sunken px-4 py-2 text-[13px] font-semibold transition-colors hover:bg-accent disabled:opacity-50"
+          >
+            {busy ? "Starting…" : "Start recovery"}
           </button>
-        </div>
-      ) : null}
-      {message ? <p className="text-sm">{message}</p> : null}
-    </section>
+        ) : (
+          <>
+            <StageList stages={RECOVERY_STAGES} activeIndex={stageIndex} />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={recoverySecretId} className="text-[12.5px] font-medium text-muted-foreground">
+                Recovery secret
+              </label>
+              <input
+                id={recoverySecretId}
+                type="password"
+                value={recoverySecret}
+                onChange={(event) => setRecoverySecret(event.target.value)}
+                autoComplete="off"
+                className={FIELD}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void completeRecovery()}
+              disabled={busy || !recoverySecret}
+              className="self-start rounded-full bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              {busy ? "Completing…" : "Complete recovery"}
+            </button>
+          </>
+        )}
+
+        <SectionMessage error={error} success={success} />
+      </div>
+    </CardShell>
   )
 }
