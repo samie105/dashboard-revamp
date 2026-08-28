@@ -139,7 +139,6 @@ export function TradeClient() {
   const [limitPrice, setLimitPrice] = React.useState("")
   const [leverage, setLeverage] = React.useState(1)
   const [tpPrice, setTpPrice] = React.useState("")
-  const [modernFundingOpen, setModernFundingOpen] = React.useState(false)
   const [slPrice, setSlPrice] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [pickerOpen, setPickerOpen] = React.useState(false)
@@ -1010,23 +1009,38 @@ export function TradeClient() {
             </span>
           )}
           {/* Funding is a detour from trading, not a destination — it opens
-              over the workspace so the chart and the ticket keep their state. */}
-          <button
-            onClick={() => usingModern ? setModernFundingOpen(true) : openFlow("fund")}
-            data-vivid-target="trade-fund-button"
-            data-vivid-label="Open the fund-trading-account modal"
-            className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
-          >
-            Fund
-          </button>
-          <button
-            onClick={() => usingModern ? setModernFundingOpen(true) : openFlow("trading-withdraw")}
-            data-vivid-target="trade-withdraw-button"
-            data-vivid-label="Open the withdraw-trading-balance modal"
-            className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
-          >
-            Withdraw
-          </button>
+              over the workspace so the chart and the ticket keep their state.
+              Spec §10 keeps the three money doors apart: the modern wallet
+              renders its own Deposit / Transfer / Withdraw triggers, each
+              opening a flow of its own, rather than one blended form. */}
+          {usingModern ? (
+            user?.userId && modernWallet.data && modernPackage.data ? (
+              <ModernFundingPanel
+                userId={user.userId}
+                wallet={modernWallet.data}
+                packageValue={modernPackage.data}
+              />
+            ) : null
+          ) : (
+            <>
+              <button
+                onClick={() => openFlow("fund")}
+                data-vivid-target="trade-fund-button"
+                data-vivid-label="Open the fund-trading-account modal"
+                className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
+              >
+                Fund
+              </button>
+              <button
+                onClick={() => openFlow("trading-withdraw")}
+                data-vivid-target="trade-withdraw-button"
+                data-vivid-label="Open the withdraw-trading-balance modal"
+                className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
+              >
+                Withdraw
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1207,7 +1221,6 @@ export function TradeClient() {
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
-      {usingModern && user?.userId && modernWallet.data && modernPackage.data && <ModernFundingPanel open={modernFundingOpen} onOpenChange={setModernFundingOpen} userId={user.userId} wallet={modernWallet.data} packageValue={modernPackage.data} />}
     </div>
   )
 }
