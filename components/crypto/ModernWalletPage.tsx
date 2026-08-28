@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import { WalletSetupFlow } from "@/components/crypto/WalletSetupFlow"
@@ -30,6 +31,7 @@ export function ModernWalletPage() {
     staleTime: 60_000,
   })
   const balances = useCryptoBalances()
+  const [unlockOpen, setUnlockOpen] = useState(false)
 
   if (!isCryptoBackendEnabled) {
     return <p className="text-sm text-muted-foreground">Modern wallet tools are disabled. Set NEXT_PUBLIC_CRYPTO_ENABLED=true to enable them.</p>
@@ -51,7 +53,19 @@ export function ModernWalletPage() {
       {wallet.data ? (
         <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <CardShell>
-            <CardHeader title="My wallet" subtitle="Your modern wallet accounts across enabled networks" right={<span className="rounded-full bg-credit-chip px-2.5 py-1 text-xs font-semibold text-credit">Active</span>} />
+            <CardHeader
+              title="My wallet"
+              subtitle="Your modern wallet accounts across enabled networks"
+              right={
+                <button
+                  type="button"
+                  onClick={() => setUnlockOpen(true)}
+                  className="rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  Locked
+                </button>
+              }
+            />
             <div className="space-y-3 px-4 pb-4">
               {wallet.data.accounts.map((account) => (
                 <div key={account.id} className="rounded-xl bg-surface-sunken/70 p-3 text-sm">
@@ -84,9 +98,10 @@ export function ModernWalletPage() {
 
       {wallet.data && networks.data ? <CardShell><CardHeader title="Balances" subtitle="Live response from the crypto backend · refresh reads the providers again" /><div className="px-4 pb-4">{balances.isLoading ? <p className="text-sm text-muted-foreground">Loading balances…</p> : balances.error ? <p className="text-sm text-destructive">Balance endpoint failed: {balances.error instanceof Error ? balances.error.message : "unknown error"}</p> : balances.balances.length === 0 ? <p className="text-sm text-muted-foreground">The endpoint returned no non-zero balances.</p> : <><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{balances.balances.map((balance) => <div key={`${balance.accountId}:${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`} className="rounded-xl bg-surface-sunken/70 p-3"><div className="flex items-center justify-between gap-2"><span className="font-medium">{balance.symbol}</span><span className="text-xs text-muted-foreground">{balance.networkName}</span></div><div className="mt-1 text-lg tabular-nums">{formatCryptoAmount(balance.amountBaseUnits, balance.decimals)}</div><div className="mt-1 truncate text-[11px] text-muted-foreground">{balance.name || (balance.asset.kind === "native" ? "Native asset" : balance.asset.identifier)}</div></div>)}</div>{balances.unavailableNetworks.length > 0 ? <p className="mt-3 text-xs text-amber-500">Some networks could not be read: {balances.unavailableNetworks.map((network) => network.networkName).join(", ")}. Their balances will appear after that provider recovers.</p> : null}</>}</div></CardShell> : null}
       {process.env.NODE_ENV !== "production" && balances.snapshot ? <details className="rounded-2xl border border-border/60 bg-surface p-4"><summary className="cursor-pointer text-sm font-medium">Balance endpoint response</summary><pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-muted-foreground">{JSON.stringify(balances.snapshot, null, 2)}</pre></details> : null}
+      <WalletUnlockDialog open={unlockOpen} onOpenChange={setUnlockOpen} />
+
       {wallet.data && packageQuery.data ? (
         <>
-          <WalletUnlockDialog walletId={wallet.data.id} packageValue={packageQuery.data} />
           <WalletKeyExportPanel walletId={wallet.data.id} accounts={wallet.data.accounts} packageValue={packageQuery.data} />
           <WalletChainProvisioningPanel walletId={wallet.data.id} packageValue={packageQuery.data} accounts={wallet.data.accounts} />
           <RecoveryPanel walletId={wallet.data.id} packageValue={packageQuery.data} />
