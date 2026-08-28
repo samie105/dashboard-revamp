@@ -44,6 +44,7 @@ import { AddressPill, SectionMessage } from "@/components/crypto/primitives"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import {
   AmountField,
+  AnnouncementBanner,
   DetailPanel,
   FlowCta,
   InlineNotice,
@@ -149,9 +150,33 @@ function clearPendingRecord(userId: string) {
 
 /* ── Small shared helpers ──────────────────────────────────────────────── */
 
+/**
+ * The three status sets a retry has to tell apart. All three are ALLOWLISTS,
+ * and the default for anything not named is "leave it alone".
+ *
+ * That direction matters more than the membership. The backend owns this
+ * vocabulary and is free to grow it without asking this client — a `broadcast`
+ * or `relaying` status could arrive tomorrow. Written as a denylist of
+ * already-sent statuses, an unrecognised one would fall through to "re-sign and
+ * re-submit", which for an EVM transaction means broadcasting a second time
+ * against money that is already moving. Written this way, an unknown status is
+ * skipped and reported, which costs at worst a wait.
+ */
+
+/** Dead ends. Never re-signed: a `failed` intent has a consumed nonce or a
+ *  reverted call, and spec §13 says an expired intent is REPLACED, never
+ *  reused. Both route the user to "Start a new deposit" (a new key), which is
+ *  the only honest retry for a leg that died. */
 const DEAD_STATUSES = new Set(["failed", "expired"])
-/** Statuses that mean the transaction already left this device. Re-signing one
- *  would broadcast the same nonce twice, which is the opposite of a retry. */
+
+/** Known to be un-sent — the intent exists and no transaction went out under
+ *  it, so signing it is the thing that was missing. `signed` belongs here: it
+ *  sits before `submitted` in the backend's own ordering, and EVM signing is
+ *  deterministic, so re-signing yields the identical raw transaction. */
+const RESIGNABLE_STATUSES = new Set(["created", "simulated", "validated", "signed"])
+
+/** Known to be on their way. Skipped — as is EVERY status in none of the three
+ *  sets, which is the whole point (see above). */
 const ALREADY_SENT = new Set(["submitted", "pending", "confirmed"])
 
 function parseAmount(value: string): number | null {
@@ -302,7 +327,15 @@ export function ModernFundingPanel({
         onResume={resumeDeposit}
       />
       <TransferFlow {...shared} open={openFlow === "transfer"} onOpenChange={(next) => setOpenFlow(next ? "transfer" : null)} />
-      <WithdrawFlow {...shared} open={openFlow === "withdraw"} onOpenChange={(next) => setOpenFlow(next ? "withdraw" : null)} />
+      <WithdrawFlow
+        {...shared}
+        open={openFlow === "withdraw"}
+        onOpenChange={(next) => setOpenFlow(next ? "withdraw" : null)}
+        // Withdrawals debit Perps, so money sitting in Spot has to be moved
+        // first. The withdraw screen hands the user straight to the flow that
+        // does it rather than describing a dead end.
+        onSwitchToTransfer={() => setOpenFlow("transfer")}
+      />
 
       <WalletUnlockDialog
         open={unlockOpen}
@@ -335,7 +368,19 @@ function DepositFlow({
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<unknown>(null)
   const [duplicateWithoutId, setDuplicateWithoutId] = React.useState(false)
+  /** What a retry that signed nothing has to say for itself. */
+  const [retryNote, setRetryNote] = React.useState<string | null>(null)
   const [intentIds, setIntentIds] = React.useState<string[]>([])
+  /**
+   * Intents THIS session has already submitted.
+   *
+   * The status poll can lag a submit that has demonstrably landed (the submit
+   * call returned a transaction record), and for a beat it still answers
+   * `created`. Without this, that beat renders "this deposit was never signed"
+   * over a transaction already on its way, and offers a button to send it
+   * again. Local knowledge outranks a stale read.
+   */
+  const [submittedIds, setSubmittedIds] = React.useState<string[]>([])
   /** The amount this attempt was CREATED with — the form string can be edited
    *  under a running deposit, the committed figure can't. */
   const [committedAmount, setCommittedAmount] = React.useState<number | null>(null)
@@ -389,18 +434,59 @@ function DepositFlow({
   const anyDead = statuses.some((status) => DEAD_STATUSES.has(status))
   const allConfirmed = statuses.length > 0 && statuses.every((status) => status === "confirmed")
   const inFlight = phase === "status" && !credited && !anyDead
-  const elapsed = useElapsed(inFlight ? startedAt : null)
-  const slow = inFlight && elapsed >= SLOW_AFTER_MS
+
+  /**
+   * Intents that exist with nothing sent under them.
+   *
+   * Two doors lead here and both used to dead-end: a reload DURING signing
+   * (the resume record is written before the first signature, on purpose — an
+   * unrecorded signature is far worse than a recorded unsigned one), and a
+   * duplicate adopted from `DUPLICATE_REQUEST`, which reaches the status screen
+   * without this device having signed anything. Both left a status screen that
+   * said "bridging" forever, offered no action, and — past ten minutes — told
+   * the user their funds were safely on their way when nothing had been sent
+   * at all. This is what makes that state nameable and actionable.
+   */
+  const awaitingSignature = statuses.filter(
+    // Index-aligned with `intentIds`: the poll maps over it in order, and a
+    // changed id list refetches under its own key rather than mixing sets.
+    (status, index) => RESIGNABLE_STATUSES.has(status) && !submittedIds.includes(intentIds[index]),
+  ).length
+  const needsSignature = awaitingSignature > 0 && !busy
+  const nothingSent = needsSignature && awaitingSignature === statuses.length
+
+  // The bridge clock only runs while there is a bridge. A deposit waiting on a
+  // signature must never reach the slow-bridge notice, whose whole sentence
+  // ("your funds are safe — the deposit continues in the background") is false
+  // for money that never left.
+  const elapsed = useElapsed(inFlight && !needsSignature ? startedAt : null)
+  const slow = inFlight && !needsSignature && elapsed >= SLOW_AFTER_MS
 
   // A bridge that has already outrun the ten-minute mark is not about to be
   // caught by a faster poll — it backs off rather than stopping, because the
   // screen is still promising to update itself.
-  const accountQuery = useTradingAccount(userId, { enabled: open || inFlight, fast: inFlight && !slow })
+  const accountQuery = useTradingAccount(userId, {
+    enabled: open || inFlight,
+    fast: inFlight && !slow && !needsSignature,
+  })
 
-  /* Crediting: a delta against the balance this deposit started from, or the
-     account flipping ready for a first-ever deposit. The 1% tolerance is for
-     rounding and any bridge-side deduction — it can only delay the verdict,
-     never invent one, because the baseline is captured before signing. */
+  /**
+   * Crediting — a DELTA against the balance this deposit started from.
+   *
+   * The delta rule is the verdict: the trading total has to have risen by
+   * (near enough) the deposited amount. The 1% tolerance covers rounding and
+   * any bridge-side deduction; it can only delay a verdict, never invent one.
+   *
+   * The `ready` flip is corroboration, not proof, and is deliberately weaker
+   * than it looks. An account can go `ready` for reasons that have nothing to
+   * do with this deposit — lazy provisioning on first use, or the same user
+   * funding from another device — so on its own it would celebrate a bridge
+   * that is still running. It therefore only counts alongside a balance that
+   * actually MOVED UP (`delta > 0`): money arrived, and the account became
+   * usable. What that pair still can't distinguish is a credit from somewhere
+   * else landing in the same window, which is a much smaller lie than the one
+   * an ungated flip would tell.
+   */
   React.useEffect(() => {
     if (phase !== "status" || credited) return
     const account = accountQuery.data
@@ -418,8 +504,10 @@ function DepositFlow({
     }
     const target = committedAmount ?? 0
     const delta = total === null ? null : total - baseline
-    const readyFlipped = baselineReady === false && account.ready === true
-    if (readyFlipped || (delta !== null && target > 0 && delta >= target * 0.99)) setCredited(true)
+    if (delta === null) return
+    const arrived = target > 0 && delta >= target * 0.99
+    const readyFlipped = baselineReady === false && account.ready === true && delta > 0
+    if (arrived || readyFlipped) setCredited(true)
   }, [accountQuery.data, phase, credited, baseline, baselineReady, committedAmount])
 
   /* Terminal states own no resume record. */
@@ -445,14 +533,30 @@ function DepositFlow({
         ? "Enter a valid amount"
         : null
 
-  /** Signs and submits only what hasn't left this device yet. */
+  /**
+   * Signs and submits only the intents KNOWN to be un-sent, and reports what it
+   * left behind so the caller can say so out loud.
+   *
+   * Anything not in `RESIGNABLE_STATUSES` is skipped — already sent, dead, or a
+   * status this build has never heard of. A retry that signs nothing is a valid
+   * outcome here, not a silent no-op: `retryAttempt` turns it into a sentence.
+   */
   async function submitPending(intents: CryptoTransactionIntent[]) {
     if (!evm) throw new Error("Your wallet doesn't have an active account for this network yet")
+    let signedCount = 0
+    let skippedUnknown = 0
     for (const intent of intents) {
-      if (ALREADY_SENT.has(String(intent.status))) continue
+      const status = String(intent.status)
+      if (!RESIGNABLE_STATUSES.has(status)) {
+        if (!ALREADY_SENT.has(status) && !DEAD_STATUSES.has(status)) skippedUnknown += 1
+        continue
+      }
       const signed = await signEvmIntent(userId, wallet.id, packageValue, intent, evm.id)
       await cryptoBackendClient.submitIntent(intent.id, signed)
+      setSubmittedIds((current) => (current.includes(intent.id) ? current : [...current, intent.id]))
+      signedCount += 1
     }
+    return { signedCount, skippedUnknown }
   }
 
   /**
@@ -553,10 +657,21 @@ function DepositFlow({
     }
     setBusy(true)
     setError(null)
+    setRetryNote(null)
     try {
       const settled = await Promise.all(intentIds.map((id) => cryptoBackendClient.getIntent(id)))
-      await submitPending(settled)
+      const { signedCount, skippedUnknown } = await submitPending(settled)
       await intentsQuery.refetch()
+      // A retry that signed nothing must SAY so. Silence here reads as a dead
+      // button, and the alternative — signing something we aren't sure is
+      // un-sent — is a second broadcast.
+      if (signedCount === 0) {
+        setRetryNote(
+          skippedUnknown > 0
+            ? "Nothing was re-signed: a step is in a state this app doesn't recognise, so it was left alone rather than sent twice. This screen updates as the network reports back."
+            : "Nothing needed re-signing — every step is already with the network. This screen updates as they land.",
+        )
+      }
     } catch (cause) {
       setError(cause)
     } finally {
@@ -577,6 +692,8 @@ function DepositFlow({
     setCredited(false)
     setError(null)
     setDuplicateWithoutId(false)
+    setRetryNote(null)
+    setSubmittedIds([])
   }
 
   /** Stop tracking. The deposit itself continues wherever it had got to. */
@@ -619,20 +736,30 @@ function DepositFlow({
             <StatusScreen
               state={state}
               direction="in"
-              figure={figure}
+              // Nothing is "in transit" when nothing was signed — the core
+              // shows a plain pulse instead of a figure it would be lying about.
+              figure={nothingSent ? undefined : figure}
               headline={
                 state === "success"
                   ? "Deposit credited"
                   : state === "failure"
                     ? "Deposit didn't finish"
-                    : "Bridging your deposit"
+                    : needsSignature
+                      ? nothingSent
+                        ? "Finish your deposit"
+                        : "One step still needs signing"
+                      : "Bridging your deposit"
               }
               caption={
                 state === "success"
                   ? "Your trading account has the funds."
                   : state === "failure"
                     ? `It stopped at “${failedStage}”.`
-                    : NOT_INSTANT
+                    : needsSignature
+                      ? nothingSent
+                        ? "This deposit was never signed, so nothing has left your wallet yet."
+                        : "The other steps are already with the network. Sign the last one to finish."
+                      : NOT_INSTANT
               }
               // The checklist stays up through a failure: which stage it
               // reached is the most useful thing on the screen.
@@ -640,10 +767,13 @@ function DepositFlow({
               activeIndex={activeIndex}
               stageStartedAt={state === "processing" ? progress.since : null}
               reference={intentIds[0] ?? null}
-              notice={state === "processing" && slow ? SLOW_BRIDGE : null}
-              // Slowness never stops the poll — the promise on screen stays a
-              // promise the flow is still keeping.
-              autoUpdating={state === "processing"}
+              // The retry's own answer outranks the bridge notice: it's the
+              // reply to a button the user just pressed.
+              notice={retryNote ?? (state === "processing" && slow ? SLOW_BRIDGE : null)}
+              // "Updates automatically" is a promise about something being in
+              // flight. Slowness never withdraws it; waiting on a signature
+              // does, because nothing is running to update from.
+              autoUpdating={state === "processing" && !needsSignature}
               primary={
                 state === "success"
                   ? { label: "Done", onClick: dismiss }
@@ -653,7 +783,12 @@ function DepositFlow({
                       : anyDead
                         ? { label: "Start a new deposit", onClick: startNewAttempt }
                         : { label: "Try again", onClick: () => void retryAttempt() }
-                    : undefined
+                    : needsSignature
+                      ? {
+                          label: nothingSent ? "Sign and continue" : "Sign the remaining step",
+                          onClick: () => void retryAttempt(),
+                        }
+                      : undefined
               }
               secondary={state === "success" ? undefined : { label: "Dismiss", onClick: dismiss }}
             />
@@ -884,7 +1019,16 @@ function TransferFlow({ userId, wallet, packageValue, evm, open, onOpenChange, r
 
 const WITHDRAW_STAGES = [{ key: "sent", label: "Withdrawal sent" }]
 
-function WithdrawFlow({ userId, wallet, packageValue, evm, open, onOpenChange, requestUnlock }: FlowProps) {
+function WithdrawFlow({
+  userId,
+  wallet,
+  packageValue,
+  evm,
+  open,
+  onOpenChange,
+  requestUnlock,
+  onSwitchToTransfer,
+}: FlowProps & { onSwitchToTransfer: () => void }) {
   const queryClient = useQueryClient()
   const [amount, setAmount] = React.useState("")
   const [attemptKey, setAttemptKey] = React.useState<string | null>(null)
@@ -899,12 +1043,33 @@ function WithdrawFlow({ userId, wallet, packageValue, evm, open, onOpenChange, r
   }, [open, phase, attemptKey])
 
   const accountQuery = useTradingAccount(userId, { enabled: open, fast: false })
-  const maxSpend = accountQuery.data?.balances?.perpsWithdrawableUsdc ?? null
+  /**
+   * The cap is the PERPS balance, and the copy on this screen has to say so.
+   *
+   * `withdraw3` debits Perps — the venue's native semantics, and what the
+   * previous implementation of this product did explicitly: its spot-withdraw
+   * route ran `usdClassTransfer(amount, toPerp: true)` FIRST and only then
+   * `withdraw3` (`docs/archive/PROJECT.md` §"Spot Withdraw"). The self-custody
+   * backend docs don't cover the venue layer at all, so that is the strongest
+   * evidence in the repo — flagged in the task report as a backend-confirmation
+   * ask.
+   *
+   * The panel treats Spot and Perps as distinct balances everywhere else
+   * (TransferFlow exists precisely to move between them), so a cap that
+   * silently ignored Spot would read as a bug. It doesn't ignore it: it names
+   * the balance it spends and points at the flow that fills it.
+   */
+  const balances = accountQuery.data?.balances ?? null
+  const maxSpend = balances?.perpsWithdrawableUsdc ?? null
+  const spotIdle = balances?.spotUsdc ?? 0
   /** The only destination this flow can reach: the wallet's own address. */
   const destination = evm?.canonicalAddress ?? ""
 
   const value = parseAmount(amount)
   const overspend = value !== null && maxSpend !== null && value > maxSpend
+  // Money is sitting in Spot that this flow cannot spend — either because
+  // Perps is empty, or because the amount asked for is more than Perps holds.
+  const suggestTransfer = spotIdle > 0 && (((maxSpend ?? 0) < 0.01) || overspend)
   const blocker = !destination
     ? "Your wallet isn't ready yet"
     : amount.trim().length === 0
@@ -912,7 +1077,7 @@ function WithdrawFlow({ userId, wallet, packageValue, evm, open, onOpenChange, r
       : value === null
         ? "Enter a valid amount"
         : overspend
-          ? "More than you can withdraw"
+          ? "More than your Perps balance"
           : null
 
   async function runWithdraw() {
@@ -980,7 +1145,8 @@ function WithdrawFlow({ userId, wallet, packageValue, evm, open, onOpenChange, r
         <ResponsiveModalHeader>
           <ResponsiveModalTitle>Withdraw from trading account</ResponsiveModalTitle>
           <ResponsiveModalDescription>
-            Withdrawals go back to your own self-custody wallet address — this flow can&apos;t send anywhere else.
+            Withdrawals come out of your Perps balance and go back to your own self-custody wallet address — this flow
+            can&apos;t send anywhere else.
           </ResponsiveModalDescription>
         </ResponsiveModalHeader>
 
@@ -1020,18 +1186,28 @@ function WithdrawFlow({ userId, wallet, packageValue, evm, open, onOpenChange, r
           </div>
         ) : (
           <div className="flex flex-col gap-4">
+            {suggestTransfer ? (
+              <AnnouncementBanner
+                title="That USDC is in your Spot balance"
+                detail={`Withdrawals come out of Perps. Move your ${formatUsdc(spotIdle)} USDC across first, then withdraw it.`}
+                action={{ label: "Move funds", onClick: onSwitchToTransfer }}
+              />
+            ) : null}
             <AmountField
               value={amount}
               onChange={setAmount}
               unit="USDC"
               autoFocus={open}
               maxSpend={maxSpend}
-              hint={maxSpend !== null ? `${formatUsdc(maxSpend)} USDC withdrawable` : undefined}
-              problem={overspend ? `You can withdraw ${formatUsdc(maxSpend ?? 0)} USDC right now.` : null}
+              hint={maxSpend !== null ? `${formatUsdc(maxSpend)} USDC withdrawable from Perps` : undefined}
+              problem={overspend ? `Your Perps balance holds ${formatUsdc(maxSpend ?? 0)} USDC right now.` : null}
             />
             <DetailPanel
               rows={[
                 { label: "Amount", value: value !== null ? `${formatUsdc(value)} USDC` : "—" },
+                // The debited balance is named on the receipt, not just in the
+                // prose — this is the row that makes the cap make sense.
+                { label: "From", value: "Perps balance" },
                 {
                   label: "To your wallet",
                   value: destination ? <AddressPill address={destination} /> : "Not ready",
