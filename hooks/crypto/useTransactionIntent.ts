@@ -26,6 +26,14 @@ type TransferInput = {
   sponsorFees?: boolean
 }
 
+type CreateIntentResult = {
+  intent: CryptoTransactionIntent
+  sponsorship: SponsorshipOperation | undefined
+  /** Whatever `quoteSponsorship`/`prepareSponsorship` threw — never fails the
+   *  mutation itself (spec §11). Read via `resolveFeePresentation`. */
+  sponsorshipError: unknown
+}
+
 export function useTransactionIntent(walletId?: string, packageValue?: CryptoWalletPackageDocument) {
   const { user, isLoaded, isSignedIn } = useAuth()
   const queryClient = useQueryClient()
@@ -54,20 +62,29 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
   })
 
   const create = useMutation({
-    mutationFn: async (input: TransferInput) => {
+    mutationFn: async (input: TransferInput): Promise<CreateIntentResult> => {
       const { sponsorFees, ...transferInput } = input
       const intent = await cryptoBackendClient.createTransferIntent({ ...transferInput, idempotencyKey: crypto.randomUUID() })
-      if (!sponsorFees) return { intent }
-      const sponsorship = await cryptoBackendClient.quoteSponsorship({
-        accountId: input.accountId,
-        networkId: input.networkId,
-        operation: input.asset.kind === "token" ? "token-transfer" : "native-transfer",
-        intentId: intent.id,
-      })
-      const prepared = sponsorship.status === "prepared"
-        ? sponsorship
-        : await cryptoBackendClient.prepareSponsorship(sponsorship.id, intent.id)
-      return { intent, sponsorship: prepared }
+      if (!sponsorFees) return { intent, sponsorship: undefined, sponsorshipError: undefined }
+      try {
+        const sponsorship = await cryptoBackendClient.quoteSponsorship({
+          accountId: input.accountId,
+          networkId: input.networkId,
+          operation: input.asset.kind === "token" ? "token-transfer" : "native-transfer",
+          intentId: intent.id,
+        })
+        const prepared = sponsorship.status === "prepared"
+          ? sponsorship
+          : await cryptoBackendClient.prepareSponsorship(sponsorship.id, intent.id)
+        return { intent, sponsorship: prepared, sponsorshipError: undefined }
+      } catch (error) {
+        // Spec §11: an outage in the sponsorship path must never kill a
+        // transfer the user could pay for themselves — the mutation still
+        // succeeds with the intent alone, and `resolveFeePresentation`
+        // (lib/crypto-backend/sponsorship.ts) is what turns this caught error
+        // into the review screen's self-paid-fallback reason.
+        return { intent, sponsorship: undefined, sponsorshipError: error }
+      }
     },
     retry: false,
     onSuccess: ({ intent, sponsorship }) => {
@@ -94,11 +111,16 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
   })
 
   const submit = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ useSponsorship }: { useSponsorship: boolean }) => {
       if (!intentId || !intentQuery.data || !walletId || !packageValue) throw new Error("Create an intent and unlock the wallet before signing")
       const intent = intentQuery.data
       const sponsorship = sponsorshipQuery.data ?? create.data?.sponsorship
-      if (sponsorship) {
+      // Spec §11 edge case: branch on the user's FINAL choice, not merely on
+      // whether an operation object happens to exist — an operation that
+      // expired (or was quoted for a choice the user has since walked back)
+      // must never be signed down the sponsored path just because it's still
+      // sitting in the cache.
+      if (useSponsorship && sponsorship) {
         if (!sponsorship.signingPayload) throw new Error("Sponsored signing payload is not ready")
         const signedPayload = intent.chainFamily === "solana"
           ? await signSponsoredSolanaTransaction(userId, walletId, packageValue, sponsorship.signingPayload, String(intent.accountId))
@@ -155,6 +177,10 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
   return {
     intent: enabled ? intentQuery.data ?? create.data?.intent : undefined,
     sponsorship: enabled ? sponsorshipQuery.data ?? create.data?.sponsorship : undefined,
+    // Spec §11: a quote/prepare outage is caught inside `create` and comes
+    // back here instead of failing the mutation — this is how the review
+    // screen's fee row (via `resolveFeePresentation`) learns why it fell back.
+    sponsorshipError: enabled ? create.data?.sponsorshipError : undefined,
     intentId,
     isLoading: create.isPending || intentQuery.isLoading,
     isSimulating: simulate.isPending,

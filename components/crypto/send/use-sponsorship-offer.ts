@@ -4,19 +4,22 @@
  * The one place the send flow learns whether a sponsored fee is on offer, and
  * what it would cost.
  *
- * Deliberately isolated. Today the quote/prepare round-trip happens inside
- * `useTransactionIntent.createIntent`, so the review screen's fee row can only
- * report what that mutation happened to return. Task 14 moves the quote out of
- * the create mutation (a quote failure should degrade the fee row, not fail the
- * whole transfer) — when it does, this hook and `feeRowValue` are the surface
- * that changes, not the screens.
+ * Deliberately isolated. `useTransactionIntent.create` catches its own
+ * `quoteSponsorship`/`prepareSponsorship` failures (spec §11: an outage there
+ * must never fail the whole transfer) and hands back `{ sponsorship,
+ * sponsorshipError }`; `resolveFeePresentation` (lib/crypto-backend/
+ * sponsorship.ts) turns that pair into the truth the review screen renders.
+ * `feeRowValue` here is only presentation — formatting that decision into the
+ * fee row's string — so this file, not the screens, is what changes if the
+ * formatting ever needs to.
  */
 
 import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "@/components/auth-provider"
 import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backend"
-import type { SponsorshipConfig, SponsorshipOperation } from "@/lib/crypto-backend"
+import type { SponsorshipConfig } from "@/lib/crypto-backend"
+import type { FeePresentation } from "@/lib/crypto-backend/sponsorship"
 import { usd } from "@/lib/num"
 import { FEE_SELF_LABEL, FEE_SPONSORED_LABEL, sponsorshipOffered } from "./send-helpers"
 
@@ -48,25 +51,15 @@ export function useSponsorshipOffer(input: {
 /**
  * The review screen's "Network fee" value.
  *
- * Sponsored AND prepared is the only state that may promise Worldstreet pays —
- * a quote that never reached `prepared` has no signing payload, so the submit
- * would fall back and the user would be charged after reading otherwise.
+ * Pure formatting over `resolveFeePresentation`'s verdict — `self-paid` and
+ * `self-paid-fallback` read identically here (both are honestly "you pay the
+ * network fee"); the fallback's REASON is a separate warning notice next to
+ * this row, not folded into the value itself.
  */
-export function feeRowValue(input: {
-  sponsorship: SponsorshipOperation | undefined
-  sponsorFees: boolean
-  gasEstimate: string | undefined
-}): string {
-  const { sponsorship, sponsorFees, gasEstimate } = input
-  const prepared =
-    sponsorFees &&
-    sponsorship !== undefined &&
-    (sponsorship.status === "prepared" || sponsorship.status === "submitted" || sponsorship.status === "confirmed")
-  if (prepared) {
-    const estimate = sponsorship.estimatedCostUsd ?? sponsorship.quote?.sponsor?.estimatedCostUsd
-    const cost = typeof estimate === "string" ? Number(estimate) : estimate
-    return cost !== undefined && Number.isFinite(cost) && cost > 0
-      ? `${FEE_SPONSORED_LABEL} · ≈ ${usd(cost)}`
+export function feeRowValue(presentation: FeePresentation, gasEstimate: string | undefined): string {
+  if (presentation.kind === "sponsored") {
+    return presentation.costUsd !== undefined
+      ? `${FEE_SPONSORED_LABEL} · ≈ ${usd(presentation.costUsd)}`
       : FEE_SPONSORED_LABEL
   }
   return gasEstimate ? `${FEE_SELF_LABEL} · ${gasEstimate} gas` : FEE_SELF_LABEL

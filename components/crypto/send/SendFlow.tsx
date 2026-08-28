@@ -54,6 +54,7 @@ import {
   type CryptoWalletAccount,
 } from "@/lib/crypto-backend"
 import { explorerTxUrl, networkMetaFor } from "@/lib/crypto-backend/network-meta"
+import { resolveFeePresentation } from "@/lib/crypto-backend/sponsorship"
 import { validateAddress, validateAmount } from "@/lib/crypto-wallet/address-validation"
 import { SEND_STAGES, sendStageIndex } from "@/lib/crypto-wallet/send-stages"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
@@ -236,6 +237,20 @@ export function SendFlow() {
     if (!feeOffered && sponsorFees) setSponsorFees(false)
   }, [feeOffered, sponsorFees])
 
+  // Spec §11: the review screen's one source of truth for who pays the
+  // network fee — never inferred from "does a sponsorship object exist"
+  // alone. A quote/prepare outage is caught inside `useTransactionIntent.
+  // create` and arrives here as `sponsorshipError` instead of failing the
+  // mutation; this is what turns that pair into the self-paid fallback.
+  const feePresentation = resolveFeePresentation({
+    requested: sponsorFees,
+    operation: transfer.sponsorship ?? null,
+    quoteError: transfer.sponsorshipError ?? null,
+  })
+  // The FINAL choice for `submitIntent` — not merely "is a sponsorship object
+  // present" (an expired or stale one must never be signed down that path).
+  const useSponsorshipFinal = feePresentation.kind === "sponsored"
+
   /* ── The intent, and its clock ─────────────────────────────────────────── */
 
   const intent = transfer.intent
@@ -248,7 +263,16 @@ export function SendFlow() {
   // from it keeps the countdown a pure function of state rather than a
   // Date.now() read during render.
   const sinceQuote = useElapsed(quoteAt)
-  const expiresAtMs = epochMsOf(intent?.expiresAt)
+  const intentExpiresAtMs = epochMsOf(intent?.expiresAt)
+  // Spec §11: a sponsored offer can lapse before the intent itself does — the
+  // countdown must reflect whichever clock runs out first, but only while the
+  // fee is actually being presented as sponsored (once it isn't, the offer's
+  // clock is no longer this transfer's business).
+  const sponsorshipExpiresAtMs = useSponsorshipFinal ? epochMsOf(transfer.sponsorship?.expiresAt) : null
+  const expiresAtMs =
+    intentExpiresAtMs !== null && sponsorshipExpiresAtMs !== null
+      ? Math.min(intentExpiresAtMs, sponsorshipExpiresAtMs)
+      : intentExpiresAtMs ?? sponsorshipExpiresAtMs
   const remainingMs = quoteAt !== null && expiresAtMs !== null ? expiresAtMs - (quoteAt + sinceQuote) : null
   const expired = remainingMs !== null && remainingMs <= 0
   const countdown = remainingMs === null ? null : formatCountdown(remainingMs)
@@ -398,7 +422,7 @@ export function SendFlow() {
     // button is the least reassuring possible reply to "I just sent money".
     setStep("status")
     try {
-      setSubmitRecord(await transfer.submitIntent())
+      setSubmitRecord(await transfer.submitIntent({ useSponsorship: useSponsorshipFinal }))
     } catch (error) {
       setSignError(error)
     }
@@ -641,11 +665,8 @@ export function SendFlow() {
         symbol={committed.symbol}
         tokenContract={committed.tokenContract}
         amount={committed.amount}
-        feeValue={feeRowValue({
-          sponsorship: transfer.sponsorship,
-          sponsorFees,
-          gasEstimate,
-        })}
+        feeValue={feeRowValue(feePresentation, gasEstimate)}
+        feeFallbackReason={feePresentation.kind === "self-paid-fallback" ? feePresentation.reason : null}
         countdown={countdown}
         expired={expired}
         validationErrors={validationErrors}
