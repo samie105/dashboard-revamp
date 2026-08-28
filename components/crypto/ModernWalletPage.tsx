@@ -41,7 +41,6 @@ import {
 import { networkMetaFor } from "@/lib/crypto-backend/network-meta"
 import { usd } from "@/lib/num"
 import { CryptoSecurityPanel } from "./CryptoSecurityPanel"
-import { ModernTransferFlow } from "./ModernTransferFlow"
 import { WalletKeyExportPanel } from "./WalletKeyExportPanel"
 import { WalletChainProvisioningPanel } from "./WalletChainProvisioningPanel"
 
@@ -368,18 +367,6 @@ export function ModernWalletPage() {
         </Rise>
       ) : null}
 
-      {/* Kept only until Task 13 lands /wallet/modern/send, which deletes this
-          component and this slot. Removing it now would leave the Send pill as
-          the sole — and not-yet-built — way to move money. */}
-      {wallet.data && packageQuery.data && networks.data ? (
-        <ModernTransferFlow
-          walletId={wallet.data.id}
-          packageValue={packageQuery.data}
-          accounts={wallet.data.accounts}
-          networks={networks.data}
-          balances={balances.balances}
-        />
-      ) : null}
     </div>
   )
 }

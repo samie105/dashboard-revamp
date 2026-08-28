@@ -193,6 +193,18 @@ export function AmountField({
    *  own money. */
   maxDecimals?: number
 }) {
+  // The percentage chips honour the unit's own precision. A fixed two places
+  // was right for a cents-settled dollar flow and wrong everywhere else: on a
+  // 0.005 SOL balance "Max" floored to 0.00 and the chip became a dead control
+  // that set an amount the field itself then rejected. Floor rather than
+  // round — a chip must never propose more than the balance it is a fraction
+  // of, which `.toFixed()` could.
+  const chipPlaces = Math.min(Math.max(maxDecimals, 0), 8)
+  const chipAmount = (pct: number, max: number) => {
+    const factor = 10 ** chipPlaces
+    return String(Math.floor(max * pct * factor) / factor)
+  }
+
   const set = (v: string) => {
     if (!/^[0-9]*\.?[0-9]*$/.test(v)) return
     const [whole = "", frac] = v.split(".")
@@ -235,7 +247,7 @@ export function AmountField({
           {[0.25, 0.5, 0.75, 1].map((pct) => (
             <button
               key={pct}
-              onClick={() => onChange(pct === 1 ? String(Math.floor(maxSpend * 100) / 100) : (maxSpend * pct).toFixed(2))}
+              onClick={() => onChange(chipAmount(pct, maxSpend))}
               className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100"
             >
               {pct === 1 ? "Max" : `${pct * 100}%`}
