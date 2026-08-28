@@ -32,7 +32,10 @@ export function WalletModeProvider({ children }: { children: React.ReactNode }) 
     try {
       const url = new URLSearchParams(window.location.search).get("wallet")
       const saved = window.localStorage.getItem(storageKey)
-      if (url === "legacy" || url === "modern") setStored(url)
+      if (url === "legacy" || url === "modern") {
+        setStored(url)
+        try { window.localStorage.setItem(storageKey, url) } catch {}
+      }
       else if (saved === "legacy" || saved === "modern") setStored(saved)
       else setStored(null)
     } catch { setStored(null) }
