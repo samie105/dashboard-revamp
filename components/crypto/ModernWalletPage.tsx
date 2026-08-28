@@ -7,6 +7,7 @@ import { ArrowDownLeft01Icon, ArrowUpRight01Icon, RefreshIcon, Shield01Icon } fr
 
 import { useAuth } from "@/components/auth-provider"
 import { AddressPill, ModeBadge, SectionMessage } from "@/components/crypto/primitives"
+import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
 import { WalletSetupFlow } from "@/components/crypto/WalletSetupFlow"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { RecoveryPanel } from "@/components/crypto/RecoveryPanel"
@@ -100,9 +101,17 @@ export function ModernWalletPage() {
   })
 
   const [unlockOpen, setUnlockOpen] = useState(false)
-  // Task 11 mounts ModernReceiveModal on this state; the pill already owns it.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [receiveOpen, setReceiveOpen] = useState(false)
+  // Scopes the modal's warning to one token when opened from a balance row;
+  // `null` from the Deposit pill or the empty-state CTA, the wallet's
+  // generic "receive anything" view. Kept (not cleared) on close, matching
+  // ReceiveModal's precedent — clearing it in the same tick would unmount
+  // the modal's content before its exit animation plays.
+  const [receiveAsset, setReceiveAsset] = useState<string | null>(null)
+  const openReceive = (asset: string | null = null) => {
+    setReceiveAsset(asset)
+    setReceiveOpen(true)
+  }
   // refresh() rejects on a failed read. Swallowing it (the old `void` call)
   // left the page showing a stale snapshot with no explanation.
   const [refreshError, setRefreshError] = useState<unknown>(null)
@@ -225,7 +234,7 @@ export function ModernWalletPage() {
 
           {/* The verbs sit under the figure they act on (design-system §05). */}
           <Rise delay={80} className="flex flex-wrap gap-2">
-            <ActionPill icon={DepositGlyph} label="Deposit" onClick={() => setReceiveOpen(true)} />
+            <ActionPill icon={DepositGlyph} label="Deposit" onClick={() => openReceive()} />
             <ActionPill icon={SendGlyph} label="Send" href="/wallet/modern/send" />
             <ActionPill icon={SecurityGlyph} label="Security" href="#security" />
           </Rise>
@@ -300,7 +309,7 @@ export function ModernWalletPage() {
                   illustration="noCrypto"
                   title="No balances yet"
                   description="Deposit crypto to get started."
-                  ctas={[{ label: "Deposit", href: "#" }]}
+                  ctas={[{ label: "Deposit", onClick: () => openReceive() }]}
                 />
               ) : (
                 <div className="flex flex-col pb-2">
@@ -313,13 +322,26 @@ export function ModernWalletPage() {
                         title={balance.symbol}
                         subtitle={balance.networkName}
                         right={
-                          <span className="flex shrink-0 flex-col items-end">
-                            <span className="text-[14px] font-semibold tabular-nums">
-                              {formatCryptoAmount(balance.amountBaseUnits, balance.decimals)}
+                          <span className="flex shrink-0 items-center gap-1">
+                            {/* Per-row deposit affordance — credit-tinted on
+                                hover (money in), never gold: that's reserved
+                                for the page's one primary CTA. */}
+                            <button
+                              type="button"
+                              onClick={() => openReceive(balance.symbol)}
+                              aria-label={`Deposit ${balance.symbol}`}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-credit-chip hover:text-credit"
+                            >
+                              <HugeiconsIcon icon={ArrowDownLeft01Icon} className="h-4 w-4" />
+                            </button>
+                            <span className="flex flex-col items-end">
+                              <span className="text-[14px] font-semibold tabular-nums">
+                                {formatCryptoAmount(balance.amountBaseUnits, balance.decimals)}
+                              </span>
+                              {value !== null ? (
+                                <span className="text-[12px] text-muted-foreground tabular-nums">{usd(value)}</span>
+                              ) : null}
                             </span>
-                            {value !== null ? (
-                              <span className="text-[12px] text-muted-foreground tabular-nums">{usd(value)}</span>
-                            ) : null}
                           </span>
                         }
                       />
@@ -333,7 +355,7 @@ export function ModernWalletPage() {
       ) : null}
 
       <WalletUnlockDialog open={unlockOpen} onOpenChange={setUnlockOpen} />
-      {/* ModernReceiveModal mounts here (Task 11) */}
+      <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} asset={receiveAsset} />
 
       {wallet.data && packageQuery.data ? (
         <Rise delay={200}>

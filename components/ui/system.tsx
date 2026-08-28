@@ -482,7 +482,11 @@ export function EmptyState({
   icon?: React.ComponentType<{ className?: string }>
   title: string
   description?: string
-  ctas?: { label: string; href: string; icon?: React.ComponentType<{ className?: string }> }[]
+  /** Either `href` (a real destination) or `onClick` (opens something in place, e.g. a modal) — never both. */
+  ctas?: ({ label: string; icon?: React.ComponentType<{ className?: string }> } & (
+    | { href: string; onClick?: never }
+    | { href?: never; onClick: () => void }
+  ))[]
   className?: string
 }) {
   return (
@@ -510,16 +514,20 @@ export function EmptyState({
       </div>
       {ctas.length > 0 && (
         <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
-          {ctas.map((c) => (
-            <a
-              key={c.label}
-              href={c.href}
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-4 py-2 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/10"
-            >
-              {c.icon && <c.icon className="h-3.5 w-3.5" />}
-              {c.label}
-            </a>
-          ))}
+          {ctas.map((c) => {
+            const cls = "inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-4 py-2 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/10"
+            return c.onClick ? (
+              <button key={c.label} type="button" onClick={c.onClick} className={cls}>
+                {c.icon && <c.icon className="h-3.5 w-3.5" />}
+                {c.label}
+              </button>
+            ) : (
+              <a key={c.label} href={c.href} className={cls}>
+                {c.icon && <c.icon className="h-3.5 w-3.5" />}
+                {c.label}
+              </a>
+            )
+          })}
         </div>
       )}
     </div>
