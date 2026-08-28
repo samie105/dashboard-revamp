@@ -293,7 +293,7 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
 
     const existing = await UserWallet.findOne({ email }).lean()
     if (!existing) {
-      return { success: false, error: "User record not found" }
+      return { success: false, error: "User record not found", notFound: true }
     }
 
     const selectedPrivyType = existing.privy_type ?? 0
