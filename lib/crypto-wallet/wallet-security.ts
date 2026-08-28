@@ -20,6 +20,13 @@ import { authenticateWalletPasskey, registerWalletPasskey } from "./security-ser
 import { saveEncryptedWalletPackage } from "./local-storage"
 import { getUnlockedWalletState, setUnlockedWalletState } from "./unlock-state"
 
+export class WalletUnlockError extends Error {
+  constructor(message: string, public readonly reason: "wrong-passphrase" | "malformed-package" | "unlock-failed") {
+    super(message)
+    this.name = "WalletUnlockError"
+  }
+}
+
 type PackageEnvelope = {
   envelopeId: string
   purpose: string
@@ -92,9 +99,21 @@ export async function unlockWalletWithRecoverySecret(
 ) {
   const secret = fromBase64Url(recoverySecret)
   const envelope = packageEnvelopes(packageValue).find((candidate) => candidate.purpose === "recovery")
-  if (!envelope) throw new Error("No recovery envelope is configured")
+  if (!envelope) {
+    secret.fill(0)
+    throw new WalletUnlockError("No recovery envelope is configured", "malformed-package")
+  }
 
-  const dek = await unwrapRecoveryDek(envelope, secret)
+  let dek: Uint8Array
+  try {
+    dek = await unwrapDek(envelope.wrappedDek, envelope.iv, await deriveRecoveryWrappingKey(secret), envelope.aad)
+  } catch (error) {
+    secret.fill(0)
+    if (error instanceof DOMException && error.name === "OperationError") {
+      throw new WalletUnlockError("Recovery secret does not match this wallet", "wrong-passphrase")
+    }
+    throw new WalletUnlockError(error instanceof Error ? error.message : "Wallet unlock failed", "unlock-failed")
+  }
   setUnlockedWalletState(userId, walletId, dek, 5 * 60_000)
   dek.fill(0)
   secret.fill(0)
@@ -108,15 +127,15 @@ export async function unlockWalletWithPassphrase(
   passphrase: string,
 ) {
   const envelope = packageEnvelopes(packageValue).find((candidate) => candidate.purpose === "passphrase")
-  if (!envelope) throw new Error("This wallet does not have a wallet passphrase yet. Unlock it with the recovery secret and set one.")
+  if (!envelope) throw new WalletUnlockError("This wallet does not have a wallet passphrase yet. Unlock it with the recovery secret and set one.", "malformed-package")
 
   const metadata = envelope.keyDerivationMetadata ?? {}
   if (metadata.kind !== "pbkdf2-sha256" || typeof metadata.salt !== "string") {
-    throw new Error("This wallet passphrase envelope is invalid")
+    throw new WalletUnlockError("This wallet passphrase envelope is invalid", "malformed-package")
   }
   const iterations = Number(metadata.iterations)
   if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > 2_000_000) {
-    throw new Error("This wallet passphrase envelope has invalid key-derivation settings")
+    throw new WalletUnlockError("This wallet passphrase envelope has invalid key-derivation settings", "malformed-package")
   }
 
   let salt: Uint8Array | undefined
@@ -128,8 +147,11 @@ export async function unlockWalletWithPassphrase(
     setUnlockedWalletState(userId, walletId, dek, 5 * 60_000)
     dek.fill(0)
     return packageValue
-  } catch {
-    throw new Error("Wallet passphrase is incorrect")
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "OperationError") {
+      throw new WalletUnlockError("Wallet passphrase is incorrect.", "wrong-passphrase")
+    }
+    throw new WalletUnlockError(error instanceof Error ? error.message : "Wallet unlock failed", "unlock-failed")
   } finally {
     wipeBytes(salt)
     wipeBytes(wrappingKey)

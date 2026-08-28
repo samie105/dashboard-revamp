@@ -33,6 +33,8 @@ type RequestOptions = {
   walletSessionToken?: string
   unwrap?: boolean
   signal?: AbortSignal
+  /** Internal: set once a request has already been retried after a 401. */
+  _retried?: boolean
 }
 
 type ErrorPayload = {
@@ -395,6 +397,13 @@ export class CryptoBackendClient {
     const payload = (body ?? {}) as ErrorPayload & { data?: T }
     const requestId = response.headers.get("x-request-id") ?? payload.requestId
     if (!response.ok || payload.success === false) {
+      if (response.status === 401 && !options._retried && typeof window !== "undefined") {
+        // clerk-js refreshes the session cookie as a side effect of getToken().
+        try {
+          await (window as { Clerk?: { session?: { getToken?: (o?: { skipCache?: boolean }) => Promise<string | null> } } }).Clerk?.session?.getToken?.({ skipCache: true })
+        } catch {}
+        return this.request<T>(path, init, { ...options, _retried: true })
+      }
       throw new CryptoBackendError(
         payload.error?.message ?? `Crypto backend request failed (${response.status})`,
         response.status,

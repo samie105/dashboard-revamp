@@ -1,4 +1,6 @@
 export { CryptoBackendError } from "./errors"
+export { describeCryptoError } from "./error-messages"
+export type { CryptoErrorAction, CryptoErrorDescription } from "./error-messages"
 export { CryptoBackendClient, cryptoBackendClient } from "./client"
 export { cryptoQueryKeys } from "./query-keys"
 export { CRYPTO_BACKEND_CONTRACT_VERSION, isCryptoBackendEnabled, isCryptoProxyEnabled, isLegacyPrivyEnabled } from "./config"
