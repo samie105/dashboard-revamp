@@ -65,7 +65,7 @@ export function CryptoSecurityPanel({
   const passphraseId = useId()
 
   async function rotate() {
-    if (!recoverySecret) return
+    if (busy || !recoverySecret) return
     setBusy(true)
     setError(null)
     setSuccess(null)
@@ -82,6 +82,7 @@ export function CryptoSecurityPanel({
   }
 
   async function revoke(deviceId: string) {
+    if (busy) return
     setBusy(true)
     setError(null)
     setSuccess(null)
@@ -245,7 +246,7 @@ export function CryptoSecurityPanel({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void rotate()}>Rotate</AlertDialogAction>
+            <AlertDialogAction disabled={busy} onClick={() => void rotate()}>Rotate</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -265,6 +266,7 @@ export function CryptoSecurityPanel({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
+              disabled={busy}
               onClick={() => {
                 if (revokeTarget) void revoke(revokeTarget.id)
               }}

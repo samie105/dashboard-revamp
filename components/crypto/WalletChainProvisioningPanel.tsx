@@ -68,6 +68,7 @@ export function WalletChainProvisioningPanel({
       <CardHeader title="Add newly supported chains" subtitle="This wallet was created before the latest chain rollout" />
       <div className="flex flex-col gap-4 px-4 pb-4">
         <AnnouncementBanner
+          tone="warning"
           title="New networks are available for your wallet"
           detail={`Add them to start using ${missingLabel}.`}
           action={{ label: "Add networks", onClick: () => setFormOpen(true) }}
