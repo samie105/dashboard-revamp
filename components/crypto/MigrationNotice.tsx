@@ -31,25 +31,104 @@ const MIGRATION_REST =
   "embedded wallet. You control the keys, and signing happens locally on your device."
 const MIGRATION_COPY = MIGRATION_LEAD + MIGRATION_REST
 
-type Dismissal = "dismissed" | "confirmed" | null
+type DismissalValue = "dismissed" | "confirmed" | null
+/** "unknown" = not read yet (SSR / not-yet-mounted) — treated as "don't
+ *  show" until we actually know, same as "dismissed", but tracked
+ *  separately so a real known-not-dismissed state (`null`) is unambiguous. */
+type DismissalSnapshot = DismissalValue | "unknown"
+
+const DISMISSAL_PREFIX = "ws:migration-dismissed:"
 
 function dismissalKey(userId: string | undefined) {
-  return `ws:migration-dismissed:${userId ?? "anonymous"}`
+  return `${DISMISSAL_PREFIX}${userId ?? "anonymous"}`
 }
 
-function readDismissal(userId: string | undefined): Dismissal {
-  try {
-    const raw = window.localStorage.getItem(dismissalKey(userId))
-    return raw === "dismissed" || raw === "confirmed" ? raw : null
-  } catch {
-    return null
+function parseDismissal(raw: string | null): DismissalValue {
+  return raw === "dismissed" || raw === "confirmed" ? raw : null
+}
+
+/**
+ * Module-level store backing both `MigrationNotice` variants (and every tab
+ * this page is open in). The banner (dashboard) and the notification row
+ * (navbar) can be mounted at the same time; without a shared store,
+ * dismissing one left the other showing until a reload. `useSyncExternalStore`
+ * keeps every subscribed instance — same tab or another tab via the
+ * `storage` event — reading the same snapshot and re-rendering together.
+ */
+const migrationDismissalStore = (() => {
+  const cache = new Map<string, DismissalValue>()
+  const listeners = new Set<() => void>()
+  let storageListenerAttached = false
+
+  function notify() {
+    for (const listener of listeners) listener()
   }
-}
 
-function writeDismissal(userId: string | undefined, value: "dismissed" | "confirmed") {
-  try {
-    window.localStorage.setItem(dismissalKey(userId), value)
-  } catch { /* private mode — the notice just returns next visit, harmless */ }
+  function ensureStorageListener() {
+    if (storageListenerAttached || typeof window === "undefined") return
+    storageListenerAttached = true
+    window.addEventListener("storage", (event) => {
+      // localStorage.clear() (this tab or another) fires with key: null —
+      // drop everything cached so the next read starts fresh.
+      if (event.key === null) {
+        cache.clear()
+        notify()
+        return
+      }
+      if (!event.key.startsWith(DISMISSAL_PREFIX)) return
+      cache.set(event.key, parseDismissal(event.newValue))
+      notify()
+    })
+  }
+
+  return {
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      ensureStorageListener()
+      return () => { listeners.delete(listener) }
+    },
+    getSnapshot(key: string): DismissalSnapshot {
+      if (!cache.has(key)) {
+        if (typeof window === "undefined") return "unknown"
+        try {
+          cache.set(key, parseDismissal(window.localStorage.getItem(key)))
+        } catch {
+          cache.set(key, null)
+        }
+      }
+      return cache.get(key) ?? null
+    },
+    getServerSnapshot(): DismissalSnapshot {
+      return "unknown"
+    },
+    dismiss(key: string, value: "dismissed" | "confirmed") {
+      cache.set(key, value)
+      try {
+        window.localStorage.setItem(key, value)
+      } catch { /* private mode — the dismissal just won't persist/cross-tab, harmless */ }
+      notify()
+    },
+  }
+})()
+
+/** Reads this user's dismissal through the shared store, kept in sync
+ *  across every mounted instance and every open tab. */
+function useMigrationDismissal(userId: string | undefined) {
+  const key = dismissalKey(userId)
+  const getSnapshot = React.useCallback(
+    () => migrationDismissalStore.getSnapshot(key),
+    [key],
+  )
+  const snapshot = React.useSyncExternalStore(
+    migrationDismissalStore.subscribe,
+    getSnapshot,
+    migrationDismissalStore.getServerSnapshot,
+  )
+  const dismiss = React.useCallback(
+    (value: "dismissed" | "confirmed") => migrationDismissalStore.dismiss(key, value),
+    [key],
+  )
+  return { snapshot, dismiss }
 }
 
 /** Shared visibility + dismissal wiring for both variants. The pure
@@ -57,32 +136,16 @@ function writeDismissal(userId: string | undefined, value: "dismissed" | "confir
 function useMigrationNoticeVisible() {
   const { user } = useAuth()
   const { legacyWalletExists } = useWallet()
-  const [dismissal, setDismissal] = React.useState<Dismissal>(null)
-  // Gate on having read localStorage first so an already-dismissed notice
-  // never flashes on screen before vanishing (mirrors MnaBanner's pattern).
-  const [hydrated, setHydrated] = React.useState(false)
-
-  React.useEffect(() => {
-    setDismissal(readDismissal(user?.userId))
-    setHydrated(true)
-  }, [user?.userId])
+  const { snapshot, dismiss } = useMigrationDismissal(user?.userId)
 
   const visible =
-    hydrated &&
+    snapshot !== "unknown" &&
     shouldShowMigrationNotice({
       modernEnabled: isCryptoBackendEnabled,
       legacyEnabled: isLegacyPrivyEnabled,
       legacyWalletExists,
-      dismissed: dismissal !== null,
+      dismissed: snapshot !== null,
     })
-
-  const dismiss = React.useCallback(
-    (value: "dismissed" | "confirmed") => {
-      setDismissal(value)
-      writeDismissal(user?.userId, value)
-    },
-    [user?.userId],
-  )
 
   return { visible, dismiss }
 }
