@@ -56,7 +56,7 @@ export default function AutoTradePage() {
     <div className="mx-auto max-w-md px-4 py-10">
       <h1 className="text-xl font-bold">Auto Trading</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Let the WorldStreet agent trade your Hyperliquid account within the caps below.
+        Let the WorldStreet agent trade your trading account within the caps below.
       </p>
 
       {loading ? (

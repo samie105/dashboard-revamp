@@ -486,7 +486,21 @@ export type HlSpotMarket = {
   inputMint?: string
   outputMint?: string
 }
-export type HlFuturesMarket = { symbol: string; price: number; maxLeverage: number }
+/**
+ * A perpetual contract row. `szDecimals` and `onlyIsolated` are the venue's own
+ * constraints (spec §9: the backend is the authority on venue constraints) and
+ * are carried through verbatim so the ticket states them rather than assuming a
+ * house default. Both are optional: the legacy `/api/trade/markets` feed does
+ * not report them, and a row without them must read as "unstated", never as
+ * "cross-margin, six decimals".
+ */
+export type HlFuturesMarket = {
+  symbol: string
+  price: number
+  maxLeverage: number
+  szDecimals?: number
+  onlyIsolated?: boolean
+}
 
 export type HlMarkets = {
   spot: HlSpotMarket[]

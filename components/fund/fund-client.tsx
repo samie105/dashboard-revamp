@@ -61,7 +61,7 @@ import {
 const FUND_STAGES: Stage[] = [
   { key: "charge", label: "Charging your Dollar Account" },
   { key: "send", label: "Sending USDC on Arbitrum" },
-  { key: "bridge", label: "Bridging into Hyperliquid" },
+  { key: "bridge", label: "Bridging into your trading account" },
   { key: "land", label: "Landing in your trading balance" },
 ]
 const FUND_STAGE_INDEX: Record<string, number> = {
@@ -76,7 +76,7 @@ const FUND_STAGE_INDEX: Record<string, number> = {
 
 const WITHDRAW_STAGES: Stage[] = [
   { key: "request", label: "Requesting the withdrawal" },
-  { key: "leave", label: "Leaving Hyperliquid" },
+  { key: "leave", label: "Leaving your trading account" },
   { key: "credit", label: "Crediting your Dollar Account" },
 ]
 const WITHDRAW_STAGE_INDEX: Record<string, number> = {
@@ -476,8 +476,8 @@ export function FundClient({
   /* ── Form ───────────────────────────────────────────────────────────── */
   const title = isFund ? "Fund trading account" : "Withdraw trading balance"
   const subtitle = isFund
-    ? "Pay from your Dollar Account — funds land in Hyperliquid ready to trade."
-    : "Move funds from Hyperliquid back to your Dollar Account."
+    ? "Pay from your Dollar Account — funds land in your trading account ready to trade."
+    : "Move funds from your trading account back to your Dollar Account."
 
   /* Shared by both presentations — the modal's terminal layout and the
      page's single column — so they can't drift apart on copy or gating. */
@@ -511,8 +511,8 @@ export function FundClient({
         : undefined,
   }
   const venueSide = {
-    label: `Hyperliquid ${sideLabel}`,
-    sub: sideBalance !== null ? `$${sideBalance.toFixed(2)} balance` : "Trading account",
+    label: `${sideLabel} trading account`,
+    sub: sideBalance !== null ? `$${sideBalance.toFixed(2)} balance` : undefined,
   }
 
   const approxLine =
@@ -528,7 +528,7 @@ export function FundClient({
     amt > 0
       ? [
           { label: isFund ? "You transfer" : "You withdraw", value: `${amt.toLocaleString()} USDC` },
-          { label: isFund ? "Destination" : "From", value: `Hyperliquid ${sideLabel}` },
+          { label: isFund ? "Destination" : "From", value: `${sideLabel} trading account` },
           ...(limits.feePercent > 0
             ? [{ label: `Fee (${limits.feePercent}%)`, value: `$${Math.abs(costUsd - amt).toFixed(2)}` }]
             : []),
@@ -576,7 +576,7 @@ export function FundClient({
         </span>
         <p className="text-[15px] font-semibold">Set up your trading account</p>
         <p className="mx-auto max-w-xs text-[13px] leading-relaxed text-muted-foreground">
-          A one-time step that designates your wallet for Hyperliquid trading. Takes a few seconds.
+          A one-time step that designates your wallet for trading. Takes a few seconds.
         </p>
         {submitError && <InlineNotice tone="error" className="w-full text-left">{submitError}</InlineNotice>}
         <button

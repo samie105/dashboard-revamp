@@ -371,7 +371,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
           title="Markets"
           subtitle={
             isFutures
-              ? `Hyperliquid perpetual futures · ${futuresMarkets.length} contracts`
+              ? `Perpetual futures · ${futuresMarkets.length} contracts`
               : tab === "Spot"
               ? `Worldstreet spot markets · ${spotMarkets.length} assets`
               : tab === "Main"

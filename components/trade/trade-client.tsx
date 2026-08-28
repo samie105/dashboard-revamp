@@ -38,7 +38,15 @@ import {
   type HlFuturesMarket,
 } from "@/lib/crypto-api"
 import { networkMetaFor } from "@/lib/crypto-backend/network-meta"
-import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import {
+  cryptoBackendClient,
+  cryptoQueryKeys,
+  isCryptoBackendEnabled,
+  LIQUIDATION_WARNING,
+  readFuturesOrderFigures,
+  reduceOnlyProblem,
+  type HyperliquidIntent,
+} from "@/lib/crypto-backend"
 import { buildSpotOrderPlan } from "@/lib/crypto-backend/spot-order"
 import { signHyperliquidIntent, signEvmIntent, signSolanaIntent } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
@@ -57,7 +65,7 @@ import { PositionsPanel } from "@/components/trade/positions-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { BackAction, Eyebrow, Segmented, type SegmentedOption } from "@/components/ui/system"
-import { AnnouncementBanner } from "@/components/ui/flow"
+import { AnnouncementBanner, DetailPanel, InlineNotice } from "@/components/ui/flow"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
 import { ModernFundingPanel } from "./modern-funding-panel"
@@ -96,6 +104,27 @@ function Stat({ label, value }: { label: string; value: string }) {
  */
 function quoteOf(m: HlSpotMarket | HlFuturesMarket | undefined) {
   return m && "quote" in m && m.quote ? String(m.quote).toUpperCase() : "USDC"
+}
+
+/**
+ * A modern futures order that has been built by the backend and is waiting on
+ * the user's explicit approval (spec §9). The ticket fields are frozen here so
+ * the review screen — and the outcome it produces — describe the order the
+ * backend priced, never a form the user nudged afterwards.
+ */
+type FuturesReview = {
+  intent: HyperliquidIntent
+  symbol: string
+  side: Side
+  orderType: OrderType
+  amountUsd: number
+  /** The price sent with a limit order. Snapshotted because the order book
+   *  rail stays live behind the review and can still rewrite the form's. */
+  limitPrice: number | null
+  leverage: number
+  reduceOnly: boolean
+  takeProfit: number | null
+  stopLoss: number | null
 }
 
 function fmtCompact(n: number) {
@@ -138,6 +167,8 @@ export function TradeClient() {
   const [amountUsd, setAmountUsd] = React.useState("")
   const [limitPrice, setLimitPrice] = React.useState("")
   const [leverage, setLeverage] = React.useState(1)
+  // Modern futures only (spec §9): an order that may only shrink exposure.
+  const [reduceOnly, setReduceOnly] = React.useState(false)
   const [tpPrice, setTpPrice] = React.useState("")
   const [slPrice, setSlPrice] = React.useState("")
   const [search, setSearch] = React.useState("")
@@ -147,6 +178,11 @@ export function TradeClient() {
   // Modern spot never claims a fill at submit time (spec §8: "a quote is not a
   // fill"). The submitted intent is polled until the backend says confirmed.
   const [spotIntentId, setSpotIntentId] = React.useState<string | null>(null)
+  // Modern futures review step (spec §9). The intent is CREATED but unsigned
+  // while this is set: nothing has reached the venue until the user confirms.
+  // The ticket state is snapshotted alongside it so the review screen states
+  // the order that was actually built, not whatever the form says later.
+  const [futuresReview, setFuturesReview] = React.useState<FuturesReview | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [busyKey, setBusyKey] = React.useState<string | null>(null)
   // Mobile-only view state: which pane sits under the chart, and whether the
@@ -228,7 +264,17 @@ export function TradeClient() {
         // reserved for its deep perpetual futures venue.
         setMarkets({
           minOrderUsd: modern.minOrderUsd,
-          futures: modern.futures.map((item) => ({ symbol: item.symbol, price: item.price, maxLeverage: item.maxLeverage ?? 1 })),
+          // Spec §9: the venue's constraints ride along with the row —
+          // `szDecimals` sizes the quantity readout, `onlyIsolated` names the
+          // margin mode. Both are omitted when the backend didn't state them,
+          // so an absent constraint never hardens into a client-side default.
+          futures: modern.futures.map((item) => ({
+            symbol: item.symbol,
+            price: item.price,
+            maxLeverage: item.maxLeverage ?? 1,
+            ...(typeof item.szDecimals === "number" ? { szDecimals: item.szDecimals } : {}),
+            ...(item.onlyIsolated ? { onlyIsolated: true } : {}),
+          })),
           spot: [],
         })
       })
@@ -264,6 +310,17 @@ export function TradeClient() {
   const current = React.useMemo(() => list.find((m) => marketRowKey(m) === selection), [list, selection])
   const symbol = current?.symbol ?? ""
   const maxLev = current && "maxLeverage" in current ? current.maxLeverage : 1
+  /**
+   * The venue's own size precision (spec §9). Clamped to what `toFixed` can
+   * take so a malformed value degrades to a rounder number rather than
+   * throwing mid-render; `null` means the backend never said, and the readout
+   * falls back to the six places it has always used.
+   */
+  const szDecimals =
+    current && "szDecimals" in current && typeof current.szDecimals === "number"
+      ? Math.min(Math.max(Math.trunc(current.szDecimals), 0), 8)
+      : null
+  const onlyIsolated = Boolean(current && "onlyIsolated" in current && current.onlyIsolated)
 
   // Clamp leverage when switching to a contract with a lower max — otherwise
   // the stale higher value is displayed and sent. Futures only: on the Spot
@@ -282,6 +339,11 @@ export function TradeClient() {
     setSlPrice("")
     setOutcome(null)
     setSpotIntentId(null)
+    // A review holds an intent priced for one contract in one wallet mode. It
+    // is discarded rather than carried: an unsigned intent expires on its own,
+    // and confirming a stale one would trade the pair the user just left.
+    setFuturesReview(null)
+    setReduceOnly(false)
     setError(null)
   }, [selection, market, walletSource])
 
@@ -365,9 +427,18 @@ export function TradeClient() {
     () => (current && "venue" in current && current.venue === "jupiter" ? current : null),
     [current],
   )
+  /** The modern-mode perpetuals ticket — the only path spec §9 governs. */
+  const modernFutures = usingModern && market === "futures"
+  const openPosition = account?.positions.find((p) => p.symbol === symbol)
+  // Reduce-only is answerable from the account already on screen, so the
+  // ticket refuses an order the venue would reject rather than discovering it
+  // after a signature (spec §9).
+  const reduceOnlyError =
+    modernFutures && reduceOnly ? reduceOnlyProblem(openPosition, symbol || "this market", side) : null
   const canSubmit =
     !submitting && !!current && amt >= minOrder &&
-    (orderType === "market" || parseFloat(limitPrice) > 0) && !tpslError && !pairUnavailable
+    (orderType === "market" || parseFloat(limitPrice) > 0) && !tpslError && !pairUnavailable &&
+    !reduceOnlyError
 
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's
@@ -433,29 +504,35 @@ export function TradeClient() {
         }
         const evmAccount = accountFor("evm")
         if (!evmAccount) throw new Error("Set up and unlock the modern wallet before trading")
+        // Spec §9: review and explicit approval come BEFORE the signature. The
+        // intent the backend builds here is unsigned — no leverage change, no
+        // order, nothing has reached the venue — so the review screen can state
+        // the backend's own size, price, fee and liquidation figures and let
+        // the user walk away from them. `confirmFuturesOrder` does the signing.
         const intent = await cryptoBackendClient.createHyperliquidIntent({
           type: "order", market: "futures", symbol: current.symbol, side, orderType, amountUsd: amt,
           ...(orderType === "limit" ? { limitPrice: parseFloat(limitPrice) } : {}),
-          leverage,
-          ...(tp > 0 ? { takeProfitPrice: tp } : {}),
-          ...(sl > 0 ? { stopLossPrice: sl } : {}),
+          // A reduce-only order opens no new exposure, so it carries neither a
+          // leverage setting nor protective triggers — the same shape the
+          // position-close path already sends.
+          ...(reduceOnly ? { reduceOnly: true } : { leverage }),
+          ...(!reduceOnly && tp > 0 ? { takeProfitPrice: tp } : {}),
+          ...(!reduceOnly && sl > 0 ? { stopLossPrice: sl } : {}),
           idempotencyKey: crypto.randomUUID(),
         })
-        const signatures = await signHyperliquidIntent(user.userId, modernWallet.data.id, packageValue, evmAccount.id, intent.steps)
-        const submitted = await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
-        const result = submitted.results[submitted.results.length - 1] as { response?: { data?: { statuses?: unknown[] } } }
-        const status = result?.response?.data?.statuses?.[0] as Record<string, unknown> | undefined
-        const filled = status && "filled" in status ? status.filled as Record<string, unknown> : undefined
-        const resting = status && "resting" in status
-        const res: HlOrderOutcome = {
-          success: true, symbol: current.symbol, side,
-          size: parseFloat(String((intent.summary?.size ?? 0))),
-          executionPrice: parseFloat(String((intent.summary?.price ?? price))),
-          filledSize: filled ? parseFloat(String(filled.totalSz ?? 0)) : 0,
-          avgFillPrice: filled ? parseFloat(String(filled.avgPx ?? 0)) : 0,
-          resting: Boolean(resting),
-        }
-        setOutcome(res)
+        setFuturesReview({
+          intent,
+          symbol: current.symbol,
+          side,
+          orderType,
+          amountUsd: amt,
+          limitPrice: orderType === "limit" ? parseFloat(limitPrice) : null,
+          leverage,
+          reduceOnly,
+          takeProfit: !reduceOnly && tp > 0 ? tp : null,
+          stopLoss: !reduceOnly && sl > 0 ? sl : null,
+        })
+        return
       } else {
         const res = market === "spot"
           ? await placeSpotOrder(base)
@@ -466,6 +543,57 @@ export function TradeClient() {
       refreshAccount()
     } catch (e) {
       setError(e instanceof CryptoApiError ? e.message : "Order failed. Try again.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  /**
+   * The second half of the modern futures flow (spec §9): sign the reviewed
+   * intent on this device and submit it. The SAME intent is re-used on every
+   * retry — re-creating it would mint a second idempotency key and could leave
+   * two orders behind — so a failure here is recoverable by pressing again.
+   */
+  async function confirmFuturesOrder() {
+    const review = futuresReview
+    if (!review || submitting) return
+    setSubmitting(true)
+    setError(null)
+    setOutcome(null)
+    try {
+      const evmAccount = modernWallet.data?.accounts.find(
+        (item) => item.chainFamily === "evm" && item.state === "active",
+      )
+      const packageValue = modernPackage.data
+      if (!user?.userId || !modernWallet.data?.id || !packageValue || !evmAccount) {
+        throw new Error("Set up and unlock the modern wallet before trading")
+      }
+      if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) {
+        throw new Error("Unlock the modern wallet locally before trading")
+      }
+      const signatures = await signHyperliquidIntent(
+        user.userId, modernWallet.data.id, packageValue, evmAccount.id, review.intent.steps,
+      )
+      const submitted = await cryptoBackendClient.submitHyperliquidIntent(review.intent.id, signatures)
+      const result = submitted.results[submitted.results.length - 1] as { response?: { data?: { statuses?: unknown[] } } }
+      const status = result?.response?.data?.statuses?.[0] as Record<string, unknown> | undefined
+      const filled = status && "filled" in status ? status.filled as Record<string, unknown> : undefined
+      const resting = status && "resting" in status
+      const figures = readFuturesOrderFigures(review.intent.summary)
+      setOutcome({
+        success: true, symbol: review.symbol, side: review.side,
+        size: figures.size ?? 0,
+        executionPrice: figures.price ?? price,
+        filledSize: filled ? parseFloat(String(filled.totalSz ?? 0)) : 0,
+        avgFillPrice: filled ? parseFloat(String(filled.avgPx ?? 0)) : 0,
+        resting: Boolean(resting),
+      })
+      // Only now is the order gone: dropping the review earlier would strand a
+      // signed intent with no way back to it.
+      setFuturesReview(null)
+      refreshAccount()
+    } catch (e) {
+      setError(e instanceof CryptoApiError ? e.message : e instanceof Error ? e.message : "Order failed. Try again.")
     } finally {
       setSubmitting(false)
     }
@@ -494,7 +622,9 @@ export function TradeClient() {
     setBusyKey(`cancel:${oid}`)
     try {
       if (usingModern) {
-        if (mkt === "spot") throw new Error("Modern spot orders are not managed by Hyperliquid")
+        // Worldstreet-wallet spot is an on-chain swap, not a resting order on
+        // the perpetuals venue — there is nothing here to cancel.
+        if (mkt === "spot") throw new Error("Worldstreet wallet spot orders are on-chain swaps — there's no resting order to cancel.")
         const evmAccount = modernWallet.data?.accounts.find((item) => item.chainFamily === "evm" && item.state === "active")
         if (!user?.userId || !modernWallet.data?.id || !modernPackage.data || !evmAccount) throw new Error("Unlock the modern wallet before cancelling an order")
         const intent = await cryptoBackendClient.createHyperliquidIntent({ type: "cancel", market: "futures", symbol: sym, oid, idempotencyKey: crypto.randomUUID() })
@@ -521,9 +651,13 @@ export function TradeClient() {
       amountUsd: amountUsd || "(empty)",
       ...(orderType === "limit" ? { limitPrice: limitPrice || "(empty)" } : {}),
       ...(market === "futures" ? { leverage, takeProfit: tpPrice || null, stopLoss: slPrice || null } : {}),
+      ...(modernFutures ? { reduceOnly } : {}),
       readyToSubmit: canSubmit,
-      ...(canSubmit ? {} : { blockedBecause: !current ? "markets not loaded" : spotPlan?.kind === "unavailable" ? spotPlan.reason : amt < minOrder ? `amount below the ${minOrder} minimum` : tpslError ?? "limit price missing" }),
+      ...(canSubmit ? {} : { blockedBecause: !current ? "markets not loaded" : spotPlan?.kind === "unavailable" ? spotPlan.reason : amt < minOrder ? `amount below the ${minOrder} minimum` : reduceOnlyError ?? tpslError ?? "limit price missing" }),
     },
+    // Spec §9: a reviewed-but-unsigned order is a distinct state — nothing has
+    // been sent, and the next press is the one that spends money.
+    awaitingOrderApproval: Boolean(futuresReview),
     openPositions: account?.positions.length ?? 0,
     openOrders: account?.openOrders.length ?? 0,
     tradingAccountReady: account?.ready ?? false,
@@ -548,13 +682,17 @@ export function TradeClient() {
   const orderCount = account?.openOrders.length ?? 0
 
   // Percent chips: the notional the balance can actually carry. Spot sells
-  // spend the token, not USDC, so no honest max exists there.
+  // spend the token, not USDC, so no honest max exists there. A reduce-only
+  // order is capped by the POSITION, not the balance — it opens nothing, so
+  // "Max" there means the whole position and leverage does not enter (spec §9).
   const maxNotional =
     market === "spot"
       ? side === "buy"
         ? balances?.spotUsdc ?? 0
         : 0
-      : (balances?.perpsWithdrawableUsdc ?? 0) * leverage
+      : modernFutures && reduceOnly
+        ? openPosition?.notionalUsd ?? 0
+        : (balances?.perpsWithdrawableUsdc ?? 0) * leverage
 
   const changeUp = (stats?.changePct ?? 0) >= 0
 
@@ -614,9 +752,93 @@ export function TradeClient() {
     </>
   )
 
+  /* ── Modern futures review (spec §9) ──────────────────────────────────── */
+  // Everything on this screen is the BACKEND'S figure or the user's own input.
+  // Nothing is derived: a fee or liquidation price we were not given is absent
+  // from the receipt entirely, and the warning stands in its place. Computing
+  // a liquidation price here would print a confident number that is wrong
+  // precisely when the position is close to being liquidated.
+  const reviewFigures = readFuturesOrderFigures(futuresReview?.intent.summary)
+  const reviewScreen = futuresReview && (
+    <div className="flex flex-col gap-3 p-3.5">
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-semibold">Review your order</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Nothing has been sent yet. Confirming signs this order on this device and submits it.
+        </p>
+      </div>
+
+      <DetailPanel
+        rows={[
+          { label: "Contract", value: `${futuresReview.symbol} PERP` },
+          { label: "Direction", value: futuresReview.side === "buy" ? "Long" : "Short" },
+          {
+            label: "Order type",
+            value: futuresReview.orderType === "limit" && futuresReview.limitPrice !== null
+              ? `Limit @ $${fmtPx(futuresReview.limitPrice)}`
+              : futuresReview.orderType === "limit"
+              ? "Limit"
+              : "Market",
+          },
+          { label: "Amount", value: `$${futuresReview.amountUsd.toFixed(2)}` },
+          ...(reviewFigures.size !== null
+            ? [{ label: "Size", value: `${reviewFigures.size} ${futuresReview.symbol}` }]
+            : []),
+          ...(reviewFigures.price !== null
+            ? [{ label: "Price", value: `$${fmtPx(reviewFigures.price)}` }]
+            : []),
+          ...(futuresReview.reduceOnly
+            ? [{ label: "Reduce only", value: "Yes" }]
+            : [{ label: "Leverage", value: `${futuresReview.leverage}×` }]),
+          ...(futuresReview.takeProfit !== null
+            ? [{ label: "Take profit", value: `$${fmtPx(futuresReview.takeProfit)}` }]
+            : []),
+          ...(futuresReview.stopLoss !== null
+            ? [{ label: "Stop loss", value: `$${fmtPx(futuresReview.stopLoss)}` }]
+            : []),
+          ...(reviewFigures.liquidationPrice !== null
+            ? [{ label: "Liquidation price", value: `$${fmtPx(reviewFigures.liquidationPrice)}` }]
+            : []),
+          ...(reviewFigures.feeUsd !== null
+            ? [{ label: "Estimated fee", value: `$${reviewFigures.feeUsd.toFixed(2)}`, strong: true }]
+            : []),
+        ]}
+      />
+
+      {reviewFigures.needsLiquidationWarning && (
+        <InlineNotice tone="warning">{LIQUIDATION_WARNING}</InlineNotice>
+      )}
+
+      {error && <InlineNotice tone="error">{error}</InlineNotice>}
+
+      <button
+        onClick={confirmFuturesOrder}
+        disabled={submitting}
+        data-vivid-target="trade-confirm-order"
+        data-vivid-guard=""
+        aria-label={`Confirm and sign — ${futuresReview.side === "buy" ? "long" : "short"} ${futuresReview.symbol} for $${futuresReview.amountUsd}`}
+        data-vivid-label={`Sign and submit the reviewed ${futuresReview.symbol} order. Moves real money.`}
+        className={`w-full rounded-full py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+          futuresReview.side === "buy" ? "bg-credit hover:bg-credit/90" : "bg-debit hover:bg-debit/90"
+        }`}
+      >
+        {submitting ? "Signing…" : "Confirm & sign"}
+      </button>
+      <button
+        onClick={() => { setFuturesReview(null); setError(null) }}
+        disabled={submitting}
+        data-vivid-target="trade-cancel-review"
+        data-vivid-label="Go back to the ticket without placing this order"
+        className="w-full rounded-full bg-surface-sunken py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+      >
+        Back to the ticket
+      </button>
+    </div>
+  )
+
   /* ── Order ticket ─────────────────────────────────────────────────────── */
   // A modern spot order is a swap out of the self-custody wallet through
-  // 0x/Jupiter — it never touches the Hyperliquid trading account (which
+  // 0x/Jupiter — it never touches the perpetuals trading account (which
   // `refreshAccount` deliberately nulls on the spot tab). Gating the ticket on
   // that account would leave modern spot as a permanent loading skeleton.
   const needsTradingAccount = !(usingModern && market === "spot")
@@ -667,6 +889,8 @@ export function TradeClient() {
         Set up &amp; fund
       </button>
     </div>
+  ) : reviewScreen ? (
+    reviewScreen
   ) : (
     <div className="flex flex-col gap-3 p-3.5">
       {spotMarketsUnavailable && (
@@ -746,9 +970,15 @@ export function TradeClient() {
           {market === "spot" && side === "buy" && balances && (
             <span className="tabular-nums">avail ${balances.spotUsdc.toFixed(2)}</span>
           )}
-          {market === "futures" && balances && (
+          {/* Reduce-only spends nothing, so the free balance is the wrong
+              ceiling to quote — the open position is. */}
+          {modernFutures && reduceOnly ? (
+            openPosition && (
+              <span className="tabular-nums">position ${openPosition.notionalUsd.toFixed(2)}</span>
+            )
+          ) : market === "futures" && balances ? (
             <span className="tabular-nums">avail ${balances.perpsWithdrawableUsdc.toFixed(2)}</span>
-          )}
+          ) : null}
         </span>
         <div className="flex items-center rounded-xl bg-surface-sunken focus-within:ring-1 focus-within:ring-foreground/[0.12]">
           <input
@@ -788,7 +1018,29 @@ export function TradeClient() {
         </div>
       )}
 
-      {market === "futures" && (
+      {/* Reduce-only (spec §9) — modern perps only. It changes what the rest
+          of the ticket even means, so it sits above the controls it removes. */}
+      {modernFutures && (
+        <label className="flex items-center justify-between gap-3 rounded-xl bg-surface-sunken px-3 py-2">
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-xs font-semibold">Reduce only</span>
+            <span className="text-[10px] leading-snug text-subtle">
+              Shrinks an open position — never opens a new one.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={reduceOnly}
+            onChange={(e) => setReduceOnly(e.target.checked)}
+            data-vivid-target="trade-reduce-only"
+            data-vivid-label="Reduce-only toggle — the order can only close existing exposure"
+            aria-label="Reduce only — the order can only close existing exposure"
+            className="h-4 w-4 shrink-0 accent-[var(--primary)]"
+          />
+        </label>
+      )}
+
+      {market === "futures" && !(modernFutures && reduceOnly) && (
         <div>
           <div className="flex justify-between text-xs text-subtle">
             <span>Leverage</span>
@@ -809,10 +1061,18 @@ export function TradeClient() {
             <span>1×</span>
             <span>{maxLev}×</span>
           </div>
+          {/* The venue's own constraint, stated rather than assumed (spec §9).
+              There is no cross-margin control to hide — this contract simply
+              has one margin mode, and the ticket says which. */}
+          {onlyIsolated && (
+            <p className="mt-1.5 text-[10px] leading-snug text-subtle">
+              Isolated margin only — the margin you commit here backs this position alone.
+            </p>
+          )}
         </div>
       )}
 
-      {market === "futures" && (
+      {market === "futures" && !(modernFutures && reduceOnly) && (
         <div className="grid grid-cols-2 gap-1.5">
           <label className="flex flex-col gap-1">
             <span className="text-xs text-subtle">Take profit</span>
@@ -847,14 +1107,21 @@ export function TradeClient() {
         <p role="alert" className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed text-warning">{tpslError}</p>
       )}
 
+      {reduceOnlyError && (
+        <p role="alert" className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed text-warning">{reduceOnlyError}</p>
+      )}
+
       {amt > 0 && price > 0 && (
         <div className="divide-y divide-border/15 rounded-xl bg-surface-sunken/70 px-3 text-xs tabular-nums">
           <div className="flex justify-between py-1.5">
             <span className="text-subtle">Qty</span>
-            {/* Amount IS the notional; leverage only sets the margin used. */}
-            <span>≈ {(amt / price).toFixed(6)} {symbol}</span>
+            {/* Amount IS the notional; leverage only sets the margin used. The
+                places shown are the contract's own `szDecimals` where the
+                backend stated it (spec §9) — the estimate should not promise
+                precision the venue will round away. */}
+            <span>≈ {(amt / price).toFixed(szDecimals ?? 6)} {symbol}</span>
           </div>
-          {market === "futures" && leverage > 1 && (
+          {market === "futures" && !(modernFutures && reduceOnly) && leverage > 1 && (
             <div className="flex justify-between py-1.5">
               <span className="text-subtle">Margin at {leverage}×</span>
               <span>≈ ${(amt / leverage).toFixed(2)}</span>
@@ -903,21 +1170,35 @@ export function TradeClient() {
         </p>
       )}
 
+      {/* Modern perps: this press only BUILDS the order — the review screen's
+          confirm is the one that spends, and it is the one carrying the guard. */}
       <button
         onClick={submit}
         disabled={!canSubmit}
         data-vivid-target="trade-submit"
-        data-vivid-guard=""
-        aria-label={`Place order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${market === "futures" && leverage > 1 ? ` at ${leverage}x` : ""}`}
-        data-vivid-label={`Place the order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol} for the amount shown. Moves real money.`}
+        data-vivid-guard={modernFutures ? undefined : ""}
+        aria-label={
+          modernFutures
+            ? `Review order — ${side === "buy" ? "long" : "short"} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${reduceOnly ? ", reduce only" : leverage > 1 ? ` at ${leverage}x` : ""}`
+            : `Place order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${market === "futures" && leverage > 1 ? ` at ${leverage}x` : ""}`
+        }
+        data-vivid-label={
+          modernFutures
+            ? `Build the order and open the review screen — ${side === "buy" ? "long" : "short"} ${symbol}. Nothing is sent until you confirm there.`
+            : `Place the order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol} for the amount shown. Moves real money.`
+        }
         className={`w-full rounded-full py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
           side === "buy" ? "bg-credit hover:bg-credit/90" : "bg-debit hover:bg-debit/90"
         }`}
       >
         {submitting
-          ? "Placing…"
+          ? modernFutures ? "Pricing…" : "Placing…"
           : pairUnavailable
           ? "Pair unavailable"
+          : reduceOnlyError
+          ? "Nothing to reduce"
+          : modernFutures
+          ? "Review order"
           : `${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
       </button>
     </div>
@@ -1086,7 +1367,7 @@ export function TradeClient() {
               <div className="flex h-full items-center justify-center">
                 <p className="max-w-sm px-6 text-center text-xs leading-relaxed text-muted-foreground">
                   {usingModern && market === "spot"
-                    ? "Spot discovery uses Worldstreet’s broader spot market feed. Hyperliquid is used here for perpetual futures only."
+                    ? "Spot discovery uses Worldstreet’s broader spot market feed. The trading account here handles perpetual futures only."
                     : "Select a market to load its chart."}
                 </p>
               </div>
