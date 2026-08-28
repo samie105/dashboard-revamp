@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/components/auth-provider"
 import { CryptoBackendError, cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
@@ -30,15 +30,25 @@ export function useCryptoBalances() {
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    placeholderData: keepPreviousData,
+    // Keep the last snapshot on screen while refetching, but only when the
+    // previous query belonged to this same user — `keepPreviousData` would
+    // otherwise carry a stale user's balances into the new user's query key
+    // for a moment after a Clerk user switch, ahead of the provider's cache
+    // clear.
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey.includes(userId) ? previousData : undefined,
     retry: (failureCount, error) =>
       failureCount < 2 && !(error instanceof CryptoBackendError && error.status < 500),
   })
 
   const refresh = React.useCallback(async () => {
+    // Never fire an unauthenticated/mid-load refresh — it would hit the
+    // backend without a session and could write into the "anonymous" cache
+    // slot.
+    if (!enabled) return
     const fresh = await cryptoBackendClient.listBalanceSnapshot(true)
     queryClient.setQueryData(cryptoQueryKeys.balanceSnapshot(userId), fresh)
-  }, [queryClient, userId])
+  }, [enabled, queryClient, userId])
 
   return {
     balances: flattenSnapshot(query.data),
