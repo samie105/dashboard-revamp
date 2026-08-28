@@ -132,6 +132,18 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
     },
   })
 
+  /**
+   * Point the poll at an intent this hook didn't create.
+   *
+   * The one caller is the `DUPLICATE_REQUEST` → `view-existing` path: the
+   * service says the work is already in flight under another id, and the honest
+   * response is to watch THAT one rather than to show a status screen about an
+   * intent that was never accepted.
+   */
+  const adoptIntent = useCallback((id: string) => {
+    setIntentId(id)
+  }, [])
+
   const reset = useCallback(() => {
     setIntentId(undefined)
     setSponsorshipId(undefined)
@@ -151,6 +163,7 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
     createIntent: create.mutateAsync,
     simulateIntent: simulate.mutateAsync,
     submitIntent: submit.mutateAsync,
+    adoptIntent,
     reset,
   }
 }

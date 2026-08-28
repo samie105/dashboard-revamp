@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { CryptoBackendError } from "@/lib/crypto-backend/errors"
-import { describeCryptoError } from "@/lib/crypto-backend/error-messages"
+import { describeCryptoError, existingOperationIdFrom } from "@/lib/crypto-backend/error-messages"
 
 const err = (code: string, status = 400, details?: unknown) =>
   new CryptoBackendError("boom", status, code, details, "req-123")
@@ -53,5 +53,32 @@ describe("describeCryptoError", () => {
     expect(d.requestId).toBe("req-123")
     expect(d.message.toLowerCase()).not.toContain("fetch failed")
     expect(d.message.toLowerCase()).not.toContain("http")
+  })
+})
+
+describe("existingOperationIdFrom", () => {
+  it("finds the id a duplicate names, whichever key the service used", () => {
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409, { intentId: "int_1" }))).toBe("int_1")
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409, { existingIntentId: "int_2" }))).toBe("int_2")
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409, { id: "int_3" }))).toBe("int_3")
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409, { operationId: "op_4" }))).toBe("op_4")
+  })
+  it("looks one level into a nested existing/intent object", () => {
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409, { existing: { id: "int_5" } }))).toBe("int_5")
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409, { intent: { id: "int_6" } }))).toBe("int_6")
+  })
+  it("returns null when the service names nothing — the caller must degrade, not guess", () => {
+    // The backend's documented contract (docs/self-custody/backend-docs/
+    // frontend-integration.md §10) carries no id for a duplicate, so this is
+    // the path that actually runs today.
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409))).toBeNull()
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409, { message: "already in progress" }))).toBeNull()
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409, { intentId: "   " }))).toBeNull()
+    expect(existingOperationIdFrom(err("DUPLICATE_REQUEST", 409, { intentId: 42 }))).toBeNull()
+  })
+  it("is safe on non-backend errors and junk", () => {
+    expect(existingOperationIdFrom(new Error("boom"))).toBeNull()
+    expect(existingOperationIdFrom(null)).toBeNull()
+    expect(existingOperationIdFrom("nope")).toBeNull()
   })
 })

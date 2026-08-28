@@ -11,6 +11,44 @@ export type CryptoErrorDescription = {
   requestId?: string
 }
 
+/** A non-empty string, or null — an id made of whitespace is not an id. */
+function idOf(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+/**
+ * The id of the operation a `DUPLICATE_REQUEST` is pointing at, if the service
+ * named one.
+ *
+ * The backend's documented contract (`docs/self-custody/backend-docs/
+ * frontend-integration.md` §10) has no `DUPLICATE_REQUEST` row at all — an
+ * idempotent intent replay comes back `200` with a top-level `existing: true`
+ * and the intent itself (§8.4), not as an error. So **null is the expected
+ * answer today**, and callers MUST degrade honestly rather than offering a
+ * "View status" button that points at nothing.
+ *
+ * The key-guessing is deliberate insurance for the day the service does carry
+ * one: it reads the plausible shapes, validates the value is a real string, and
+ * never invents an id.
+ */
+export function existingOperationIdFrom(error: unknown): string | null {
+  if (!(error instanceof CryptoBackendError)) return null
+  const details = error.details
+  if (!details || typeof details !== "object") return null
+  const record = details as Record<string, unknown>
+  const direct =
+    idOf(record.intentId) ?? idOf(record.existingIntentId) ?? idOf(record.operationId) ?? idOf(record.id)
+  if (direct) return direct
+  for (const key of ["existing", "intent", "operation"]) {
+    const nested = record[key]
+    if (nested && typeof nested === "object") {
+      const found = idOf((nested as Record<string, unknown>).id) ?? idOf((nested as Record<string, unknown>).intentId)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 export function describeCryptoError(error: unknown): CryptoErrorDescription {
   // Node 21+ exposes a global `navigator` with `onLine` left `undefined` (not
   // `false`), so a bare `!navigator.onLine` would misfire outside a browser.

@@ -22,6 +22,7 @@
  */
 
 import * as React from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 
@@ -45,8 +46,11 @@ import { useUsdIndex } from "@/hooks/crypto/useUsdIndex"
 import {
   cryptoBackendClient,
   cryptoQueryKeys,
+  describeCryptoError,
+  existingOperationIdFrom,
   isCryptoBackendEnabled,
   type CryptoErrorAction,
+  type CryptoIntentSimulation,
   type CryptoWalletAccount,
 } from "@/lib/crypto-backend"
 import { explorerTxUrl, networkMetaFor } from "@/lib/crypto-backend/network-meta"
@@ -121,6 +125,7 @@ export function SendFlow() {
   const [committed, setCommitted] = React.useState<CommittedTransfer | null>(null)
   const [createError, setCreateError] = React.useState<unknown>(null)
   const [simulateCallError, setSimulateCallError] = React.useState<unknown>(null)
+  const [simulationResult, setSimulationResult] = React.useState<CryptoIntentSimulation | null>(null)
   const [signError, setSignError] = React.useState<unknown>(null)
   const [submitRecord, setSubmitRecord] = React.useState<unknown>(null)
 
@@ -253,13 +258,46 @@ export function SendFlow() {
     if (step !== "review" || !intentId || simulatedFor.current === intentId) return
     simulatedFor.current = intentId
     setSimulateCallError(null)
-    void simulateIntent().catch((error: unknown) => setSimulateCallError(error))
+    setSimulationResult(null)
+    void simulateIntent()
+      // What the call RESOLVES with is kept here rather than being read back
+      // out of the query cache. `useTransactionIntent`'s onSuccess merges the
+      // result with `setQueryData(key, current => current ? {...} : current)`,
+      // which silently DISCARDS it when the intent GET hasn't populated that
+      // key yet — and this effect fires the instant the step flips to review,
+      // racing exactly that GET. Dropping a fail-closed verdict would leave an
+      // armed "Approve and sign locally" on a transfer the service already
+      // said would fail.
+      .then((result) => setSimulationResult(result))
+      .catch((error: unknown) => {
+        setSimulateCallError(error)
+        // The call never landed, so nothing was learned — let a later return
+        // to this screen ask again instead of pinning the fail-open warning.
+        simulatedFor.current = null
+      })
   }, [step, intentId, simulateIntent])
 
-  const validationErrors =
-    intent?.validationResult && intent.validationResult.ok === false ? intent.validationResult.errors ?? [] : []
-  const simulationFailed = intent?.simulationResult?.ok === false
-  const simulationRaw = intent?.simulationResult?.error ?? null
+  // Fail-closed union: a "no" from EITHER source is a "no". The resolved value
+  // is the one that cannot be lost to the cache race; the intent's own fields
+  // carry a verdict that arrived by poll or from an earlier simulate.
+  const resolvedValidation = simulationResult?.validation
+  const resolvedSimulation = simulationResult?.simulation
+  const validationErrors = React.useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...(resolvedValidation?.ok === false ? resolvedValidation.errors ?? [] : []),
+          ...(intent?.validationResult?.ok === false ? intent.validationResult.errors ?? [] : []),
+        ]),
+      ),
+    [resolvedValidation, intent?.validationResult],
+  )
+  const simulationFailed = resolvedSimulation?.ok === false || intent?.simulationResult?.ok === false
+  const simulationRaw =
+    (resolvedSimulation?.ok === false ? resolvedSimulation.error : null) ??
+    (intent?.simulationResult?.ok === false ? intent.simulationResult.error : null) ??
+    null
+  const gasEstimate = resolvedSimulation?.gasEstimate ?? intent?.simulationResult?.gasEstimate
 
   /* ── Status ────────────────────────────────────────────────────────────── */
 
@@ -330,20 +368,25 @@ export function SendFlow() {
     }
     setCreateError(null)
     setSimulateCallError(null)
+    setSimulationResult(null)
     setSignError(null)
     setSubmitRecord(null)
     simulatedFor.current = null
     transfer.reset()
+    // Leave the status screen HERE, before the await — from this line nothing
+    // is in flight, and the status screen must never keep showing a running
+    // transfer core and "you can safely leave" over a transfer that no longer
+    // exists. Review is where a fresh quote gets read; while it is being
+    // fetched the review branch shows its (bounded) skeleton.
+    setStep("review")
     try {
       await transfer.createIntent(transferInput())
       setCommitted(snapshot())
-      // A fresh quote is always something to READ before signing — including
-      // when the expiry was discovered at submit time, on the status screen.
-      // Landing back on review is what makes "get a fresh one" a route
-      // forward rather than a dead end on a screen with nothing in flight.
-      setStep("review")
     } catch (error) {
       setCreateError(error)
+      // No quote means nothing to review. The form is the only screen that is
+      // true here, and it renders this error.
+      setStep("form")
     }
   }
 
@@ -384,6 +427,7 @@ export function SendFlow() {
     setSimulateCallError(null)
     setSignError(null)
     setSubmitRecord(null)
+    setSimulationResult(null)
     setCommitted(null)
     setStep("form")
   }
@@ -404,7 +448,12 @@ export function SendFlow() {
     else startOver()
   }
 
-  function errorAction(action: CryptoErrorAction, retry: () => void, resume: () => void) {
+  function errorAction(
+    action: CryptoErrorAction,
+    retry: () => void,
+    resume: () => void,
+    existingId: string | null,
+  ) {
     switch (action) {
       case "unlock":
         openUnlock(resume)
@@ -412,12 +461,19 @@ export function SendFlow() {
       case "new-intent":
         void refreshQuote()
         break
-      case "view-existing":
-        // The duplicate IS this intent — its status screen is the answer.
+      case "view-existing": {
+        // Only ever offered when an id was actually resolved (see renderError),
+        // so this can't be a button that quietly does nothing.
+        if (!existingId) break
         setCreateError(null)
         setSignError(null)
-        if (intentId) setStep("status")
+        // On the submit path the duplicate IS our intent. On the create path
+        // `create.onSuccess` never ran, so the id came out of the error and the
+        // poll has to be pointed at it.
+        if (existingId !== intentId) transfer.adoptIntent(existingId)
+        setStep("status")
         break
+      }
       case "setup-wallet":
         router.push(WALLET_HREF)
         break
@@ -436,9 +492,48 @@ export function SendFlow() {
     }
   }
 
+  /**
+   * One error presenter for all three screens.
+   *
+   * Its job beyond rendering: decide whether the taxonomy's suggested action is
+   * one this screen can actually honour. `view-existing` is the case that
+   * matters — a `DUPLICATE_REQUEST` on the CREATE path arrives before
+   * `create.onSuccess` has set an id, and the backend's documented contract
+   * carries none, so offering "View status" there would be a button that
+   * silently does nothing. When no id can be resolved the button is withheld
+   * and the copy says plainly what the user can do instead.
+   */
+  const renderError = (error: unknown, retry: () => void, resume: () => void): React.ReactNode => {
+    if (!error) return null
+    const described = describeCryptoError(error)
+    // The service's named id wins over the local one: after an edit-and-
+    // re-review our `intentId` can be a different (superseded) operation, and
+    // the duplicate is about whichever one the service says it is.
+    const existingId = described.action === "view-existing" ? existingOperationIdFrom(error) ?? intentId ?? null : null
+    const actionable = described.action !== "none" && (described.action !== "view-existing" || existingId !== null)
+    return (
+      <div className="flex flex-col gap-1.5">
+        <SectionMessage
+          error={error}
+          onAction={actionable ? (action) => errorAction(action, retry, resume, existingId) : undefined}
+        />
+        {described.action === "view-existing" && !existingId ? (
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            The service didn&apos;t say which operation, so there&apos;s nothing to open here. Nothing was sent twice —
+            check your <Link href="/transactions" className="font-semibold underline underline-offset-2">transaction
+            history</Link> in a moment.
+          </p>
+        ) : null}
+      </div>
+    )
+  }
+
   /* ── Chrome ────────────────────────────────────────────────────────────── */
 
-  const backTarget: string | (() => void) = step === "review" ? () => setStep("form") : WALLET_HREF
+  // Back means "the form" only when there is a review to back OUT of; on the
+  // fall-through (review step, no quote) the form is already what's rendered.
+  const backTarget: string | (() => void) =
+    step === "review" && intent && committed ? () => setStep("form") : WALLET_HREF
   const shell = (body: React.ReactNode) => (
     <FlowShell>
       <div className="mb-5 flex items-start gap-2">
@@ -513,25 +608,17 @@ export function SendFlow() {
         explorer={explorer}
         onDone={resetToForm}
         onTryAgain={tryAgain}
-        errorSlot={
-          signError ? (
-            <SectionMessage
-              error={signError}
-              onAction={(action) => errorAction(action, () => void runSubmit(), () => void runSubmit())}
-            />
-          ) : null
-        }
+        // `createError` too: a quote failure can no longer strand a user here
+        // (refreshQuote leaves this screen before it starts), but if one ever
+        // reaches this branch it must be readable rather than invisible.
+        errorSlot={renderError(signError ?? createError, () => void runSubmit(), () => void runSubmit())}
       />,
     )
   }
 
   /* ── Review ────────────────────────────────────────────────────────────── */
 
-  if (step === "review") {
-    // `refreshQuote` clears the old intent before the new one lands; the
-    // review has nothing true to show in that gap.
-    if (!intent || !committed) return shell(<FlowSkeleton />)
-
+  if (step === "review" && intent && committed) {
     const packageReady = Boolean(packageQuery.data)
     const signBlocked = validationErrors.length > 0 || simulationFailed
     const ctaLabel = expired
@@ -557,7 +644,7 @@ export function SendFlow() {
         feeValue={feeRowValue({
           sponsorship: transfer.sponsorship,
           sponsorFees,
-          gasEstimate: intent.simulationResult?.gasEstimate,
+          gasEstimate,
         })}
         countdown={countdown}
         expired={expired}
@@ -570,19 +657,24 @@ export function SendFlow() {
         ctaBusy={transfer.isSimulating || transfer.isSubmitting || transfer.isLoading}
         onSign={expired ? () => void refreshQuote() : pressSign}
         onEdit={() => setStep("form")}
-        errorSlot={
-          createError || packageQuery.error ? (
-            <SectionMessage
-              error={createError ?? packageQuery.error}
-              onAction={(action) => errorAction(action, () => void refreshQuote(), () => void runSubmit())}
-            />
-          ) : null
-        }
+        errorSlot={renderError(
+          createError ?? packageQuery.error,
+          () => void refreshQuote(),
+          () => void runSubmit(),
+        )}
       />,
-      )
+    )
   }
 
+  // Review with no quote: only reachable WHILE one is being fetched, because a
+  // failed `refreshQuote` sends the step back to the form. The skeleton is
+  // therefore bounded by the request — it can never be indefinite.
+  if (step === "review" && transfer.isLoading) return shell(<FlowSkeleton />)
+
   /* ── Form ──────────────────────────────────────────────────────────────── */
+  /* Also the fall-through for a "review" step with nothing to review and
+     nothing in flight: the form is the only honest screen then, and it renders
+     `createError`. */
 
   const networkUnavailable = balances.unavailableNetworks.some((entry) => entry.networkId === networkId)
 
@@ -642,14 +734,7 @@ export function SendFlow() {
       ctaDisabled={Boolean(blocker)}
       ctaBusy={transfer.isLoading}
       onSubmit={() => void startReview()}
-      errorSlot={
-        createError ? (
-          <SectionMessage
-            error={createError}
-            onAction={(action) => errorAction(action, () => void startReview(), () => void startReview())}
-          />
-        ) : null
-      }
+      errorSlot={renderError(createError, () => void startReview(), () => void startReview())}
     />,
   )
 }
