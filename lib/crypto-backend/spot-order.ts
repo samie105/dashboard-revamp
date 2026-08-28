@@ -188,9 +188,7 @@ export function buildSpotOrderPlan(
   }
 
   const quoteSymbol = (row.quote ?? "").toUpperCase()
-  if (!quoteSymbol) {
-    return unavailable(`The market registry didn't say what ${label} is quoted in, so we can't size this order safely.`)
-  }
+  if (!quoteSymbol) return unavailable(missingQuoteReason(label))
   if (!USD_QUOTE_SYMBOLS.has(quoteSymbol)) {
     // The ticket takes a USD figure. Against a non-USD quote that figure is a
     // different quantity entirely — the mis-scaling this module exists to stop.
@@ -201,10 +199,8 @@ export function buildSpotOrderPlan(
   }
 
   if (row.venue === "0x") return buildEvmPlan(row, side, amountUsd, price, label, quoteSymbol)
-  if (row.venue === "jupiter") return buildSolanaPlan(row, side, amountUsd, price, label, quoteSymbol)
-  return unavailable(
-    `${label} trades on ${row.venue ?? "a venue the registry didn't name"}, which the Worldstreet wallet can't route yet.`,
-  )
+  if (row.venue === "jupiter") return buildSolanaPlan(row, side, amountUsd, price)
+  return unavailable(venueReason(row.venue, label))
 }
 
 function buildEvmPlan(
@@ -253,44 +249,108 @@ function buildEvmPlan(
   }
 }
 
-function buildSolanaPlan(
+/**
+ * Every containment check a Jupiter row must pass before an amount is even
+ * scaled: venue, quote asset, both mints, the orientation self-check, and the
+ * precision of the token about to be SPENT. Both Solana entry points — the
+ * USD ticket and the token-denominated panel — go through this and nothing
+ * else, so neither can drift into deriving mints or decimals on its own.
+ */
+function resolveSolanaLegs(
   row: ModernSpotMarketRow,
   side: "buy" | "sell",
-  amountUsd: number,
-  price: number,
-  label: string,
-  quoteSymbol: string,
-): SpotOrderPlan {
+): { inputMint: string; outputMint: string; inputDecimals: number; spentSymbol: string; label: string } | { reason: string } {
+  const label = row.symbol ? row.symbol.toUpperCase() : "This market"
+  if (row.venue !== "jupiter") return { reason: venueReason(row.venue, label) }
+
+  const quoteSymbol = (row.quote ?? "").toUpperCase()
+  if (!quoteSymbol) return { reason: missingQuoteReason(label) }
+
   const networkId = row.networkId ?? "solana-mainnet-beta"
   // The registry states the buy direction: spend the quote mint for the base.
   const quoteMint = row.inputMint
   const baseMint = row.outputMint
   if (!quoteMint || !baseMint) {
-    return unavailable(`The market registry didn't include the token mints for ${label}, so we can't build the swap.`)
+    return { reason: `The market registry didn't include the token mints for ${label}, so we can't build the swap.` }
   }
   const misoriented = orientationProblem(networkId, quoteMint, quoteSymbol, label)
-  if (misoriented) return unavailable(misoriented)
+  if (misoriented) return { reason: misoriented }
 
   const inputMint = side === "buy" ? quoteMint : baseMint
   const outputMint = side === "buy" ? baseMint : quoteMint
+  const spentSymbol = side === "buy" ? quoteSymbol : label
   const inputDecimals = tokenDecimalsFor(networkId, inputMint)
-  if (inputDecimals === undefined) {
-    return unavailable(precisionReason(side === "buy" ? quoteSymbol : label, networkId))
-  }
+  if (inputDecimals === undefined) return { reason: precisionReason(spentSymbol, networkId) }
 
-  const sized = sizeInBaseUnits(side === "buy" ? amountUsd : amountUsd / price, inputDecimals)
-  if ("problem" in sized) return unavailable(sizingReason(sized.problem, label))
+  return { inputMint, outputMint, inputDecimals, spentSymbol, label }
+}
+
+/**
+ * The same checks, as a yes/no for a screen that wants to refuse BEFORE the
+ * user types an amount. `null` means the row is safe to trade on this side.
+ */
+export function solanaSwapProblem(row: ModernSpotMarketRow, side: "buy" | "sell"): string | null {
+  const legs = resolveSolanaLegs(row, side)
+  return "reason" in legs ? legs.reason : null
+}
+
+/**
+ * The token-denominated sibling of `buildSpotOrderPlan`: the caller already
+ * holds an amount in whole units of the token being spent (the Jupiter panel's
+ * field), so no price and no USD assumption enters — but every containment
+ * check is the same one, in the same order, and the conversion is still exact.
+ */
+export function buildSolanaSwapPlanFromTokenAmount(
+  row: ModernSpotMarketRow,
+  side: "buy" | "sell",
+  amountText: string,
+): SpotOrderPlan {
+  const legs = resolveSolanaLegs(row, side)
+  if ("reason" in legs) return unavailable(legs.reason)
+
+  const amountBaseUnits = toBaseUnits(amountText.trim(), legs.inputDecimals)
+  if (amountBaseUnits === null) {
+    return unavailable(`Enter a ${legs.spentSymbol} amount with at most ${legs.inputDecimals} decimal places.`)
+  }
+  if (amountBaseUnits === "0") return unavailable(`Enter a ${legs.spentSymbol} amount above zero.`)
 
   return {
     kind: "solana",
     input: {
-      inputMint,
-      outputMint,
+      inputMint: legs.inputMint,
+      outputMint: legs.outputMint,
+      amountBaseUnits,
+      slippageBps: SLIPPAGE_BPS,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  }
+}
+
+function buildSolanaPlan(row: ModernSpotMarketRow, side: "buy" | "sell", amountUsd: number, price: number): SpotOrderPlan {
+  const legs = resolveSolanaLegs(row, side)
+  if ("reason" in legs) return unavailable(legs.reason)
+
+  const sized = sizeInBaseUnits(side === "buy" ? amountUsd : amountUsd / price, legs.inputDecimals)
+  if ("problem" in sized) return unavailable(sizingReason(sized.problem, legs.label))
+
+  return {
+    kind: "solana",
+    input: {
+      inputMint: legs.inputMint,
+      outputMint: legs.outputMint,
       amountBaseUnits: sized.units,
       slippageBps: SLIPPAGE_BPS,
       idempotencyKey: newIdempotencyKey(),
     },
   }
+}
+
+function venueReason(venue: string | undefined, label: string): string {
+  return `${label} trades on ${venue ?? "a venue the registry didn't name"}, which the Worldstreet wallet can't route yet.`
+}
+
+function missingQuoteReason(label: string): string {
+  return `The market registry didn't say what ${label} is quoted in, so we can't size this order safely.`
 }
 
 function precisionReason(token: string, networkId: string): string {

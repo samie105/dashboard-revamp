@@ -14,7 +14,8 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Eyebrow } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import type { HlSpotMarket, HlFuturesMarket } from "@/lib/crypto-api"
+import { marketRowKey, type HlSpotMarket, type HlFuturesMarket } from "@/lib/crypto-api"
+import { networkMetaFor } from "@/lib/crypto-backend/network-meta"
 
 type AnyMarket = HlSpotMarket | HlFuturesMarket
 
@@ -31,17 +32,28 @@ function quoteLabel(m: AnyMarket) {
   return "quote" in m && m.quote ? String(m.quote).toUpperCase() : "USDC"
 }
 
+/**
+ * The network a row settles on, shown because a symbol alone is ambiguous:
+ * WETH/USDC exists on both arbitrum-one and ethereum-mainnet, and picking the
+ * wrong one sends the order to the wrong chain.
+ */
+function networkLabel(m: AnyMarket) {
+  if (!("networkId" in m) || !m.networkId) return null
+  return networkMetaFor(m.networkId)?.label ?? m.networkId
+}
+
 export function MarketsRail({
   list,
   market,
-  symbol,
+  selected,
   onSelect,
   className,
 }: {
   list: readonly AnyMarket[]
   market: "spot" | "futures"
-  symbol: string
-  onSelect: (symbol: string) => void
+  /** The selected row's identity — `marketRowKey`, never a bare symbol. */
+  selected: string
+  onSelect: (rowKey: string) => void
   className?: string
 }) {
   const [search, setSearch] = React.useState("")
@@ -84,16 +96,21 @@ export function MarketsRail({
           <p className="px-3 py-8 text-center text-xs text-muted-foreground">No markets match.</p>
         ) : (
           filtered.map((m) => {
-            const active = m.symbol === symbol
+            // Identity is the registry id where there is one: two rows can
+            // share a symbol on different networks (spec §8).
+            const rowKey = marketRowKey(m)
+            const active = rowKey === selected
+            const network = networkLabel(m)
+            const networkNote = network ? ` on ${network}` : ""
             return (
               <button
-                key={"id" in m && m.id ? m.id : m.symbol}
+                key={rowKey}
                 role="option"
                 aria-selected={active}
-                aria-label={`Switch to the ${m.symbol} market`}
-                data-vivid-target={`pick-pair-${m.symbol}`}
-                data-vivid-label={`Switch to the ${m.symbol} market`}
-                onClick={() => onSelect(m.symbol)}
+                aria-label={`Switch to the ${m.symbol} market${networkNote}`}
+                data-vivid-target={`pick-pair-${rowKey}`}
+                data-vivid-label={`Switch to the ${m.symbol} market${networkNote}`}
+                onClick={() => onSelect(rowKey)}
                 className={cn(
                   "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",
                   active ? "bg-accent" : "hover:bg-accent/50",
@@ -108,6 +125,11 @@ export function MarketsRail({
                   {"maxLeverage" in m && (
                     <span className="ml-1.5 rounded bg-primary/[0.12] px-1 py-0.5 text-[9px] font-bold text-primary">
                       {m.maxLeverage}×
+                    </span>
+                  )}
+                  {network && (
+                    <span className="ml-1 truncate rounded bg-surface-sunken px-1 py-0.5 text-[9px] font-medium text-subtle">
+                      {network}
                     </span>
                   )}
                 </span>

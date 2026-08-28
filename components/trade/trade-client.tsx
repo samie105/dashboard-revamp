@@ -33,9 +33,11 @@ import {
   type HlMarkets,
   type HlAccount,
   type HlOrderOutcome,
+  marketRowKey,
   type HlSpotMarket,
   type HlFuturesMarket,
 } from "@/lib/crypto-api"
+import { networkMetaFor } from "@/lib/crypto-backend/network-meta"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
 import { buildSpotOrderPlan } from "@/lib/crypto-backend/spot-order"
 import { signHyperliquidIntent, signEvmIntent, signSolanaIntent } from "@/lib/crypto-wallet"
@@ -118,9 +120,14 @@ export function TradeClient() {
 
   const market: Market = params.get("market") === "futures" ? "futures" : "spot"
   const urlSymbol = params.get("symbol") ?? params.get("pair") ?? ""
+  // The registry id rides in the URL beside the symbol: a symbol alone can name
+  // two different rows (WETH on arbitrum-one and on ethereum-mainnet), and a
+  // shared link must reopen the pair the sender was actually looking at.
+  const urlRowId = params.get("id") ?? ""
 
   const [markets, setMarkets] = React.useState<HlMarkets | null>(null)
-  const [symbol, setSymbol] = React.useState<string>("")
+  /** The selected row's identity — `marketRowKey`, not a bare symbol (spec §8). */
+  const [selection, setSelection] = React.useState<string>("")
   const [account, setAccount] = React.useState<HlAccount | null>(null)
   const [book, setBook] = React.useState<HlOrderBook | null>(null)
   const [stats, setStats] = React.useState<Hl24hStats | null>(null)
@@ -236,7 +243,10 @@ export function TradeClient() {
     return () => clearInterval(id)
   }, [loadMarkets, refreshAccount])
 
-  // Pick default/URL symbol once markets load.
+  // Pick the default/URL row once markets load. The id wins over the symbol:
+  // it is the only field that separates two same-symbol rows on different
+  // networks (spec §8). The symbol remains the fallback for shared links and
+  // for the legacy/futures rows that carry no id.
   const list = React.useMemo(
     () => (market === "spot" ? (markets?.spot ?? []) : (markets?.futures ?? [])),
     [markets, market],
@@ -244,11 +254,16 @@ export function TradeClient() {
   React.useEffect(() => {
     if (!list.length) return
     const wanted = urlSymbol.toUpperCase()
-    const match = list.find((m) => m.symbol.toUpperCase() === wanted)
-    setSymbol(match?.symbol ?? (list.find((m) => m.symbol === "BTC")?.symbol ?? list[0].symbol))
-  }, [list, urlSymbol])
+    const chosen =
+      (urlRowId ? list.find((m) => marketRowKey(m) === urlRowId) : undefined) ??
+      (wanted ? list.find((m) => m.symbol.toUpperCase() === wanted) : undefined) ??
+      list.find((m) => m.symbol === "BTC") ??
+      list[0]
+    setSelection(marketRowKey(chosen))
+  }, [list, urlSymbol, urlRowId])
 
-  const current = React.useMemo(() => list.find((m) => m.symbol === symbol), [list, symbol])
+  const current = React.useMemo(() => list.find((m) => marketRowKey(m) === selection), [list, selection])
+  const symbol = current?.symbol ?? ""
   const maxLev = current && "maxLeverage" in current ? current.maxLeverage : 1
 
   // Clamp leverage when switching to a contract with a lower max — otherwise
@@ -259,7 +274,9 @@ export function TradeClient() {
     setLeverage((l) => Math.min(l, maxLev))
   }, [market, current, maxLev])
 
-  // A new symbol or market invalidates everything priced in the old one.
+  // A new row, market or wallet mode invalidates everything priced in the old
+  // one — including the modern swap being polled, which belongs to neither the
+  // next pair nor the legacy ticket.
   React.useEffect(() => {
     setLimitPrice("")
     setTpPrice("")
@@ -267,7 +284,7 @@ export function TradeClient() {
     setOutcome(null)
     setSpotIntentId(null)
     setError(null)
-  }, [symbol, market])
+  }, [selection, market, walletSource])
 
   // Order book — futures use the bare symbol; spot uses the coinName.
   const bookCoin = React.useMemo(() => {
@@ -343,12 +360,10 @@ export function TradeClient() {
   // must not be reported as unavailable.
   const spotMarketsUnavailable = usingModern && market === "spot" && !current && (marketsError || markets !== null)
 
-  // The Jupiter panel is the selected Solana row's own, or nothing at all.
+  // The Jupiter panel is the selected Solana row's own, or nothing at all. The
+  // registry row goes in whole — the panel derives nothing itself.
   const jupiterMarket = React.useMemo(
-    () =>
-      current && "venue" in current && current.venue === "jupiter" && current.inputMint && current.outputMint
-        ? { symbol: current.symbol, quote: current.quote, networkId: current.networkId, inputMint: current.inputMint, outputMint: current.outputMint }
-        : null,
+    () => (current && "venue" in current && current.venue === "jupiter" ? current : null),
     [current],
   )
   const canSubmit =
@@ -363,11 +378,15 @@ export function TradeClient() {
   }
 
   // Keep the address bar honest — it's what gets refreshed, shared and
-  // bookmarked, so it must name the pair actually on screen.
+  // bookmarked, so it must name the row actually on screen, id included.
   React.useEffect(() => {
-    if (!symbol || urlSymbol.toUpperCase() === symbol.toUpperCase()) return
-    router.replace(`/trade?market=${market}&symbol=${symbol}`)
-  }, [symbol, market, urlSymbol, router])
+    if (!current) return
+    const rowId = "id" in current && current.id ? current.id : ""
+    if (urlSymbol.toUpperCase() === current.symbol.toUpperCase() && urlRowId === rowId) return
+    router.replace(
+      `/trade?market=${market}&symbol=${encodeURIComponent(current.symbol)}${rowId ? `&id=${encodeURIComponent(rowId)}` : ""}`,
+    )
+  }, [current, market, urlSymbol, urlRowId, router])
 
   async function submit() {
     if (!current) return
@@ -564,11 +583,11 @@ export function TradeClient() {
           ) : (
             filtered.map((m) => (
               <button
-                key={m.symbol}
-                onClick={() => { setSymbol(m.symbol); setPickerOpen(false); setSearch("") }}
-                data-vivid-target={`pick-pair-${m.symbol}`}
-                data-vivid-label={`Switch to the ${m.symbol} market`}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent ${m.symbol === symbol ? "bg-accent" : ""}`}
+                key={marketRowKey(m)}
+                onClick={() => { setSelection(marketRowKey(m)); setPickerOpen(false); setSearch("") }}
+                data-vivid-target={`pick-pair-${marketRowKey(m)}`}
+                data-vivid-label={`Switch to the ${m.symbol} market${"networkId" in m && m.networkId ? ` on ${m.networkId}` : ""}`}
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent ${marketRowKey(m) === selection ? "bg-accent" : ""}`}
               >
                 <span className="flex items-center gap-2 font-semibold">
                   <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} src={"icon" in m ? m.icon : undefined} size="md" />
@@ -576,6 +595,11 @@ export function TradeClient() {
                   <span className="ml-1 text-[10px] font-medium text-subtle">
                     {market === "futures" ? "PERP" : quoteOf(m)}
                   </span>
+                  {"networkId" in m && m.networkId && (
+                    <span className="ml-1 rounded bg-surface-sunken px-1 py-0.5 text-[9px] font-medium text-subtle">
+                      {networkMetaFor(m.networkId)?.label ?? m.networkId}
+                    </span>
+                  )}
                   {"maxLeverage" in m && (
                     <span className="ml-1.5 rounded bg-primary/[0.12] px-1 py-0.5 text-[9px] font-bold text-primary">
                       {m.maxLeverage}×
@@ -856,8 +880,9 @@ export function TradeClient() {
         </p>
       )}
       {/* Spec §8: a submitted swap is not a fill. This line follows the intent
-          poll and only reads as done on `confirmed`. */}
-      {spotIntentId && (
+          poll and only reads as done on `confirmed`. Modern spot only — the
+          legacy ticket must never show a Worldstreet-wallet swap's status. */}
+      {usingModern && market === "spot" && spotIntentId && (
         <p
           role="status"
           aria-live="polite"
@@ -928,7 +953,9 @@ export function TradeClient() {
             value={walletSource}
             onChange={(value) => {
               setWalletSource(value)
-              router.replace(`/trade?market=${market}${symbol ? `&symbol=${symbol}` : ""}&wallet=${value}`)
+              // No `id` here: the row id belongs to one catalogue, and this
+              // switch swaps the catalogue. The symbol is the honest carry-over.
+              router.replace(`/trade?market=${market}${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}&wallet=${value}`)
             }}
             options={[{ key: "modern", label: "Worldstreet wallet" }, { key: "legacy", label: "Legacy wallet" }]}
             vividPrefix="wallet-tab"
@@ -1010,8 +1037,8 @@ export function TradeClient() {
         <MarketsRail
           list={list}
           market={market}
-          symbol={symbol}
-          onSelect={setSymbol}
+          selected={selection}
+          onSelect={setSelection}
           className="hidden w-[236px] shrink-0 border-r border-border/30 xl:flex"
         />
 
@@ -1114,10 +1141,18 @@ export function TradeClient() {
       </div>
 
       {/* Jupiter's token-denominated panel belongs to the selected Solana pair
-          only — it takes that row's mints, never a fixed SOL/USDC pair. */}
+          only — it takes that row's mints, never a fixed SOL/USDC pair. The
+          key remounts it per row: its typed amount, message and polled intent
+          all belong to the pair they were entered against, not the next one. */}
       {usingModern && market === "spot" && jupiterMarket && user?.userId && modernWallet.data && modernPackage.data ? (
         <div className="border-t border-border/30 px-3 py-3 lg:block">
-          <ModernJupiterPanel userId={user.userId} wallet={modernWallet.data} packageValue={modernPackage.data} market={jupiterMarket} />
+          <ModernJupiterPanel
+            key={marketRowKey(jupiterMarket)}
+            userId={user.userId}
+            wallet={modernWallet.data}
+            packageValue={modernPackage.data}
+            market={jupiterMarket}
+          />
         </div>
       ) : null}
 

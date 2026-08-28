@@ -4,32 +4,21 @@
  * Modern Solana spot — the token-denominated companion to the USD ticket.
  *
  * The mints come from the selected registry row (spec §8): this panel holds no
- * catalogue of its own, and it refuses any token whose decimals the shared
- * table doesn't know rather than guessing a scale (`spot-order.ts`).
+ * catalogue of its own and derives NOTHING itself. Venue, quote, mints,
+ * orientation, precision and the base-unit conversion all come from
+ * `spot-order.ts`, the same path the USD ticket takes — one refuse-don't-guess
+ * gate, so a misoriented row cannot spend the wrong token's scale here either.
  */
 
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { cryptoBackendClient, cryptoQueryKeys } from "@/lib/crypto-backend"
 import type { CryptoWalletDetails, CryptoWalletPackageDocument } from "@/lib/crypto-backend"
-import { SLIPPAGE_BPS, tokenDecimalsFor } from "@/lib/crypto-backend/spot-order"
+import { buildSolanaSwapPlanFromTokenAmount, solanaSwapProblem, type ModernSpotMarketRow } from "@/lib/crypto-backend/spot-order"
 import { signSolanaIntent } from "@/lib/crypto-wallet"
-import { toBaseUnits } from "@/lib/crypto-wallet/address-validation"
 
-const SOLANA_NETWORK_ID = "solana-mainnet-beta"
-
-export type JupiterMarket = {
-  /** Base asset symbol, e.g. SOL. */
-  symbol: string
-  /** Quote asset symbol, e.g. USDC. */
-  quote?: string
-  /** The registry's network id — the decimals table is keyed by it. */
-  networkId?: string
-  /** The mint spent on a buy (the quote). */
-  inputMint?: string
-  /** The mint received on a buy (the base). */
-  outputMint?: string
-}
+/** The registry row itself — the panel reads it, it never rebuilds it. */
+export type JupiterMarket = ModernSpotMarketRow
 
 export function ModernJupiterPanel({
   userId,
@@ -65,6 +54,9 @@ export function ModernJupiterPanel({
   const base = market.symbol.toUpperCase()
   const quote = (market.quote ?? "USDC").toUpperCase()
   const spentSymbol = side === "buy" ? quote : base
+  // The row is judged before an amount is typed, by the same gate the ticket
+  // uses — so an unroutable or misoriented pair disables the field outright.
+  const rowProblem = React.useMemo(() => solanaSwapProblem(market, side), [market, side])
 
   async function submit() {
     setBusy(true)
@@ -72,29 +64,10 @@ export function ModernJupiterPanel({
     setIntentId(null)
     try {
       if (!account?.id) throw new Error("Modern Solana wallet is not ready")
-      if (!market.inputMint || !market.outputMint) {
-        throw new Error(`The market registry didn't include the token mints for ${base}, so we can't build the swap.`)
-      }
-      // Buy spends the quote mint for the base; sell reverses it.
-      const inputMint = side === "buy" ? market.inputMint : market.outputMint
-      const outputMint = side === "buy" ? market.outputMint : market.inputMint
-      const decimals = tokenDecimalsFor(market.networkId ?? SOLANA_NETWORK_ID, inputMint)
-      if (decimals === undefined) {
-        throw new Error(`We don't know ${spentSymbol}'s token precision yet, and we won't guess it — a wrong guess would send the wrong amount.`)
-      }
-      // The typed figure is already in whole tokens: convert it exactly, never
-      // through a float multiply.
-      const amountBaseUnits = toBaseUnits(amount.trim(), decimals)
-      if (amountBaseUnits === null) throw new Error(`Enter a ${spentSymbol} amount with at most ${decimals} decimal places`)
-      if (amountBaseUnits === "0") throw new Error(`Enter a ${spentSymbol} amount above zero`)
+      const plan = buildSolanaSwapPlanFromTokenAmount(market, side, amount)
+      if (plan.kind !== "solana") throw new Error(plan.kind === "unavailable" ? plan.reason : "This pair can't be swapped here.")
 
-      const intent = await cryptoBackendClient.createModernSolanaSpotIntent({
-        inputMint,
-        outputMint,
-        amountBaseUnits,
-        slippageBps: SLIPPAGE_BPS,
-        idempotencyKey: crypto.randomUUID(),
-      })
+      const intent = await cryptoBackendClient.createModernSolanaSpotIntent(plan.input)
       const signed = await signSolanaIntent(userId, wallet.id, packageValue, intent, account.id)
       await cryptoBackendClient.submitIntent(intent.id, signed)
       setIntentId(intent.id)
@@ -119,7 +92,9 @@ export function ModernJupiterPanel({
         {(["buy", "sell"] as const).map((v) => (
           <button
             key={v}
-            onClick={() => setSide(v)}
+            // The field's unit flips with the side (spend quote vs spend base),
+            // so the typed figure cannot carry across.
+            onClick={() => { setSide(v); setAmount("") }}
             className={`rounded-md py-2 text-xs font-semibold ${side === v ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
           >
             {v === "buy" ? `Buy ${base}` : `Sell ${base}`}
@@ -131,12 +106,18 @@ export function ModernJupiterPanel({
         <input
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-sunken p-2.5"
+          disabled={Boolean(rowProblem)}
+          className="mt-1 w-full rounded-lg border border-border bg-surface-sunken p-2.5 disabled:opacity-50"
           inputMode="decimal"
           placeholder="0.00"
           aria-label={`${spentSymbol} amount to swap`}
         />
       </label>
+      {rowProblem && (
+        <p role="alert" className="mt-2 rounded-lg bg-warning-chip px-2.5 py-1.5 text-[11px] leading-relaxed text-warning">
+          {rowProblem}
+        </p>
+      )}
       {message && (
         <p role="status" className="mt-2 text-xs text-muted-foreground">
           {message}
@@ -154,11 +135,11 @@ export function ModernJupiterPanel({
         </p>
       )}
       <button
-        disabled={busy}
+        disabled={busy || Boolean(rowProblem)}
         onClick={submit}
         className="mt-3 w-full rounded-full bg-primary py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
       >
-        {busy ? "Preparing and signing…" : "Review Jupiter swap"}
+        {busy ? "Preparing and signing…" : rowProblem ? "Pair unavailable" : "Review Jupiter swap"}
       </button>
     </div>
   )

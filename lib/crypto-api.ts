@@ -494,6 +494,18 @@ export type HlMarkets = {
   minOrderUsd: number
 }
 
+/**
+ * A market row's identity (spec §8): the backend registry `id` when the row
+ * has one, else the symbol. Symbols are NOT unique across the registry — WETH
+ * exists on arbitrum-one and on ethereum-mainnet — so anything that selects,
+ * keys or looks up a row must go through this, or the two rows collapse into
+ * one and an order can route to a chain the user didn't pick. Legacy
+ * Hyperliquid rows carry no id and keep their symbol identity.
+ */
+export function marketRowKey(m: HlSpotMarket | HlFuturesMarket): string {
+  return "id" in m && m.id ? m.id : m.symbol
+}
+
 export type HlPosition = {
   symbol: string
   size: number

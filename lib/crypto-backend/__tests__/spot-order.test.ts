@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
+  buildSolanaSwapPlanFromTokenAmount,
   buildSpotOrderPlan,
   SLIPPAGE_BPS,
   SLIPPAGE_PERCENTAGE,
+  solanaSwapProblem,
   tokenDecimalsFor,
   type ModernSpotMarketRow,
 } from "@/lib/crypto-backend/spot-order"
@@ -185,6 +187,56 @@ describe("buildSpotOrderPlan — refuses rather than guesses", () => {
   it("refuses a non-finite or non-positive amount", () => {
     expect(buildSpotOrderPlan(wethRow, "buy", 0, 2500).kind).toBe("unavailable")
     expect(buildSpotOrderPlan(wethRow, "buy", Number.NaN, 2500).kind).toBe("unavailable")
+  })
+})
+
+describe("token-denominated Jupiter swaps share the one refuse-don't-guess path", () => {
+  it("sizes a buy in the quote mint's own units", () => {
+    const plan = buildSolanaSwapPlanFromTokenAmount(solRow, "buy", "10")
+    expect(plan.kind).toBe("solana")
+    if (plan.kind !== "solana") return
+    expect(plan.input.inputMint).toBe(SOL_USDC)
+    expect(plan.input.outputMint).toBe(SOL_MINT)
+    expect(plan.input.amountBaseUnits).toBe("10000000") // 10 USDC at 6dp
+    expect(plan.input.slippageBps).toBe(SLIPPAGE_BPS)
+  })
+
+  it("sizes a sell in the base mint's own units", () => {
+    const plan = buildSolanaSwapPlanFromTokenAmount(solRow, "sell", "0.5")
+    if (plan.kind !== "solana") throw new Error("expected a solana plan")
+    expect(plan.input.inputMint).toBe(SOL_MINT)
+    expect(plan.input.amountBaseUnits).toBe("500000000") // 0.5 SOL at 9dp
+  })
+
+  it("refuses a misoriented row instead of spending the wrong token's scale", () => {
+    // The failure this guards: field says "USDC amount", 10 typed, SOL's 9
+    // decimals applied → 10 SOL (10e9 lamports) spent for a 10 USDC order.
+    const misoriented = { ...solRow, inputMint: SOL_MINT, outputMint: SOL_USDC }
+    expect(solanaSwapProblem(misoriented, "buy")).toMatch(/don't line up with the USDC quote/i)
+    expect(buildSolanaSwapPlanFromTokenAmount(misoriented, "buy", "10").kind).toBe("unavailable")
+  })
+
+  it("refuses an unknown mint, a foreign venue and a missing quote", () => {
+    expect(solanaSwapProblem({ ...solRow, inputMint: "Mystery1111111111111111111111111111111111" }, "buy")).toMatch(/precision/i)
+    expect(solanaSwapProblem({ ...solRow, venue: "0x" }, "buy")).toMatch(/route/i)
+    expect(solanaSwapProblem({ ...solRow, quote: undefined }, "buy")).toMatch(/quoted in/i)
+  })
+
+  it("passes a healthy row", () => {
+    expect(solanaSwapProblem(solRow, "buy")).toBeNull()
+    expect(solanaSwapProblem(solRow, "sell")).toBeNull()
+  })
+
+  it("refuses amounts the mint cannot represent", () => {
+    const tooPrecise = buildSolanaSwapPlanFromTokenAmount(solRow, "buy", "1.1234567")
+    expect(tooPrecise.kind).toBe("unavailable")
+    if (tooPrecise.kind !== "unavailable") return
+    expect(tooPrecise.reason).toMatch(/decimal places/i)
+
+    const zero = buildSolanaSwapPlanFromTokenAmount(solRow, "buy", "0")
+    expect(zero.kind).toBe("unavailable")
+    if (zero.kind !== "unavailable") return
+    expect(zero.reason).toMatch(/above zero/i)
   })
 })
 
