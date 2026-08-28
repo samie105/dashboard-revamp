@@ -28,7 +28,7 @@ export function AddressPill({ address, className }: { address: string; className
         void navigator.clipboard?.writeText(address).then(() => {
           setCopied(true)
           setTimeout(() => setCopied(false), 1600)
-        })
+        }).catch(() => {})
       }}
       title={address}
       className={`ws-microswap inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-[11px] transition-colors ${copied ? "bg-credit-chip text-credit" : "bg-surface-sunken text-muted-foreground hover:bg-accent"} ${className ?? ""}`}
