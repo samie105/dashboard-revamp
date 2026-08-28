@@ -29,14 +29,16 @@ import {
   placeFuturesOrder,
   closePosition,
   cancelOrder,
-  fetchPrices,
   CryptoApiError,
   type HlMarkets,
   type HlAccount,
   type HlOrderOutcome,
+  type HlSpotMarket,
+  type HlFuturesMarket,
 } from "@/lib/crypto-api"
-import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backend"
-import { signHyperliquidIntent, signEvmIntent } from "@/lib/crypto-wallet"
+import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { buildSpotOrderPlan } from "@/lib/crypto-backend/spot-order"
+import { signHyperliquidIntent, signEvmIntent, signSolanaIntent } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { useAuth } from "@/components/auth-provider"
 import { useWalletMode } from "@/components/wallet-mode-provider"
@@ -53,9 +55,9 @@ import { PositionsPanel } from "@/components/trade/positions-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { BackAction, Eyebrow, Segmented, type SegmentedOption } from "@/components/ui/system"
+import { AnnouncementBanner } from "@/components/ui/flow"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
-import { getSpotMarkets } from "@/lib/actions"
 import { ModernFundingPanel } from "./modern-funding-panel"
 import { ModernJupiterPanel } from "./modern-jupiter-panel"
 
@@ -84,6 +86,14 @@ function Stat({ label, value }: { label: string; value: string }) {
       <span className="text-[13px] font-medium tabular-nums">{value}</span>
     </span>
   )
+}
+
+/**
+ * The quote asset a market is actually priced in — the registry names it per
+ * row (spec §8). Legacy Hyperliquid rows carry no quote field and are USDC.
+ */
+function quoteOf(m: HlSpotMarket | HlFuturesMarket | undefined) {
+  return m && "quote" in m && m.quote ? String(m.quote).toUpperCase() : "USDC"
 }
 
 function fmtCompact(n: number) {
@@ -128,6 +138,9 @@ export function TradeClient() {
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [outcome, setOutcome] = React.useState<HlOrderOutcome | null>(null)
+  // Modern spot never claims a fill at submit time (spec §8: "a quote is not a
+  // fill"). The submitted intent is polled until the backend says confirmed.
+  const [spotIntentId, setSpotIntentId] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [busyKey, setBusyKey] = React.useState<string | null>(null)
   // Mobile-only view state: which pane sits under the chart, and whether the
@@ -141,6 +154,24 @@ export function TradeClient() {
   const { mode: walletSource, setMode: setWalletSource, canChoose: canChooseWallet } = useWalletMode()
 
   const usingModern = walletSource === "modern" && isCryptoBackendEnabled
+
+  // Spot intent status — the same poll `useTransactionIntent` runs for
+  // transfers, on the same cache key, so a spot order's terminal state comes
+  // from the backend rather than from the fact that we managed to submit it.
+  // It stops only on a terminal status; anything else is still in flight.
+  const spotIntentQuery = useQuery({
+    queryKey: cryptoQueryKeys.intent(user?.userId ?? "anonymous", spotIntentId ?? "none"),
+    queryFn: ({ signal }) => cryptoBackendClient.getIntent(spotIntentId as string, signal),
+    enabled: isCryptoBackendEnabled && Boolean(spotIntentId),
+    refetchInterval: (query) => {
+      // The backend's terminal statuses (see `sendStageIndex` for the full
+      // vocabulary); everything else — created/signed/submitted/pending/
+      // unknown, or a status this client hasn't been taught — is still moving.
+      const status = query.state.data?.status
+      return status === "confirmed" || status === "failed" || status === "expired" ? false : 5_000
+    },
+  })
+  const spotIntentStatus = spotIntentId ? spotIntentQuery.data?.status : undefined
 
   // Markets + account
   const refreshAccount = React.useCallback(() => {
@@ -158,8 +189,29 @@ export function TradeClient() {
       return
     }
     if (market === "spot") {
+      // Spec §8: the registry IS the catalogue. Every field the order builder
+      // needs — quote asset, token addresses, mints — is carried through
+      // verbatim; nothing downstream may re-derive them from the symbol.
       cryptoBackendClient.getModernSpotMarkets()
-        .then((result) => setMarkets({ minOrderUsd: 1, futures: [], spot: result.markets.filter((coin) => coin.chartSupported).map((coin) => ({ id: coin.id, symbol: coin.symbol.toUpperCase(), coinName: `${coin.symbol.toUpperCase()} · ${coin.networkId}`, price: coin.price ?? 0, icon: coin.icon, networkId: coin.networkId, venue: coin.venue })) }))
+        .then((result) => setMarkets({
+          minOrderUsd: 1,
+          futures: [],
+          spot: result.markets.filter((coin) => coin.chartSupported).map((coin) => ({
+            id: coin.id,
+            symbol: coin.symbol.toUpperCase(),
+            coinName: `${coin.symbol.toUpperCase()} · ${coin.networkId}`,
+            price: coin.price ?? 0,
+            icon: coin.icon,
+            networkId: coin.networkId,
+            venue: coin.venue,
+            quote: coin.quote,
+            chartSymbol: coin.chartSymbol,
+            sellToken: coin.sellToken,
+            buyToken: coin.buyToken,
+            inputMint: coin.inputMint,
+            outputMint: coin.outputMint,
+          })),
+        }))
         .catch(() => setMarketsError(true))
       return
     }
@@ -213,6 +265,7 @@ export function TradeClient() {
     setTpPrice("")
     setSlPrice("")
     setOutcome(null)
+    setSpotIntentId(null)
     setError(null)
   }, [symbol, market])
 
@@ -274,10 +327,33 @@ export function TradeClient() {
   }, [market, entryRef, tp, sl, side])
 
   const minOrder = markets?.minOrderUsd ?? 10
-  const modernSpotUnavailable = false
+
+  // Pre-submit gating (spec §8). The plan is built from the registry row the
+  // user is looking at, at the size they could place at minimum, so an
+  // unroutable pair says so in the ticket instead of throwing after the press.
+  // Legacy rows carry none of this metadata, so the legacy ticket never asks.
+  const spotPlan = React.useMemo(
+    () => (usingModern && market === "spot" && current ? buildSpotOrderPlan(current, side, Math.max(amt, minOrder), price) : null),
+    [usingModern, market, current, side, amt, minOrder, price],
+  )
+  const pairUnavailable = spotPlan?.kind === "unavailable"
+
+  // No row to trade: the registry failed, came back empty, or the selected
+  // market vanished from a refresh. `markets === null` is still loading, and
+  // must not be reported as unavailable.
+  const spotMarketsUnavailable = usingModern && market === "spot" && !current && (marketsError || markets !== null)
+
+  // The Jupiter panel is the selected Solana row's own, or nothing at all.
+  const jupiterMarket = React.useMemo(
+    () =>
+      current && "venue" in current && current.venue === "jupiter" && current.inputMint && current.outputMint
+        ? { symbol: current.symbol, quote: current.quote, networkId: current.networkId, inputMint: current.inputMint, outputMint: current.outputMint }
+        : null,
+    [current],
+  )
   const canSubmit =
     !submitting && !!current && amt >= minOrder &&
-    (orderType === "market" || parseFloat(limitPrice) > 0) && !tpslError && !modernSpotUnavailable
+    (orderType === "market" || parseFloat(limitPrice) > 0) && !tpslError && !pairUnavailable
 
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's
@@ -298,6 +374,7 @@ export function TradeClient() {
     setSubmitting(true)
     setError(null)
     setOutcome(null)
+    setSpotIntentId(null)
     try {
       const base = {
         symbol: current.symbol,
@@ -307,22 +384,37 @@ export function TradeClient() {
         ...(orderType === "limit" ? { limitPrice: parseFloat(limitPrice) } : {}),
       }
       if (usingModern) {
-        const evmAccount = modernWallet.data?.accounts.find((item) => item.chainFamily === "evm" && item.state === "active")
+        const accountFor = (family: string) =>
+          modernWallet.data?.accounts.find((item) => item.chainFamily === family && item.state === "active")
         const packageValue = modernPackage.data
-        if (!user?.userId || !modernWallet.data?.id || !evmAccount || !packageValue) throw new Error("Set up and unlock the modern wallet before trading")
+        if (!user?.userId || !modernWallet.data?.id || !packageValue) throw new Error("Set up and unlock the modern wallet before trading")
         if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) throw new Error("Unlock the modern wallet locally before trading")
         if (market === "spot") {
-          if (!current.symbol.toUpperCase().includes("ETH")) throw new Error("Modern spot currently supports ETH/USDC through 0x. Choose ETH/USDC or use the legacy spot router for other pairs.")
-          const networkId = "arbitrum-one" as const
-          const sellToken = side === "buy" ? "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" : "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
-          const buyToken = side === "buy" ? "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1" : "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
-          const intent = await cryptoBackendClient.createModernSpotIntent({ networkId, sellToken, buyToken, sellAmountBaseUnits: side === "buy" ? String(Math.round(amt * 1e6)) : String(Math.round((amt / Math.max(price, 1)) * 1e18)), slippagePercentage: 0.01, idempotencyKey: crypto.randomUUID() })
-          const signed = await signEvmIntent(user.userId, modernWallet.data.id, packageValue, intent, evmAccount.id)
+          // The registry row is the whole order: venue, network, token
+          // identifiers and precision all come from it (spec §8).
+          const plan = buildSpotOrderPlan(current, side, amt, price)
+          if (plan.kind === "unavailable") { setError(plan.reason); return }
+          const walletId = modernWallet.data.id
+          const signingAccount = accountFor(plan.kind === "evm" ? "evm" : "solana")
+          if (!signingAccount) {
+            throw new Error(plan.kind === "evm"
+              ? "Your Worldstreet wallet doesn't have an EVM account yet."
+              : "Your Worldstreet wallet doesn't have a Solana account yet.")
+          }
+          const intent = plan.kind === "evm"
+            ? await cryptoBackendClient.createModernSpotIntent(plan.input)
+            : await cryptoBackendClient.createModernSolanaSpotIntent(plan.input)
+          const signed = plan.kind === "evm"
+            ? await signEvmIntent(user.userId, walletId, packageValue, intent, signingAccount.id)
+            : await signSolanaIntent(user.userId, walletId, packageValue, intent, signingAccount.id)
           await cryptoBackendClient.submitIntent(intent.id, signed)
-          setOutcome({ success: true, symbol: current.symbol, side, size: 0, executionPrice: price, filledSize: 0, avgFillPrice: price, resting: false })
-          refreshAccount()
+          // Submitted is not filled: the status line below follows the intent
+          // poll and only reads as complete once the backend says `confirmed`.
+          setSpotIntentId(intent.id)
           return
         }
+        const evmAccount = accountFor("evm")
+        if (!evmAccount) throw new Error("Set up and unlock the modern wallet before trading")
         const intent = await cryptoBackendClient.createHyperliquidIntent({
           type: "order", market: "futures", symbol: current.symbol, side, orderType, amountUsd: amt,
           ...(orderType === "limit" ? { limitPrice: parseFloat(limitPrice) } : {}),
@@ -412,7 +504,7 @@ export function TradeClient() {
       ...(orderType === "limit" ? { limitPrice: limitPrice || "(empty)" } : {}),
       ...(market === "futures" ? { leverage, takeProfit: tpPrice || null, stopLoss: slPrice || null } : {}),
       readyToSubmit: canSubmit,
-      ...(canSubmit ? {} : { blockedBecause: !current ? "markets not loaded" : amt < minOrder ? `amount below the ${minOrder} minimum` : tpslError ?? "limit price missing" }),
+      ...(canSubmit ? {} : { blockedBecause: !current ? "markets not loaded" : spotPlan?.kind === "unavailable" ? spotPlan.reason : amt < minOrder ? `amount below the ${minOrder} minimum` : tpslError ?? "limit price missing" }),
     },
     openPositions: account?.positions.length ?? 0,
     openOrders: account?.openOrders.length ?? 0,
@@ -482,7 +574,7 @@ export function TradeClient() {
                   <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} src={"icon" in m ? m.icon : undefined} size="md" />
                   {m.symbol}
                   <span className="ml-1 text-[10px] font-medium text-subtle">
-                    {market === "futures" ? "PERP" : "USDC"}
+                    {market === "futures" ? "PERP" : quoteOf(m)}
                   </span>
                   {"maxLeverage" in m && (
                     <span className="ml-1.5 rounded bg-primary/[0.12] px-1 py-0.5 text-[9px] font-bold text-primary">
@@ -500,7 +592,12 @@ export function TradeClient() {
   )
 
   /* ── Order ticket ─────────────────────────────────────────────────────── */
-  const ticket = accountError ? (
+  // A modern spot order is a swap out of the self-custody wallet through
+  // 0x/Jupiter — it never touches the Hyperliquid trading account (which
+  // `refreshAccount` deliberately nulls on the spot tab). Gating the ticket on
+  // that account would leave modern spot as a permanent loading skeleton.
+  const needsTradingAccount = !(usingModern && market === "spot")
+  const ticket = needsTradingAccount && accountError ? (
     <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-warning"><circle cx="12" cy="12" r="10" /><path d="M12 8v5" /><path d="M12 16h.01" /></svg>
@@ -519,7 +616,7 @@ export function TradeClient() {
         Try again
       </button>
     </div>
-  ) : !account ? (
+  ) : needsTradingAccount && !account ? (
     <div className="flex flex-col gap-3 p-3.5">
       <div className="grid grid-cols-2 gap-1.5">
         <div className="h-10 animate-pulse rounded-xl bg-surface-sunken" />
@@ -529,7 +626,7 @@ export function TradeClient() {
       <div className="h-[52px] animate-pulse rounded-xl bg-surface-sunken" />
       <div className="h-11 animate-pulse rounded-full bg-surface-sunken" />
     </div>
-  ) : !ready ? (
+  ) : needsTradingAccount && !ready ? (
     <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.12]">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg>
@@ -549,6 +646,28 @@ export function TradeClient() {
     </div>
   ) : (
     <div className="flex flex-col gap-3 p-3.5">
+      {spotMarketsUnavailable && (
+        <AnnouncementBanner
+          tone="warning"
+          title="Markets are unavailable right now"
+          detail={marketsError
+            ? "The market registry didn't load. Your wallet and balances are unaffected."
+            : "The market registry came back empty, so there's nothing to trade here yet."}
+          action={{ label: "Try again", onClick: loadMarkets }}
+        />
+      )}
+
+      {/* Spec §8: an unroutable pair says so before the press, in the pair's
+          own words, with the legacy router offered when it's available. */}
+      {spotPlan?.kind === "unavailable" && (
+        <AnnouncementBanner
+          tone="warning"
+          title="This pair isn't available on the Worldstreet wallet yet"
+          detail={spotPlan.reason}
+          action={canChooseWallet ? { label: "Use legacy wallet", onClick: () => setWalletSource("legacy") } : undefined}
+        />
+      )}
+
       {/* Side */}
       <div className="grid grid-cols-2 gap-1.5">
         {(["buy", "sell"] as const).map((s) => (
@@ -736,6 +855,29 @@ export function TradeClient() {
           ⚠ {outcome.tpslWarning} — your position is open without that protection.
         </p>
       )}
+      {/* Spec §8: a submitted swap is not a fill. This line follows the intent
+          poll and only reads as done on `confirmed`. */}
+      {spotIntentId && (
+        <p
+          role="status"
+          aria-live="polite"
+          className={`rounded-lg px-2.5 py-1.5 text-xs leading-relaxed ${
+            spotIntentStatus === "confirmed"
+              ? "bg-credit-chip text-credit"
+              : spotIntentStatus === "failed" || spotIntentStatus === "expired"
+              ? "bg-debit-chip text-debit"
+              : "bg-surface-sunken text-muted-foreground"
+          }`}
+        >
+          {spotIntentStatus === "confirmed"
+            ? `Swap confirmed on-chain. Your ${symbol} balance updates shortly.`
+            : spotIntentStatus === "failed"
+            ? "The swap didn't go through — nothing left your wallet beyond network fees."
+            : spotIntentStatus === "expired"
+            ? "The swap expired before it confirmed. Nothing was swapped."
+            : "Swap submitted. Waiting for on-chain confirmation — this isn't a fill yet."}
+        </p>
+      )}
 
       <button
         onClick={submit}
@@ -750,8 +892,8 @@ export function TradeClient() {
       >
         {submitting
           ? "Placing…"
-          : modernSpotUnavailable
-          ? "Spot execution unavailable"
+          : pairUnavailable
+          ? "Pair unavailable"
           : `${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
       </button>
     </div>
@@ -807,7 +949,7 @@ export function TradeClient() {
           >
             <CoinAvatar symbol={bookCoin ?? symbol} size="md" />
             {symbol || "—"}
-            <span className="hidden text-[11px] font-semibold text-subtle sm:inline">{market === "futures" ? "PERP" : "/USDC"}</span>
+            <span className="hidden text-[11px] font-semibold text-subtle sm:inline">{market === "futures" ? "PERP" : `/${quoteOf(current)}`}</span>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-subtle"><path d="M6 9l6 6 6-6" /></svg>
           </button>
           {picker}
@@ -971,9 +1113,11 @@ export function TradeClient() {
         </aside>
       </div>
 
-      {usingModern && market === "spot" && user?.userId && modernWallet.data && modernPackage.data ? (
+      {/* Jupiter's token-denominated panel belongs to the selected Solana pair
+          only — it takes that row's mints, never a fixed SOL/USDC pair. */}
+      {usingModern && market === "spot" && jupiterMarket && user?.userId && modernWallet.data && modernPackage.data ? (
         <div className="border-t border-border/30 px-3 py-3 lg:block">
-          <ModernJupiterPanel userId={user.userId} wallet={modernWallet.data} packageValue={modernPackage.data} />
+          <ModernJupiterPanel userId={user.userId} wallet={modernWallet.data} packageValue={modernPackage.data} market={jupiterMarket} />
         </div>
       ) : null}
 
@@ -1012,7 +1156,7 @@ export function TradeClient() {
                 <CoinAvatar symbol={bookCoin ?? symbol} size="sm" />
                 {symbol}
                 <span className="text-[11px] font-semibold text-subtle">
-                  {market === "futures" ? "PERP" : "/USDC"}
+                  {market === "futures" ? "PERP" : `/${quoteOf(current)}`}
                 </span>
               </span>
               <button

@@ -22,6 +22,15 @@ function fmtPx(p: number) {
   return p.toLocaleString(undefined, { maximumFractionDigits: p < 1 ? 6 : 2 })
 }
 
+/**
+ * The quote asset is the market's own (spec §8) — the registry names it per
+ * row, so the rail must not label every spot pair USDC. Rows that predate the
+ * registry (the legacy Hyperliquid feed) are USDC-quoted, hence the fallback.
+ */
+function quoteLabel(m: AnyMarket) {
+  return "quote" in m && m.quote ? String(m.quote).toUpperCase() : "USDC"
+}
+
 export function MarketsRail({
   list,
   market,
@@ -65,7 +74,9 @@ export function MarketsRail({
 
       <div className="slim-scroll min-h-0 flex-1 overflow-y-auto pb-2" role="listbox" aria-label="Market list">
         {list.length === 0 ? (
-          // Markets still loading — hold the layout with quiet rows.
+          // Markets still loading — hold the layout with quiet rows. An empty
+          // registry looks identical here; the ticket carries the honest
+          // "markets are unavailable" message, this rail only holds space.
           Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="mx-3 my-1.5 h-9 animate-pulse rounded-lg bg-surface-sunken/70" />
           ))
@@ -92,7 +103,7 @@ export function MarketsRail({
                   <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} src={"icon" in m ? m.icon : undefined} size="md" />
                   {m.symbol}
                   <span className="ml-1 text-[10px] font-medium text-subtle">
-                    {market === "futures" ? "PERP" : "USDC"}
+                    {market === "futures" ? "PERP" : quoteLabel(m)}
                   </span>
                   {"maxLeverage" in m && (
                     <span className="ml-1.5 rounded bg-primary/[0.12] px-1 py-0.5 text-[9px] font-bold text-primary">

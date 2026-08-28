@@ -465,7 +465,27 @@ export function fetchTransactions(params?: Record<string, string>): Promise<Tran
 
 // ── Hyperliquid trading (/api/trade/*) — mirrors mobile's trade.ts 1:1 ──────
 
-export type HlSpotMarket = { id?: string; symbol: string; coinName: string; price: number; icon?: string | null; networkId?: string; venue?: string }
+/**
+ * A spot row. The modern-wallet path fills the optional half from the backend
+ * market registry (spec §8) and carries it end to end: the order builder needs
+ * the quote asset and the exact token identifiers, and must never re-derive
+ * them from the symbol.
+ */
+export type HlSpotMarket = {
+  id?: string
+  symbol: string
+  coinName: string
+  price: number
+  icon?: string | null
+  networkId?: string
+  venue?: string
+  quote?: string
+  chartSymbol?: string
+  sellToken?: string
+  buyToken?: string
+  inputMint?: string
+  outputMint?: string
+}
 export type HlFuturesMarket = { symbol: string; price: number; maxLeverage: number }
 
 export type HlMarkets = {
