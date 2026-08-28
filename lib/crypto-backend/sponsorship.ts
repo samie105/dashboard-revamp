@@ -71,9 +71,18 @@ export function resolveFeePresentation(input: {
 }
 
 /**
- * The taxonomy's own reason when the backend gave one — e.g. `SPONSORSHIP_
- * UNAVAILABLE`'s `details` carrying the daily-limit message — else the Copy
- * Deck's canned fallback. Never a raw exception string reaching the screen.
+ * The taxonomy's own reason when the backend gave one, else the Copy Deck's
+ * canned fallback. Never a raw exception string reaching the screen.
+ *
+ * Fallback chain: a structured `details.message` (e.g. the daily-limit
+ * copy) wins when present; otherwise, but ONLY for a `SPONSORSHIP_
+ * UNAVAILABLE`-coded error, the backend's own top-level `.message` — that
+ * field is `client.ts`'s `payload.error?.message`, the documented primary
+ * human-readable field, so a backend that puts the daily-limit copy there
+ * instead of in `details` must not be silently dropped. Gating this on the
+ * SPONSORSHIP_UNAVAILABLE code specifically (rather than any CryptoBackendError)
+ * keeps an unrelated transport failure's technical message from leaking into
+ * the fee row; the canned copy is always the answer for those.
  */
 function sponsorshipUnavailableReason(quoteError: unknown): string {
   if (quoteError instanceof CryptoBackendError) {
@@ -81,6 +90,9 @@ function sponsorshipUnavailableReason(quoteError: unknown): string {
     if (details && typeof details === "object") {
       const message = (details as Record<string, unknown>).message
       if (typeof message === "string" && message.trim()) return message.trim()
+    }
+    if (quoteError.code === "SPONSORSHIP_UNAVAILABLE" && quoteError.message.trim()) {
+      return quoteError.message.trim()
     }
   }
   return SPONSOR_UNAVAILABLE_REASON

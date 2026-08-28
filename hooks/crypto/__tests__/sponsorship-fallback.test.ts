@@ -41,13 +41,17 @@ describe("resolveFeePresentation", () => {
     expect(resolveFeePresentation({ requested: true, operation: operation({ status: "confirmed" }), quoteError: null }).kind).toBe("sponsored")
   })
 
-  it("falls back to self-paid with the taxonomy's default reason when the quote threw SPONSORSHIP_UNAVAILABLE", () => {
-    const quoteError = new CryptoBackendError("Sponsorship unavailable", 400, "SPONSORSHIP_UNAVAILABLE")
+  it("surfaces the backend's top-level message for SPONSORSHIP_UNAVAILABLE when there's no structured details.message", () => {
+    // `client.ts` populates CryptoBackendError.message from `payload.error?.
+    // message` — the documented primary human-readable field — so a backend
+    // that puts its reason there (rather than nested in `details`) must not
+    // be silently dropped for the generic canned copy.
+    const quoteError = new CryptoBackendError("Sponsorship isn't available for this account right now.", 400, "SPONSORSHIP_UNAVAILABLE")
     const result = resolveFeePresentation({ requested: true, operation: null, quoteError })
-    expect(result).toEqual({ kind: "self-paid-fallback", reason: SPONSOR_UNAVAILABLE_REASON })
+    expect(result).toEqual({ kind: "self-paid-fallback", reason: "Sponsorship isn't available for this account right now." })
   })
 
-  it("surfaces the backend's own message when SPONSORSHIP_UNAVAILABLE details carry one (e.g. the daily limit)", () => {
+  it("prefers a structured details.message over the top-level message when both are present (e.g. the daily limit)", () => {
     const quoteError = new CryptoBackendError("Sponsorship unavailable", 400, "SPONSORSHIP_UNAVAILABLE", {
       message: "You've used today's $5 sponsorship allowance for this account.",
     })
@@ -56,6 +60,25 @@ describe("resolveFeePresentation", () => {
       kind: "self-paid-fallback",
       reason: "You've used today's $5 sponsorship allowance for this account.",
     })
+  })
+
+  it("falls back to the canned default when a SPONSORSHIP_UNAVAILABLE error carries no usable message at all", () => {
+    const quoteError = new CryptoBackendError("", 400, "SPONSORSHIP_UNAVAILABLE")
+    const result = resolveFeePresentation({ requested: true, operation: null, quoteError })
+    expect(result).toEqual({ kind: "self-paid-fallback", reason: SPONSOR_UNAVAILABLE_REASON })
+  })
+
+  it("never leaks a generic transport error's top-level message into the fee row", () => {
+    // Only a SPONSORSHIP_UNAVAILABLE-coded error's top-level message is
+    // trusted — an unrelated failure's technical text must not reach the UI.
+    const quoteError = new CryptoBackendError("Crypto backend request failed before a response: TypeError: fetch failed", 0, "CRYPTO_BACKEND_UNREACHABLE")
+    const result = resolveFeePresentation({ requested: true, operation: null, quoteError })
+    expect(result).toEqual({ kind: "self-paid-fallback", reason: SPONSOR_UNAVAILABLE_REASON })
+  })
+
+  it("falls back to the canned default for a plain (non-CryptoBackendError) throw", () => {
+    const result = resolveFeePresentation({ requested: true, operation: null, quoteError: new Error("fetch failed") })
+    expect(result).toEqual({ kind: "self-paid-fallback", reason: SPONSOR_UNAVAILABLE_REASON })
   })
 
   it("falls back to self-paid with the expiry reason when the offer itself expired", () => {
