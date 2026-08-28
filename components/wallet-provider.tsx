@@ -6,7 +6,10 @@ import {
   pregenerateWallet,
   refreshWallet as refreshWalletAction,
   getTradingWalletStatus,
+  getExistingWallets,
 } from "@/lib/wallet-actions"
+import { isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { shouldProvisionLegacy } from "@/lib/wallet-mode"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -53,6 +56,7 @@ interface WalletContextType {
   tradingWallet: TradingWallet | null
   hasTradingWallet: boolean
   privyType: number | null
+  legacyWalletExists: boolean | null
   fetchWallets: () => Promise<void>
   refreshWallets: () => Promise<void>
 }
@@ -73,6 +77,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [tradingWallet, setTradingWallet] = React.useState<TradingWallet | null>(null)
   const [hasTradingWallet, setHasTradingWallet] = React.useState(false)
   const [privyType, setPrivyType] = React.useState<number | null>(null)
+  const [legacyWalletExists, setLegacyWalletExists] = React.useState<boolean | null>(null)
 
   const checkTradingWallet = React.useCallback(async () => {
     if (!user?.email) return
@@ -93,11 +98,51 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    setIsLoading(true)
+    setError(null)
+
+    // Spec §1: check for an existing legacy Privy wallet before ever creating
+    // one. New users never get a Privy wallet provisioned; existing legacy
+    // owners keep working exactly as before.
+    let exists: boolean | null = null
+    if (isCryptoBackendEnabled) {
+      setSetupStatus("Checking wallet status…")
+      const lookup = await getExistingWallets(user.email)
+      if (lookup.success) {
+        exists = lookup.exists
+        setLegacyWalletExists(lookup.exists)
+        if (lookup.exists && lookup.wallets) {
+          // The lookup already returned the wallets — no create call needed at all.
+          setWallets(lookup.wallets as unknown as PrivyWallets)
+          setAddresses({
+            ethereum: lookup.wallets.ethereum?.address ?? "",
+            solana: lookup.wallets.solana?.address ?? "",
+            sui: lookup.wallets.sui?.address ?? "",
+            ton: lookup.wallets.ton?.address ?? "",
+            tron: lookup.wallets.tron?.address ?? "",
+          })
+          if (lookup.tradingWallet) setTradingWallet(lookup.tradingWallet)
+          setPrivyType(lookup.privy_type ?? null)
+          setWalletsGenerated(true)
+          setSetupStatus(null)
+          setIsLoading(false)
+          return
+        }
+      } else {
+        setLegacyWalletExists(null)
+      }
+    }
+
+    if (!shouldProvisionLegacy({ modernEnabled: isCryptoBackendEnabled, legacyWalletExists: exists })) {
+      // Modern-only user (or inconclusive lookup): never create a Privy wallet.
+      setSetupStatus(null)
+      setIsLoading(false)
+      return
+    }
+
     const MAX_RETRIES = 2
     const RETRY_DELAYS = [2000, 5000]
 
-    setIsLoading(true)
-    setError(null)
     setSetupStatus("Connecting to wallet service…")
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -196,10 +241,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       tradingWallet,
       hasTradingWallet,
       privyType,
+      legacyWalletExists,
       fetchWallets,
       refreshWallets,
     }),
-    [wallets, addresses, walletsGenerated, isLoading, error, setupStatus, tradingWallet, hasTradingWallet, privyType, fetchWallets, refreshWallets],
+    [wallets, addresses, walletsGenerated, isLoading, error, setupStatus, tradingWallet, hasTradingWallet, privyType, legacyWalletExists, fetchWallets, refreshWallets],
   )
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>

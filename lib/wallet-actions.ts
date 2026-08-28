@@ -93,6 +93,7 @@ export type WalletResult = {
   wallets?: Record<string, WalletInfo>
   tradingWallet?: { walletId: string; address: string; chainType: string } | null
   error?: string
+  notFound?: boolean
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -303,7 +304,7 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
     try {
       user = await privy.users().getByEmailAddress({ address: email })
     } catch {
-      return { success: false, error: "User not found in Privy. Please create wallets first." }
+      return { success: false, error: "User not found in Privy. Please create wallets first.", notFound: true }
     }
 
     if (!user) {
@@ -332,5 +333,26 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     }
+  }
+}
+
+/**
+ * Lookup-only: reports whether this email already owns legacy Privy wallets.
+ * MUST NOT create anything — this is the spec §1 gate that keeps new users
+ * from being provisioned a legacy wallet.
+ */
+export async function getExistingWallets(email: string): Promise<
+  | { success: true; exists: boolean; wallets?: WalletResult["wallets"]; tradingWallet?: WalletResult["tradingWallet"]; privy_type?: number }
+  | { success: false; error: string }
+> {
+  try {
+    const result = await refreshWallet(email)
+    if (result.success && result.wallets) {
+      return { success: true, exists: true, wallets: result.wallets, tradingWallet: result.tradingWallet ?? null, privy_type: result.privy_type }
+    }
+    if (result.notFound) return { success: true, exists: false }
+    return { success: false, error: result.error ?? "Wallet lookup failed" }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Wallet lookup failed" }
   }
 }
