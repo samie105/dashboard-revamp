@@ -11,7 +11,7 @@
  */
 
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { cryptoBackendClient, cryptoQueryKeys } from "@/lib/crypto-backend"
 import type { CryptoWalletDetails, CryptoWalletPackageDocument } from "@/lib/crypto-backend"
 import { buildSolanaSwapPlanFromTokenAmount, solanaSwapProblem, type ModernSpotMarketRow } from "@/lib/crypto-backend/spot-order"
@@ -37,6 +37,7 @@ export function ModernJupiterPanel({
   const [busy, setBusy] = React.useState(false)
   const [message, setMessage] = React.useState<string | null>(null)
   const [intentId, setIntentId] = React.useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   // Spec §8: the swap is done when the backend says `confirmed`, not when the
   // submit call returns — the same poll the transfer flow runs.
@@ -50,6 +51,19 @@ export function ModernJupiterPanel({
     },
   })
   const intentStatus = intentId ? intentQuery.data?.status : undefined
+
+  // The balance snapshot has `staleTime: Infinity` (spec §5's explicit-
+  // invalidation list) — a confirmed swap has to say so itself or the wallet
+  // page shows pre-trade balances forever. Guarded on the created→confirmed
+  // TRANSITION (a ref, not the poll tick) so a swap that reopens this intent
+  // id on a later confirmed read never re-fires it.
+  const invalidatedFor = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (intentStatus !== "confirmed" || !intentId || invalidatedFor.current === intentId) return
+    invalidatedFor.current = intentId
+    void queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balanceSnapshot(userId) })
+    void queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balances(userId) })
+  }, [intentStatus, intentId, queryClient, userId])
 
   const base = market.symbol.toUpperCase()
   const quote = (market.quote ?? "USDC").toUpperCase()

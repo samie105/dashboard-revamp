@@ -18,7 +18,7 @@ import { FEE_SELF_LABEL, FEE_SPONSORED_CHIP_LABEL } from "./send-helpers"
 export type ChoiceOption = { key: string; label: string; sub?: string; icon?: string }
 
 const ADDRESS_INPUT_CLASS =
-  "w-full rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 font-mono text-[13px] outline-none ring-1 ring-border/25 transition-shadow focus-visible:ring-2 focus-visible:ring-primary/40 placeholder:font-sans"
+  "w-full rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 font-mono text-[13px] outline-none ring-1 ring-border/25 transition-shadow focus-visible:ring-2 focus-visible:ring-primary/40 placeholder:font-sans disabled:opacity-50"
 
 const FEE_OPTIONS: ChoiceOption[] = [
   { key: "self", label: FEE_SELF_LABEL },
@@ -54,6 +54,7 @@ export function SendFormScreen({
   ctaBusy,
   onSubmit,
   errorSlot,
+  disabled = false,
 }: {
   networkOptions: ChoiceOption[]
   networkId: string
@@ -85,6 +86,11 @@ export function SendFormScreen({
   ctaBusy: boolean
   onSubmit: () => void
   errorSlot?: React.ReactNode
+  /** True while a value read from this screen is already in flight (an intent
+   *  create/refresh) — belt and braces alongside the committed-snapshot
+   *  capture in `SendFlow`: the fields are locked so what the review screen
+   *  shows can never diverge from what got signed. */
+  disabled?: boolean
 }) {
   const networkChosen = Boolean(networkId)
   const assetChosen = Boolean(assetKey)
@@ -94,7 +100,7 @@ export function SendFormScreen({
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
         <Eyebrow>Network</Eyebrow>
-        <ChoiceRow options={networkOptions} value={networkId} onChange={onNetworkChange} />
+        <ChoiceRow options={networkOptions} value={networkId} onChange={onNetworkChange} disabled={disabled} />
       </div>
 
       {networkNotice}
@@ -111,7 +117,7 @@ export function SendFormScreen({
           {networkChosen && (
             <div className="flex flex-col gap-2">
               <Eyebrow>Asset</Eyebrow>
-              <ChoiceRow columns={2} options={assetOptions} value={assetKey} onChange={onAssetChange} />
+              <ChoiceRow columns={2} options={assetOptions} value={assetKey} onChange={onAssetChange} disabled={disabled} />
             </div>
           )}
 
@@ -126,6 +132,7 @@ export function SendFormScreen({
                   value={to}
                   onChange={(event) => onToChange(event.target.value)}
                   onBlur={onToBlur}
+                  disabled={disabled}
                   spellCheck={false}
                   autoComplete="off"
                   autoCapitalize="none"
@@ -155,6 +162,7 @@ export function SendFormScreen({
                 // The destination sits directly above and is still empty on
                 // first arrival — grabbing focus for the amount would skip it.
                 autoFocus={false}
+                disabled={disabled}
               />
 
               {/* Spec §11: rendered only when the service says sponsorship is
@@ -167,6 +175,7 @@ export function SendFormScreen({
                     options={FEE_OPTIONS}
                     value={sponsorFees ? "sponsored" : "self"}
                     onChange={(key) => onSponsorFeesChange(key === "sponsored")}
+                    disabled={disabled}
                   />
                 </div>
               )}

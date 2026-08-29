@@ -172,6 +172,7 @@ export function AmountField({
   presets,
   autoFocus = true,
   maxDecimals = 2,
+  disabled = false,
 }: {
   value: string
   onChange: (v: string) => void
@@ -192,6 +193,10 @@ export function AmountField({
    *  panel, and have 100.005 sent — the two numbers disagreeing about their
    *  own money. */
   maxDecimals?: number
+  /** True while a value captured from this field is in flight (e.g. an intent
+   *  create) — the figure the user is about to review must be the one they
+   *  see here, not one they slipped in mid-request. */
+  disabled?: boolean
 }) {
   // The percentage chips honour the unit's own precision. A fixed two places
   // was right for a cents-settled dollar flow and wrong everywhere else: on a
@@ -230,12 +235,13 @@ export function AmountField({
           ref={inputRef}
           value={value}
           onChange={(e) => set(e.target.value)}
+          disabled={disabled}
           inputMode="decimal"
           placeholder="0"
           aria-label={`Amount in ${unit}`}
           data-vivid-target="flow-amount"
           data-vivid-label={`The amount to move, in ${unit}`}
-          className="w-full min-w-0 bg-transparent text-center font-display text-[clamp(2.75rem,8vw,3.5rem)] font-light leading-none tracking-[-0.02em] tabular-nums outline-none placeholder:text-muted-foreground/30"
+          className="w-full min-w-0 bg-transparent text-center font-display text-[clamp(2.75rem,8vw,3.5rem)] font-light leading-none tracking-[-0.02em] tabular-nums outline-none placeholder:text-muted-foreground/30 disabled:opacity-50"
         />
       </div>
       <span className="rounded-full bg-surface-sunken px-2.5 py-1 text-[11px] font-bold tracking-[0.04em] text-muted-foreground ring-1 ring-border/25">
@@ -248,7 +254,8 @@ export function AmountField({
             <button
               key={pct}
               onClick={() => onChange(chipAmount(pct, maxSpend))}
-              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100"
+              disabled={disabled}
+              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50"
             >
               {pct === 1 ? "Max" : `${pct * 100}%`}
             </button>
@@ -260,7 +267,8 @@ export function AmountField({
             <button
               key={p}
               onClick={() => onChange(String(p))}
-              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100"
+              disabled={disabled}
+              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50"
             >
               {p.toLocaleString()}
             </button>
@@ -290,11 +298,16 @@ export function ChoiceRow<T extends string>({
   value,
   onChange,
   columns = 3,
+  disabled = false,
 }: {
   options: { key: T; label: string; sub?: string; icon?: string }[]
   value: T
   onChange: (k: T) => void
   columns?: 2 | 3
+  /** True while a choice made here is in flight elsewhere (e.g. an intent
+   *  create) — the option the user is about to review must be the one they
+   *  picked, not one they swapped in mid-request. */
+  disabled?: boolean
 }) {
   return (
     <div className={cn("grid gap-2", columns === 2 ? "grid-cols-2" : "grid-cols-3")}>
@@ -304,8 +317,9 @@ export function ChoiceRow<T extends string>({
           <button
             key={o.key}
             onClick={() => onChange(o.key)}
+            disabled={disabled}
             className={cn(
-              "relative flex flex-col items-center gap-1.5 rounded-2xl px-3 pb-3 pt-3.5 transition-all active:scale-[0.97] motion-reduce:active:scale-100",
+              "relative flex flex-col items-center gap-1.5 rounded-2xl px-3 pb-3 pt-3.5 transition-all active:scale-[0.97] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50",
               active
                 ? // The chosen option floats: a half-step lift + a real
                   // shadow, so selection reads as depth, not just tint.

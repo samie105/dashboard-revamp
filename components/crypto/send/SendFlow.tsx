@@ -85,6 +85,13 @@ const WALLET_HREF = "/wallet/modern"
  * drop out of the spendable list entirely — the status screen would then be
  * reporting "Sending 5 " with the symbol missing, about money it had already
  * sent. What was signed doesn't change because the wallet moved on.
+ *
+ * Captured BEFORE `transfer.createIntent` is awaited, from the same read as
+ * the values handed to that call — never after. `createIntent` is a
+ * multi-second round trip (intent + sponsorship quote + prepare), and the
+ * pickers are still live on screen for however long the form isn't disabled
+ * during it; reading this snapshot back out afterwards would risk it
+ * disagreeing with what was actually signed.
  */
 type CommittedTransfer = {
   symbol: string
@@ -375,9 +382,15 @@ export function SendFlow() {
     setAddressTouched(true)
     if (blocker || !selectedBalance) return
     setCreateError(null)
+    // Captured HERE, before the await — not read back off the pickers once
+    // `createIntent` resolves. The form stays mounted (and merely disabled,
+    // belt-and-braces) for the whole round trip, so what gets reviewed and
+    // signed must be exactly what was on screen the instant this fired.
+    const input = transferInput()
+    const committedSnapshot = snapshot()
     try {
-      await transfer.createIntent(transferInput())
-      setCommitted(snapshot())
+      await transfer.createIntent(input)
+      setCommitted(committedSnapshot)
       setStep("review")
     } catch (error) {
       setCreateError(error)
@@ -403,9 +416,13 @@ export function SendFlow() {
     // exists. Review is where a fresh quote gets read; while it is being
     // fetched the review branch shows its (bounded) skeleton.
     setStep("review")
+    // Same capture-before-await discipline as `startReview`: whatever this
+    // refresh reviews and signs must be the values read the instant it fired.
+    const input = transferInput()
+    const committedSnapshot = snapshot()
     try {
-      await transfer.createIntent(transferInput())
-      setCommitted(snapshot())
+      await transfer.createIntent(input)
+      setCommitted(committedSnapshot)
     } catch (error) {
       setCreateError(error)
       // No quote means nothing to review. The form is the only screen that is
@@ -607,6 +624,12 @@ export function SendFlow() {
   }
 
   if (networkOptions.length === 0) {
+    // An empty list here can mean the read failed, not that it succeeded with
+    // nothing in it — those are different problems with different fixes, and
+    // only the second one is actually "add a chain under Security".
+    if (networks.isError && !networks.data) {
+      return shell(<SectionMessage error={networks.error} onAction={() => void networks.refetch()} />)
+    }
     return shell(
       <UnavailablePanel
         title="No network to send on"
@@ -756,6 +779,11 @@ export function SendFlow() {
       ctaBusy={transfer.isLoading}
       onSubmit={() => void startReview()}
       errorSlot={renderError(createError, () => void startReview(), () => void startReview())}
+      // Belt and braces alongside the pre-flight snapshot capture above: while
+      // the intent create is in flight, nothing here should be editable —
+      // there must be no window where a picker change can outrun what was
+      // already captured for the review screen.
+      disabled={transfer.isLoading}
     />,
   )
 }

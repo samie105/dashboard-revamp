@@ -17,7 +17,7 @@
  */
 
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import Image from "next/image"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -139,6 +139,7 @@ export function TradeClient() {
   const router = useRouter()
   const { openFlow } = useMoneyFlow()
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const modernWallet = useCryptoWalletState()
   const modernPackage = useQuery({
     queryKey: ["crypto", "wallet-package", user?.userId ?? "anonymous"],
@@ -214,6 +215,20 @@ export function TradeClient() {
     },
   })
   const spotIntentStatus = spotIntentId ? spotIntentQuery.data?.status : undefined
+
+  // The balance snapshot has `staleTime: Infinity` (spec §5's explicit-
+  // invalidation list) — a confirmed spot trade has to say so itself or the
+  // wallet page shows pre-trade balances forever. Guarded on the created→
+  // confirmed TRANSITION (a ref, not the poll tick) so this can only fire
+  // once per intent.
+  const spotBalancesInvalidatedFor = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (spotIntentStatus !== "confirmed" || !spotIntentId || spotBalancesInvalidatedFor.current === spotIntentId) return
+    spotBalancesInvalidatedFor.current = spotIntentId
+    const uid = user?.userId ?? "anonymous"
+    void queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balanceSnapshot(uid) })
+    void queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balances(uid) })
+  }, [spotIntentStatus, spotIntentId, queryClient, user?.userId])
 
   // Markets + account
   const refreshAccount = React.useCallback(() => {
