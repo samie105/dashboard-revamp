@@ -35,3 +35,25 @@ export function useUsdIndex(): Record<string, number> | null {
   if (query.isPending) return null
   return query.data?.prices ?? {}
 }
+
+/**
+ * Symbol → 24h percent change, from the same query (and therefore the same
+ * cache entry) as `useUsdIndex`. A symbol the feed didn't move-stamp is
+ * simply absent — callers render nothing rather than a fake 0.00%.
+ */
+export function useUsdChangeIndex(): Record<string, number> | null {
+  const query = useQuery({
+    queryKey: ["usd-price-index"],
+    queryFn: () => getPrices(),
+    staleTime: 60_000,
+    gcTime: 15 * 60_000,
+    refetchOnWindowFocus: false,
+  })
+
+  if (query.isPending) return null
+  const changes: Record<string, number> = {}
+  for (const coin of query.data?.coins ?? []) {
+    if (Number.isFinite(coin.change24h) && coin.change24h !== 0) changes[coin.symbol.toUpperCase()] = coin.change24h
+  }
+  return changes
+}

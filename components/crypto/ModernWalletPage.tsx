@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo, useState, type CSSProperties } from "react"
+import { useMemo, useState, type ComponentType, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDownLeft01Icon, ArrowUpRight01Icon, EyeIcon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, EyeIcon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
+import Link from "next/link"
 
 import { useAuth } from "@/components/auth-provider"
 import { AddressPill, ModeBadge, SectionMessage } from "@/components/crypto/primitives"
@@ -14,7 +15,6 @@ import { RecoveryPanel } from "@/components/crypto/RecoveryPanel"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { InlineNotice, UnavailablePanel } from "@/components/ui/flow"
 import {
-  ActionPill,
   Balance,
   CardHeader,
   CardShell,
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/system"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
 import { formatCryptoAmount, useCryptoBalances, type CryptoBalanceResult } from "@/hooks/crypto/useCryptoBalances"
+import { useUsdChangeIndex } from "@/hooks/crypto/useUsdIndex"
 import { useCryptoNetworks } from "@/hooks/crypto/useCryptoNetworks"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useUsdIndex } from "@/hooks/crypto/useUsdIndex"
@@ -79,6 +80,104 @@ const AMOUNT_MASK = "••••"
 const DepositGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={ArrowDownLeft01Icon} className={className} />
 const SendGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={ArrowUpRight01Icon} className={className} />
 const SecurityGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={Shield01Icon} className={className} />
+const TradeGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={ChartLineData01Icon} className={className} />
+
+/** The round icon-button-with-label — the action grammar every consumer
+ *  wallet trains people on. Gold only on the single primary verb. */
+function RoundAction({
+  icon: Icon,
+  label,
+  primary,
+  href,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string }>
+  label: string
+  primary?: boolean
+  href?: string
+  onClick?: () => void
+}) {
+  const circle = primary
+    ? "bg-primary text-primary-foreground shadow-[0_10px_28px_-10px_rgba(234,179,8,0.55)]"
+    : "bg-surface-sunken text-foreground ring-1 ring-border/25"
+  const inner = (
+    <>
+      <span
+        className={`flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 group-hover:-translate-y-0.5 group-hover:brightness-110 motion-reduce:group-hover:translate-y-0 ${circle}`}
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="text-[11.5px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+        {label}
+      </span>
+    </>
+  )
+  const shell = "group flex flex-col items-center gap-1.5"
+  return href ? (
+    <Link href={href} className={shell}>{inner}</Link>
+  ) : (
+    <button type="button" onClick={onClick} className={shell}>{inner}</button>
+  )
+}
+
+/** The card in the wallet — a payment-card object carrying the brand mark,
+ *  a chip, and the primary address grouped like a card number. Deliberately
+ *  dark in both themes: a black-and-gold card stays a black-and-gold card
+ *  on a light desk. Press to copy the full address. */
+function WalletCardVisual({ address, label }: { address?: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  const grouped = address
+    ? `${address.slice(0, 6)}  ••••  ••••  ${address.slice(-6)}`
+    : "••••  ••••  ••••  ••••"
+  return (
+    <button
+      type="button"
+      disabled={!address}
+      aria-label={address ? `Copy ${label} address` : "Address pending"}
+      onClick={() => {
+        if (!address) return
+        navigator.clipboard?.writeText(address).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1600)
+        }).catch(() => {})
+      }}
+      className="group relative hidden aspect-[1.586] w-[290px] shrink-0 overflow-hidden rounded-2xl text-left transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0 lg:block"
+    >
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,#2E2A27_0%,#1C1917_48%,#100E0D_100%)]" />
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{ background: "radial-gradient(130% 100% at 100% 0%, rgba(234,179,8,0.16) 0%, rgba(234,179,8,0.045) 42%, transparent 64%)" }}
+      />
+      <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl p-px opacity-90" style={GOLD_STROKE} />
+      <div className="relative flex h-full flex-col justify-between p-4">
+        <div className="flex items-start justify-between">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/worldstreet-logo/WorldStreet1.png" alt="" className="h-6 w-6 opacity-90" />
+          <span
+            aria-hidden
+            className="grid h-6 w-8 grid-cols-2 gap-px overflow-hidden rounded-[5px] bg-gradient-to-br from-yellow-200/70 via-yellow-500/60 to-yellow-800/60 p-[3px]"
+          >
+            <span className="rounded-[1px] bg-black/25" />
+            <span className="rounded-[1px] bg-black/10" />
+            <span className="rounded-[1px] bg-black/10" />
+            <span className="rounded-[1px] bg-black/25" />
+          </span>
+        </div>
+        <span className="font-mono text-[13px] tracking-[0.13em] text-white/85">{grouped}</span>
+        <div className="flex items-end justify-between">
+          <div className="flex flex-col">
+            <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">
+              {copied ? "Address copied" : label}
+            </span>
+            <span className="text-[11.5px] font-semibold tracking-[0.02em] text-white/90">WorldStreet</span>
+          </div>
+          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/90">Only yours</span>
+        </div>
+      </div>
+    </button>
+  )
+}
 
 /**
  * One holding's USD value, or `null` when nothing here can be trusted: no
@@ -111,6 +210,7 @@ export function ModernWalletPage() {
   const networks = useCryptoNetworks()
   const balances = useCryptoBalances()
   const usdIndex = useUsdIndex()
+  const changeIndex = useUsdChangeIndex()
   const userId = user?.userId ?? "anonymous"
 
   const packageQuery = useQuery({
@@ -182,6 +282,13 @@ export function ModernWalletPage() {
     if (rest > 0) segments.push({ label: "Other", value: rest })
     return segments
   }, [balances.balances, usdIndex])
+
+  // The card visual wears the wallet's primary identity — the Ethereum
+  // address by convention, or whatever account exists first.
+  const primaryAccount = useMemo(
+    () => (wallet.data?.accounts ?? []).find((account) => account.chainFamily === "evm") ?? wallet.data?.accounts[0],
+    [wallet.data],
+  )
 
   const heroStats = useMemo(() => {
     const pricedNetworks = new Set(balances.balances.map((balance) => balance.networkId))
@@ -300,8 +407,8 @@ export function ModernWalletPage() {
               <div aria-hidden className="pointer-events-none absolute -right-24 -top-32 h-72 w-72 rounded-full bg-primary/[0.08] blur-3xl" />
               <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-20 h-60 w-60 rounded-full bg-primary/[0.04] blur-3xl" />
 
-              <div className="relative flex flex-col gap-5">
-                <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+              <div className="relative flex flex-col gap-6">
+                <div className="flex items-start justify-between gap-6">
                   <div className="flex w-fit flex-col gap-1">
                     <div className="flex items-center gap-3">
                       <Eyebrow>Est. Total Value</Eyebrow>
@@ -315,9 +422,9 @@ export function ModernWalletPage() {
                       </button>
                     </div>
                     {heroLoading ? (
-                      <Skel className="my-1.5 h-[clamp(2rem,4vw,3rem)] w-[clamp(11rem,22vw,17rem)] rounded-lg" />
+                      <Skel className="my-1.5 h-[clamp(2.4rem,5vw,3.6rem)] w-[clamp(12rem,24vw,19rem)] rounded-lg" />
                     ) : (
-                      <Balance value={usd(totalUsd)} hidden={hidden} className="text-[clamp(2rem,4vw,3rem)]" />
+                      <Balance value={usd(totalUsd)} hidden={hidden} className="text-[clamp(2.4rem,5vw,3.6rem)]" />
                     )}
                     <div className="flex items-center gap-1">
                       <p className="text-[13px] text-muted-foreground">
@@ -326,6 +433,25 @@ export function ModernWalletPage() {
                       </p>
                       {refreshAction}
                     </div>
+                  </div>
+
+                  {/* The card in the wallet — primary address as the card
+                      number, press to copy. lg+ only; mobile leads with the
+                      figure and the verbs. */}
+                  <WalletCardVisual
+                    address={primaryAccount?.canonicalAddress}
+                    label={primaryAccount ? (FAMILY_LABEL[primaryAccount.chainFamily] ?? primaryAccount.chainFamily) : "Wallet"}
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+                  {/* The verbs, in the round grammar every wallet trains —
+                      gold on the one primary verb only. */}
+                  <div className="flex gap-5">
+                    <RoundAction icon={DepositGlyph} label="Deposit" primary onClick={() => openReceive()} />
+                    <RoundAction icon={SendGlyph} label="Send" href="/wallet/modern/send" />
+                    <RoundAction icon={TradeGlyph} label="Trade" href="/trade" />
+                    <RoundAction icon={SecurityGlyph} label="Security" href="#security" />
                   </div>
 
                   {/* The wallet's shape at a glance — real counts, no invented data. */}
@@ -341,13 +467,6 @@ export function ModernWalletPage() {
                       </div>
                     ))}
                   </div>
-                </div>
-
-                {/* The verbs sit under the figure they act on (design-system §05). */}
-                <div className="flex flex-wrap gap-2">
-                  <ActionPill icon={DepositGlyph} label="Deposit" onClick={() => openReceive()} />
-                  <ActionPill icon={SendGlyph} label="Send" href="/wallet/modern/send" />
-                  <ActionPill icon={SecurityGlyph} label="Security" href="#security" />
                 </div>
               </div>
             </section>
@@ -476,6 +595,7 @@ export function ModernWalletPage() {
                 <div className="flex flex-col pb-2">
                   {balances.balances.map((balance) => {
                     const value = usdValueOf(balance, usdIndex)
+                    const change = changeIndex?.[(balance.symbol ?? "").toUpperCase()]
                     return (
                       <ListRow
                         key={`${balance.accountId}:${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`}
@@ -499,9 +619,18 @@ export function ModernWalletPage() {
                               <span className="text-[14px] font-semibold tabular-nums">
                                 {hidden ? AMOUNT_MASK : formatCryptoAmount(balance.amountBaseUnits, balance.decimals)}
                               </span>
-                              {value !== null ? (
-                                <span className="text-[12px] text-muted-foreground tabular-nums">{hidden ? AMOUNT_MASK : usd(value)}</span>
-                              ) : null}
+                              <span className="flex items-center gap-1.5 text-[12px] tabular-nums">
+                                {value !== null ? (
+                                  <span className="text-muted-foreground">{hidden ? AMOUNT_MASK : usd(value)}</span>
+                                ) : null}
+                                {/* 24h move — a market fact, not a holding, so it
+                                    stays visible under privacy masking. */}
+                                {change !== undefined ? (
+                                  <span className={change >= 0 ? "text-credit" : "text-debit"}>
+                                    {change >= 0 ? "+" : ""}{change.toFixed(1)}%
+                                  </span>
+                                ) : null}
+                              </span>
                             </span>
                           </span>
                         }
