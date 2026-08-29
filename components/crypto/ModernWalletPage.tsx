@@ -140,73 +140,107 @@ function CardChip() {
   )
 }
 
-/** One chain's card in the carousel — a card-shaped object tinted with the
- *  network's own hue, address as the card number, press to copy. Cards are
- *  dark objects in both themes, like the hero card they sit under. */
-function ChainCard({
-  label,
-  networksLabel,
-  symbol,
-  address,
-  value,
-  hidden,
-  hue,
-}: {
+/** Everything one card in the wallet needs to render — the WorldStreet
+ *  total card and each chain card share this shape. */
+type WalletCardData = {
+  key: string
   label: string
-  networksLabel: string
-  symbol: string
-  address?: string
+  /** undefined = nothing priced yet; render an em dash, never $0.00. */
   value?: number
-  hidden: boolean
+  address?: string
+  /** Network brand hue for chain cards; absent = the gold WorldStreet card. */
   hue?: string
+  symbol?: string
+  networksLabel?: string
+}
+
+/** The wallet pocket — the reference gesture: cards tucked into a pouch,
+ *  tops peeking out. Hover peeks a card further; click deals it onto the
+ *  hero. The pouch front is the WorldStreet total card itself. */
+function WalletPocket({
+  cards,
+  selected,
+  onSelect,
+  hidden,
+  totalUsd,
+  loading,
+}: {
+  cards: WalletCardData[]
+  selected: string
+  onSelect: (key: string) => void
+  hidden: boolean
+  totalUsd: number
+  loading: boolean
 }) {
-  const [copied, setCopied] = useState(false)
+  const chainCards = cards.filter((card) => card.key !== "worldstreet")
   return (
-    <button
-      type="button"
-      disabled={!address}
-      aria-label={address ? `Copy ${label} address` : `${label} address pending`}
-      onClick={() => {
-        if (!address) return
-        navigator.clipboard?.writeText(address).then(() => {
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1600)
-        }).catch(() => {})
-      }}
-      className="group relative aspect-[1.586] w-[248px] shrink-0 snap-start overflow-hidden rounded-2xl text-left transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
-    >
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,#2A2724_0%,#1C1917_50%,#12100E_100%)]" />
-      {hue ? (
-        <div
+    <div className="flex w-[272px] shrink-0 flex-col justify-end">
+      {/* The tucked stack — later cards overlap earlier ones; each shows its
+          top edge like cards in a pouch. */}
+      <div className="flex flex-col px-2.5">
+        {chainCards.map((card, index) => {
+          const active = selected === card.key
+          return (
+            <button
+              key={card.key}
+              type="button"
+              onClick={() => onSelect(card.key)}
+              aria-pressed={active}
+              className={`relative -mb-4 h-[60px] rounded-t-xl px-3.5 pt-2 text-left transition-transform duration-200 ${active ? "-translate-y-1.5" : "hover:-translate-y-1.5 motion-reduce:hover:translate-y-0"}`}
+              style={{ zIndex: index + 1 }}
+            >
+              <span
+                aria-hidden
+                className="absolute inset-0 rounded-t-xl shadow-[0_-6px_16px_-8px_rgb(0_0_0/0.55)]"
+                style={{
+                  background: `linear-gradient(135deg, ${card.hue ?? "#292524"}59 0%, #1F1B18 55%, #16130F 100%)`,
+                }}
+              />
+              <span aria-hidden className={`absolute inset-0 rounded-t-xl ring-1 ring-inset transition-colors ${active ? "ring-white/30" : "ring-white/10"}`} />
+              <span className="relative flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {card.symbol ? <CoinAvatar symbol={card.symbol} size="sm" className="h-4 w-4 shrink-0" /> : null}
+                  <span className="truncate text-[11.5px] font-semibold text-white/85">{card.label}</span>
+                </span>
+                <span className="shrink-0 text-[11.5px] font-semibold tabular-nums text-white/70">
+                  {card.value !== undefined ? (hidden ? AMOUNT_MASK : usd(card.value)) : "—"}
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* The pouch front — the WorldStreet card's face, and the way back to
+          the total view. */}
+      <button
+        type="button"
+        onClick={() => onSelect("worldstreet")}
+        aria-pressed={selected === "worldstreet"}
+        className="relative z-20 overflow-hidden rounded-2xl text-left transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
+      >
+        <span aria-hidden className="absolute inset-0 bg-[linear-gradient(150deg,#2E2A27_0%,#1C1917_55%,#100E0D_100%)]" />
+        <span
           aria-hidden
           className="absolute inset-0"
-          style={{ background: `radial-gradient(130% 100% at 100% 0%, ${hue}3D 0%, ${hue}14 40%, transparent 64%)` }}
+          style={{ background: "radial-gradient(120% 100% at 100% 0%, rgba(234,179,8,0.13) 0%, transparent 60%)" }}
         />
-      ) : null}
-      <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
-      <div className="relative flex h-full flex-col justify-between p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <CoinAvatar symbol={symbol} size="lg" className="h-6 w-6 shrink-0" />
-            <span className="truncate text-[13px] font-semibold text-white/90">{label}</span>
-          </div>
-          {value !== undefined && value > 0 ? (
-            <span className="shrink-0 text-[12.5px] font-semibold tabular-nums text-white/80">
-              {hidden ? AMOUNT_MASK : usd(value)}
-            </span>
-          ) : null}
-        </div>
-        <span className="font-mono text-[12px] tracking-[0.12em] text-white/80">{groupedAddress(address)}</span>
-        <div className="flex items-end justify-between gap-2">
-          <span className="truncate text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/40">
-            {networksLabel}
+        <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl p-px" style={GOLD_STROKE} />
+        <span className="relative flex flex-col items-center gap-1 px-4 pb-3 pt-4">
+          <span className="flex items-center gap-1.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/worldstreet-logo/WorldStreet1.png" alt="" className="h-4 w-4 opacity-90" />
+            <span className="text-[11px] font-semibold tracking-[0.02em] text-white/80">WorldStreet</span>
           </span>
-          <span className={`shrink-0 text-[9.5px] font-semibold uppercase tracking-[0.14em] transition-colors ${copied ? "text-credit" : "text-white/40 group-hover:text-white/70"}`}>
-            {address ? (copied ? "Copied" : "Tap to copy") : "Address pending"}
+          <span className="text-[22px] font-semibold tabular-nums leading-tight text-white">
+            {loading ? "––" : hidden ? AMOUNT_MASK : usd(totalUsd)}
           </span>
-        </div>
-      </div>
-    </button>
+          <span className={`text-[9.5px] font-semibold uppercase tracking-[0.14em] ${selected === "worldstreet" ? "text-primary/90" : "text-white/40"}`}>
+            Total balance
+          </span>
+        </span>
+      </button>
+    </div>
   )
 }
 
@@ -323,6 +357,35 @@ export function ModernWalletPage() {
     [wallet.data],
   )
 
+  // Which card is dealt onto the hero — the WorldStreet total by default,
+  // or the chain card picked from the pocket.
+  const [selectedCard, setSelectedCard] = useState("worldstreet")
+  const walletCards = useMemo<WalletCardData[]>(() => {
+    const chainCards = (wallet.data?.accounts ?? []).map((account) => {
+      const familyNetworks = networksForFamily(account.chainFamily, networks.data)
+      const meta = familyNetworks.length ? networkMetaFor(familyNetworks[0].id, networks.data) : null
+      return {
+        key: account.chainFamily,
+        label: FAMILY_LABEL[account.chainFamily] ?? account.chainFamily.toUpperCase(),
+        value: familyUsd[account.chainFamily],
+        address: account.canonicalAddress,
+        hue: meta?.hue,
+        symbol: meta?.nativeSymbol ?? account.chainFamily,
+        networksLabel: familyNetworks.map((network) => network.name).join(" · ") || account.state,
+      }
+    })
+    return [
+      { key: "worldstreet", label: "WorldStreet", value: totalUsd, address: primaryAccount?.canonicalAddress },
+      ...chainCards,
+    ]
+  }, [wallet.data, networks.data, familyUsd, totalUsd, primaryAccount])
+  const activeCard = walletCards.find((card) => card.key === selectedCard) ?? walletCards[0]
+  const isTotalCard = activeCard.key === "worldstreet"
+  const selectCard = (key: string) => {
+    setSelectedCard(key)
+    setCardCopied(false)
+  }
+
   const heroStats = useMemo(() => {
     const pricedNetworks = new Set(balances.balances.map((balance) => balance.networkId))
     return [
@@ -428,34 +491,51 @@ export function ModernWalletPage() {
 
       {hasWallet || walletLoading ? (
         <>
-          {/* ── THE wallet card. Not a panel with a card on it — the card IS
-                 the hero, and the balance is printed on it, the way Apple
-                 Wallet or Revolut hold a card up. Dark object in both
-                 themes; visible on every breakpoint. ── */}
-          <Rise delay={40} className="flex flex-wrap items-center gap-x-8 gap-y-5">
-            <section className="relative w-full max-w-[560px] overflow-hidden rounded-[20px] shadow-[0_28px_64px_-28px_rgb(0_0_0/0.65)]">
+          {/* ── The hero card + the wallet pocket. The pocket holds every
+                 card; clicking one deals it onto the hero, which re-skins to
+                 that chain's hue, value, and address. ── */}
+          <Rise delay={40} className="flex flex-wrap items-stretch gap-6">
+            <section className="relative w-full max-w-[560px] flex-1 basis-[340px] overflow-hidden rounded-[20px] shadow-[0_28px_64px_-28px_rgb(0_0_0/0.65)]">
               <div className="absolute inset-0 bg-[linear-gradient(135deg,#2E2A27_0%,#1C1917_48%,#100E0D_100%)]" />
               <div
                 aria-hidden
-                className="absolute inset-0"
-                style={{ background: "radial-gradient(120% 90% at 100% 0%, rgba(234,179,8,0.15) 0%, rgba(234,179,8,0.04) 45%, transparent 68%)" }}
+                className="absolute inset-0 transition-opacity duration-300"
+                style={{
+                  background: isTotalCard
+                    ? "radial-gradient(120% 90% at 100% 0%, rgba(234,179,8,0.15) 0%, rgba(234,179,8,0.04) 45%, transparent 68%)"
+                    : `radial-gradient(120% 90% at 100% 0%, ${activeCard.hue ?? "#57534E"}47 0%, ${activeCard.hue ?? "#57534E"}14 45%, transparent 68%)`,
+                }}
               />
               <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-primary/[0.05] blur-3xl" />
-              <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[20px] p-px opacity-90" style={GOLD_STROKE} />
+              {isTotalCard ? (
+                <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[20px] p-px opacity-90" style={GOLD_STROKE} />
+              ) : (
+                <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[20px] ring-1 ring-inset ring-white/15" />
+              )}
 
-              <div className="relative flex flex-col gap-6 p-5 md:p-6">
+              {/* Keyed so dealing a new card replays the house entrance. */}
+              <div key={activeCard.key} className="rise relative flex h-full flex-col justify-between gap-6 p-5 md:p-6">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/worldstreet-logo/WorldStreet1.png" alt="" className="h-6 w-6 opacity-90" />
-                    <span className="text-[13px] font-semibold tracking-[0.02em] text-white/90">WorldStreet</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {isTotalCard ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/worldstreet-logo/WorldStreet1.png" alt="" className="h-6 w-6 opacity-90" />
+                        <span className="text-[13px] font-semibold tracking-[0.02em] text-white/90">WorldStreet</span>
+                      </>
+                    ) : (
+                      <>
+                        <CoinAvatar symbol={activeCard.symbol ?? ""} size="lg" className="h-6 w-6 shrink-0" />
+                        <span className="truncate text-[13px] font-semibold tracking-[0.02em] text-white/90">{activeCard.label}</span>
+                      </>
+                    )}
                   </div>
                   <CardChip />
                 </div>
 
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-3">
-                    <Eyebrow className="text-white/45">Est. Total Value</Eyebrow>
+                    <Eyebrow className="text-white/45">{isTotalCard ? "Est. Total Value" : `${activeCard.label} balance`}</Eyebrow>
                     <button
                       type="button"
                       onClick={toggleHidden}
@@ -468,7 +548,11 @@ export function ModernWalletPage() {
                   {heroLoading ? (
                     <Skel className="my-1.5 h-[clamp(2.4rem,5vw,3.4rem)] w-[clamp(12rem,24vw,18rem)] rounded-lg" />
                   ) : (
-                    <Balance value={usd(totalUsd)} hidden={hidden} className="text-[clamp(2.4rem,5vw,3.4rem)] text-white" />
+                    <Balance
+                      value={activeCard.value !== undefined ? usd(activeCard.value) : "—"}
+                      hidden={hidden}
+                      className="text-[clamp(2.4rem,5vw,3.4rem)] text-white"
+                    />
                   )}
                   <div className="flex items-center gap-1">
                     <p className="text-[12.5px] text-white/45">
@@ -482,10 +566,10 @@ export function ModernWalletPage() {
                 <div className="flex items-end justify-between gap-3">
                   <button
                     type="button"
-                    disabled={!primaryAccount?.canonicalAddress}
-                    aria-label={primaryAccount?.canonicalAddress ? "Copy wallet address" : "Address pending"}
+                    disabled={!activeCard.address}
+                    aria-label={activeCard.address ? `Copy ${activeCard.label} address` : "Address pending"}
                     onClick={() => {
-                      const address = primaryAccount?.canonicalAddress
+                      const address = activeCard.address
                       if (!address) return
                       navigator.clipboard?.writeText(address).then(() => {
                         setCardCopied(true)
@@ -494,28 +578,23 @@ export function ModernWalletPage() {
                     }}
                     className={`font-mono text-[13px] tracking-[0.13em] transition-colors ${cardCopied ? "text-credit" : "text-white/75 hover:text-white"}`}
                   >
-                    {cardCopied ? "Address copied" : groupedAddress(primaryAccount?.canonicalAddress)}
+                    {cardCopied ? "Address copied" : groupedAddress(activeCard.address)}
                   </button>
-                  <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/90">
-                    Only yours
+                  <span className={`shrink-0 text-[9px] font-semibold uppercase tracking-[0.16em] ${isTotalCard ? "text-primary/90" : "text-white/45"}`}>
+                    {isTotalCard ? "Only yours" : activeCard.networksLabel}
                   </span>
                 </div>
               </div>
             </section>
 
-            {/* The wallet's shape — a quiet rail beside the card on lg+. */}
-            <div className="hidden flex-col gap-4 lg:flex">
-              {heroStats.map((stat) => (
-                <div key={stat.label} className="flex flex-col gap-0.5">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
-                    {stat.label}
-                  </span>
-                  <span className="text-[17px] font-semibold tabular-nums">
-                    {heroLoading ? "––" : stat.value}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <WalletPocket
+              cards={walletCards}
+              selected={activeCard.key}
+              onSelect={selectCard}
+              hidden={hidden}
+              totalUsd={totalUsd}
+              loading={heroLoading}
+            />
           </Rise>
 
           {/* The verbs, in the round grammar every wallet trains — gold on
@@ -527,23 +606,19 @@ export function ModernWalletPage() {
               <RoundAction icon={TradeGlyph} label="Trade" href="/trade" />
               <RoundAction icon={SecurityGlyph} label="Security" href="#security" />
             </div>
-            <div className="flex items-center divide-x divide-border/40 lg:hidden">
-              {heroStats.map((stat) => (
-                <div key={stat.label} className="flex flex-col items-end gap-1 px-5 first:pl-0 last:pr-0">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
-                    {stat.label}
-                  </span>
-                  <span className="text-[13.5px] font-semibold tabular-nums">
-                    {heroLoading ? "––" : stat.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Rise>
-
-          <Rise delay={120} className="flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <Eyebrow>Your addresses</Eyebrow>
+            <div className="flex items-center gap-5">
+              <div className="flex items-center divide-x divide-border/40">
+                {heroStats.map((stat) => (
+                  <div key={stat.label} className="flex flex-col items-end gap-1 px-5 first:pl-0 last:pr-0">
+                    <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                      {stat.label}
+                    </span>
+                    <span className="text-[13.5px] font-semibold tabular-nums">
+                      {heroLoading ? "––" : stat.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={() => setUnlockOpen(true)}
@@ -552,36 +627,6 @@ export function ModernWalletPage() {
                 Locked
               </button>
             </div>
-            {walletLoading ? (
-              <div className="flex gap-3 overflow-x-auto scrollbar-none">
-                {[0, 1, 2].map((index) => (
-                  <Skel key={index} className="aspect-[1.586] w-[248px] shrink-0 rounded-2xl" />
-                ))}
-              </div>
-            ) : (
-              // The cards in the wallet: one card-shaped object per chain,
-              // tinted with the network's own hue, address embossed like a
-              // card number. Full-bleed snap carousel — thumb through them
-              // the way you thumb through a physical wallet.
-              <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 scrollbar-none md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
-                {(wallet.data?.accounts ?? []).map((account) => {
-                  const familyNetworks = networksForFamily(account.chainFamily, networks.data)
-                  const meta = familyNetworks.length ? networkMetaFor(familyNetworks[0].id, networks.data) : null
-                  return (
-                    <ChainCard
-                      key={account.id}
-                      label={FAMILY_LABEL[account.chainFamily] ?? account.chainFamily.toUpperCase()}
-                      networksLabel={familyNetworks.map((network) => network.name).join(" · ") || account.state}
-                      symbol={meta?.nativeSymbol ?? account.chainFamily}
-                      address={account.canonicalAddress}
-                      value={familyUsd[account.chainFamily]}
-                      hidden={hidden}
-                      hue={meta?.hue}
-                    />
-                  )
-                })}
-              </div>
-            )}
           </Rise>
 
           <Rise delay={160}>
