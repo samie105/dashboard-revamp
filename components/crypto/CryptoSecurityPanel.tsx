@@ -132,7 +132,7 @@ export function CryptoSecurityPanel({
   // through SectionMessage and the flow stops here. A clean file queues the
   // confirmation dialog instead of writing immediately.
   async function prepareRestore(file: File | undefined) {
-    if (!file) return
+    if (busy || !file) return
     setBusy(true)
     setError(null)
     setSuccess(null)
@@ -241,6 +241,7 @@ export function CryptoSecurityPanel({
             type="file"
             accept="application/json,.json"
             className="hidden"
+            disabled={busy}
             onChange={(event) => void prepareRestore(event.target.files?.[0])}
           />
           <button

@@ -48,6 +48,29 @@ describe("computeBackupChecksum", () => {
   it("changes when the payload changes", async () => {
     expect(await computeBackupChecksum({ a: 1 })).not.toBe(await computeBackupChecksum({ a: 2 }))
   })
+
+  it("is stable across a JSON round trip when the package contains undefined values (an object value and an array element), matching real JSON.stringify semantics", async () => {
+    const live = packageBody({
+      accounts: [
+        { accountId: "acct-1", family: "evm", nickname: undefined }, // undefined object value — JSON.stringify drops the key
+        undefined, // undefined array element — JSON.stringify serializes it as null
+      ],
+    })
+
+    const liveChecksum = await computeBackupChecksum(live)
+    const roundTripped = JSON.parse(JSON.stringify(live))
+    const roundTrippedChecksum = await computeBackupChecksum(roundTripped)
+    expect(roundTrippedChecksum).toBe(liveChecksum)
+
+    // And the real export/restore path agrees: the checksum is computed
+    // against the live, undefined-carrying package at export time, but the
+    // file on disk only ever holds the JSON-normalized form — validating
+    // that normalized form must still recompute the same checksum.
+    const serialized = await serializeEncryptedWalletPackage(USER_ID, live)
+    const parsed = JSON.parse(serialized)
+    const result = await validateBackup({ backup: parsed, expectedWalletId: WALLET_ID, expectedUserId: USER_ID })
+    expect(result).toEqual({ ok: true, warnings: [] })
+  })
 })
 
 describe("validateBackup", () => {

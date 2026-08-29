@@ -23,12 +23,24 @@ export const LEGACY_BACKUP_WARNING = "This backup predates integrity checks."
  * path both run the package body through this exact function — that
  * symmetry is what makes the checksum meaningful. Never use this for
  * anything that round-trips back through `JSON.parse` (key order is lost).
+ *
+ * `undefined` is handled to match `JSON.stringify`'s actual semantics, not
+ * `String(undefined)`: an object property whose value is `undefined` is
+ * dropped entirely (the key never appears), and an array element that is
+ * `undefined` serializes as `null`. Without this, a package built in memory
+ * (which can carry real `undefined`s) would checksum differently than the
+ * exact same package after the export path's own `JSON.stringify` round
+ * trip has already dropped/nulled those spots — a false "tampered"
+ * rejection of a perfectly genuine backup.
  */
 export function canonicalizeForChecksum(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalizeForChecksum).join(",")}]`
+  if (Array.isArray(value)) {
+    const items = value.map((item) => (item === undefined ? "null" : canonicalizeForChecksum(item)))
+    return `[${items.join(",")}]`
+  }
   if (value !== null && typeof value === "object") {
     const record = value as Record<string, unknown>
-    const keys = Object.keys(record).sort()
+    const keys = Object.keys(record).filter((key) => record[key] !== undefined).sort()
     return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalizeForChecksum(record[key])}`).join(",")}}`
   }
   return JSON.stringify(value)
