@@ -25,7 +25,17 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ComputerIcon, DatabaseLockedIcon, Key01Icon, Shield01Icon } from "@hugeicons/core-free-icons"
+import {
+  CheckmarkCircle02Icon,
+  ComputerIcon,
+  Copy01Icon,
+  DatabaseLockedIcon,
+  DiceIcon,
+  Key01Icon,
+  Shield01Icon,
+  ViewIcon,
+  ViewOffIcon,
+} from "@hugeicons/core-free-icons"
 
 import { useModernWalletSetup } from "@/hooks/crypto/useModernWalletSetup"
 import { AddressPill, SectionMessage } from "@/components/crypto/primitives"
@@ -76,6 +86,43 @@ const FAMILY_LABEL: Record<string, string> = {
   sui: "Sui",
   ton: "TON",
   tron: "Tron",
+}
+
+/** Word pool for the suggested passphrase. Short, concrete, easy-to-type
+ *  words — the phrase is meant to be memorable, and its strength comes from
+ *  five independent draws (244^5 ≈ 2^39.7) plus a two-digit tail, hardened
+ *  further by the 600k-iteration key derivation. */
+const PASSPHRASE_WORDS = (
+  "acorn amber anchor apple arrow autumn badge baker bamboo basil beach beacon berry birch blaze bloom " +
+  "bluff board bonus boots bounce brave bread breeze brick bridge bright brook brush bucket butter cabin " +
+  "cactus camel candle canoe canyon carbon cargo carrot castle cedar chalk charm cherry chess chief chime " +
+  "cider circle citrus clover cobalt cocoa comet copper coral cotton cove crane cream crisp crown cypress " +
+  "daisy dawn delta denim desert dew diamond dome drift dune eagle early earth ember engine falcon fable " +
+  "feather fern field fig flame flint flora forest fossil fox frost galaxy garden gecko ginger glacier glade " +
+  "globe gold goose grape grove hazel harbor hawk heron hill honey horizon iceberg indigo iris island ivory " +
+  "jade jasper jungle juniper kayak kettle koala lagoon lake lantern laurel lemon lily linen lunar maple " +
+  "marble meadow melon mesa mint mirror monsoon moss mountain mango napkin nectar nickel night nimbus north " +
+  "oak oasis ocean olive onyx opal orbit orchid otter owl oyster palm panda paper peach pearl pebble pecan " +
+  "penguin pepper petal pine pistachio planet plum pocket polar pond poppy prairie prism pumpkin quartz " +
+  "quill rain raven reef ridge river robin rocket rose rustic saffron sage salmon sand sapphire scarlet " +
+  "shell silver sketch sleet slope smoke snow solar sparrow spice spring spruce stone storm summit sunny " +
+  "swan tang teak tempo terra thyme tiger timber topaz torch trail tulip tundra turtle twilight umber " +
+  "valley vanilla velvet vine violet wagon walnut water willow winter wolf wren yarrow zebra zephyr zinc"
+).split(/\s+/)
+
+/** Five uniformly drawn words plus a two-digit tail, via rejection-sampled
+ *  crypto randomness — Math.random has no place near a wallet credential. */
+function generatePassphrase(): string {
+  const draw = (bound: number) => {
+    const limit = Math.floor(256 / bound) * bound
+    const byte = new Uint8Array(1)
+    for (;;) {
+      crypto.getRandomValues(byte)
+      if (byte[0] < limit) return byte[0] % bound
+    }
+  }
+  const words = Array.from({ length: 5 }, () => PASSPHRASE_WORDS[draw(PASSPHRASE_WORDS.length)])
+  return `${words.join("-")}-${draw(10)}${draw(10)}`
 }
 
 /** Plain full-width pill. Gold's breathing glow belongs to the money CTA
@@ -226,6 +273,8 @@ export function WalletSetupFlow({
   const [secretAcknowledged, setSecretAcknowledged] = useState(false)
   const [passphrase, setPassphrase] = useState("")
   const [passphraseConfirmation, setPassphraseConfirmation] = useState("")
+  const [passphraseRevealed, setPassphraseRevealed] = useState(false)
+  const [passphraseCopied, setPassphraseCopied] = useState(false)
   const [stage, setStage] = useState<WalletSetupStage | null>(null)
   const [attempt, setAttempt] = useState(0)
   const secureContext = useSyncExternalStore(neverChanges, readSecureContext, assumeSecureOnServer)
@@ -348,24 +397,70 @@ export function WalletSetupFlow({
               ) : null}
 
               <div className="flex flex-col gap-2">
-                <label htmlFor="wallet-passphrase" className="text-[13px] font-semibold">
-                  Wallet passphrase
-                </label>
-                <Input
-                  id="wallet-passphrase"
-                  className={FIELD_INPUT}
-                  type="password"
-                  value={passphrase}
-                  onChange={(event) => {
-                    setPassphrase(event.target.value)
-                    // A failed attempt's message stops applying the moment they
-                    // start typing a different passphrase.
-                    if (setup.error) setup.reset()
-                  }}
-                  autoComplete="new-password"
-                  placeholder="At least 12 characters"
-                  aria-describedby="wallet-passphrase-strength"
-                />
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="wallet-passphrase" className="text-[13px] font-semibold">
+                    Wallet passphrase
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const generated = generatePassphrase()
+                      setPassphrase(generated)
+                      setPassphraseConfirmation(generated)
+                      // Show what was just chosen for them — a hidden surprise
+                      // credential is one nobody writes down.
+                      setPassphraseRevealed(true)
+                      if (setup.error) setup.reset()
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <HugeiconsIcon icon={DiceIcon} className="h-3.5 w-3.5" />
+                    Generate for me
+                  </button>
+                </div>
+                <div className="relative">
+                  <Input
+                    id="wallet-passphrase"
+                    className={`${FIELD_INPUT} pr-20`}
+                    type={passphraseRevealed ? "text" : "password"}
+                    value={passphrase}
+                    onChange={(event) => {
+                      setPassphrase(event.target.value)
+                      // A failed attempt's message stops applying the moment they
+                      // start typing a different passphrase.
+                      if (setup.error) setup.reset()
+                    }}
+                    autoComplete="new-password"
+                    placeholder="At least 12 characters"
+                    aria-describedby="wallet-passphrase-strength"
+                  />
+                  <div className="absolute inset-y-0 right-2 flex items-center gap-0.5">
+                    {passphrase.length > 0 ? (
+                      <button
+                        type="button"
+                        aria-label={passphraseCopied ? "Copied" : "Copy passphrase"}
+                        onClick={() => {
+                          navigator.clipboard?.writeText(passphrase).then(() => {
+                            setPassphraseCopied(true)
+                            setTimeout(() => setPassphraseCopied(false), 1600)
+                          }).catch(() => {})
+                        }}
+                        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${passphraseCopied ? "text-credit" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+                      >
+                        <HugeiconsIcon icon={passphraseCopied ? CheckmarkCircle02Icon : Copy01Icon} className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      aria-label={passphraseRevealed ? "Hide passphrase" : "Show passphrase"}
+                      aria-pressed={passphraseRevealed}
+                      onClick={() => setPassphraseRevealed((current) => !current)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <HugeiconsIcon icon={passphraseRevealed ? ViewOffIcon : ViewIcon} className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
                 {/* The meter sits with the field it measures. Allocation
                     ladder read backwards: Strong takes rank 0 (brand gold),
                     each weaker rung a duller step down it. */}
@@ -385,7 +480,7 @@ export function WalletSetupFlow({
                 <Input
                   id="wallet-passphrase-confirmation"
                   className={FIELD_INPUT}
-                  type="password"
+                  type={passphraseRevealed ? "text" : "password"}
                   value={passphraseConfirmation}
                   onChange={(event) => setPassphraseConfirmation(event.target.value)}
                   autoComplete="new-password"
