@@ -23,12 +23,12 @@ export function PasskeyButton({ mode = "authenticate", walletId }: { mode?: "reg
   }
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <button
         type="button"
         onClick={handleClick}
         disabled={busy}
-        className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+        className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
       >
         {busy ? "Waiting for passkey…" : mode === "register" ? "Register passkey" : "Unlock with passkey"}
       </button>

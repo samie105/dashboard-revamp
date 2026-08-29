@@ -160,8 +160,8 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
           <p className="rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] text-muted-foreground">Fetching your wallet&apos;s encrypted keys…</p>
         ) : tab === "passphrase" ? (
           hasPassphrase ? (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
                 <label htmlFor="wallet-unlock-passphrase" className="text-[13px] font-semibold">Wallet passphrase</label>
                 <Input
                   id="wallet-unlock-passphrase"
@@ -181,8 +181,8 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
             <p className="rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] text-muted-foreground">This wallet doesn&apos;t have a passphrase yet. Switch to Recovery secret to unlock and set one.</p>
           )
         ) : (
-          <div className="space-y-3">
-            <div className="space-y-1.5">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
               <label htmlFor="wallet-unlock-recovery-secret" className="text-[13px] font-semibold">Recovery secret</label>
               <Input
                 id="wallet-unlock-recovery-secret"
@@ -199,13 +199,13 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
             </button>
 
             {!hasPassphrase ? (
-              <div className="space-y-3 rounded-xl bg-surface-sunken/70 p-3">
+              <div className="flex flex-col gap-3 rounded-xl bg-surface-sunken/70 p-3">
                 <p className="text-[12px] leading-relaxed text-muted-foreground">This older wallet has no passphrase envelope. Unlock with the recovery secret above, or set a passphrase here so you don&apos;t need the recovery secret for normal unlocks.</p>
-                <div className="space-y-1.5">
+                <div className="flex flex-col gap-1.5">
                   <label htmlFor="wallet-unlock-new-passphrase" className="text-[13px] font-semibold">New wallet passphrase</label>
                   <Input id="wallet-unlock-new-passphrase" type="password" value={newPassphrase} onChange={(event) => setNewPassphrase(event.target.value)} placeholder="New wallet passphrase" autoComplete="new-password" />
                 </div>
-                <div className="space-y-1.5">
+                <div className="flex flex-col gap-1.5">
                   <label htmlFor="wallet-unlock-new-passphrase-confirmation" className="text-[13px] font-semibold">Confirm new passphrase</label>
                   <Input id="wallet-unlock-new-passphrase-confirmation" type="password" value={newPassphraseConfirmation} onChange={(event) => setNewPassphraseConfirmation(event.target.value)} placeholder="Confirm new passphrase" autoComplete="new-password" />
                 </div>
@@ -223,7 +223,7 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
         )}
 
         {unlockError ? (
-          <div className="space-y-1.5">
+          <div className="flex flex-col gap-1.5">
             <SectionMessage error={unlockError} />
             {malformedPackage ? (
               <p className="text-[12px] leading-relaxed text-muted-foreground">Your local wallet data looks damaged — restore from an encrypted backup under Security.</p>
