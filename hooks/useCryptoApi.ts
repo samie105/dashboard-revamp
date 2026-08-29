@@ -1,9 +1,17 @@
 "use client"
 
 import { useMemo } from "react"
-import { useAuth } from "@clerk/nextjs"
+import { useAuth as useClerkAuth } from "@clerk/nextjs"
 import { CryptoApi } from "@/lib/crypto/api"
 import { cryptoBackendUrl } from "@/lib/crypto/config"
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+
+// Under the dev bypass ClerkProvider isn't mounted (see app/layout.tsx), so
+// Clerk's useAuth would throw. Module-level constant pick keeps hook order
+// stable; the synthetic dev token below already covers the missing session.
+const useAuth = DEV_AUTH_BYPASS
+  ? () => ({ getToken: async (): Promise<string | null> => null })
+  : useClerkAuth
 
 /**
  * One CryptoApi per Clerk session. In local development the backend runs

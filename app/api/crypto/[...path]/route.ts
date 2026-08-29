@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { isCryptoProxyEnabled } from "@/lib/crypto-backend/config"
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 
 const CRYPTO_API = process.env.CRYPTO_API_URL?.replace(/\/+$/, "")
 const PROXY_TIMEOUT_MS = 15_000
@@ -124,8 +125,11 @@ async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> 
     return jsonError("Crypto service is not configured", 503, "CRYPTO_SERVICE_UNCONFIGURED")
   }
 
-  const { getToken } = await auth()
-  const token = await getToken()
+  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts):
+  // clerkMiddleware doesn't run, so auth() would throw. Forward a synthetic
+  // bearer token — a local crypto backend running with auth disabled accepts
+  // it; anything else rejects it and the client shows its error state.
+  const token = DEV_AUTH_BYPASS ? "dev-bypass-token" : await (await auth()).getToken()
   if (!token) return jsonError("Unauthorized", 401, "UNAUTHORIZED")
 
   const upstreamHeaders = new Headers({

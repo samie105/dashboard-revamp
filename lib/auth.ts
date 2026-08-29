@@ -8,6 +8,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server"
 import { UserWallet } from "@/models/UserWallet"
 import { connectDB } from "@/lib/mongodb"
+import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
 
 export interface AuthUser {
   userId: string
@@ -23,6 +24,16 @@ export interface AuthUser {
  * Optionally fetches privy_type from database if fetchPrivyType is true.
  */
 export async function getAuthUser(fetchPrivyType: boolean = false): Promise<AuthUser | null> {
+  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
+  if (DEV_AUTH_BYPASS) {
+    return {
+      userId: DEV_BYPASS_USER.userId,
+      email: DEV_BYPASS_USER.email,
+      firstName: DEV_BYPASS_USER.firstName,
+      lastName: DEV_BYPASS_USER.lastName,
+    }
+  }
+
   const { userId } = await auth()
   if (!userId) return null
 
