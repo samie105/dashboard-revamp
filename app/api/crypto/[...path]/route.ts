@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { isCryptoProxyEnabled } from "@/lib/crypto-backend/config"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+import { devMockCryptoApiResponse } from "@/lib/dev-mock-crypto-backend"
 
 const CRYPTO_API = process.env.CRYPTO_API_URL?.replace(/\/+$/, "")
 const PROXY_TIMEOUT_MS = 15_000
@@ -93,6 +94,14 @@ function responseHeaders(upstream: Response) {
 async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
   const { path: segments } = await ctx.params
   const path = segments.map((segment) => encodeURIComponent(segment)).join("/")
+
+  // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts):
+  // answer from the in-process mock backend so the modern wallet is fully
+  // testable on localhost. Unmocked paths fall through and fail loudly.
+  if (DEV_AUTH_BYPASS) {
+    const mock = await devMockCryptoApiResponse(req, path)
+    if (mock) return mock
+  }
 
   if (!isCryptoProxyEnabled) {
     return jsonError("Crypto backend proxy is disabled", 404, "CRYPTO_PROXY_DISABLED")
