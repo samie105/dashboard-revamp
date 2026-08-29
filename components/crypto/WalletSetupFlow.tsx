@@ -25,7 +25,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Shield01Icon } from "@hugeicons/core-free-icons"
+import { ComputerIcon, DatabaseLockedIcon, Key01Icon, Shield01Icon } from "@hugeicons/core-free-icons"
 
 import { useModernWalletSetup } from "@/hooks/crypto/useModernWalletSetup"
 import { AddressPill, SectionMessage } from "@/components/crypto/primitives"
@@ -65,9 +65,9 @@ const SETUP_STAGES: Stage[] = [
 ]
 
 const INTRO_POINTS = [
-  "Your keys are generated on this device",
-  "Worldstreet stores only encrypted data",
-  "Your passphrase and recovery secret are the only ways in",
+  { icon: ComputerIcon, text: "Your keys are generated on this device" },
+  { icon: DatabaseLockedIcon, text: "Worldstreet stores only encrypted data" },
+  { icon: Key01Icon, text: "Your passphrase and recovery secret are the only ways in" },
 ]
 
 const FAMILY_LABEL: Record<string, string> = {
@@ -288,6 +288,9 @@ export function WalletSetupFlow({
 
   return (
     <>
+      {/* The ceremony is a focused flow, not dashboard furniture: a narrow
+          centered column (like the send flow), never a full-width card. */}
+      <div className="mx-auto w-full max-w-md">
       <CardShell>
         {!secureContext ? (
           <UnavailablePanel
@@ -295,13 +298,20 @@ export function WalletSetupFlow({
             reason="Open this page over HTTPS to create a wallet."
           />
         ) : step === "intro" ? (
-          <div className="flex flex-col gap-4 px-4 pb-4">
-            <EmptyState icon={ShieldGlyph} title="Create your Worldstreet wallet" className="gap-2.5 px-0 py-6" />
-            <ul className="flex flex-col gap-2">
-              {INTRO_POINTS.map((point) => (
-                <li key={point} className="flex items-start gap-2.5 text-[13px] text-muted-foreground">
-                  <span aria-hidden className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-muted-foreground/50" />
-                  {point}
+          <div className="flex flex-col gap-5 px-5 pb-5">
+            <EmptyState
+              icon={ShieldGlyph}
+              title="Create your Worldstreet wallet"
+              description="A wallet only you can open — set up in about a minute."
+              className="gap-2.5 px-0 pb-1 pt-8"
+            />
+            <ul className="flex flex-col gap-1 rounded-xl bg-surface-sunken/50 p-2 ring-1 ring-border/20">
+              {INTRO_POINTS.map(({ icon, text }) => (
+                <li key={text} className="flex items-center gap-3 rounded-lg p-2 text-[13px] leading-snug text-muted-foreground">
+                  <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-foreground/70">
+                    <HugeiconsIcon icon={icon} className="h-4 w-4" />
+                  </span>
+                  {text}
                 </li>
               ))}
             </ul>
@@ -435,6 +445,7 @@ export function WalletSetupFlow({
           </>
         )}
       </CardShell>
+      </div>
 
       {recoveryModalOpen && setup.data?.recoverySecret ? (
         <RecoverySecretModal
