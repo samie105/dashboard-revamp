@@ -502,7 +502,7 @@ export function TradeClient() {
           const signingAccount = accountFor(plan.kind === "evm" ? "evm" : "solana")
           if (!signingAccount) {
             throw new Error(plan.kind === "evm"
-              ? "Your Worldstreet wallet doesn't have an EVM account yet."
+              ? "Your Worldstreet wallet doesn't have an Ethereum account yet."
               : "Your Worldstreet wallet doesn't have a Solana account yet.")
           }
           const intent = plan.kind === "evm"
@@ -924,9 +924,9 @@ export function TradeClient() {
       {spotPlan?.kind === "unavailable" && (
         <AnnouncementBanner
           tone="warning"
-          title="This pair isn't available on the Worldstreet wallet yet"
+          title="This pair isn't available on the new wallet yet"
           detail={spotPlan.reason}
-          action={canChooseWallet ? { label: "Use legacy wallet", onClick: () => setWalletSource("legacy") } : undefined}
+          action={canChooseWallet ? { label: "Use old wallet", onClick: () => setWalletSource("legacy") } : undefined}
         />
       )}
 
@@ -1252,7 +1252,7 @@ export function TradeClient() {
               // switch swaps the catalogue. The symbol is the honest carry-over.
               router.replace(`/trade?market=${market}${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}&wallet=${value}`)
             }}
-            options={[{ key: "modern", label: "Worldstreet wallet" }, { key: "legacy", label: "Legacy wallet" }]}
+            options={[{ key: "modern", label: "New wallet" }, { key: "legacy", label: "Old wallet" }]}
             vividPrefix="wallet-tab"
             className="order-4 shrink-0 lg:order-none"
           />

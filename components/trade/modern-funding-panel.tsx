@@ -727,7 +727,7 @@ function DepositFlow({
         <ResponsiveModalHeader>
           <ResponsiveModalTitle>Fund trading account</ResponsiveModalTitle>
           <ResponsiveModalDescription>
-            Bridge USDC from your self-custody wallet into your trading account.
+            Move USDC from your wallet into your trading account.
           </ResponsiveModalDescription>
         </ResponsiveModalHeader>
 
@@ -1145,7 +1145,7 @@ function WithdrawFlow({
         <ResponsiveModalHeader>
           <ResponsiveModalTitle>Withdraw from trading account</ResponsiveModalTitle>
           <ResponsiveModalDescription>
-            Withdrawals come out of your Perps balance and go back to your own self-custody wallet address — this flow
+            Withdrawals come out of your Perps balance and go straight back to your own wallet — this flow
             can&apos;t send anywhere else.
           </ResponsiveModalDescription>
         </ResponsiveModalHeader>

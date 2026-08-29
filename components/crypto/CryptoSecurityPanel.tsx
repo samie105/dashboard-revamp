@@ -35,10 +35,10 @@ const FIELD =
   "w-full rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] outline-none ring-1 ring-border/25 transition-shadow focus-visible:ring-2 focus-visible:ring-primary/40"
 
 const ROTATE_DESCRIPTION =
-  "Every account key is re-encrypted with a fresh key. Your addresses don't change."
+  "Your wallet gets a fresh set of locks. Your addresses and money don't change."
 
 const RESTORE_CONFIRM_DESCRIPTION =
-  "Your current local package is overwritten. Your funds and addresses are unaffected — this only changes the encrypted copy stored in this browser."
+  "This replaces the wallet data saved in this browser. Your funds and addresses are unaffected."
 
 const RECOVERY_SECRET_NOTICE =
   "Only enter your recovery secret for security changes you started yourself."
@@ -81,7 +81,7 @@ export function CryptoSecurityPanel({
       await security.rotateWallet(recoverySecret, passphrase)
       setRecoverySecret("")
       setPassphrase("")
-      setSuccess("Wallet security rotated. Your passphrase and recovery secret were rewrapped, and active sessions were cleared.")
+      setSuccess("Done — your wallet has fresh locks, and anywhere it was open has been signed out.")
     } catch (cause) {
       setError(cause)
     } finally {
@@ -175,7 +175,7 @@ export function CryptoSecurityPanel({
     <CardShell>
       <CardHeader
         title="Security"
-        subtitle="Rotation and device revocation require your wallet passphrase and recovery secret"
+        subtitle="These actions need your passphrase and recovery secret"
         badge={
           <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
             v{packageValue.securityVersion}

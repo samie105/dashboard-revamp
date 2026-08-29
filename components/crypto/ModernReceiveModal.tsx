@@ -65,7 +65,7 @@ export function ModernReceiveModal({ open, onOpenChange, asset = null }: {
             asset={asset}
             addresses={addresses}
             only={Object.keys(addresses).length ? undefined : []}
-            note="This address belongs to your Worldstreet self-custodial wallet. Only you control its keys."
+            note="This address belongs to your Worldstreet wallet. Only you can access money sent to it."
           />
         </div>
         {showProvisioningNotice && (

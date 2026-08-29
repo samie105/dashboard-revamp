@@ -58,20 +58,20 @@ type Step = "intro" | "passphrase" | "creating" | "done" | "closed"
  *  was still talking to the service, and `useStageProgress`'s high-water mark
  *  would then swallow the real key-generation report. */
 const SETUP_STAGES: Stage[] = [
-  { key: "account", label: "Provisioning wallet accounts" },
-  { key: "keys", label: "Generating keys on this device" },
-  { key: "encrypt", label: "Encrypting your wallet package" },
-  { key: "commit", label: "Storing the encrypted package" },
+  { key: "account", label: "Setting up your accounts" },
+  { key: "keys", label: "Creating your wallet on this device" },
+  { key: "encrypt", label: "Locking it with your passphrase" },
+  { key: "commit", label: "Saving your locked wallet" },
 ]
 
 const INTRO_POINTS = [
-  { icon: ComputerIcon, text: "Your keys are generated on this device" },
-  { icon: DatabaseLockedIcon, text: "Worldstreet stores only encrypted data" },
+  { icon: ComputerIcon, text: "Your wallet is created on this device" },
+  { icon: DatabaseLockedIcon, text: "Worldstreet can't open it — not even our team" },
   { icon: Key01Icon, text: "Your passphrase and recovery secret are the only ways in" },
 ]
 
 const FAMILY_LABEL: Record<string, string> = {
-  evm: "EVM",
+  evm: "Ethereum",
   solana: "Solana",
   sui: "Sui",
   ton: "TON",
@@ -142,8 +142,8 @@ function RecoverySecretModal({ secret, onClose }: { secret: string; onClose: () 
         <ResponsiveModalHeader>
           <ResponsiveModalTitle>Save your wallet recovery secret</ResponsiveModalTitle>
           <ResponsiveModalDescription>
-            This is the only time the new recovery secret is shown. You need it to recover the wallet, change the
-            passphrase, rotate keys, or revoke devices.
+            This is the only time it will ever be shown. It's how you get back into your wallet if you forget
+            your passphrase or lose this device.
           </ResponsiveModalDescription>
         </ResponsiveModalHeader>
 
@@ -325,7 +325,7 @@ export function WalletSetupFlow({
           <>
             <CardHeader
               title="Choose a wallet passphrase"
-              subtitle="It unlocks your keys on this device. Worldstreet never sees it and can't reset it."
+              subtitle="It unlocks your wallet on this device. Worldstreet never sees it and can't reset it."
             />
             <div className="flex flex-col gap-4 px-4 pb-4">
               {resume ? (
@@ -389,7 +389,7 @@ export function WalletSetupFlow({
                 disabled={Boolean(blocker)}
                 busy={setup.isPending}
                 onClick={() => void createWallet()}
-                control={{ target: "wallet-setup-submit", describe: "Create your self-custodial wallet", guarded: false }}
+                control={{ target: "wallet-setup-submit", describe: "Create your Worldstreet wallet", guarded: false }}
               />
             </div>
           </>
@@ -414,8 +414,8 @@ export function WalletSetupFlow({
               title="Your wallet is ready"
               subtitle={
                 setup.data?.existing
-                  ? "This wallet was already set up — your existing keys are unchanged."
-                  : "One address per chain family. They're yours on every network in that family."
+                  ? "This wallet was already set up — nothing about it has changed."
+                  : "These are your addresses. Share one to receive money on that network."
               }
             />
             <div className="flex flex-col gap-4 pb-4">

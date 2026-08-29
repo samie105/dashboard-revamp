@@ -19,9 +19,9 @@ const FIELD =
   "w-full rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] outline-none ring-1 ring-border/25 transition-shadow focus-visible:ring-2 focus-visible:ring-primary/40"
 
 const RECOVERY_STAGES: Stage[] = [
-  { key: "verify", label: "Verify recovery secret" },
-  { key: "rewrap", label: "Re-wrap wallet key" },
-  { key: "confirm", label: "Confirm with the service" },
+  { key: "verify", label: "Checking your recovery secret" },
+  { key: "rewrap", label: "Re-locking your wallet" },
+  { key: "confirm", label: "Confirming the change" },
 ]
 
 export function RecoveryPanel({
@@ -71,7 +71,7 @@ export function RecoveryPanel({
       setStageIndex(3)
       setRecoverySecret("")
       setCeremony(null)
-      setSuccess("Wallet recovery completed. The recovery envelope was rotated.")
+      setSuccess("Recovery complete — your wallet is back and freshly secured.")
     } catch (cause) {
       setError(cause)
     } finally {
@@ -83,7 +83,7 @@ export function RecoveryPanel({
     <CardShell>
       <CardHeader
         title="Wallet recovery"
-        subtitle="The recovery secret is used locally to unwrap the DEK and sign the recovery challenge"
+        subtitle="Your recovery secret proves it's you — it never leaves this device"
       />
       <div className="flex flex-col gap-4 px-4 pb-4">
         {!ceremony ? (

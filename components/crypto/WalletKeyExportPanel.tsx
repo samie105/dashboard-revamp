@@ -188,7 +188,7 @@ export function WalletKeyExportPanel({
     <CardShell>
       <CardHeader
         title="Export private keys"
-        subtitle="A local operation — keys are decrypted on this device only"
+        subtitle="For advanced users — keys are only ever revealed on this device, never sent anywhere"
       />
       <div className="flex flex-col gap-3 px-4 pb-4">
         <InlineNotice tone="warning">{EXPORT_WARNING}</InlineNotice>

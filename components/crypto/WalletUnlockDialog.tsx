@@ -145,7 +145,7 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
       <ResponsiveModalContent className="sm:max-w-md">
         <ResponsiveModalHeader>
           <ResponsiveModalTitle>Unlock your wallet</ResponsiveModalTitle>
-          <ResponsiveModalDescription>Your keys are decrypted locally and stay on this device.</ResponsiveModalDescription>
+          <ResponsiveModalDescription>Unlocking happens on this device — your passphrase is never sent anywhere.</ResponsiveModalDescription>
         </ResponsiveModalHeader>
 
         <Segmented

@@ -579,7 +579,7 @@ export function SendFlow() {
     <FlowShell>
       <div className="mb-5 flex items-start gap-2">
         <BackAction to={backTarget} />
-        <FlowHeader direction="out" title="Send crypto" subtitle="Signed locally on this device" />
+        <FlowHeader direction="out" title="Send crypto" subtitle="Approved on this device — only you can send" />
       </div>
       {body}
       {/* Mounted on every branch: the DEK can lapse at any point, and the
@@ -601,7 +601,7 @@ export function SendFlow() {
       <UnavailablePanel
         title="The Worldstreet wallet isn't enabled"
         tone="muted"
-        reason="Self-custody is still rolling out and isn't switched on for this account yet."
+        reason="The new wallet is still rolling out and isn't switched on for your account yet."
       />,
     )
   }
@@ -611,7 +611,7 @@ export function SendFlow() {
       <UnavailablePanel
         title="You don't have a Worldstreet wallet yet"
         tone="muted"
-        reason="Create your self-custodial wallet first — it takes a moment and the keys stay on this device."
+        reason="Create your Worldstreet wallet first — it only takes a minute."
         action={{ label: "Set up your wallet", onClick: () => router.push(WALLET_HREF) }}
       />,
     )

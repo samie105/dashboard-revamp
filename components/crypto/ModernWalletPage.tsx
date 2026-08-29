@@ -46,10 +46,10 @@ import { WalletKeyExportPanel } from "./WalletKeyExportPanel"
 import { WalletChainProvisioningPanel } from "./WalletChainProvisioningPanel"
 
 const PAGE = "flex flex-col gap-6 p-4 md:p-6 lg:p-8"
-const SUBTITLE = "Self-custodial — keys never leave this device"
+const SUBTITLE = "Only you can open this wallet"
 
 const FAMILY_LABEL: Record<string, string> = {
-  evm: "EVM",
+  evm: "Ethereum",
   solana: "Solana",
   sui: "Sui",
   ton: "TON",
@@ -150,7 +150,7 @@ export function ModernWalletPage() {
         <UnavailablePanel
           title="The Worldstreet wallet isn't enabled"
           tone="muted"
-          reason="Self-custody is still rolling out and isn't switched on for this account yet."
+          reason="The new wallet is still rolling out and isn't switched on for your account yet."
         />
       </div>
     )
@@ -256,7 +256,7 @@ export function ModernWalletPage() {
             <CardShell>
               <CardHeader
                 title="Accounts"
-                subtitle="One address per chain family"
+                subtitle="Your addresses — share one to receive money"
                 right={
                   <button
                     type="button"

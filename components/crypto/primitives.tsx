@@ -10,7 +10,7 @@ import { describeCryptoError, type CryptoErrorAction } from "@/lib/crypto-backen
 export function ModeBadge({ mode }: { mode: "modern" | "legacy" }) {
   return (
     <span className="rounded-full bg-surface-sunken px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-      {mode === "modern" ? "Self-custody" : "Legacy"}
+      {mode === "modern" ? "New wallet" : "Old wallet"}
     </span>
   )
 }

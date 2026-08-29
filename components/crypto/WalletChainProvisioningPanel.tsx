@@ -54,7 +54,7 @@ export function WalletChainProvisioningPanel({
       await security.addChains(packageValue, passphrase, recoverySecret)
       setPassphrase("")
       setRecoverySecret("")
-      setSuccess("The missing chain accounts were added to your encrypted wallet.")
+      setSuccess("The new networks were added to your wallet.")
       setFormOpen(false)
     } catch (cause) {
       setError(cause)
@@ -65,7 +65,7 @@ export function WalletChainProvisioningPanel({
 
   return (
     <CardShell>
-      <CardHeader title="Add newly supported chains" subtitle="This wallet was created before the latest chain rollout" />
+      <CardHeader title="Add new networks" subtitle="Your wallet can now support more networks" />
       <div className="flex flex-col gap-4 px-4 pb-4">
         <AnnouncementBanner
           tone="warning"

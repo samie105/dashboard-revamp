@@ -361,8 +361,8 @@ export function NavbarActions() {
                         value={walletMode}
                         onChange={setWalletMode}
                         options={[
-                          { key: "modern", label: "Worldstreet wallet" },
-                          { key: "legacy", label: "Legacy wallet" },
+                          { key: "modern", label: "New wallet" },
+                          { key: "legacy", label: "Old wallet" },
                         ]}
                       />
                     </div>

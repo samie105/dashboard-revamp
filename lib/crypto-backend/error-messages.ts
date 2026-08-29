@@ -65,7 +65,7 @@ export function describeCryptoError(error: unknown): CryptoErrorDescription {
       case "WALLET_NOT_FOUND":
         return { title: "No wallet yet", message: "Create your Worldstreet wallet to continue.", action: "setup-wallet", requestId }
       case "USER_VERIFICATION_REQUIRED":
-        return { title: "Verification needed", message: "Unlock your wallet on this device (or complete recovery) to authorize this step.", action: "unlock", requestId }
+        return { title: "Verification needed", message: "Unlock your wallet to continue.", action: "unlock", requestId }
       case "INSUFFICIENT_FUNDS": {
         const d = error.details as { available?: string; requested?: string } | undefined
         const extra = d?.available && d?.requested ? ` Available: ${d.available}. Requested: ${d.requested}.` : ""
@@ -76,11 +76,11 @@ export function describeCryptoError(error: unknown): CryptoErrorDescription {
       case "RPC_UNAVAILABLE":
         return { title: "Network provider unavailable", message: "The network isn't responding. Your data is unchanged — try again shortly.", action: "retry", requestId }
       case "INTENT_EXPIRED":
-        return { title: "Quote expired", message: "This quote expired before signing. Request a fresh one — nothing was sent.", action: "new-intent", requestId }
+        return { title: "Quote expired", message: "This quote ran out before you confirmed. Get a fresh one — nothing was sent.", action: "new-intent", requestId }
       case "DUPLICATE_REQUEST":
         return { title: "Already in progress", message: "This request was already submitted — showing the existing operation.", action: "view-existing", requestId }
       case "PROXY_DISABLED":
-        return { title: "Wallet service disabled", message: "The modern wallet is switched off right now. Try again later.", action: "none", requestId }
+        return { title: "Wallet service disabled", message: "The new wallet is switched off right now. Try again later.", action: "none", requestId }
       case "CRYPTO_BACKEND_UNREACHABLE":
         return { title: "Can't reach the wallet service", message: "The wallet service didn't respond. Check your connection and try again shortly.", action: "retry", requestId }
     }
