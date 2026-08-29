@@ -1,9 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDownLeft01Icon, ArrowUpRight01Icon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDownLeft01Icon, ArrowUpRight01Icon, EyeIcon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
 
 import { useAuth } from "@/components/auth-provider"
 import { AddressPill, ModeBadge, SectionMessage } from "@/components/crypto/primitives"
@@ -27,6 +27,7 @@ import {
   Skel,
   SkeletonRows,
 } from "@/components/ui/system"
+import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
 import { formatCryptoAmount, useCryptoBalances, type CryptoBalanceResult } from "@/hooks/crypto/useCryptoBalances"
 import { useCryptoNetworks } from "@/hooks/crypto/useCryptoNetworks"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
@@ -55,6 +56,25 @@ const FAMILY_LABEL: Record<string, string> = {
   ton: "TON",
   tron: "Tron",
 }
+
+/** Gradient stroke for the glass address cards — brand gold dissolving
+ *  diagonally to nothing, identical to the dashboard's account cards
+ *  (user-card.tsx): a masked ring so the translucent fill keeps showing the
+ *  silk field through the card. */
+const GOLD_STROKE: CSSProperties = {
+  background:
+    "linear-gradient(135deg, color-mix(in oklab, var(--primary) 55%, transparent), color-mix(in oklab, var(--primary) 14%, transparent) 38%, transparent 68%)",
+  WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+  WebkitMaskComposite: "xor",
+  mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+  maskComposite: "exclude",
+}
+
+/** Allocation strip tones — a neutral opacity ladder, never gold: gold is
+ *  brand/action, and the DS forbids it as a data colour. */
+const ALLOCATION_TONES = ["bg-foreground/75", "bg-foreground/50", "bg-foreground/30", "bg-foreground/[0.18]", "bg-foreground/10"]
+
+const AMOUNT_MASK = "••••"
 
 const DepositGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={ArrowDownLeft01Icon} className={className} />
 const SendGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={ArrowUpRight01Icon} className={className} />
@@ -122,6 +142,8 @@ export function ModernWalletPage() {
     refresh().catch((error: unknown) => setRefreshError(error))
   }
 
+  const { hidden, toggle: toggleHidden } = useBalancePrivacy()
+
   const { total: totalUsd, unpriced } = useMemo(() => {
     let total = 0
     let unpricedCount = 0
@@ -132,6 +154,43 @@ export function ModernWalletPage() {
     }
     return { total, unpriced: unpricedCount }
   }, [balances.balances, usdIndex])
+
+  // USD value held per chain family — each glass address card wears the value
+  // that actually lives behind that address.
+  const familyUsd = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const balance of balances.balances) {
+      const family = (networks.data ?? []).find((network) => network.id === balance.networkId)?.family
+      const value = usdValueOf(balance, usdIndex)
+      if (family && value !== null) map[family] = (map[family] ?? 0) + value
+    }
+    return map
+  }, [balances.balances, networks.data, usdIndex])
+
+  // Portfolio allocation by asset for the strip above the balance rows —
+  // top four assets named, everything else folded into "Other".
+  const allocation = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const balance of balances.balances) {
+      const value = usdValueOf(balance, usdIndex)
+      if (value !== null && value > 0) totals.set(balance.symbol, (totals.get(balance.symbol) ?? 0) + value)
+    }
+    const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1])
+    const top = sorted.slice(0, 4)
+    const rest = sorted.slice(4).reduce((sum, [, value]) => sum + value, 0)
+    const segments = [...top.map(([symbol, value]) => ({ label: symbol, value }))]
+    if (rest > 0) segments.push({ label: "Other", value: rest })
+    return segments
+  }, [balances.balances, usdIndex])
+
+  const heroStats = useMemo(() => {
+    const pricedNetworks = new Set(balances.balances.map((balance) => balance.networkId))
+    return [
+      { label: "Assets", value: balances.balances.length },
+      { label: "Networks", value: pricedNetworks.size },
+      { label: "Accounts", value: wallet.data?.accounts.length ?? 0 },
+    ]
+  }, [balances.balances, wallet.data])
 
   // One notice per network, not per account — the same chain being down for
   // two accounts is one outage to read about.
@@ -229,19 +288,45 @@ export function ModernWalletPage() {
 
       {hasWallet || walletLoading ? (
         <>
-          <Rise delay={40} className="flex w-fit flex-col gap-1">
-            <Eyebrow>Est. Total Value</Eyebrow>
-            {heroLoading ? (
-              <Skel className="my-1.5 h-[clamp(2rem,4vw,3rem)] w-[clamp(11rem,22vw,17rem)] rounded-lg" />
-            ) : (
-              <Balance value={usd(totalUsd)} className="text-[clamp(2rem,4vw,3rem)]" />
-            )}
-            <div className="flex items-center gap-1">
-              <p className="text-[13px] text-muted-foreground">
-                {asOf ?? (heroLoading ? "Syncing…" : "Not synced yet")}
-                {unpriced > 0 ? " · Some assets have no live price" : ""}
-              </p>
-              {refreshAction}
+          <Rise delay={40} className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+            <div className="flex w-fit flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <Eyebrow>Est. Total Value</Eyebrow>
+                <button
+                  type="button"
+                  onClick={toggleHidden}
+                  aria-label={hidden ? "Show balances" : "Hide balances"}
+                  className={`transition-colors ${hidden ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"}`}
+                >
+                  <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
+                </button>
+              </div>
+              {heroLoading ? (
+                <Skel className="my-1.5 h-[clamp(2rem,4vw,3rem)] w-[clamp(11rem,22vw,17rem)] rounded-lg" />
+              ) : (
+                <Balance value={usd(totalUsd)} hidden={hidden} className="text-[clamp(2rem,4vw,3rem)]" />
+              )}
+              <div className="flex items-center gap-1">
+                <p className="text-[13px] text-muted-foreground">
+                  {asOf ?? (heroLoading ? "Syncing…" : "Not synced yet")}
+                  {unpriced > 0 ? " · Some assets have no live price" : ""}
+                </p>
+                {refreshAction}
+              </div>
+            </div>
+
+            {/* The wallet's shape at a glance — real counts, no invented data. */}
+            <div className="hidden items-center divide-x divide-border/40 sm:flex">
+              {heroStats.map((stat) => (
+                <div key={stat.label} className="flex flex-col items-end gap-1 px-5 first:pl-0 last:pr-0">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                    {stat.label}
+                  </span>
+                  <span className="text-[13.5px] font-semibold tabular-nums">
+                    {heroLoading ? "––" : stat.value}
+                  </span>
+                </div>
+              ))}
             </div>
           </Rise>
 
@@ -252,57 +337,104 @@ export function ModernWalletPage() {
             <ActionPill icon={SecurityGlyph} label="Security" href="#security" />
           </Rise>
 
-          <Rise delay={120}>
-            <CardShell>
-              <CardHeader
-                title="Accounts"
-                subtitle="Your addresses — share one to receive money"
-                right={
-                  <button
-                    type="button"
-                    onClick={() => setUnlockOpen(true)}
-                    className="rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    Locked
-                  </button>
-                }
-              />
-              {walletLoading ? (
-                <SkeletonRows rows={2} label="Reading your accounts" />
-              ) : (
-                <div className="flex flex-col pb-2">
-                  {(wallet.data?.accounts ?? []).map((account) => {
-                    const familyNetworks = networksForFamily(account.chainFamily, networks.data)
-                    const meta = familyNetworks.length ? networkMetaFor(familyNetworks[0].id, networks.data) : null
-                    const symbol = meta?.nativeSymbol ?? account.chainFamily
-                    return (
-                      <ListRow
-                        key={account.id}
-                        icon={() => <CoinAvatar symbol={symbol} size="lg" className="h-6 w-6" />}
-                        title={FAMILY_LABEL[account.chainFamily] ?? account.chainFamily.toUpperCase()}
-                        subtitle={familyNetworks.map((network) => network.name).join(" · ") || account.state}
-                        right={
-                          account.canonicalAddress ? (
-                            <AddressPill address={account.canonicalAddress} />
-                          ) : (
-                            // An AddressPill with no address is a control that
-                            // copies nothing — say what's actually true instead.
-                            <span className="shrink-0 rounded-full bg-surface-sunken px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                              Address pending
+          <Rise delay={120} className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <Eyebrow>Your addresses</Eyebrow>
+              <button
+                type="button"
+                onClick={() => setUnlockOpen(true)}
+                className="rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Locked
+              </button>
+            </div>
+            {walletLoading ? (
+              <div className="flex gap-2.5 overflow-x-auto scrollbar-none sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 sm:overflow-visible">
+                {[0, 1, 2].map((index) => (
+                  <Skel key={index} className="h-[104px] min-w-[200px] flex-1 rounded-2xl sm:min-w-0" />
+                ))}
+              </div>
+            ) : (
+              // The dashboard's glass account-card grammar (user-card.tsx):
+              // translucent fill over the silk field, gold gradient-stroke
+              // ring, hover lift. Each card is one address you can share.
+              <div className="flex gap-2.5 overflow-x-auto scrollbar-none sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 sm:overflow-visible">
+                {(wallet.data?.accounts ?? []).map((account) => {
+                  const familyNetworks = networksForFamily(account.chainFamily, networks.data)
+                  const meta = familyNetworks.length ? networkMetaFor(familyNetworks[0].id, networks.data) : null
+                  const symbol = meta?.nativeSymbol ?? account.chainFamily
+                  const value = familyUsd[account.chainFamily]
+                  return (
+                    <div
+                      key={account.id}
+                      className="ws-card-glass group relative flex min-w-[200px] flex-1 shrink-0 flex-col gap-3 rounded-2xl bg-card/70 p-4 pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0 sm:min-w-0"
+                    >
+                      <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl p-px opacity-80 transition-opacity group-hover:opacity-100" style={GOLD_STROKE} />
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <CoinAvatar symbol={symbol} size="lg" className="h-7 w-7 shrink-0" />
+                          <div className="flex min-w-0 flex-col">
+                            <span className="truncate text-[13px] font-semibold leading-tight">
+                              {FAMILY_LABEL[account.chainFamily] ?? account.chainFamily.toUpperCase()}
                             </span>
-                          )
-                        }
-                      />
-                    )
-                  })}
-                </div>
-              )}
-            </CardShell>
+                            <span className="truncate text-[11px] text-muted-foreground">
+                              {familyNetworks.map((network) => network.name).join(" · ") || account.state}
+                            </span>
+                          </div>
+                        </div>
+                        {value !== undefined && value > 0 ? (
+                          <span className="shrink-0 text-[12px] font-semibold tabular-nums text-muted-foreground">
+                            {hidden ? AMOUNT_MASK : usd(value)}
+                          </span>
+                        ) : null}
+                      </div>
+                      {account.canonicalAddress ? (
+                        <AddressPill address={account.canonicalAddress} className="w-fit" />
+                      ) : (
+                        // An AddressPill with no address is a control that
+                        // copies nothing — say what's actually true instead.
+                        <span className="w-fit rounded-full bg-surface-sunken px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                          Address pending
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </Rise>
 
           <Rise delay={160}>
             <CardShell>
-              <CardHeader title="Balances" right={refreshAction} />
+              <CardHeader
+                title="Balances"
+                subtitle={balances.balances.length > 0 ? `${balances.balances.length} assets across ${new Set(balances.balances.map((b) => b.networkId)).size} networks` : undefined}
+                right={refreshAction}
+              />
+              {/* Portfolio allocation — a neutral-toned strip (gold is never
+                  a data colour). Hidden with the figures it would reveal. */}
+              {!hidden && allocation.length > 0 && totalUsd > 0 ? (
+                <div className="flex flex-col gap-2 px-4 pb-4">
+                  <div className="flex h-1.5 gap-px overflow-hidden rounded-full">
+                    {allocation.map((segment, index) => (
+                      <span
+                        key={segment.label}
+                        className={`${ALLOCATION_TONES[index] ?? ALLOCATION_TONES[ALLOCATION_TONES.length - 1]} h-full`}
+                        style={{ width: `${Math.max(1.5, (segment.value / totalUsd) * 100)}%` }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {allocation.map((segment, index) => (
+                      <span key={segment.label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <span aria-hidden className={`h-2 w-2 rounded-full ${ALLOCATION_TONES[index] ?? ALLOCATION_TONES[ALLOCATION_TONES.length - 1]}`} />
+                        {segment.label}
+                        <span className="font-semibold tabular-nums">{Math.round((segment.value / totalUsd) * 100)}%</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {outages.length > 0 || balances.error || refreshError ? (
                 <div className="flex flex-col gap-2 px-4 pb-3">
                   {balances.error || refreshError ? (
@@ -349,10 +481,10 @@ export function ModernWalletPage() {
                             </button>
                             <span className="flex flex-col items-end">
                               <span className="text-[14px] font-semibold tabular-nums">
-                                {formatCryptoAmount(balance.amountBaseUnits, balance.decimals)}
+                                {hidden ? AMOUNT_MASK : formatCryptoAmount(balance.amountBaseUnits, balance.decimals)}
                               </span>
                               {value !== null ? (
-                                <span className="text-[12px] text-muted-foreground tabular-nums">{usd(value)}</span>
+                                <span className="text-[12px] text-muted-foreground tabular-nums">{hidden ? AMOUNT_MASK : usd(value)}</span>
                               ) : null}
                             </span>
                           </span>
