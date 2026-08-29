@@ -29,10 +29,12 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     rootRef.current?.toggleAttribute("data-ws-scrolled", (e.target as HTMLElement).scrollTop > 8)
   }, [])
   if (isAuthRoute) return <>{children}</>
-  // The silk atmosphere belongs to the dashboard hero only, but it must live
-  // HERE, under the z-10 content layer, so the translucent sidebar and navbar
-  // blur it through — inside <main> it could never reach behind the rail.
-  const isDashboard = pathname === "/"
+  // The silk atmosphere belongs to the hero pages only — the dashboard and
+  // the wallet home (both lead with a Balance hero; DS §atmosphere) — but it
+  // must live HERE, under the z-10 content layer, so the translucent sidebar
+  // and navbar blur it through — inside <main> it could never reach behind
+  // the rail.
+  const isDashboard = pathname === "/" || pathname === "/wallet/modern"
 
   if (isFullBleed) {
     return (

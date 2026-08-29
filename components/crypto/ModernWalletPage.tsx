@@ -288,53 +288,69 @@ export function ModernWalletPage() {
 
       {hasWallet || walletLoading ? (
         <>
-          <Rise delay={40} className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-            <div className="flex w-fit flex-col gap-1">
-              <div className="flex items-center gap-3">
-                <Eyebrow>Est. Total Value</Eyebrow>
-                <button
-                  type="button"
-                  onClick={toggleHidden}
-                  aria-label={hidden ? "Show balances" : "Hide balances"}
-                  className={`transition-colors ${hidden ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"}`}
-                >
-                  <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
-                </button>
-              </div>
-              {heroLoading ? (
-                <Skel className="my-1.5 h-[clamp(2rem,4vw,3rem)] w-[clamp(11rem,22vw,17rem)] rounded-lg" />
-              ) : (
-                <Balance value={usd(totalUsd)} hidden={hidden} className="text-[clamp(2rem,4vw,3rem)]" />
-              )}
-              <div className="flex items-center gap-1">
-                <p className="text-[13px] text-muted-foreground">
-                  {asOf ?? (heroLoading ? "Syncing…" : "Not synced yet")}
-                  {unpriced > 0 ? " · Some assets have no live price" : ""}
-                </p>
-                {refreshAction}
-              </div>
-            </div>
+          {/* ── The wallet card — the page's thesis as one object. Glass fill
+                 over the silk field, the gold gradient-stroke ring, ambient
+                 gold bloom inside; balance, shape stats, and the verbs all
+                 live ON the card, like the thing in your pocket. ── */}
+          <Rise delay={40}>
+            <section className="ws-card-glass relative overflow-hidden rounded-2xl bg-card/70 p-5 md:p-6">
+              <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl p-px" style={GOLD_STROKE} />
+              {/* Ambient gold, hero pages only (DS §atmosphere) — two soft
+                  blooms, never a flood. */}
+              <div aria-hidden className="pointer-events-none absolute -right-24 -top-32 h-72 w-72 rounded-full bg-primary/[0.08] blur-3xl" />
+              <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-20 h-60 w-60 rounded-full bg-primary/[0.04] blur-3xl" />
 
-            {/* The wallet's shape at a glance — real counts, no invented data. */}
-            <div className="hidden items-center divide-x divide-border/40 sm:flex">
-              {heroStats.map((stat) => (
-                <div key={stat.label} className="flex flex-col items-end gap-1 px-5 first:pl-0 last:pr-0">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
-                    {stat.label}
-                  </span>
-                  <span className="text-[13.5px] font-semibold tabular-nums">
-                    {heroLoading ? "––" : stat.value}
-                  </span>
+              <div className="relative flex flex-col gap-5">
+                <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+                  <div className="flex w-fit flex-col gap-1">
+                    <div className="flex items-center gap-3">
+                      <Eyebrow>Est. Total Value</Eyebrow>
+                      <button
+                        type="button"
+                        onClick={toggleHidden}
+                        aria-label={hidden ? "Show balances" : "Hide balances"}
+                        className={`transition-colors ${hidden ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"}`}
+                      >
+                        <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
+                      </button>
+                    </div>
+                    {heroLoading ? (
+                      <Skel className="my-1.5 h-[clamp(2rem,4vw,3rem)] w-[clamp(11rem,22vw,17rem)] rounded-lg" />
+                    ) : (
+                      <Balance value={usd(totalUsd)} hidden={hidden} className="text-[clamp(2rem,4vw,3rem)]" />
+                    )}
+                    <div className="flex items-center gap-1">
+                      <p className="text-[13px] text-muted-foreground">
+                        {asOf ?? (heroLoading ? "Syncing…" : "Not synced yet")}
+                        {unpriced > 0 ? " · Some assets have no live price" : ""}
+                      </p>
+                      {refreshAction}
+                    </div>
+                  </div>
+
+                  {/* The wallet's shape at a glance — real counts, no invented data. */}
+                  <div className="hidden items-center divide-x divide-border/40 sm:flex">
+                    {heroStats.map((stat) => (
+                      <div key={stat.label} className="flex flex-col items-end gap-1 px-5 first:pl-0 last:pr-0">
+                        <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                          {stat.label}
+                        </span>
+                        <span className="text-[13.5px] font-semibold tabular-nums">
+                          {heroLoading ? "––" : stat.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </Rise>
 
-          {/* The verbs sit under the figure they act on (design-system §05). */}
-          <Rise delay={80} className="flex flex-wrap gap-2">
-            <ActionPill icon={DepositGlyph} label="Deposit" onClick={() => openReceive()} />
-            <ActionPill icon={SendGlyph} label="Send" href="/wallet/modern/send" />
-            <ActionPill icon={SecurityGlyph} label="Security" href="#security" />
+                {/* The verbs sit under the figure they act on (design-system §05). */}
+                <div className="flex flex-wrap gap-2">
+                  <ActionPill icon={DepositGlyph} label="Deposit" onClick={() => openReceive()} />
+                  <ActionPill icon={SendGlyph} label="Send" href="/wallet/modern/send" />
+                  <ActionPill icon={SecurityGlyph} label="Security" href="#security" />
+                </div>
+              </div>
+            </section>
           </Rise>
 
           <Rise delay={120} className="flex flex-col gap-2.5">
