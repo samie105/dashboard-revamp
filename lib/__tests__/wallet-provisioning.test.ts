@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { canChooseWalletMode, resolveWalletMode, shouldProvisionLegacy } from "@/lib/wallet-mode"
+import { canChooseWalletMode, modernDataEnabled, resolveWalletMode, shouldProvisionLegacy } from "@/lib/wallet-mode"
 
 describe("shouldProvisionLegacy", () => {
   // Spec §1: newly created Clerk users must not be provisioned a legacy Privy wallet.
@@ -72,5 +72,23 @@ describe("canChooseWalletMode", () => {
     expect(
       canChooseWalletMode({ modernEnabled: false, legacyEnabled: true, legacyWalletExists: true }),
     ).toBe(false)
+  })
+})
+
+// Spec §1, §5: the single gate every data hook shares — balance/history
+// sources must follow the user's selected mode, not the raw feature flag,
+// or legacy-mode users can never reach the legacy data path.
+describe("modernDataEnabled", () => {
+  it("is enabled when the modern backend flag is on and the selected mode is modern", () => {
+    expect(modernDataEnabled({ modernEnabled: true, mode: "modern" })).toBe(true)
+  })
+  it("is disabled when the selected mode is legacy, even with the modern backend flag on", () => {
+    expect(modernDataEnabled({ modernEnabled: true, mode: "legacy" })).toBe(false)
+  })
+  it("is disabled when the modern backend flag is off, even if the mode is modern", () => {
+    expect(modernDataEnabled({ modernEnabled: false, mode: "modern" })).toBe(false)
+  })
+  it("is disabled when both the flag is off and the mode is legacy", () => {
+    expect(modernDataEnabled({ modernEnabled: false, mode: "legacy" })).toBe(false)
   })
 })

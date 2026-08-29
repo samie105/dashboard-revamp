@@ -3,12 +3,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/components/auth-provider"
+import { useWalletMode } from "@/components/wallet-mode-provider"
 import {
   CryptoBackendError,
   cryptoBackendClient,
   cryptoQueryKeys,
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
+import { modernDataEnabled } from "@/lib/wallet-mode"
 
 export interface TokenBalance {
   symbol: string
@@ -80,13 +82,17 @@ async function fetchLegacyBalances(signal?: AbortSignal): Promise<TokenBalance[]
 }
 
 /**
- * Reads balances through TanStack Query when the new backend flag is enabled.
- * The legacy endpoint remains the default until phases 3–7 complete.
+ * Reads balances through TanStack Query when the crypto backend is enabled
+ * AND the user has actually selected the modern wallet mode (spec §1, §5).
+ * The legacy endpoint serves legacy-mode users even once the modern backend
+ * flag is on.
  */
 export function useWalletBalances(refreshInterval = 0): UseWalletBalancesReturn {
   const { user, isLoaded, isSignedIn } = useAuth()
+  const { mode } = useWalletMode()
   const userId = user?.userId ?? "anonymous"
-  const backendEnabled = isCryptoBackendEnabled && isLoaded && isSignedIn
+  const backendEnabled =
+    modernDataEnabled({ modernEnabled: isCryptoBackendEnabled, mode }) && isLoaded && isSignedIn
   const queryClient = useQueryClient()
   const queryKey = backendEnabled
     ? cryptoQueryKeys.balances(userId)

@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/components/auth-provider"
+import { useWalletMode } from "@/components/wallet-mode-provider"
 import {
   cryptoBackendClient,
   cryptoQueryKeys,
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
 import type { CryptoTransactionRecord } from "@/lib/crypto-backend"
+import { modernDataEnabled } from "@/lib/wallet-mode"
 import type {
   UnifiedTransaction,
   TransactionStats,
@@ -97,8 +99,10 @@ export function useUnifiedTransactions(
 ): UseUnifiedTransactionsReturn {
   const { pollInterval = 30000 } = options
   const { user, isLoaded, isSignedIn } = useAuth()
+  const { mode } = useWalletMode()
   const userId = user?.userId ?? "anonymous"
-  const backendEnabled = isCryptoBackendEnabled && isLoaded && isSignedIn
+  const backendEnabled =
+    modernDataEnabled({ modernEnabled: isCryptoBackendEnabled, mode }) && isLoaded && isSignedIn
 
   const [transactions, setTransactions] = useState<UnifiedTransaction[]>([])
   const [stats, setStats] = useState<TransactionStats | null>(null)

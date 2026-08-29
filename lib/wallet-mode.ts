@@ -23,6 +23,14 @@ export function resolveWalletMode(input: {
   return input.stored ?? "modern"
 }
 
+// Spec §1, §5: the single named gate every data hook shares. Balance and
+// history sources must follow the user's *selected* mode, not the raw
+// backend flag alone — a flag-only gate makes the legacy data path
+// unreachable for a legacy-mode user once the modern backend is enabled.
+export function modernDataEnabled(input: { modernEnabled: boolean; mode: WalletMode }): boolean {
+  return input.modernEnabled && input.mode === "modern"
+}
+
 export function canChooseWalletMode(input: {
   modernEnabled: boolean
   legacyEnabled: boolean
