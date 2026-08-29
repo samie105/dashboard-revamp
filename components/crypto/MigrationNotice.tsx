@@ -23,12 +23,16 @@ import { isCryptoBackendEnabled, isLegacyPrivyEnabled } from "@/lib/crypto-backe
 import { shouldShowMigrationNotice } from "@/lib/wallet-mode"
 import { IconAction } from "@/components/ui/system"
 
-// Verbatim spec copy — never edit without checking spec §2. Never implies
-// Worldstreet can recover or access keys.
-const MIGRATION_LEAD = "Your legacy wallet is still available."
+// Plain-language rewrite of the spec §2 copy (owner's call, 2026-08-29):
+// the verbatim spec text ("self-custodial", "embedded wallet", "signing
+// happens locally") confused crypto newcomers. Meaning is preserved — and it
+// must NEVER imply Worldstreet can recover or access keys; "not even
+// Worldstreet can open it" states the truthful opposite.
+const MIGRATION_LEAD = "You have a new Worldstreet wallet."
 const MIGRATION_REST =
-  " For the new Worldstreet self-custodial experience, move your funds to your Worldstreet " +
-  "embedded wallet. You control the keys, and signing happens locally on your device."
+  " Your old wallet still works, but your new wallet belongs to you alone — it's protected " +
+  "by a passphrase only you know, and not even Worldstreet can open it. When you're ready, " +
+  "move your money over."
 const MIGRATION_COPY = MIGRATION_LEAD + MIGRATION_REST
 
 type DismissalValue = "dismissed" | "confirmed" | null
@@ -173,14 +177,14 @@ function MigrationBanner({ onConfirm, onDismiss }: {
             href="/wallet/modern"
             className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-4 py-2 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/10"
           >
-            Move funds
+            Move my funds
           </Link>
           <button
             type="button"
             onClick={onConfirm}
             className="text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
           >
-            I&rsquo;ve finished migrating
+            I&rsquo;ve already moved them
           </button>
         </div>
       </div>
@@ -201,7 +205,7 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
       <HugeiconsIcon icon={Wallet01Icon} className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium">Legacy wallet migration</span>
+          <span className="text-xs font-medium">Your new wallet is ready</span>
           <span className="rounded-full bg-primary/10 px-1.5 py-px text-[9px] font-bold uppercase text-primary">
             Pinned
           </span>
@@ -214,14 +218,14 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
             href="/wallet/modern"
             className="text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
           >
-            Move funds
+            Move my funds
           </Link>
           <button
             type="button"
             onClick={onConfirm}
             className="text-[10px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors"
           >
-            I&rsquo;ve finished migrating
+            I&rsquo;ve already moved them
           </button>
         </div>
       </div>

@@ -82,9 +82,12 @@ No Privy wallet exists or is ever created; no toggle; no migration notice.
       unchanged from its pre-modern-wallet behavior — balances, transfers,
       trading all still work under legacy mode.
 - [ ] **[§14-4]** Migration notice appears on login and in notifications;
-      copy matches spec §2 wording (never implies Worldstreet can recover or
-      access private keys); dismissing it in one surface suppresses it in
-      the other (see deferred item below).
+      copy is the plain-language rewrite approved 2026-08-29 ("You have a
+      new Worldstreet wallet. …not even Worldstreet can open it") — it
+      deliberately replaces the spec §2 verbatim wording, but must still
+      never imply Worldstreet can recover or access private keys;
+      dismissing it in one surface suppresses it in the other (see
+      deferred item below).
 - [ ] Items **§14-5 through §14-12** (setup, balances, markets, transfers,
       orders, funding stages, sponsorship, secret hygiene) all re-verified
       under modern mode for this account, same as Persona A.
