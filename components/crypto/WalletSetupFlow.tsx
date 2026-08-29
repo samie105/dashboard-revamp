@@ -31,6 +31,7 @@ import {
   Copy01Icon,
   DatabaseLockedIcon,
   DiceIcon,
+  Download01Icon,
   Key01Icon,
   Shield01Icon,
   ViewIcon,
@@ -129,9 +130,6 @@ function generatePassphrase(): string {
  *  (FlowCta's armed state); these secondary confirmations don't move money. */
 const PILL =
   "flex h-11 w-full items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-const QUIET_PILL =
-  "rounded-full bg-surface-sunken px-4 py-2 text-[13px] font-semibold transition-colors hover:bg-accent"
-
 /** The app's sunken field (RecoveryPanel's FIELD), applied over the base
  *  Input: taller, softer, ring instead of border — the bordered shadcn
  *  default reads like a wireframe against this card. */
@@ -200,49 +198,55 @@ function RecoverySecretModal({ secret, onClose }: { secret: string; onClose: () 
           </ResponsiveModalDescription>
         </ResponsiveModalHeader>
 
-        <code className="block max-h-40 select-all overflow-auto break-all rounded-xl bg-surface-sunken/70 p-3 font-mono text-xs leading-5 ring-1 ring-border/25">
-          {secret}
-        </code>
-        <p className="text-[12px] leading-relaxed text-warning">
-          Keep it offline. Worldstreet cannot show it again, reissue it, or recover your wallet without it.
-        </p>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={QUIET_PILL}
-            onClick={() => {
-              void navigator.clipboard?.writeText(secret).then(() => {
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1600)
-              }).catch(() => {})
-            }}
-          >
-            {copied ? "Copied" : "Copy recovery secret"}
-          </button>
-          <button
-            type="button"
-            className={QUIET_PILL}
-            onClick={() => {
-              const blob = new Blob([secret], { type: "text/plain" })
-              const url = URL.createObjectURL(blob)
-              const anchor = document.createElement("a")
-              anchor.href = url
-              anchor.download = "worldstreet-wallet-recovery-secret.txt"
-              anchor.click()
-              URL.revokeObjectURL(url)
-            }}
-          >
-            Download secret
-          </button>
+        {/* The secret and its two actions are one object — a sunken panel
+            with the controls attached, not three loose blocks. */}
+        <div className="flex flex-col rounded-xl bg-surface-sunken/70 p-1.5 ring-1 ring-border/25">
+          <code className="block max-h-40 select-all overflow-auto break-all rounded-lg px-3 py-3.5 text-center font-mono text-[13px] leading-6">
+            {secret}
+          </code>
+          <div className="flex gap-1 border-t border-border/15 pt-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(secret).then(() => {
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 1600)
+                }).catch(() => {})
+              }}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors ${copied ? "text-credit" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+            >
+              <HugeiconsIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} className="h-3.5 w-3.5" />
+              {copied ? "Copied" : "Copy"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const blob = new Blob([secret], { type: "text/plain" })
+                const url = URL.createObjectURL(blob)
+                const anchor = document.createElement("a")
+                anchor.href = url
+                anchor.download = "worldstreet-wallet-recovery-secret.txt"
+                anchor.click()
+                URL.revokeObjectURL(url)
+              }}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <HugeiconsIcon icon={Download01Icon} className="h-3.5 w-3.5" />
+              Download
+            </button>
+          </div>
         </div>
 
-        <label className="flex items-start gap-2 text-[13px] leading-relaxed">
+        <InlineNotice tone="warning">
+          Keep it offline. Worldstreet cannot show it again, reissue it, or recover your wallet without it.
+        </InlineNotice>
+
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-surface-sunken/40 p-3 text-[13px] leading-snug ring-1 ring-border/20 transition-colors hover:bg-surface-sunken/70">
           <input
             type="checkbox"
             checked={saved}
             onChange={(event) => setSaved(event.target.checked)}
-            className="mt-0.5"
+            className="h-4 w-4 shrink-0 accent-primary"
           />
           <span>I have saved this recovery secret somewhere secure and offline.</span>
         </label>
