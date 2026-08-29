@@ -45,7 +45,7 @@ import {
   ResponsiveModalHeader,
   ResponsiveModalTitle,
 } from "@/components/ui/responsive-modal"
-import { CardHeader, CardShell, EmptyState, ListRow, WeightBar } from "@/components/ui/system"
+import { CardHeader, CardShell, EmptyState, ListRow, Rise, WeightBar } from "@/components/ui/system"
 import type { CryptoWalletPackageDocument } from "@/lib/crypto-backend"
 import { passphraseStrength } from "@/lib/crypto-wallet/passphrase-strength"
 import type { WalletSetupStage } from "@/lib/crypto-wallet/wallet-setup"
@@ -84,6 +84,12 @@ const PILL =
   "flex h-11 w-full items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
 const QUIET_PILL =
   "rounded-full bg-surface-sunken px-4 py-2 text-[13px] font-semibold transition-colors hover:bg-accent"
+
+/** The app's sunken field (RecoveryPanel's FIELD), applied over the base
+ *  Input: taller, softer, ring instead of border — the bordered shadcn
+ *  default reads like a wireframe against this card. */
+const FIELD_INPUT =
+  "h-11 rounded-xl border-0 bg-surface-sunken/70 px-3.5 text-[13px] ring-1 ring-border/25 transition-shadow focus-visible:ring-2 focus-visible:ring-primary/40 dark:bg-surface-sunken/70"
 
 const ShieldGlyph = ({ className }: { className?: string }) => (
   <HugeiconsIcon icon={Shield01Icon} className={className} />
@@ -298,48 +304,56 @@ export function WalletSetupFlow({
             reason="Open this page over HTTPS to create a wallet."
           />
         ) : step === "intro" ? (
-          <div className="flex flex-col gap-5 px-5 pb-5">
-            <EmptyState
-              icon={ShieldGlyph}
-              title="Create your Worldstreet wallet"
-              description="A wallet only you can open — set up in about a minute."
-              className="gap-2.5 px-0 pb-1 pt-8"
-            />
-            <ul className="flex flex-col gap-1 rounded-xl bg-surface-sunken/50 p-2 ring-1 ring-border/20">
-              {INTRO_POINTS.map(({ icon, text }) => (
-                <li key={text} className="flex items-center gap-3 rounded-lg p-2 text-[13px] leading-snug text-muted-foreground">
-                  <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-foreground/70">
-                    <HugeiconsIcon icon={icon} className="h-4 w-4" />
-                  </span>
-                  {text}
-                </li>
-              ))}
-            </ul>
-            <FlowCta
-              label="Get started"
-              onClick={() => setStep("passphrase")}
-              control={{ target: "wallet-setup-start", describe: "Start wallet setup", guarded: false }}
-            />
+          <div className="flex flex-col gap-5 px-4 pb-5">
+            <Rise>
+              <EmptyState
+                icon={ShieldGlyph}
+                title="Create your Worldstreet wallet"
+                description="A wallet only you can open — set up in about a minute."
+                className="gap-2.5 px-0 pb-1 pt-8"
+              />
+            </Rise>
+            <Rise delay={60}>
+              <ul className="flex flex-col gap-1 rounded-xl bg-surface-sunken/50 p-2 ring-1 ring-border/20">
+                {INTRO_POINTS.map(({ icon, text }) => (
+                  <li key={text} className="flex items-center gap-3 rounded-lg p-2 text-[13px] leading-snug text-muted-foreground">
+                    <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-foreground/70">
+                      <HugeiconsIcon icon={icon} className="h-4 w-4" />
+                    </span>
+                    {text}
+                  </li>
+                ))}
+              </ul>
+            </Rise>
+            <Rise delay={120}>
+              <FlowCta
+                label="Get started"
+                onClick={() => setStep("passphrase")}
+                control={{ target: "wallet-setup-start", describe: "Start wallet setup", guarded: false }}
+              />
+            </Rise>
           </div>
         ) : step === "passphrase" ? (
-          <>
+          <Rise>
             <CardHeader
+              className="pb-1 pt-5"
               title="Choose a wallet passphrase"
               subtitle="It unlocks your wallet on this device. Worldstreet never sees it and can't reset it."
             />
-            <div className="flex flex-col gap-4 px-4 pb-4">
+            <div className="flex flex-col gap-5 px-4 pb-5 pt-3">
               {resume ? (
                 <InlineNotice tone="warning">
                   Your wallet was created but setup didn&apos;t finish. Pick a passphrase to finish securing it.
                 </InlineNotice>
               ) : null}
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <label htmlFor="wallet-passphrase" className="text-[13px] font-semibold">
                   Wallet passphrase
                 </label>
                 <Input
                   id="wallet-passphrase"
+                  className={FIELD_INPUT}
                   type="password"
                   value={passphrase}
                   onChange={(event) => {
@@ -352,34 +366,36 @@ export function WalletSetupFlow({
                   placeholder="At least 12 characters"
                   aria-describedby="wallet-passphrase-strength"
                 />
+                {/* The meter sits with the field it measures. Allocation
+                    ladder read backwards: Strong takes rank 0 (brand gold),
+                    each weaker rung a duller step down it. */}
+                <div className="flex flex-col gap-1.5 pt-1">
+                  <WeightBar pct={(strength.score / 3) * 100} rank={3 - strength.score} />
+                  <p id="wallet-passphrase-strength" className="flex justify-between gap-2 text-[12px] text-muted-foreground">
+                    <span>A long phrase beats a short complicated one.</span>
+                    <span className="shrink-0 font-semibold">{strength.label}</span>
+                  </p>
+                </div>
               </div>
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <label htmlFor="wallet-passphrase-confirmation" className="text-[13px] font-semibold">
                   Confirm passphrase
                 </label>
                 <Input
                   id="wallet-passphrase-confirmation"
+                  className={FIELD_INPUT}
                   type="password"
                   value={passphraseConfirmation}
                   onChange={(event) => setPassphraseConfirmation(event.target.value)}
                   autoComplete="new-password"
                   placeholder="Repeat your passphrase"
+                  aria-invalid={mismatch || undefined}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") void createWallet()
                   }}
                 />
                 {mismatch ? <p className="text-[12px] text-debit">Passphrases don&apos;t match</p> : null}
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                {/* The allocation ladder read backwards: Strong takes rank 0
-                    (brand gold), each weaker rung a duller step down it. */}
-                <WeightBar pct={(strength.score / 3) * 100} rank={3 - strength.score} />
-                <p id="wallet-passphrase-strength" className="flex justify-between gap-2 text-[12px] text-muted-foreground">
-                  <span>A long phrase beats a short complicated one.</span>
-                  <span className="shrink-0 font-semibold">{strength.label}</span>
-                </p>
               </div>
 
               <SectionMessage error={setup.error} />
@@ -392,14 +408,15 @@ export function WalletSetupFlow({
                 control={{ target: "wallet-setup-submit", describe: "Create your Worldstreet wallet", guarded: false }}
               />
             </div>
-          </>
+          </Rise>
         ) : step === "creating" ? (
-          <>
+          <Rise>
             <CardHeader
+              className="pb-1 pt-5"
               title="Creating your wallet"
               subtitle="Keep this tab open — closing it now leaves the setup half-finished."
             />
-            <div className="flex flex-col gap-4 px-4 pb-4">
+            <div className="flex flex-col gap-4 px-4 pb-5 pt-3">
               <StageList
                 stages={SETUP_STAGES}
                 activeIndex={progress.index}
@@ -407,10 +424,11 @@ export function WalletSetupFlow({
                 cascade
               />
             </div>
-          </>
+          </Rise>
         ) : (
-          <>
+          <Rise>
             <CardHeader
+              className="pb-1 pt-5"
               title="Your wallet is ready"
               subtitle={
                 setup.data?.existing
@@ -418,9 +436,9 @@ export function WalletSetupFlow({
                   : "These are your addresses. Share one to receive money on that network."
               }
             />
-            <div className="flex flex-col gap-4 pb-4">
+            <div className="flex flex-col gap-4 pb-5 pt-2">
               {addresses.length > 0 ? (
-                <div className="flex flex-col">
+                <Rise delay={60} className="flex flex-col">
                   {addresses.map((account) => (
                     <ListRow
                       key={account.key}
@@ -428,21 +446,21 @@ export function WalletSetupFlow({
                       right={<AddressPill address={account.address} />}
                     />
                   ))}
-                </div>
+                </Rise>
               ) : (
                 <p className="px-4 text-[13px] text-muted-foreground">
                   Your addresses are listed under Accounts on this page.
                 </p>
               )}
-              <div className="px-4">
+              <Rise delay={120} className="px-4">
                 <FlowCta
                   label="Open your wallet"
                   onClick={() => setStep("closed")}
                   control={{ target: "wallet-setup-done", describe: "Finish wallet setup", guarded: false }}
                 />
-              </div>
+              </Rise>
             </div>
-          </>
+          </Rise>
         )}
       </CardShell>
       </div>
