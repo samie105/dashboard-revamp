@@ -32,6 +32,7 @@ import { useCryptoNetworks } from "@/hooks/crypto/useCryptoNetworks"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useUsdIndex } from "@/hooks/crypto/useUsdIndex"
 import {
+  CryptoBackendError,
   cryptoBackendClient,
   cryptoQueryKeys,
   isCryptoBackendEnabled,
@@ -157,6 +158,15 @@ export function ModernWalletPage() {
 
   const walletLoading = wallet.isLoading && !wallet.needsSetup
   const hasWallet = Boolean(wallet.data)
+  // A wallet with no encrypted package is a setup that was interrupted between
+  // the backend wallet and the commit — the tab was closed, or the commit
+  // failed. `createSelfCustodialWallet` get-or-creates at BOTH levels (an
+  // existing wallet is reused; an existing package short-circuits the whole
+  // ceremony), so re-running it is safe: it picks up the orphaned wallet and
+  // finishes it with fresh keys instead of stranding the user with an account
+  // they can neither use nor recreate.
+  const setupIncomplete =
+    hasWallet && packageQuery.error instanceof CryptoBackendError && packageQuery.error.status === 404
   // Prices are part of the hero figure, so the total waits for them too —
   // otherwise it prints an under-counted number and then jumps. Nothing to
   // value means nothing to wait for.
@@ -191,11 +201,12 @@ export function ModernWalletPage() {
       {/* Two invariants live on this one line — read both before editing it.
           (1) FIXED POSITION, MOUNTED UNCONDITIONALLY: this component owns the
           one-time recovery-secret modal, and it renders that from *mutation*
-          state (WalletSetupFlow.tsx:49-56) which dies with the instance. The
-          wallet query is invalidated the moment creation succeeds, so gating
-          the mount on `wallet.needsSetup` would unmount it exactly then and
-          destroy the user's only copy of the secret. Suppression is the
-          PROP's job, never the mount's.
+          state (WalletSetupFlow derives the modal straight off
+          `setup.data?.recoverySecret`) which dies with the instance — as does
+          the staged progress of an attempt in flight. The wallet query is invalidated the moment
+          creation succeeds, so gating the mount on `wallet.needsSetup` would
+          unmount it exactly then and destroy the user's only copy of the
+          secret. Suppression is the PROP's job, never the mount's.
           (2) LOADING-AWARE PROP: `walletExists` is what hides the "create a
           wallet" CTA, and `Boolean(wallet.data)` is false during the first
           fetch as well as on a confirmed 404 — so a bare `hasWallet` offered
@@ -204,8 +215,11 @@ export function ModernWalletPage() {
           until a 404 actually says setup is needed. It fails open on purpose:
           any settled non-404 state still offers setup, and creation is
           idempotent (`setup.data.existing`), so a weird backend answer can
-          never strand a user with no way to make a wallet. */}
-      <WalletSetupFlow walletExists={hasWallet || walletLoading} />
+          never strand a user with no way to make a wallet.
+          `resume` is the one thing allowed to overrule the suppression: a
+          wallet whose package 404s needs the flow back on screen precisely
+          BECAUSE the wallet exists. */}
+      <WalletSetupFlow walletExists={hasWallet || walletLoading} resume={setupIncomplete} />
 
       {wallet.error && !wallet.needsSetup ? (
         <Rise delay={40}>

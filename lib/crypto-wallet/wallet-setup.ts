@@ -16,11 +16,22 @@ import { generateAccountKey, generateLocalEd25519Key } from "./key-generation"
 import { saveEncryptedWalletPackage } from "./local-storage"
 import { setUnlockedWalletState } from "./unlock-state"
 
+/**
+ * The phases setup passes through, in the order this function runs them.
+ * Reported as they START, so a checklist can show the work in flight rather
+ * than a spinner: backend wallet + accounts, local key generation, local
+ * encryption, then the one network write that makes it durable.
+ */
+export type WalletSetupStage = "account" | "keys" | "encrypt" | "commit"
+
 type SetupOptions = {
   chainFamilies?: Array<"evm" | "solana" | "sui" | "ton" | "tron">
   unlockTtlMs?: number
   walletPassphrase?: string
   authorizeWallet?: () => Promise<WalletAuthorizationResult>
+  /** Progress callback for the setup checklist. Optional — omitting it leaves
+   *  behaviour identical for every existing caller. */
+  onStage?: (stage: WalletSetupStage) => void
 }
 
 export type SelfCustodialWalletSetupResult = {
@@ -50,8 +61,14 @@ export async function createSelfCustodialWallet(
   }
 
   const chainFamilies = options.chainFamilies ?? ["evm", "solana", "sui", "ton", "tron"]
+  const stage = options.onStage ?? (() => {})
   let wallet: CryptoWallet
 
+  // Get-or-create, at both levels: an existing wallet is reused, and an
+  // existing package short-circuits the whole ceremony. That is what makes a
+  // re-run after an interrupted setup safe — see the resume path in
+  // ModernWalletPage.
+  stage("account")
   try {
     wallet = await cryptoBackendClient.getWallet()
   } catch (error) {
@@ -84,8 +101,10 @@ export async function createSelfCustodialWallet(
       cryptoBackendClient.prepareAccount({ chainFamily, keyAlgorithm: chainFamily === "evm" || chainFamily === "tron" ? "secp256k1" : "ed25519", keyType: "private-key" }),
     ),
   )
+  stage("keys")
   const generated = preparedAccounts.map((account) => ({ account, key: generateAccountKey(account.chainFamily) }))
 
+  stage("encrypt")
   const dek = randomBytes(32)
   const recoveryKey = generateLocalEd25519Key()
   const recoverySecret = toBase64Url(recoveryKey.seed)
@@ -169,6 +188,7 @@ export async function createSelfCustodialWallet(
     envelopes,
   } satisfies CryptoWalletPackage
 
+  stage("commit")
   const committedPackage = await cryptoBackendClient.commitWalletPackage(
     packageValue,
     authorization.walletAuthorizationToken,

@@ -402,21 +402,32 @@ export function FlowCta({
   onClick,
   disabled,
   busy,
+  control,
 }: {
   /** The blocker ladder's current rung — or the action itself. */
   label: string
   onClick: () => void
   disabled?: boolean
   busy?: boolean
+  /** Who this button is, for screen readers and the Vivid control layer.
+   *  Defaults to the money-flow identity — a guarded "flow-submit" that
+   *  announces a transfer. A CTA that moves no money (wallet setup) passes its
+   *  own, because announcing "Confirm transfer… Moves real money" over a
+   *  "Get started" button is simply false, and the guard would demand spoken
+   *  confirmation for a step that doesn't warrant it. */
+  control?: { target: string; describe: string; guarded?: boolean }
 }) {
+  const guarded = control?.guarded ?? true
   return (
     <button
       onClick={onClick}
       disabled={disabled || busy}
-      data-vivid-target="flow-submit"
-      data-vivid-guard=""
-      aria-label={`Confirm transfer — ${label}`}
-      data-vivid-label={`Submit this money flow: ${label}. Moves real money.`}
+      data-vivid-target={control?.target ?? "flow-submit"}
+      data-vivid-guard={guarded ? "" : undefined}
+      aria-label={control ? `${control.describe} — ${label}` : `Confirm transfer — ${label}`}
+      data-vivid-label={
+        control ? `${control.describe}: ${label}.` : `Submit this money flow: ${label}. Moves real money.`
+      }
       className={cn(
         "flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-bold transition-all",
         "bg-primary text-primary-foreground hover:bg-primary/90",
