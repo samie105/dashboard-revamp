@@ -7,7 +7,7 @@ import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, EyeIcon, 
 import Link from "next/link"
 
 import { useAuth } from "@/components/auth-provider"
-import { AddressPill, ModeBadge, SectionMessage } from "@/components/crypto/primitives"
+import { ModeBadge, SectionMessage } from "@/components/crypto/primitives"
 import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
 import { WalletSetupFlow } from "@/components/crypto/WalletSetupFlow"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
@@ -120,20 +120,52 @@ function RoundAction({
   )
 }
 
-/** The card in the wallet — a payment-card object carrying the brand mark,
- *  a chip, and the primary address grouped like a card number. Deliberately
- *  dark in both themes: a black-and-gold card stays a black-and-gold card
- *  on a light desk. Press to copy the full address. */
-function WalletCardVisual({ address, label }: { address?: string; label: string }) {
+/** Formats an address like an embossed card number. */
+function groupedAddress(address?: string) {
+  return address ? `${address.slice(0, 6)}  ••••  ••••  ${address.slice(-6)}` : "••••  ••••  ••••  ••••"
+}
+
+/** The gold chip — pure brand furniture on the card objects. */
+function CardChip() {
+  return (
+    <span
+      aria-hidden
+      className="grid h-6 w-8 grid-cols-2 gap-px overflow-hidden rounded-[5px] bg-gradient-to-br from-yellow-200/70 via-yellow-500/60 to-yellow-800/60 p-[3px]"
+    >
+      <span className="rounded-[1px] bg-black/25" />
+      <span className="rounded-[1px] bg-black/10" />
+      <span className="rounded-[1px] bg-black/10" />
+      <span className="rounded-[1px] bg-black/25" />
+    </span>
+  )
+}
+
+/** One chain's card in the carousel — a card-shaped object tinted with the
+ *  network's own hue, address as the card number, press to copy. Cards are
+ *  dark objects in both themes, like the hero card they sit under. */
+function ChainCard({
+  label,
+  networksLabel,
+  symbol,
+  address,
+  value,
+  hidden,
+  hue,
+}: {
+  label: string
+  networksLabel: string
+  symbol: string
+  address?: string
+  value?: number
+  hidden: boolean
+  hue?: string
+}) {
   const [copied, setCopied] = useState(false)
-  const grouped = address
-    ? `${address.slice(0, 6)}  ••••  ••••  ${address.slice(-6)}`
-    : "••••  ••••  ••••  ••••"
   return (
     <button
       type="button"
       disabled={!address}
-      aria-label={address ? `Copy ${label} address` : "Address pending"}
+      aria-label={address ? `Copy ${label} address` : `${label} address pending`}
       onClick={() => {
         if (!address) return
         navigator.clipboard?.writeText(address).then(() => {
@@ -141,38 +173,37 @@ function WalletCardVisual({ address, label }: { address?: string; label: string 
           setTimeout(() => setCopied(false), 1600)
         }).catch(() => {})
       }}
-      className="group relative hidden aspect-[1.586] w-[290px] shrink-0 overflow-hidden rounded-2xl text-left transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0 lg:block"
+      className="group relative aspect-[1.586] w-[248px] shrink-0 snap-start overflow-hidden rounded-2xl text-left transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
     >
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,#2E2A27_0%,#1C1917_48%,#100E0D_100%)]" />
-      <div
-        aria-hidden
-        className="absolute inset-0"
-        style={{ background: "radial-gradient(130% 100% at 100% 0%, rgba(234,179,8,0.16) 0%, rgba(234,179,8,0.045) 42%, transparent 64%)" }}
-      />
-      <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl p-px opacity-90" style={GOLD_STROKE} />
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,#2A2724_0%,#1C1917_50%,#12100E_100%)]" />
+      {hue ? (
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{ background: `radial-gradient(130% 100% at 100% 0%, ${hue}3D 0%, ${hue}14 40%, transparent 64%)` }}
+        />
+      ) : null}
+      <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
       <div className="relative flex h-full flex-col justify-between p-4">
-        <div className="flex items-start justify-between">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/worldstreet-logo/WorldStreet1.png" alt="" className="h-6 w-6 opacity-90" />
-          <span
-            aria-hidden
-            className="grid h-6 w-8 grid-cols-2 gap-px overflow-hidden rounded-[5px] bg-gradient-to-br from-yellow-200/70 via-yellow-500/60 to-yellow-800/60 p-[3px]"
-          >
-            <span className="rounded-[1px] bg-black/25" />
-            <span className="rounded-[1px] bg-black/10" />
-            <span className="rounded-[1px] bg-black/10" />
-            <span className="rounded-[1px] bg-black/25" />
-          </span>
-        </div>
-        <span className="font-mono text-[13px] tracking-[0.13em] text-white/85">{grouped}</span>
-        <div className="flex items-end justify-between">
-          <div className="flex flex-col">
-            <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">
-              {copied ? "Address copied" : label}
-            </span>
-            <span className="text-[11.5px] font-semibold tracking-[0.02em] text-white/90">WorldStreet</span>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <CoinAvatar symbol={symbol} size="lg" className="h-6 w-6 shrink-0" />
+            <span className="truncate text-[13px] font-semibold text-white/90">{label}</span>
           </div>
-          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/90">Only yours</span>
+          {value !== undefined && value > 0 ? (
+            <span className="shrink-0 text-[12.5px] font-semibold tabular-nums text-white/80">
+              {hidden ? AMOUNT_MASK : usd(value)}
+            </span>
+          ) : null}
+        </div>
+        <span className="font-mono text-[12px] tracking-[0.12em] text-white/80">{groupedAddress(address)}</span>
+        <div className="flex items-end justify-between gap-2">
+          <span className="truncate text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/40">
+            {networksLabel}
+          </span>
+          <span className={`shrink-0 text-[9.5px] font-semibold uppercase tracking-[0.14em] transition-colors ${copied ? "text-credit" : "text-white/40 group-hover:text-white/70"}`}>
+            {address ? (copied ? "Copied" : "Tap to copy") : "Address pending"}
+          </span>
         </div>
       </div>
     </button>
@@ -222,6 +253,8 @@ export function ModernWalletPage() {
 
   const [unlockOpen, setUnlockOpen] = useState(false)
   const [receiveOpen, setReceiveOpen] = useState(false)
+  // The hero card's press-to-copy flash for the primary address.
+  const [cardCopied, setCardCopied] = useState(false)
   // Scopes the modal's warning to one token when opened from a balance row;
   // `null` from the Deposit pill or the empty-state CTA, the wallet's
   // generic "receive anything" view. Kept (not cleared) on close, matching
@@ -395,81 +428,117 @@ export function ModernWalletPage() {
 
       {hasWallet || walletLoading ? (
         <>
-          {/* ── The wallet card — the page's thesis as one object. Glass fill
-                 over the silk field, the gold gradient-stroke ring, ambient
-                 gold bloom inside; balance, shape stats, and the verbs all
-                 live ON the card, like the thing in your pocket. ── */}
-          <Rise delay={40}>
-            <section className="ws-card-glass relative overflow-hidden rounded-2xl bg-card/70 p-5 md:p-6">
-              <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl p-px" style={GOLD_STROKE} />
-              {/* Ambient gold, hero pages only (DS §atmosphere) — two soft
-                  blooms, never a flood. */}
-              <div aria-hidden className="pointer-events-none absolute -right-24 -top-32 h-72 w-72 rounded-full bg-primary/[0.08] blur-3xl" />
-              <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-20 h-60 w-60 rounded-full bg-primary/[0.04] blur-3xl" />
+          {/* ── THE wallet card. Not a panel with a card on it — the card IS
+                 the hero, and the balance is printed on it, the way Apple
+                 Wallet or Revolut hold a card up. Dark object in both
+                 themes; visible on every breakpoint. ── */}
+          <Rise delay={40} className="flex flex-wrap items-center gap-x-8 gap-y-5">
+            <section className="relative w-full max-w-[560px] overflow-hidden rounded-[20px] shadow-[0_28px_64px_-28px_rgb(0_0_0/0.65)]">
+              <div className="absolute inset-0 bg-[linear-gradient(135deg,#2E2A27_0%,#1C1917_48%,#100E0D_100%)]" />
+              <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{ background: "radial-gradient(120% 90% at 100% 0%, rgba(234,179,8,0.15) 0%, rgba(234,179,8,0.04) 45%, transparent 68%)" }}
+              />
+              <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-primary/[0.05] blur-3xl" />
+              <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[20px] p-px opacity-90" style={GOLD_STROKE} />
 
-              <div className="relative flex flex-col gap-6">
-                <div className="flex items-start justify-between gap-6">
-                  <div className="flex w-fit flex-col gap-1">
-                    <div className="flex items-center gap-3">
-                      <Eyebrow>Est. Total Value</Eyebrow>
-                      <button
-                        type="button"
-                        onClick={toggleHidden}
-                        aria-label={hidden ? "Show balances" : "Hide balances"}
-                        className={`transition-colors ${hidden ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"}`}
-                      >
-                        <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
-                      </button>
-                    </div>
-                    {heroLoading ? (
-                      <Skel className="my-1.5 h-[clamp(2.4rem,5vw,3.6rem)] w-[clamp(12rem,24vw,19rem)] rounded-lg" />
-                    ) : (
-                      <Balance value={usd(totalUsd)} hidden={hidden} className="text-[clamp(2.4rem,5vw,3.6rem)]" />
-                    )}
-                    <div className="flex items-center gap-1">
-                      <p className="text-[13px] text-muted-foreground">
-                        {asOf ?? (heroLoading ? "Syncing…" : "Not synced yet")}
-                        {unpriced > 0 ? " · Some assets have no live price" : ""}
-                      </p>
-                      {refreshAction}
-                    </div>
+              <div className="relative flex flex-col gap-6 p-5 md:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/worldstreet-logo/WorldStreet1.png" alt="" className="h-6 w-6 opacity-90" />
+                    <span className="text-[13px] font-semibold tracking-[0.02em] text-white/90">WorldStreet</span>
                   </div>
-
-                  {/* The card in the wallet — primary address as the card
-                      number, press to copy. lg+ only; mobile leads with the
-                      figure and the verbs. */}
-                  <WalletCardVisual
-                    address={primaryAccount?.canonicalAddress}
-                    label={primaryAccount ? (FAMILY_LABEL[primaryAccount.chainFamily] ?? primaryAccount.chainFamily) : "Wallet"}
-                  />
+                  <CardChip />
                 </div>
 
-                <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-                  {/* The verbs, in the round grammar every wallet trains —
-                      gold on the one primary verb only. */}
-                  <div className="flex gap-5">
-                    <RoundAction icon={DepositGlyph} label="Deposit" primary onClick={() => openReceive()} />
-                    <RoundAction icon={SendGlyph} label="Send" href="/wallet/modern/send" />
-                    <RoundAction icon={TradeGlyph} label="Trade" href="/trade" />
-                    <RoundAction icon={SecurityGlyph} label="Security" href="#security" />
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <Eyebrow className="text-white/45">Est. Total Value</Eyebrow>
+                    <button
+                      type="button"
+                      onClick={toggleHidden}
+                      aria-label={hidden ? "Show balances" : "Hide balances"}
+                      className={`transition-colors ${hidden ? "text-primary" : "text-white/40 hover:text-white/80"}`}
+                    >
+                      <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
+                    </button>
                   </div>
+                  {heroLoading ? (
+                    <Skel className="my-1.5 h-[clamp(2.4rem,5vw,3.4rem)] w-[clamp(12rem,24vw,18rem)] rounded-lg" />
+                  ) : (
+                    <Balance value={usd(totalUsd)} hidden={hidden} className="text-[clamp(2.4rem,5vw,3.4rem)] text-white" />
+                  )}
+                  <div className="flex items-center gap-1">
+                    <p className="text-[12.5px] text-white/45">
+                      {asOf ?? (heroLoading ? "Syncing…" : "Not synced yet")}
+                      {unpriced > 0 ? " · Some assets have no live price" : ""}
+                    </p>
+                    {refreshAction}
+                  </div>
+                </div>
 
-                  {/* The wallet's shape at a glance — real counts, no invented data. */}
-                  <div className="hidden items-center divide-x divide-border/40 sm:flex">
-                    {heroStats.map((stat) => (
-                      <div key={stat.label} className="flex flex-col items-end gap-1 px-5 first:pl-0 last:pr-0">
-                        <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
-                          {stat.label}
-                        </span>
-                        <span className="text-[13.5px] font-semibold tabular-nums">
-                          {heroLoading ? "––" : stat.value}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                <div className="flex items-end justify-between gap-3">
+                  <button
+                    type="button"
+                    disabled={!primaryAccount?.canonicalAddress}
+                    aria-label={primaryAccount?.canonicalAddress ? "Copy wallet address" : "Address pending"}
+                    onClick={() => {
+                      const address = primaryAccount?.canonicalAddress
+                      if (!address) return
+                      navigator.clipboard?.writeText(address).then(() => {
+                        setCardCopied(true)
+                        setTimeout(() => setCardCopied(false), 1600)
+                      }).catch(() => {})
+                    }}
+                    className={`font-mono text-[13px] tracking-[0.13em] transition-colors ${cardCopied ? "text-credit" : "text-white/75 hover:text-white"}`}
+                  >
+                    {cardCopied ? "Address copied" : groupedAddress(primaryAccount?.canonicalAddress)}
+                  </button>
+                  <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/90">
+                    Only yours
+                  </span>
                 </div>
               </div>
             </section>
+
+            {/* The wallet's shape — a quiet rail beside the card on lg+. */}
+            <div className="hidden flex-col gap-4 lg:flex">
+              {heroStats.map((stat) => (
+                <div key={stat.label} className="flex flex-col gap-0.5">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                    {stat.label}
+                  </span>
+                  <span className="text-[17px] font-semibold tabular-nums">
+                    {heroLoading ? "––" : stat.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Rise>
+
+          {/* The verbs, in the round grammar every wallet trains — gold on
+              the one primary verb only. */}
+          <Rise delay={80} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+            <div className="flex gap-5">
+              <RoundAction icon={DepositGlyph} label="Deposit" primary onClick={() => openReceive()} />
+              <RoundAction icon={SendGlyph} label="Send" href="/wallet/modern/send" />
+              <RoundAction icon={TradeGlyph} label="Trade" href="/trade" />
+              <RoundAction icon={SecurityGlyph} label="Security" href="#security" />
+            </div>
+            <div className="flex items-center divide-x divide-border/40 lg:hidden">
+              {heroStats.map((stat) => (
+                <div key={stat.label} className="flex flex-col items-end gap-1 px-5 first:pl-0 last:pr-0">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                    {stat.label}
+                  </span>
+                  <span className="text-[13.5px] font-semibold tabular-nums">
+                    {heroLoading ? "––" : stat.value}
+                  </span>
+                </div>
+              ))}
+            </div>
           </Rise>
 
           <Rise delay={120} className="flex flex-col gap-2.5">
@@ -484,55 +553,31 @@ export function ModernWalletPage() {
               </button>
             </div>
             {walletLoading ? (
-              <div className="flex gap-2.5 overflow-x-auto scrollbar-none sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 sm:overflow-visible">
+              <div className="flex gap-3 overflow-x-auto scrollbar-none">
                 {[0, 1, 2].map((index) => (
-                  <Skel key={index} className="h-[104px] min-w-[200px] flex-1 rounded-2xl sm:min-w-0" />
+                  <Skel key={index} className="aspect-[1.586] w-[248px] shrink-0 rounded-2xl" />
                 ))}
               </div>
             ) : (
-              // The dashboard's glass account-card grammar (user-card.tsx):
-              // translucent fill over the silk field, gold gradient-stroke
-              // ring, hover lift. Each card is one address you can share.
-              <div className="flex gap-2.5 overflow-x-auto scrollbar-none sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 sm:overflow-visible">
+              // The cards in the wallet: one card-shaped object per chain,
+              // tinted with the network's own hue, address embossed like a
+              // card number. Full-bleed snap carousel — thumb through them
+              // the way you thumb through a physical wallet.
+              <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 scrollbar-none md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
                 {(wallet.data?.accounts ?? []).map((account) => {
                   const familyNetworks = networksForFamily(account.chainFamily, networks.data)
                   const meta = familyNetworks.length ? networkMetaFor(familyNetworks[0].id, networks.data) : null
-                  const symbol = meta?.nativeSymbol ?? account.chainFamily
-                  const value = familyUsd[account.chainFamily]
                   return (
-                    <div
+                    <ChainCard
                       key={account.id}
-                      className="ws-card-glass group relative flex min-w-[200px] flex-1 shrink-0 flex-col gap-3 rounded-2xl bg-card/70 p-4 pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0 sm:min-w-0"
-                    >
-                      <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl p-px opacity-80 transition-opacity group-hover:opacity-100" style={GOLD_STROKE} />
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <CoinAvatar symbol={symbol} size="lg" className="h-7 w-7 shrink-0" />
-                          <div className="flex min-w-0 flex-col">
-                            <span className="truncate text-[13px] font-semibold leading-tight">
-                              {FAMILY_LABEL[account.chainFamily] ?? account.chainFamily.toUpperCase()}
-                            </span>
-                            <span className="truncate text-[11px] text-muted-foreground">
-                              {familyNetworks.map((network) => network.name).join(" · ") || account.state}
-                            </span>
-                          </div>
-                        </div>
-                        {value !== undefined && value > 0 ? (
-                          <span className="shrink-0 text-[12px] font-semibold tabular-nums text-muted-foreground">
-                            {hidden ? AMOUNT_MASK : usd(value)}
-                          </span>
-                        ) : null}
-                      </div>
-                      {account.canonicalAddress ? (
-                        <AddressPill address={account.canonicalAddress} className="w-fit" />
-                      ) : (
-                        // An AddressPill with no address is a control that
-                        // copies nothing — say what's actually true instead.
-                        <span className="w-fit rounded-full bg-surface-sunken px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                          Address pending
-                        </span>
-                      )}
-                    </div>
+                      label={FAMILY_LABEL[account.chainFamily] ?? account.chainFamily.toUpperCase()}
+                      networksLabel={familyNetworks.map((network) => network.name).join(" · ") || account.state}
+                      symbol={meta?.nativeSymbol ?? account.chainFamily}
+                      address={account.canonicalAddress}
+                      value={familyUsd[account.chainFamily]}
+                      hidden={hidden}
+                      hue={meta?.hue}
+                    />
                   )
                 })}
               </div>
