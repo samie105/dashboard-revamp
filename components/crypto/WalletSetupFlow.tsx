@@ -262,12 +262,19 @@ function RecoverySecretModal({ secret, onClose }: { secret: string; onClose: () 
 export function WalletSetupFlow({
   walletExists = false,
   resume = false,
+  onVisibilityChange,
 }: {
   walletExists?: boolean
   /** The wallet exists but its encrypted package doesn't — an interrupted
    *  setup. Opens straight at the passphrase step with a warning, and keeps
    *  the card visible even though `walletExists` is true. */
   resume?: boolean
+  /** Reports whether the ceremony currently owns the page. Creation flips
+   *  `walletExists` true mid-flow, so without this the finished wallet would
+   *  render BEHIND the "Your wallet is ready → Open your wallet" screen and
+   *  that button would point at something already on screen. The page hides
+   *  its body while this is true; dismissing the flow reveals it. */
+  onVisibilityChange?: (visible: boolean) => void
 }) {
   const setup = useModernWalletSetup()
   // `null` until the user steers: the landing step is then derived, so a
@@ -316,6 +323,19 @@ export function WalletSetupFlow({
   const progress = useStageProgress(Math.max(0, rawStageIndex), attempt)
   const addresses = useMemo(() => packageAddresses(setup.data?.package), [setup.data])
 
+  // Suppression is the PROP's job, never the mount's — and only over the idle
+  // invitation. Once the ceremony starts (or the secret is on screen) this
+  // component owns the page until the user leaves it themselves.
+  const busyWithSetup = step === "creating" || step === "done" || recoveryModalOpen
+  const invited = !walletExists || resume
+  const visible = setup.isReady && step !== "closed" && (busyWithSetup || invited)
+
+  // Announced from an effect, not during render: the parent hides the wallet
+  // body off this, and a setState mid-render would be a cross-component write.
+  useEffect(() => {
+    onVisibilityChange?.(visible)
+  }, [visible, onVisibilityChange])
+
   async function createWallet() {
     if (blocker || setup.isPending) return
     setAttempt((current) => current + 1)
@@ -336,14 +356,7 @@ export function WalletSetupFlow({
     }
   }
 
-  if (!setup.isReady) return null
-
-  // Suppression is the PROP's job, never the mount's — and only over the idle
-  // invitation. Once the ceremony starts (or the secret is on screen) this
-  // component owns the card until the user leaves it themselves.
-  const busyWithSetup = step === "creating" || step === "done" || recoveryModalOpen
-  const invited = !walletExists || resume
-  if (step === "closed" || (!busyWithSetup && !invited)) return null
+  if (!visible) return null
 
   return (
     <>

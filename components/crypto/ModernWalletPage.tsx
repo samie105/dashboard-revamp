@@ -287,6 +287,11 @@ export function ModernWalletPage() {
 
   const [unlockOpen, setUnlockOpen] = useState(false)
   const [receiveOpen, setReceiveOpen] = useState(false)
+  // True while the setup ceremony owns the page. Creation flips `hasWallet`
+  // true the instant it succeeds, so without this the finished wallet would
+  // render BEHIND the flow's "Your wallet is ready" card and its "Open your
+  // wallet" button would point at a wallet that was already on screen.
+  const [setupCeremony, setSetupCeremony] = useState(false)
   // The hero card's press-to-copy flash for the primary address.
   const [cardCopied, setCardCopied] = useState(false)
   // Scopes the modal's warning to one token when opened from a balance row;
@@ -481,7 +486,11 @@ export function ModernWalletPage() {
           `resume` is the one thing allowed to overrule the suppression: a
           wallet whose package 404s needs the flow back on screen precisely
           BECAUSE the wallet exists. */}
-      <WalletSetupFlow walletExists={hasWallet || walletLoading} resume={setupIncomplete} />
+      <WalletSetupFlow
+        walletExists={hasWallet || walletLoading}
+        resume={setupIncomplete}
+        onVisibilityChange={setSetupCeremony}
+      />
 
       {wallet.error && !wallet.needsSetup ? (
         <Rise delay={40}>
@@ -489,7 +498,9 @@ export function ModernWalletPage() {
         </Rise>
       ) : null}
 
-      {hasWallet || walletLoading ? (
+      {/* The wallet body waits for the ceremony to hand the page over — one
+          screen at a time, so "Open your wallet" always opens something. */}
+      {(hasWallet || walletLoading) && !setupCeremony ? (
         <>
           {/* ── The hero card + the wallet pocket. The pocket holds every
                  card; clicking one deals it onto the hero, which re-skins to
@@ -737,7 +748,7 @@ export function ModernWalletPage() {
       <WalletUnlockDialog open={unlockOpen} onOpenChange={setUnlockOpen} />
       <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} asset={receiveAsset} />
 
-      {wallet.data && packageQuery.data ? (
+      {wallet.data && packageQuery.data && !setupCeremony ? (
         <Rise delay={200}>
           <div id="security" className="flex flex-col gap-6">
             <CryptoSecurityPanel walletId={wallet.data.id} packageValue={packageQuery.data} />
