@@ -19,9 +19,13 @@
  *  - sponsorship, spot markets/intents, Hyperliquid markets/account/intents,
  *    bridge deposits, devices and recovery status are all served.
  *
- * State is in-memory per dev-server process: restarting the server resets
- * the mock wallet. GET /api/crypto/dev/reset clears it on demand (clear the
- * browser's site data too if you want to re-run the setup ceremony).
+ * WHERE THIS RUNS: in the browser, called directly by the crypto client's
+ * injected fetcher (lib/dev-mock-fetch.ts) — no network hop — and also on the
+ * server behind the proxy route, for anything that asks server-side. The
+ * browser copy is the authoritative one for the demo, and it persists itself
+ * to localStorage; see "Durability" below for why that isn't optional.
+ *
+ * GET /api/crypto/dev/reset clears the wallet, in memory and on disk.
  */
 
 import { Keypair, PublicKey, SystemProgram, TransactionMessage, VersionedTransaction } from "@solana/web3.js"
@@ -72,7 +76,7 @@ type PackageAccount = {
 
 type MockIntent = Record<string, unknown> & { id: string; status: string }
 
-const state: {
+type MockState = {
   wallet: Record<string, unknown> | null
   pkg: (Record<string, unknown> & { accounts: PackageAccount[] }) | null
   prepared: Map<string, Record<string, unknown>>
@@ -84,7 +88,14 @@ const state: {
   /** family:identifier → base-units delta applied by confirmed sends */
   balanceDeltas: Map<string, bigint>
   counter: number
-} = {
+}
+
+// Hung off globalThis rather than held as a module constant, so the wallet
+// survives the module being evaluated more than once in one process — which
+// happens across route bundles in a deployed build and on every hot reload.
+const globalStore = globalThis as typeof globalThis & { __wsMockCryptoState?: MockState }
+
+const state: MockState = (globalStore.__wsMockCryptoState ??= {
   wallet: null,
   pkg: null,
   prepared: new Map(),
@@ -95,7 +106,91 @@ const state: {
   transactions: [],
   balanceDeltas: new Map(),
   counter: 0,
+})
+
+/* ── Durability ────────────────────────────────────────────────────────────
+   In-process state is enough for a dev server, which is one long-lived
+   process. It is NOT enough anywhere the mock is answering from a serverless
+   function: setup alone makes nine round trips (get wallet → create → get
+   package → authorize → list networks → prepare ×5), and the instance holding
+   the wallet can be recycled in the gap while the browser generates keys and
+   runs a 600k-iteration derivation. The next call then answers "create the
+   wallet first" and the ceremony dies half-built.
+
+   So the browser copy of this module persists itself. Only the durable half is
+   written — the transient maps (prepared accounts, in-flight intents) belong
+   to a single flow and are worthless after a reload. `bigint` has no JSON
+   representation, hence the string round trip. No-ops on the server, where
+   `localStorage` doesn't exist. */
+
+const PERSIST_KEY = "worldstreet:dev-mock-crypto:v1"
+
+const canPersist = () => {
+  try {
+    return typeof localStorage !== "undefined"
+  } catch {
+    // Storage access throws outright in some embedded contexts.
+    return false
+  }
 }
+
+export function persistMockCryptoState() {
+  if (!canPersist()) return
+  try {
+    localStorage.setItem(PERSIST_KEY, JSON.stringify({
+      wallet: state.wallet,
+      pkg: state.pkg,
+      transactions: state.transactions,
+      balanceDeltas: Array.from(state.balanceDeltas, ([key, value]) => [key, value.toString()]),
+      counter: state.counter,
+    }))
+  } catch {
+    // A full quota must never take the demo down with it.
+  }
+}
+
+function clearPersistedMockCryptoState() {
+  if (!canPersist()) return
+  try {
+    localStorage.removeItem(PERSIST_KEY)
+  } catch {}
+}
+
+/** Back to "no wallet yet", in memory and on disk — the state the demo starts
+ *  from, so the setup ceremony can be run again. */
+export function resetMockCryptoState() {
+  state.wallet = null; state.pkg = null; state.prepared.clear(); state.intents.clear()
+  state.byIdempotency.clear(); state.sponsorOps.clear(); state.hlIntents.clear()
+  state.transactions = []; state.balanceDeltas.clear()
+  clearPersistedMockCryptoState()
+}
+
+function hydrateMockCryptoState() {
+  // A wallet already in memory wins: this runs at import, and re-importing
+  // must never roll live state back to whatever was last written.
+  if (!canPersist() || state.wallet) return
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw) as {
+      wallet?: MockState["wallet"]
+      pkg?: MockState["pkg"]
+      transactions?: MockState["transactions"]
+      balanceDeltas?: Array<[string, string]>
+      counter?: number
+    }
+    state.wallet = saved.wallet ?? null
+    state.pkg = saved.pkg ?? null
+    state.transactions = saved.transactions ?? []
+    state.balanceDeltas = new Map((saved.balanceDeltas ?? []).map(([key, value]) => [key, BigInt(value)]))
+    state.counter = saved.counter ?? 0
+  } catch {
+    // Corrupt or half-written state is not worth failing over — start fresh.
+    clearPersistedMockCryptoState()
+  }
+}
+
+hydrateMockCryptoState()
 
 const nextId = (prefix: string) => `${prefix}-${++state.counter}-${Date.now().toString(36)}`
 
@@ -486,9 +581,7 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
   }
 
   if (method === "GET" && path === "dev/reset") {
-    state.wallet = null; state.pkg = null; state.prepared.clear(); state.intents.clear()
-    state.byIdempotency.clear(); state.sponsorOps.clear(); state.hlIntents.clear()
-    state.transactions = []; state.balanceDeltas.clear()
+    resetMockCryptoState()
     return jsonRaw({ success: true, data: { reset: true } })
   }
 
