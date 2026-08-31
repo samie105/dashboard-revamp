@@ -108,6 +108,9 @@ export function useWalletSecurity(walletId?: string) {
     const result = await addWalletChains(userId, walletId, packageValue, passphrase, recoverySecret, () => authorizeWalletWithRecoverySecret(recoverySecret))
     await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.wallet(userId) })
     await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.walletPackage(userId) })
+    // Both balance keys — the wallet page reads `balanceSnapshot`, so without
+    // it the chains just added stay missing from the balances until a reload.
+    await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balanceSnapshot(userId) })
     await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balances(userId) })
     return result
   }, [queryClient, userId, walletId])

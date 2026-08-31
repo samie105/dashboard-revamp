@@ -24,6 +24,13 @@ export function useModernWalletSetup() {
       if (!userId) return
       await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.wallet(userId) })
       await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.walletPackage(userId) })
+      // BOTH balance keys, the way every other call site does it. The wallet
+      // page reads `balanceSnapshot`, and that query has already failed with
+      // WALLET_NOT_FOUND by the time setup runs — invalidating only `balances`
+      // left the snapshot holding that error, so a wallet finished successfully
+      // and then sat behind a red "No wallet yet" with no balances until the
+      // page was reloaded.
+      await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balanceSnapshot(userId) })
       await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balances(userId) })
       if (!result.existing) await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.networks() })
     },
