@@ -117,7 +117,16 @@ type CommittedTransfer = {
  * code in both, which is the point of doing it this way rather than forking
  * a modal copy that drifts.
  */
-export function SendFlow({ onClose }: { onClose?: () => void } = {}) {
+export function SendFlow({
+  onClose,
+  onInFlightChange,
+}: {
+  onClose?: () => void
+  /** Reports whether a transfer is mid-flight, so a containing modal can
+   *  refuse accidental dismissal. Named to match `BuySellClient`, which
+   *  reports the same thing to the cash money-flow modal. */
+  onInFlightChange?: (inFlight: boolean) => void
+} = {}) {
   const router = useRouter()
   const inModal = Boolean(onClose)
   /** "Leave the flow" — close the modal, or go back to the wallet page. */
@@ -356,6 +365,14 @@ export function SendFlow({ onClose }: { onClose?: () => void } = {}) {
   const stageProgress = useStageProgress(rawStageIndex, intentId ?? "none")
   const statusState = signError ? "failure" : statusStateOf(intent?.status)
   const activeIndex = statusState === "success" ? SEND_STAGES.length : stageProgress.index
+
+  /* `runSubmit` moves to the status step BEFORE signing, so this one flag
+     covers the whole dangerous window: signing, submitting, and waiting for
+     the chain. A settled send — success or failure — is free to dismiss. */
+  const inFlight = step === "status" && statusState === "processing"
+  React.useEffect(() => {
+    onInFlightChange?.(inFlight)
+  }, [inFlight, onInFlightChange])
   const txHash = readTxHash(transfer.sponsorship, submitRecord, intent)
   // The network this transfer was BUILT on, not whatever the picker shows now.
   const sentNetworkId = committed?.networkId ?? networkId
