@@ -44,11 +44,11 @@ import { Input } from "@/components/ui/input"
 import {
   FlowCta,
   InlineNotice,
-  StageList,
   UnavailablePanel,
   useStageProgress,
   type Stage,
 } from "@/components/ui/flow"
+import { SetupCeremony } from "@/components/crypto/SetupCeremony"
 import {
   ResponsiveModal,
   ResponsiveModalContent,
@@ -286,6 +286,8 @@ export function WalletSetupFlow({
   const [passphraseConfirmation, setPassphraseConfirmation] = useState("")
   const [passphraseRevealed, setPassphraseRevealed] = useState(false)
   const [passphraseCopied, setPassphraseCopied] = useState(false)
+  /** Counts generated phrases, purely so the field's flash can be re-keyed. */
+  const [generated, setGenerated] = useState(0)
   const [stage, setStage] = useState<WalletSetupStage | null>(null)
   const [attempt, setAttempt] = useState(0)
   const secureContext = useSyncExternalStore(neverChanges, readSecureContext, assumeSecureOnServer)
@@ -418,6 +420,9 @@ export function WalletSetupFlow({
                   <label htmlFor="wallet-passphrase" className="text-[13px] font-semibold">
                     Wallet passphrase
                   </label>
+                  {/* Raised to a real chip rather than a ghost link: for most
+                      people this is the better path, and a suggestion nobody
+                      notices is a suggestion nobody takes. */}
                   <button
                     type="button"
                     onClick={() => {
@@ -427,9 +432,10 @@ export function WalletSetupFlow({
                       // Show what was just chosen for them — a hidden surprise
                       // credential is one nobody writes down.
                       setPassphraseRevealed(true)
+                      setGenerated((count) => count + 1)
                       if (setup.error) setup.reset()
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[12px] font-semibold text-foreground/80 transition-colors hover:bg-accent/70 hover:text-foreground"
                   >
                     <HugeiconsIcon icon={DiceIcon} className="h-3.5 w-3.5" />
                     Generate for me
@@ -477,6 +483,17 @@ export function WalletSetupFlow({
                       <HugeiconsIcon icon={passphraseRevealed ? ViewOffIcon : ViewIcon} className="h-4 w-4" />
                     </button>
                   </div>
+                  {/* A one-shot ring on the field the moment a phrase is
+                      generated — it lands in a control the user wasn't looking
+                      at, so something has to point at it. Keyed (not toggled)
+                      so a second roll replays instead of sitting still. */}
+                  {generated > 0 ? (
+                    <span
+                      key={generated}
+                      aria-hidden
+                      className="ws-field-flash pointer-events-none absolute inset-0 rounded-xl ring-2 ring-primary/60"
+                    />
+                  ) : null}
                 </div>
                 {/* The meter sits with the field it measures. Allocation
                     ladder read backwards: Strong takes rank 0 (brand gold),
@@ -507,7 +524,17 @@ export function WalletSetupFlow({
                     if (event.key === "Enter") void createWallet()
                   }}
                 />
-                {mismatch ? <p className="text-[12px] text-debit">Passphrases don&apos;t match</p> : null}
+                {mismatch ? (
+                  <p className="text-[12px] text-debit">Passphrases don&apos;t match</p>
+                ) : passphraseConfirmation.length > 0 && passphrase === passphraseConfirmation ? (
+                  // Answering the second field while they're still in it — the
+                  // alternative is typing a long phrase twice and finding out
+                  // whether it took only after pressing the button.
+                  <p className="ws-casc flex items-center gap-1.5 text-[12px] text-credit">
+                    <HugeiconsIcon icon={CheckmarkCircle02Icon} className="h-3.5 w-3.5" />
+                    Passphrases match
+                  </p>
+                ) : null}
               </div>
 
               <SectionMessage error={setup.error} />
@@ -529,12 +556,7 @@ export function WalletSetupFlow({
               subtitle="Keep this tab open — closing it now leaves the setup half-finished."
             />
             <div className="flex flex-col gap-4 px-4 pb-5 pt-3">
-              <StageList
-                stages={SETUP_STAGES}
-                activeIndex={progress.index}
-                stageStartedAt={progress.since}
-                cascade
-              />
+              <SetupCeremony stages={SETUP_STAGES} activeIndex={progress.index} />
             </div>
           </Rise>
         ) : (

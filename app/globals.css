@@ -907,6 +907,21 @@ input[type="range"]::-moz-range-track {
 }
 .ws-casc-pop { animation: ws-casc-pop 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
+/* A value that arrived in a field on its own — a generated passphrase — rings
+   once and fades. It fires on an event and never repeats, so it points at the
+   change without becoming ambient decoration. Reduced motion drops the ring
+   entirely: the value is already visible in the field, which is the fact that
+   mattered. */
+@keyframes ws-field-flash {
+  0%   { opacity: 0; }
+  18%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.ws-field-flash { animation: ws-field-flash 1s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .ws-field-flash { animation: none; opacity: 0; }
+}
+
 /* ── The wallet — cards, the pocket, and the deal ─────────────────────────
    A card only reads as an object if it behaves like one. Three motions,
    all of them things a physical wallet does:
