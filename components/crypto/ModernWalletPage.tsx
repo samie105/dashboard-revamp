@@ -3,7 +3,7 @@
 import { useMemo, useState, type ComponentType, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, EyeIcon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, CheckmarkCircle02Icon, Copy01Icon, EyeIcon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
 import Link from "next/link"
 
 import { useAuth } from "@/components/auth-provider"
@@ -111,20 +111,23 @@ function RoundAction({
   const circle = primary
     ? "bg-primary text-primary-foreground shadow-[0_10px_28px_-10px_rgba(234,179,8,0.55)]"
     : "bg-surface-sunken text-foreground ring-1 ring-border/25"
+  // Sized up on small screens, where this row is the whole control surface of
+  // the wallet and a 48px target competes with nothing. Desktop keeps the
+  // tighter figure — there the row sits beside the counters and reads fine.
   const inner = (
     <>
       <span
-        className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 group-hover:-translate-y-0.5 group-hover:brightness-110 motion-reduce:group-hover:translate-y-0 ${circle}`}
+        className={`relative flex h-14 w-14 items-center justify-center rounded-full transition-all duration-200 group-hover:-translate-y-0.5 group-hover:brightness-110 motion-reduce:group-hover:translate-y-0 sm:h-12 sm:w-12 ${circle}`}
       >
-        <Icon className="h-5 w-5" />
+        <Icon className="h-6 w-6 sm:h-5 sm:w-5" />
         {dot ? (
           <span
             aria-hidden
-            className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background"
+            className="absolute right-0 top-0 h-3 w-3 rounded-full bg-primary ring-2 ring-background sm:h-2.5 sm:w-2.5"
           />
         ) : null}
       </span>
-      <span className="text-[11.5px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+      <span className="text-[12.5px] font-semibold text-muted-foreground transition-colors group-hover:text-foreground sm:text-[11.5px] sm:font-medium">
         {label}
       </span>
     </>
@@ -306,13 +309,13 @@ function WalletPocket({
         {/* Stitching. */}
         <span aria-hidden className="absolute inset-[7px] rounded-[12px] border border-dashed border-white/[0.11]" />
         <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[18px] p-px" style={GOLD_STROKE} />
-        <span className="relative flex h-full flex-col items-center justify-center gap-0.5 px-4">
-          <span className="flex items-center gap-1.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/worldstreet-logo/WorldStreet1.png" alt="" className="h-4 w-4 opacity-90" />
-            <span className="text-[11px] font-semibold tracking-[0.02em] text-white/80">WorldStreet</span>
-          </span>
-          <span className="text-[23px] font-semibold tabular-nums leading-tight text-white">
+        {/* Just the number. The WorldStreet mark used to sit above it, which
+            made three brand lockups on one screen — the hero card wears one
+            whenever the total is dealt, and the page header is right there.
+            The pouch front's job is the figure; dropping the mark gave the
+            figure the room to be one. */}
+        <span className="relative flex h-full flex-col items-center justify-center gap-1 px-4">
+          <span className="text-[28px] font-semibold tabular-nums leading-none text-white">
             {loading ? "––" : hidden ? AMOUNT_MASK : usd(totalUsd)}
           </span>
           <span className={`text-[9.5px] font-semibold uppercase tracking-[0.14em] transition-colors ${totalActive ? "text-primary/90" : "text-white/40"}`}>
@@ -781,6 +784,10 @@ export function ModernWalletPage() {
                 </div>
 
                 <div className="flex items-end justify-between gap-3">
+                  {/* This is a button, and it used to read as a line of type:
+                      thin, dimmed, no affordance at all. It carries the one
+                      thing on the card people actually come to take away, so
+                      it now wears its weight, an icon, and a pressable box. */}
                   <button
                     type="button"
                     disabled={!activeCard.address}
@@ -793,9 +800,15 @@ export function ModernWalletPage() {
                         setTimeout(() => setCardCopied(false), 1600)
                       }).catch(() => {})
                     }}
-                    className={`font-mono text-[13px] tracking-[0.13em] transition-colors ${cardCopied ? "text-credit" : "text-white/75 hover:text-white"}`}
+                    className={`-mx-2 -my-1 flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 font-mono text-[13px] font-semibold tracking-[0.08em] transition-colors enabled:hover:bg-white/[0.07] disabled:opacity-60 sm:tracking-[0.13em] ${cardCopied ? "text-credit" : "text-white/90 hover:text-white"}`}
                   >
-                    {cardCopied ? "Address copied" : groupedAddress(activeCard.address)}
+                    <span className="truncate">
+                      {cardCopied ? "Address copied" : groupedAddress(activeCard.address)}
+                    </span>
+                    <HugeiconsIcon
+                      icon={cardCopied ? CheckmarkCircle02Icon : Copy01Icon}
+                      className="h-4 w-4 shrink-0 opacity-70"
+                    />
                   </button>
                   <span className={`shrink-0 text-[9px] font-semibold uppercase tracking-[0.16em] ${isTotalCard ? "text-primary/90" : "text-white/45"}`}>
                     {isTotalCard ? "Only yours" : activeCard.networksLabel}
@@ -816,8 +829,12 @@ export function ModernWalletPage() {
 
           {/* The verbs, in the round grammar every wallet trains — gold on
               the one primary verb only. */}
-          <Rise delay={80} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
-            <div className="flex gap-5">
+          {/* On a phone these two rows are the wallet's entire control surface,
+              so each spans the full width and shares it out rather than
+              huddling at one end. From sm up they sit on one line, actions
+              left and counters right, which is what the desktop width wants. */}
+          <Rise delay={80} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-5">
+            <div className="flex w-full justify-between sm:w-auto sm:justify-start sm:gap-5">
               <RoundAction icon={DepositGlyph} label="Deposit" primary onClick={() => openReceive()} />
               <RoundAction icon={SendGlyph} label="Send" onClick={() => setSendOpen(true)} />
               <RoundAction icon={TradeGlyph} label="Trade" href="/trade" />
@@ -828,14 +845,21 @@ export function ModernWalletPage() {
                 dot={networksToAdd > 0}
               />
             </div>
-            <div className="flex items-center gap-5">
-              <div className="flex items-center divide-x divide-border/40">
+            <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:gap-5">
+              <div className="flex flex-1 items-center divide-x divide-border/40 sm:flex-none">
                 {heroStats.map((stat) => (
-                  <div key={stat.label} className="flex flex-col items-end gap-1 px-5 first:pl-0 last:pr-0">
+                  <div
+                    key={stat.label}
+                    className="flex flex-1 flex-col items-center gap-1 px-2 first:pl-0 last:pr-0 sm:flex-none sm:items-end sm:px-5"
+                  >
+                    {/* The caption stays small on purpose. "ACCOUNTS" beside
+                        "NETWORKS" beside "ASSETS" plus the Locked pill is
+                        already most of a 390px row; the figure is the part
+                        worth enlarging, and it is the part that grew. */}
                     <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
                       {stat.label}
                     </span>
-                    <span className="text-[13.5px] font-semibold tabular-nums">
+                    <span className="text-[17px] font-semibold tabular-nums sm:text-[13.5px]">
                       {heroLoading ? "––" : stat.value}
                     </span>
                   </div>
@@ -844,7 +868,7 @@ export function ModernWalletPage() {
               <button
                 type="button"
                 onClick={() => setUnlockOpen(true)}
-                className="rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="shrink-0 rounded-full bg-surface-sunken px-3.5 py-2 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:px-2.5 sm:py-1 sm:text-xs"
               >
                 Locked
               </button>
