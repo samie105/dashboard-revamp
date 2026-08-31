@@ -48,7 +48,7 @@ function deviceMeta(device: Device) {
   const stamp = device.lastSeenAt ?? device.createdAt
   if (!stamp) return platform
   const formatted = new Date(stamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-  return device.lastSeenAt ? `${platform} · Last seen ${formatted}` : `${platform} · Registered ${formatted}`
+  return device.lastSeenAt ? `${platform} · Last seen ${formatted}` : `${platform} · Added ${formatted}`
 }
 
 export function CryptoSecurityPanel({
@@ -96,7 +96,7 @@ export function CryptoSecurityPanel({
     setSuccess(null)
     try {
       await security.revokeDevice(deviceId, recoverySecret)
-      setSuccess("Device revoked and local wallet state cleared.")
+      setSuccess("That device has been signed out, and its copy of your wallet was cleared.")
     } catch (cause) {
       setError(cause)
     } finally {
@@ -110,7 +110,7 @@ export function CryptoSecurityPanel({
     setError(null)
     setSuccess(null)
     try {
-      if (!user?.userId) throw new Error("Sign in before exporting a wallet backup")
+      if (!user?.userId) throw new Error("Sign in before saving a backup file")
       const serialized = await serializeEncryptedWalletPackage(user.userId, packageValue)
       const blob = new Blob([serialized], { type: "application/json" })
       const url = URL.createObjectURL(blob)
@@ -119,7 +119,7 @@ export function CryptoSecurityPanel({
       anchor.download = `worldstreet-wallet-${walletId}-encrypted-backup.json`
       anchor.click()
       URL.revokeObjectURL(url)
-      setSuccess("Encrypted wallet backup downloaded. Keep it with the recovery secret.")
+      setSuccess("Backup file saved. Keep it somewhere safe, along with your recovery secret.")
     } catch (cause) {
       setError(cause)
     } finally {
@@ -137,7 +137,7 @@ export function CryptoSecurityPanel({
     setError(null)
     setSuccess(null)
     try {
-      if (!user?.userId) throw new Error("Sign in before restoring a wallet backup")
+      if (!user?.userId) throw new Error("Sign in before restoring a backup file")
       const preview = await previewWalletBackupRestore(user.userId, walletId, await file.text())
       setPendingRestore(preview)
     } catch (cause) {
@@ -158,11 +158,14 @@ export function CryptoSecurityPanel({
     setBusy(true)
     setError(null)
     try {
-      if (!user?.userId) throw new Error("Sign in before restoring a wallet backup")
+      if (!user?.userId) throw new Error("Sign in before restoring a backup file")
       security.clear()
       await commitWalletBackupRestore(user.userId, walletId, pendingRestore.packageValue)
       const warningPrefix = pendingRestore.warnings.length > 0 ? `${pendingRestore.warnings.join(" ")} ` : ""
-      setSuccess(`${warningPrefix}Encrypted package restored to this browser. The server package remains authoritative until a recovery/commit flow completes. Unlock the wallet to continue.`)
+      // The local copy is back, but the server still holds the previous one
+      // until a recovery run commits — saying only "restored" would let
+      // someone believe they were finished when they aren't.
+      setSuccess(`${warningPrefix}Your backup is back on this browser. Worldstreet still holds your previous copy until you finish "Get back in". Open your wallet to continue.`)
       setPendingRestore(null)
     } catch (cause) {
       setError(cause)
@@ -218,13 +221,8 @@ export function CryptoSecurityPanel({
             disabled={busy || !recoverySecret || !passphrase}
             className="self-start rounded-full bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            {busy ? "Rotating…" : "Rotate wallet security"}
+            {busy ? "Changing locks…" : "Give my wallet new locks"}
           </button>
-        </div>
-
-        <div className="flex flex-col gap-1 text-[12.5px] text-muted-foreground">
-          <span>Package version {packageValue.version}</span>
-          <span>Registered devices {security.devices.length}</span>
         </div>
 
         <div className="flex flex-wrap gap-2 border-t border-border/20 pt-3.5">
@@ -234,7 +232,7 @@ export function CryptoSecurityPanel({
             disabled={busy}
             className="rounded-full bg-surface-sunken px-3.5 py-1.5 text-[12px] font-semibold transition-colors hover:bg-accent disabled:opacity-50"
           >
-            Download encrypted backup
+            Download a backup file
           </button>
           <input
             ref={fileInput}
@@ -250,7 +248,7 @@ export function CryptoSecurityPanel({
             disabled={busy}
             className="rounded-full bg-surface-sunken px-3.5 py-1.5 text-[12px] font-semibold transition-colors hover:bg-accent disabled:opacity-50"
           >
-            Restore encrypted backup
+            Restore from a backup file
           </button>
         </div>
 
@@ -260,7 +258,11 @@ export function CryptoSecurityPanel({
             <Skel className="h-14 w-full rounded-xl" />
           </div>
         ) : security.devices.length > 0 ? (
-          <div className="flex flex-col divide-y divide-border/20 rounded-xl bg-surface-sunken/70 ring-1 ring-border/25">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[12.5px] font-medium text-muted-foreground">
+              Devices that can open this wallet
+            </span>
+            <div className="flex flex-col divide-y divide-border/20 rounded-xl bg-surface-sunken/70 ring-1 ring-border/25">
             {security.devices.map((device) => (
               <ListRow
                 key={device.id}
@@ -279,7 +281,8 @@ export function CryptoSecurityPanel({
                   ) : null
                 }
               />
-            ))}
+              ))}
+            </div>
           </div>
         ) : null}
 
@@ -289,12 +292,12 @@ export function CryptoSecurityPanel({
       <AlertDialog open={confirmRotate} onOpenChange={setConfirmRotate}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Rotate your wallet encryption?</AlertDialogTitle>
+            <AlertDialogTitle>Give your wallet new locks?</AlertDialogTitle>
             <AlertDialogDescription>{ROTATE_DESCRIPTION}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={busy} onClick={() => void rotate()}>Rotate</AlertDialogAction>
+            <AlertDialogAction disabled={busy} onClick={() => void rotate()}>Change locks</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -333,7 +336,7 @@ export function CryptoSecurityPanel({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Replace the wallet package on this device?</AlertDialogTitle>
+            <AlertDialogTitle>Replace the wallet saved in this browser?</AlertDialogTitle>
             <AlertDialogDescription>{RESTORE_CONFIRM_DESCRIPTION}</AlertDialogDescription>
           </AlertDialogHeader>
           {pendingRestore && pendingRestore.warnings.length > 0 ? (

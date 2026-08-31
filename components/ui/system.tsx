@@ -359,34 +359,55 @@ export function IconAction({
    corner-light ring (the hero account cards' gold ring, de-tinted — family
    resemblance without spending gold on a container). ─────────────────────── */
 
+/**
+ * "The surface you are on is ALREADY a card." A CardShell rendered inside a
+ * modal popup — itself a glass pane with its own ring, corners and bevel —
+ * would stack pane on pane: two rings, two roundings, two bevels, and the
+ * inner one floating a few pixels inside the outer for no reason.
+ *
+ * Wrapping a subtree in `<FlatCardSurface>` tells every CardShell inside it
+ * to contribute layout only and skip the pane. That lets a panel written for
+ * the page be reused verbatim in a modal instead of being rewritten or
+ * forked — which is exactly what the wallet's security panels do.
+ */
+const FlatCardSurfaceContext = React.createContext(false)
+
+export function FlatCardSurface({ children }: { children: React.ReactNode }) {
+  return <FlatCardSurfaceContext.Provider value={true}>{children}</FlatCardSurfaceContext.Provider>
+}
+
 export function CardShell({ className, children, ...rest }: React.ComponentProps<"div">) {
+  const flat = React.useContext(FlatCardSurfaceContext)
   return (
     <div
       className={cn(
+        "relative flex h-full min-w-0 flex-col",
         // ws-card-glass: the iOS-26 clear grade — a LOW fill (45%) so the
         // silk field genuinely transmits through the pane, with the heavy
         // blur+saturate in ws-card-glass doing the legibility work. The
         // no-backdrop-filter fallback in globals re-solidifies the fill.
-        "ws-card-glass relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl bg-card/30",
         // The lens: a lit bevel at the top edge, soft occlusion at the
         // bottom — what makes clear glass read as a pane, not a tint.
-        "shadow-[inset_0_1px_0_rgb(255_255_255/0.07),inset_0_12px_24px_-20px_rgb(255_255_255/0.12),inset_0_-14px_26px_-22px_rgb(0_0_0/0.35)]",
+        !flat &&
+          "ws-card-glass overflow-hidden rounded-2xl bg-card/30 shadow-[inset_0_1px_0_rgb(255_255_255/0.07),inset_0_12px_24px_-20px_rgb(255_255_255/0.12),inset_0_-14px_26px_-22px_rgb(0_0_0/0.35)]",
         className,
       )}
       {...rest}
     >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-2xl p-px"
-        style={{
-          background:
-            "linear-gradient(135deg, color-mix(in oklab, var(--foreground) 14%, transparent), color-mix(in oklab, var(--foreground) 4%, transparent) 40%, transparent 65%)",
-          WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-          WebkitMaskComposite: "xor",
-          mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-          maskComposite: "exclude",
-        }}
-      />
+      {!flat && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-2xl p-px"
+          style={{
+            background:
+              "linear-gradient(135deg, color-mix(in oklab, var(--foreground) 14%, transparent), color-mix(in oklab, var(--foreground) 4%, transparent) 40%, transparent 65%)",
+            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
+            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            maskComposite: "exclude",
+          }}
+        />
+      )}
       {children}
     </div>
   )
@@ -411,7 +432,11 @@ export function CardHeader({
   className?: string
 }) {
   return (
-    <div className={cn("flex items-center justify-between gap-3 px-4 py-3.5", className)}>
+    // data-slot: a surface that titles a panel ITSELF — a modal whose own
+    // header already names the pane — hides these without reaching for
+    // ":first-child", which would silently target the wrong node the day a
+    // panel gains a banner above its header.
+    <div data-slot="card-header" className={cn("flex items-center justify-between gap-3 px-4 py-3.5", className)}>
       <div className="flex min-w-0 flex-col">
         <span className="flex items-center gap-2.5">
           <h3 className="text-[15px] font-semibold leading-tight">{title}</h3>

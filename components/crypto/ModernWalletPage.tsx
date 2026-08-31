@@ -11,13 +11,14 @@ import { ModeBadge, SectionMessage } from "@/components/crypto/primitives"
 import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
 import { WalletSetupFlow } from "@/components/crypto/WalletSetupFlow"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
-import { RecoveryPanel } from "@/components/crypto/RecoveryPanel"
+import { WalletSecurityModal } from "@/components/crypto/WalletSecurityModal"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { InlineNotice, UnavailablePanel } from "@/components/ui/flow"
 import {
   Balance,
   CardHeader,
   CardShell,
+  DeltaChip,
   EmptyState,
   Eyebrow,
   IconAction,
@@ -43,9 +44,7 @@ import {
 } from "@/lib/crypto-backend"
 import { networkMetaFor } from "@/lib/crypto-backend/network-meta"
 import { usd } from "@/lib/num"
-import { CryptoSecurityPanel } from "./CryptoSecurityPanel"
-import { WalletKeyExportPanel } from "./WalletKeyExportPanel"
-import { WalletChainProvisioningPanel } from "./WalletChainProvisioningPanel"
+import { missingChainFamilies } from "./WalletChainProvisioningPanel"
 
 const PAGE = "flex flex-col gap-6 p-4 md:p-6 lg:p-8"
 const SUBTITLE = "Only you can open this wallet"
@@ -90,12 +89,17 @@ function RoundAction({
   primary,
   href,
   onClick,
+  dot,
 }: {
   icon: ComponentType<{ className?: string }>
   label: string
   primary?: boolean
   href?: string
   onClick?: () => void
+  /** Something is waiting behind this verb. Gold, because "there is
+   *  something here for you" is exactly the active-state meaning gold is
+   *  reserved for. */
+  dot?: boolean
 }) {
   const circle = primary
     ? "bg-primary text-primary-foreground shadow-[0_10px_28px_-10px_rgba(234,179,8,0.55)]"
@@ -103,9 +107,15 @@ function RoundAction({
   const inner = (
     <>
       <span
-        className={`flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 group-hover:-translate-y-0.5 group-hover:brightness-110 motion-reduce:group-hover:translate-y-0 ${circle}`}
+        className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 group-hover:-translate-y-0.5 group-hover:brightness-110 motion-reduce:group-hover:translate-y-0 ${circle}`}
       >
         <Icon className="h-5 w-5" />
+        {dot ? (
+          <span
+            aria-hidden
+            className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background"
+          />
+        ) : null}
       </span>
       <span className="text-[11.5px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">
         {label}
@@ -147,6 +157,8 @@ type WalletCardData = {
   label: string
   /** undefined = nothing priced yet; render an em dash, never $0.00. */
   value?: number
+  /** 24h move for what this card holds. undefined = the feed didn't say. */
+  change?: number
   address?: string
   /** Network brand hue for chain cards; absent = the gold WorldStreet card. */
   hue?: string
@@ -154,9 +166,24 @@ type WalletCardData = {
   networksLabel?: string
 }
 
-/** The wallet pocket — the reference gesture: cards tucked into a pouch,
- *  tops peeking out. Hover peeks a card further; click deals it onto the
- *  hero. The pouch front is the WorldStreet total card itself. */
+/**
+ * The wallet pocket — cards tucked into a pouch with their top edges showing.
+ * Hover peeks a card out; click deals it onto the hero. The pouch front is
+ * the WorldStreet card's own face, and the way back to the total view.
+ *
+ * What makes this read as a POCKET rather than a list of coloured rows:
+ *
+ *  · each card is a real card — 92px of card, of which only the top 40px is
+ *    ever visible, so what you see is a card DISAPPEARING into something
+ *    rather than a 40px-tall strip that happens to be rounded;
+ *  · the stack funnels: cards behind are inset a few px each, the way a fan
+ *    of cards narrows toward the back of a pocket;
+ *  · every card casts a shadow UPWARD onto the one behind it, and the pouch
+ *    casts the deepest one of all — that gradient at the pouch mouth is what
+ *    sells "these go inside";
+ *  · the pouch has a lit lip, dashed stitching, and a gold hairline. Leather
+ *    with a brand stamp, not another rounded rectangle.
+ */
 function WalletPocket({
   cards,
   selected,
@@ -173,36 +200,72 @@ function WalletPocket({
   loading: boolean
 }) {
   const chainCards = cards.filter((card) => card.key !== "worldstreet")
+  const depth = chainCards.length
+  const totalActive = selected === "worldstreet"
   return (
-    <div className="flex w-[272px] shrink-0 flex-col justify-end">
-      {/* The tucked stack — later cards overlap earlier ones; each shows its
-          top edge like cards in a pouch. */}
-      <div className="flex flex-col px-2.5">
+    <div className="flex w-[292px] shrink-0 flex-col justify-end">
+      <div className="flex flex-col">
         {chainCards.map((card, index) => {
           const active = selected === card.key
+          const hue = card.hue ?? "#57534E"
+          // Cards further back sit narrower, so the stack tapers into the
+          // pouch instead of stacking like table rows.
+          const inset = (depth - 1 - index) * 5
           return (
             <button
               key={card.key}
               type="button"
               onClick={() => onSelect(card.key)}
               aria-pressed={active}
-              className={`relative -mb-4 h-[60px] rounded-t-xl px-3.5 pt-2 text-left transition-transform duration-200 ${active ? "-translate-y-1.5" : "hover:-translate-y-1.5 motion-reduce:hover:translate-y-0"}`}
-              style={{ zIndex: index + 1 }}
+              aria-label={`Show ${card.label}`}
+              style={{
+                zIndex: index + 1,
+                marginLeft: inset,
+                marginRight: inset,
+                // Each card deals in a beat after the one behind it, and
+                // leans a different way on the way down.
+                animationDelay: `${140 + index * 70}ms`,
+                ["--deal-tilt" as string]: index % 2 ? "2.5deg" : "-2.5deg",
+              }}
+              // flex-col + justify-start is load-bearing, not decoration: a
+              // bare <button> centres its content box vertically, which put
+              // every card's name in the middle of its 92px body — i.e. down
+              // on the NEXT card's visible strip — and let the value spill
+              // past the card's right edge.
+              className={`ws-card-deal group/card relative -mb-[52px] flex h-[92px] flex-col items-stretch justify-start rounded-[13px] px-3.5 pt-3 text-left shadow-[0_-9px_20px_-6px_rgb(0_0_0/0.75)] transition-transform duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] active:scale-[0.985] motion-reduce:transition-none ${
+                active ? "-translate-y-2.5" : "hover:-translate-y-2.5 motion-reduce:hover:translate-y-0"
+              }`}
             >
+              {/* The printed face: the chain's colour burning brightest at the
+                  corner that catches light, falling to card stock. */}
               <span
                 aria-hidden
-                className="absolute inset-0 rounded-t-xl shadow-[0_-6px_16px_-8px_rgb(0_0_0/0.55)]"
-                style={{
-                  background: `linear-gradient(135deg, ${card.hue ?? "#292524"}59 0%, #1F1B18 55%, #16130F 100%)`,
-                }}
+                className="absolute inset-0 rounded-[13px]"
+                style={{ background: `linear-gradient(118deg, ${hue}A6 0%, ${hue}47 30%, #1A1614 66%, #100E0C 100%)` }}
               />
-              <span aria-hidden className={`absolute inset-0 rounded-t-xl ring-1 ring-inset transition-colors ${active ? "ring-white/30" : "ring-white/10"}`} />
-              <span className="relative flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  {card.symbol ? <CoinAvatar symbol={card.symbol} size="sm" className="h-4 w-4 shrink-0" /> : null}
-                  <span className="truncate text-[11.5px] font-semibold text-white/85">{card.label}</span>
+              {/* The cut edge catching the light. */}
+              <span
+                aria-hidden
+                className="absolute inset-x-0 top-0 h-px rounded-t-[13px] bg-gradient-to-r from-transparent via-white/40 to-transparent"
+              />
+              <span
+                aria-hidden
+                className={`absolute inset-0 rounded-[13px] ring-1 ring-inset transition-colors ${
+                  active ? "ring-white/40" : "ring-white/[0.12] group-hover/card:ring-white/25"
+                }`}
+              />
+              {/* You-are-here, in the same gold tick the sidebar rail uses. */}
+              {active ? (
+                <span aria-hidden className="absolute left-0 top-3 h-4 w-[3px] rounded-r-full bg-primary" />
+              ) : null}
+              <span className="relative flex w-full items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  {card.symbol ? <CoinAvatar symbol={card.symbol} size="sm" className="h-[18px] w-[18px] shrink-0" /> : null}
+                  <span className={`truncate text-[12px] font-semibold tracking-[0.01em] transition-colors ${active ? "text-white" : "text-white/85"}`}>
+                    {card.label}
+                  </span>
                 </span>
-                <span className="shrink-0 text-[11.5px] font-semibold tabular-nums text-white/70">
+                <span className="shrink-0 text-[12px] font-semibold tabular-nums text-white/65">
                   {card.value !== undefined ? (hidden ? AMOUNT_MASK : usd(card.value)) : "—"}
                 </span>
               </span>
@@ -211,31 +274,38 @@ function WalletPocket({
         })}
       </div>
 
-      {/* The pouch front — the WorldStreet card's face, and the way back to
-          the total view. */}
+      {/* The pouch front. Its upward shadow is the pocket's mouth — the dark
+          the cards vanish into. */}
       <button
         type="button"
         onClick={() => onSelect("worldstreet")}
-        aria-pressed={selected === "worldstreet"}
-        className="relative z-20 overflow-hidden rounded-2xl text-left transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
+        aria-pressed={totalActive}
+        aria-label="Show your total balance"
+        style={{ animationDelay: `${140 + depth * 70}ms`, ["--deal-tilt" as string]: "0deg" }}
+        className="ws-card-deal relative z-20 h-[116px] overflow-hidden rounded-[18px] text-left shadow-[0_-16px_28px_-8px_rgb(0_0_0/0.85),0_20px_38px_-14px_rgb(0_0_0/0.7)] transition-transform duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-1 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
-        <span aria-hidden className="absolute inset-0 bg-[linear-gradient(150deg,#2E2A27_0%,#1C1917_55%,#100E0D_100%)]" />
+        <span aria-hidden className="absolute inset-0 bg-[linear-gradient(168deg,#3A3532_0%,#241F1C_44%,#14110F_100%)]" />
         <span
           aria-hidden
           className="absolute inset-0"
-          style={{ background: "radial-gradient(120% 100% at 100% 0%, rgba(234,179,8,0.13) 0%, transparent 60%)" }}
+          style={{ background: "radial-gradient(120% 100% at 100% 0%, rgba(234,179,8,0.15) 0%, transparent 62%)" }}
         />
-        <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl p-px" style={GOLD_STROKE} />
-        <span className="relative flex flex-col items-center gap-1 px-4 pb-3 pt-4">
+        {/* The lip: a lit top edge over a short fall of light. */}
+        <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+        <span aria-hidden className="absolute inset-x-0 top-0 h-7 bg-[linear-gradient(180deg,rgb(255_255_255/0.08),transparent)]" />
+        {/* Stitching. */}
+        <span aria-hidden className="absolute inset-[7px] rounded-[12px] border border-dashed border-white/[0.11]" />
+        <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[18px] p-px" style={GOLD_STROKE} />
+        <span className="relative flex h-full flex-col items-center justify-center gap-0.5 px-4">
           <span className="flex items-center gap-1.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/worldstreet-logo/WorldStreet1.png" alt="" className="h-4 w-4 opacity-90" />
             <span className="text-[11px] font-semibold tracking-[0.02em] text-white/80">WorldStreet</span>
           </span>
-          <span className="text-[22px] font-semibold tabular-nums leading-tight text-white">
+          <span className="text-[23px] font-semibold tabular-nums leading-tight text-white">
             {loading ? "––" : hidden ? AMOUNT_MASK : usd(totalUsd)}
           </span>
-          <span className={`text-[9.5px] font-semibold uppercase tracking-[0.14em] ${selected === "worldstreet" ? "text-primary/90" : "text-white/40"}`}>
+          <span className={`text-[9.5px] font-semibold uppercase tracking-[0.14em] transition-colors ${totalActive ? "text-primary/90" : "text-white/40"}`}>
             Total balance
           </span>
         </span>
@@ -266,7 +336,9 @@ function asOfLabel(generatedAt: string | null): string | null {
   if (!generatedAt) return null
   const date = new Date(generatedAt)
   if (Number.isNaN(date.getTime())) return null
-  return `As of ${date.toLocaleTimeString()}`
+  // To the minute. Seconds on a snapshot that refreshes on a timer is
+  // precision the number doesn't have.
+  return `As of ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
 }
 
 export function ModernWalletPage() {
@@ -287,6 +359,7 @@ export function ModernWalletPage() {
 
   const [unlockOpen, setUnlockOpen] = useState(false)
   const [receiveOpen, setReceiveOpen] = useState(false)
+  const [securityOpen, setSecurityOpen] = useState(false)
   // True while the setup ceremony owns the page. Creation flips `hasWallet`
   // true the instant it succeeds, so without this the finished wallet would
   // render BEHIND the flow's "Your wallet is ready" card and its "Open your
@@ -316,28 +389,50 @@ export function ModernWalletPage() {
 
   const { hidden, toggle: toggleHidden } = useBalancePrivacy()
 
-  const { total: totalUsd, unpriced } = useMemo(() => {
-    let total = 0
+  /**
+   * One pass over the balances producing everything the cards wear: the
+   * total, the value sitting behind each network's address, and — for both —
+   * where that money stood 24 hours ago.
+   *
+   * The 24h side is DERIVED rather than fetched. A holding worth `v` today
+   * after a `c`% move was worth `v / (1 + c/100)` yesterday, so summing the
+   * "before" column gives a properly value-weighted move; averaging the
+   * percentages instead would let a $5 position outvote a $5,000 one. A
+   * symbol the feed never move-stamped contributes the same figure to both
+   * columns, so it dilutes the answer toward zero rather than inventing a
+   * move for itself.
+   */
+  const valuation = useMemo(() => {
+    const family: Record<string, { now: number; before: number }> = {}
+    let now = 0
+    let before = 0
     let unpricedCount = 0
     for (const balance of balances.balances) {
       const value = usdValueOf(balance, usdIndex)
-      if (value === null) unpricedCount += 1
-      else total += value
+      if (value === null) {
+        unpricedCount += 1
+        continue
+      }
+      const change = changeIndex?.[(balance.symbol ?? "").toUpperCase()]
+      const was = change !== undefined ? value / (1 + change / 100) : value
+      now += value
+      before += was
+      const chainFamily = (networks.data ?? []).find((network) => network.id === balance.networkId)?.family
+      if (chainFamily) {
+        let bucket = family[chainFamily]
+        if (!bucket) {
+          bucket = { now: 0, before: 0 }
+          family[chainFamily] = bucket
+        }
+        bucket.now += value
+        bucket.before += was
+      }
     }
-    return { total, unpriced: unpricedCount }
-  }, [balances.balances, usdIndex])
+    return { now, before, family, unpriced: unpricedCount }
+  }, [balances.balances, networks.data, usdIndex, changeIndex])
 
-  // USD value held per chain family — each glass address card wears the value
-  // that actually lives behind that address.
-  const familyUsd = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const balance of balances.balances) {
-      const family = (networks.data ?? []).find((network) => network.id === balance.networkId)?.family
-      const value = usdValueOf(balance, usdIndex)
-      if (family && value !== null) map[family] = (map[family] ?? 0) + value
-    }
-    return map
-  }, [balances.balances, networks.data, usdIndex])
+  const totalUsd = valuation.now
+  const unpriced = valuation.unpriced
 
   // Portfolio allocation by asset for the strip above the balance rows —
   // top four assets named, everything else folded into "Other".
@@ -366,13 +461,21 @@ export function ModernWalletPage() {
   // or the chain card picked from the pocket.
   const [selectedCard, setSelectedCard] = useState("worldstreet")
   const walletCards = useMemo<WalletCardData[]>(() => {
+    /** A move, or null when there isn't one to report. "+0.00%" on a cold
+     *  feed claims knowledge nobody handed us. */
+    const moveOf = (bucket?: { now: number; before: number }) => {
+      if (!bucket || bucket.before <= 0) return undefined
+      const pct = ((bucket.now - bucket.before) / bucket.before) * 100
+      return Number.isFinite(pct) && Math.abs(pct) >= 0.005 ? pct : undefined
+    }
     const chainCards = (wallet.data?.accounts ?? []).map((account) => {
       const familyNetworks = networksForFamily(account.chainFamily, networks.data)
       const meta = familyNetworks.length ? networkMetaFor(familyNetworks[0].id, networks.data) : null
       return {
         key: account.chainFamily,
         label: FAMILY_LABEL[account.chainFamily] ?? account.chainFamily.toUpperCase(),
-        value: familyUsd[account.chainFamily],
+        value: valuation.family[account.chainFamily]?.now,
+        change: moveOf(valuation.family[account.chainFamily]),
         address: account.canonicalAddress,
         hue: meta?.hue,
         symbol: meta?.nativeSymbol ?? account.chainFamily,
@@ -380,16 +483,27 @@ export function ModernWalletPage() {
       }
     })
     return [
-      { key: "worldstreet", label: "WorldStreet", value: totalUsd, address: primaryAccount?.canonicalAddress },
+      {
+        key: "worldstreet",
+        label: "WorldStreet",
+        value: totalUsd,
+        change: moveOf(valuation),
+        address: primaryAccount?.canonicalAddress,
+      },
       ...chainCards,
     ]
-  }, [wallet.data, networks.data, familyUsd, totalUsd, primaryAccount])
+  }, [wallet.data, networks.data, valuation, totalUsd, primaryAccount])
   const activeCard = walletCards.find((card) => card.key === selectedCard) ?? walletCards[0]
   const isTotalCard = activeCard.key === "worldstreet"
   const selectCard = (key: string) => {
     setSelectedCard(key)
     setCardCopied(false)
   }
+
+  // The provisioning panel now lives inside the security modal, where nobody
+  // would ever find it on their own — so the Security verb wears a dot when
+  // there is something in there worth opening.
+  const networksToAdd = wallet.data ? missingChainFamilies(wallet.data.accounts).length : 0
 
   const heroStats = useMemo(() => {
     const pricedNetworks = new Set(balances.balances.map((balance) => balance.networkId))
@@ -508,24 +622,50 @@ export function ModernWalletPage() {
           <Rise delay={40} className="flex flex-wrap items-stretch gap-6">
             <section className="relative w-full max-w-[560px] flex-1 basis-[340px] overflow-hidden rounded-[20px] shadow-[0_28px_64px_-28px_rgb(0_0_0/0.65)]">
               <div className="absolute inset-0 bg-[linear-gradient(135deg,#2E2A27_0%,#1C1917_48%,#100E0D_100%)]" />
+              {/* Every card's tint is mounted at once and crossfaded by
+                  opacity. Swapping one inline `background` would cut hard —
+                  background-image can't transition — and a card changing its
+                  colour with a jump-cut looks like a bug, not a deal. */}
+              {walletCards.map((card) => (
+                <div
+                  key={card.key}
+                  aria-hidden
+                  className="absolute inset-0 transition-opacity duration-500 motion-reduce:transition-none"
+                  style={{
+                    opacity: card.key === activeCard.key ? 1 : 0,
+                    background:
+                      card.key === "worldstreet"
+                        ? "radial-gradient(120% 90% at 100% 0%, rgba(234,179,8,0.16) 0%, rgba(234,179,8,0.045) 45%, transparent 68%)"
+                        : `radial-gradient(120% 90% at 100% 0%, ${card.hue ?? "#57534E"}4D 0%, ${card.hue ?? "#57534E"}16 45%, transparent 68%)`,
+                  }}
+                />
+              ))}
+              <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-primary/[0.05] blur-3xl" />
+              {/* Card stock: fine engraved diagonals, barely there. */}
               <div
                 aria-hidden
-                className="absolute inset-0 transition-opacity duration-300"
-                style={{
-                  background: isTotalCard
-                    ? "radial-gradient(120% 90% at 100% 0%, rgba(234,179,8,0.15) 0%, rgba(234,179,8,0.04) 45%, transparent 68%)"
-                    : `radial-gradient(120% 90% at 100% 0%, ${activeCard.hue ?? "#57534E"}47 0%, ${activeCard.hue ?? "#57534E"}14 45%, transparent 68%)`,
-                }}
+                className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:repeating-linear-gradient(115deg,transparent_0_9px,rgb(255_255_255/0.65)_9px_10px)]"
               />
-              <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-primary/[0.05] blur-3xl" />
-              {isTotalCard ? (
-                <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[20px] p-px opacity-90" style={GOLD_STROKE} />
-              ) : (
-                <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[20px] ring-1 ring-inset ring-white/15" />
-              )}
+              {/* Both rings live at once and crossfade with the tint: gold is
+                  the brand card's, a plain white hairline is every other. */}
+              <span
+                aria-hidden
+                className={`pointer-events-none absolute inset-0 rounded-[20px] p-px transition-opacity duration-500 motion-reduce:transition-none ${isTotalCard ? "opacity-90" : "opacity-0"}`}
+                style={GOLD_STROKE}
+              />
+              <span
+                aria-hidden
+                className={`pointer-events-none absolute inset-0 rounded-[20px] ring-1 ring-inset ring-white/15 transition-opacity duration-500 motion-reduce:transition-none ${isTotalCard ? "opacity-0" : "opacity-100"}`}
+              />
+              {/* Light travelling the laminate, replayed on every deal. */}
+              <span
+                key={`sheen-${activeCard.key}`}
+                aria-hidden
+                className="ws-card-sheen pointer-events-none absolute inset-0 overflow-hidden rounded-[20px]"
+              />
 
-              {/* Keyed so dealing a new card replays the house entrance. */}
-              <div key={activeCard.key} className="rise relative flex h-full flex-col justify-between gap-6 p-5 md:p-6">
+              {/* Keyed so dealing a new card replays the settle. */}
+              <div key={activeCard.key} className="ws-card-face-in relative flex h-full flex-col justify-between gap-5 p-5 md:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     {isTotalCard ? (
@@ -565,8 +705,18 @@ export function ModernWalletPage() {
                       className="text-[clamp(2.4rem,5vw,3.4rem)] text-white"
                     />
                   )}
-                  <div className="flex items-center gap-1">
-                    <p className="text-[12.5px] text-white/45">
+                  {/* The move comes first — it's the thing you look for after
+                      the figure itself. The sync time is bookkeeping and is
+                      sized like it. */}
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    {!heroLoading && activeCard.change !== undefined ? (
+                      <>
+                        <DeltaChip value={activeCard.change} className="px-2 py-0.5 text-[12px]" />
+                        <span className="text-[12px] font-medium text-white/40">24h</span>
+                        <span aria-hidden className="text-white/20">·</span>
+                      </>
+                    ) : null}
+                    <p className="text-[12px] text-white/40">
                       {asOf ?? (heroLoading ? "Syncing…" : "Not synced yet")}
                       {unpriced > 0 ? " · Some assets have no live price" : ""}
                     </p>
@@ -615,7 +765,12 @@ export function ModernWalletPage() {
               <RoundAction icon={DepositGlyph} label="Deposit" primary onClick={() => openReceive()} />
               <RoundAction icon={SendGlyph} label="Send" href="/wallet/modern/send" />
               <RoundAction icon={TradeGlyph} label="Trade" href="/trade" />
-              <RoundAction icon={SecurityGlyph} label="Security" href="#security" />
+              <RoundAction
+                icon={SecurityGlyph}
+                label="Security"
+                onClick={() => setSecurityOpen(true)}
+                dot={networksToAdd > 0}
+              />
             </div>
             <div className="flex items-center gap-5">
               <div className="flex items-center divide-x divide-border/40">
@@ -748,17 +903,19 @@ export function ModernWalletPage() {
       <WalletUnlockDialog open={unlockOpen} onOpenChange={setUnlockOpen} />
       <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} asset={receiveAsset} />
 
-      {wallet.data && packageQuery.data && !setupCeremony ? (
-        <Rise delay={200}>
-          <div id="security" className="flex flex-col gap-6">
-            <CryptoSecurityPanel walletId={wallet.data.id} packageValue={packageQuery.data} />
-            <RecoveryPanel walletId={wallet.data.id} packageValue={packageQuery.data} />
-            <WalletKeyExportPanel walletId={wallet.data.id} accounts={wallet.data.accounts} packageValue={packageQuery.data} />
-            <WalletChainProvisioningPanel walletId={wallet.data.id} packageValue={packageQuery.data} accounts={wallet.data.accounts} />
-          </div>
-        </Rise>
+      {/* Security lives behind the Security verb rather than as four cards
+          stacked below the fold. Mounted only once the package is loaded —
+          every panel inside needs it. */}
+      {wallet.data && packageQuery.data ? (
+        <WalletSecurityModal
+          open={securityOpen}
+          onOpenChange={setSecurityOpen}
+          walletId={wallet.data.id}
+          packageValue={packageQuery.data}
+          accounts={wallet.data.accounts}
+          networksToAdd={networksToAdd}
+        />
       ) : null}
-
     </div>
   )
 }

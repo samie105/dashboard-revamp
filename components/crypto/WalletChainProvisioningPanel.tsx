@@ -18,6 +18,15 @@ import { SectionMessage } from "@/components/crypto/primitives"
 const REQUESTED_FAMILIES = ["evm", "solana", "sui", "ton", "tron"] as const
 const FAMILY_LABELS: Record<string, string> = { evm: "Ethereum + Arbitrum", solana: "Solana", sui: "Sui", ton: "TON", tron: "TRON" }
 
+/** The networks this wallet could have but doesn't. Exported because the
+ *  wallet page needs the same answer to decide whether to mark its Security
+ *  button — the panel lives behind a modal now, so nothing would ever tell
+ *  the user there was something waiting inside it. */
+export function missingChainFamilies(accounts: CryptoWalletAccount[]) {
+  const existing = new Set(accounts.map((account) => account.chainFamily))
+  return REQUESTED_FAMILIES.filter((family) => !existing.has(family))
+}
+
 const FIELD =
   "w-full rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] outline-none ring-1 ring-border/25 transition-shadow focus-visible:ring-2 focus-visible:ring-primary/40"
 
@@ -39,8 +48,7 @@ export function WalletChainProvisioningPanel({
   const [formOpen, setFormOpen] = useState(false)
   const passphraseId = useId()
   const recoverySecretId = useId()
-  const existingFamilies = useMemo(() => new Set(accounts.map((account) => account.chainFamily)), [accounts])
-  const missingFamilies = REQUESTED_FAMILIES.filter((family) => !existingFamilies.has(family))
+  const missingFamilies = useMemo(() => missingChainFamilies(accounts), [accounts])
 
   if (missingFamilies.length === 0) return null
 
@@ -108,10 +116,11 @@ export function WalletChainProvisioningPanel({
               disabled={busy || !passphrase || !recoverySecret}
               className="self-start rounded-full bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
-              {busy ? "Adding chain accounts…" : "Add chain accounts"}
+              {busy ? "Adding networks…" : "Add these networks"}
             </button>
             <p className="text-[12px] leading-relaxed text-muted-foreground">
-              The passphrase decrypts the existing wallet locally. The recovery secret authorizes the encrypted package update; neither secret is uploaded.
+              Your passphrase opens your wallet on this device and the recovery secret confirms it&apos;s you. Neither one
+              is ever sent to Worldstreet.
             </p>
           </div>
         ) : null}
