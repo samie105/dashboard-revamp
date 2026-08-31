@@ -22,11 +22,12 @@ import {
   EmptyState,
   Eyebrow,
   IconAction,
-  ListRow,
   PageHeader,
   Rise,
   Skel,
   SkeletonRows,
+  WeightBar,
+  allocationColor,
 } from "@/components/ui/system"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
 import { formatCryptoAmount, useCryptoBalances, type CryptoBalanceResult } from "@/hooks/crypto/useCryptoBalances"
@@ -70,9 +71,13 @@ const GOLD_STROKE: CSSProperties = {
   maskComposite: "exclude",
 }
 
-/** Allocation strip tones — a neutral opacity ladder, never gold: gold is
- *  brand/action, and the DS forbids it as a data colour. */
-const ALLOCATION_TONES = ["bg-foreground/75", "bg-foreground/50", "bg-foreground/30", "bg-foreground/[0.18]", "bg-foreground/10"]
+/* The allocation strip and the per-row share bars both read from the house
+   rank ladder (`allocationColor`) rather than a local neutral ramp. It looks
+   like a gold exception but isn't: the ladder is ORDINAL, so a colour means
+   "first, second, third", never "this asset is gold" — and it's the same
+   ladder the Assets donut and the Portfolio bars use, so one holding wears
+   one colour everywhere in the app. A private ramp here made this the only
+   page that described composition in its own dialect. */
 
 const AMOUNT_MASK = "••••"
 
@@ -203,7 +208,10 @@ function WalletPocket({
   const depth = chainCards.length
   const totalActive = selected === "worldstreet"
   return (
-    <div className="flex w-[292px] shrink-0 flex-col justify-end">
+    // Full width until the hero can sit beside it. A fixed 292px pocket under
+    // a full-width hero card left a ragged 66px of nothing down one side and
+    // read as a misplaced element rather than a second column.
+    <div className="flex w-full shrink-0 flex-col justify-end sm:w-[292px]">
       <div className="flex flex-col">
         {chainCards.map((card, index) => {
           const active = selected === card.key
@@ -433,6 +441,40 @@ export function ModernWalletPage() {
 
   const totalUsd = valuation.now
   const unpriced = valuation.unpriced
+
+  /**
+   * The balance rows, biggest holding first, each carrying its share of the
+   * wallet and its rank on that ladder.
+   *
+   * Sorting matters more than it looks: the backend returns balances grouped
+   * by account, so the list arrived in creation order — $289 of ETH sat above
+   * $1,267 of SOL for no reason a reader could see. Anything the feed
+   * couldn't price sinks to the bottom rather than claiming a position it
+   * can't justify.
+   */
+  const sortedBalances = useMemo(() => {
+    const rows = balances.balances.map((balance) => ({
+      balance,
+      value: usdValueOf(balance, usdIndex),
+      share: null as number | null,
+      relative: null as number | null,
+      rank: 0,
+    }))
+    rows.sort((a, b) => (b.value ?? -1) - (a.value ?? -1))
+    const top = rows[0]?.value ?? 0
+    rows.forEach((row, index) => {
+      row.rank = index
+      row.share = row.value !== null && totalUsd > 0 ? (row.value / totalUsd) * 100 : null
+      // The BAR is scaled against the largest holding, not against the whole
+      // wallet; the PERCENTAGE beside it is the true share. A well-spread
+      // wallet tops out around 17%, so absolute-width bars were ten nubs of
+      // near-identical length — technically honest and completely unreadable.
+      // Filling the track for the biggest holding restores the one thing the
+      // column is for: telling at a glance which rows are the big ones.
+      row.relative = row.value !== null && top > 0 ? (row.value / top) * 100 : null
+    })
+    return rows
+  }, [balances.balances, usdIndex, totalUsd])
 
   // Portfolio allocation by asset for the strip above the balance rows —
   // top four assets named, everything else folded into "Other".
@@ -802,23 +844,26 @@ export function ModernWalletPage() {
                 subtitle={balances.balances.length > 0 ? `${balances.balances.length} assets across ${new Set(balances.balances.map((b) => b.networkId)).size} networks` : undefined}
                 right={refreshAction}
               />
-              {/* Portfolio allocation — a neutral-toned strip (gold is never
-                  a data colour). Hidden with the figures it would reveal. */}
+              {/* Portfolio allocation — the same rank ladder the rows below
+                  use. Hidden with the figures it would reveal. */}
               {!hidden && allocation.length > 0 && totalUsd > 0 ? (
                 <div className="flex flex-col gap-2 px-4 pb-4">
                   <div className="flex h-1.5 gap-px overflow-hidden rounded-full">
                     {allocation.map((segment, index) => (
                       <span
                         key={segment.label}
-                        className={`${ALLOCATION_TONES[index] ?? ALLOCATION_TONES[ALLOCATION_TONES.length - 1]} h-full`}
-                        style={{ width: `${Math.max(1.5, (segment.value / totalUsd) * 100)}%` }}
+                        className="h-full"
+                        style={{
+                          width: `${Math.max(1.5, (segment.value / totalUsd) * 100)}%`,
+                          background: allocationColor(index),
+                        }}
                       />
                     ))}
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     {allocation.map((segment, index) => (
                       <span key={segment.label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <span aria-hidden className={`h-2 w-2 rounded-full ${ALLOCATION_TONES[index] ?? ALLOCATION_TONES[ALLOCATION_TONES.length - 1]}`} />
+                        <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: allocationColor(index) }} />
                         {segment.label}
                         <span className="font-semibold tabular-nums">{Math.round((segment.value / totalUsd) * 100)}%</span>
                       </span>
@@ -849,48 +894,90 @@ export function ModernWalletPage() {
                 />
               ) : (
                 <div className="flex flex-col pb-2">
-                  {balances.balances.map((balance) => {
-                    const value = usdValueOf(balance, usdIndex)
+                  {/* Column labels. The list carries four facts per row on a
+                      wide card; without a header they're four unlabelled
+                      numbers and the reader has to infer which is which. */}
+                  <div className="flex items-center gap-3 px-4 pb-1.5 pt-0.5">
+                    <span className="w-9 shrink-0" />
+                    <span className="min-w-0 flex-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                      Asset
+                    </span>
+                    <span className="hidden w-[150px] shrink-0 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 lg:block">
+                      Share of wallet
+                    </span>
+                    <span className="hidden w-[112px] shrink-0 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 sm:block">
+                      Amount
+                    </span>
+                    <span className="w-[104px] shrink-0 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                      Value
+                    </span>
+                    <span className="w-8 shrink-0" />
+                  </div>
+                  {sortedBalances.map(({ balance, value, share, relative, rank }) => {
                     const change = changeIndex?.[(balance.symbol ?? "").toUpperCase()]
+                    const amount = formatCryptoAmount(balance.amountBaseUnits, balance.decimals)
                     return (
-                      <ListRow
+                      <div
                         key={`${balance.accountId}:${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`}
-                        icon={() => <CoinAvatar symbol={balance.symbol} src={balance.logo} size="lg" className="h-6 w-6" />}
-                        title={balance.symbol}
-                        subtitle={balance.networkName}
-                        right={
-                          <span className="flex shrink-0 items-center gap-1">
-                            {/* Per-row deposit affordance — credit-tinted on
-                                hover (money in), never gold: that's reserved
-                                for the page's one primary CTA. */}
-                            <button
-                              type="button"
-                              onClick={() => openReceive(balance.symbol)}
-                              aria-label={`Deposit ${balance.symbol}`}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-credit-chip hover:text-credit"
-                            >
-                              <HugeiconsIcon icon={ArrowDownLeft01Icon} className="h-4 w-4" />
-                            </button>
-                            <span className="flex flex-col items-end">
-                              <span className="text-[14px] font-semibold tabular-nums">
-                                {hidden ? AMOUNT_MASK : formatCryptoAmount(balance.amountBaseUnits, balance.decimals)}
+                        className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/40"
+                      >
+                        <CoinAvatar symbol={balance.symbol} src={balance.logo} size="lg" className="h-9 w-9 shrink-0" />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-[14px] font-semibold">{balance.symbol}</span>
+                          <span className="truncate text-[12.5px] text-muted-foreground">{balance.networkName}</span>
+                        </span>
+
+                        {/* What this holding is OF the wallet — the fact the
+                            wide card had room for and wasn't showing. Shares
+                            the house rank ladder, so a row's colour matches
+                            its slice on Assets and Portfolio. */}
+                        <span className="hidden w-[150px] shrink-0 items-center gap-2.5 lg:flex">
+                          {share !== null && relative !== null && !hidden ? (
+                            <>
+                              <WeightBar pct={relative} rank={rank} className="flex-1" />
+                              <span className="w-8 shrink-0 text-right text-[12px] tabular-nums text-muted-foreground">
+                                {share >= 1 ? Math.round(share) : "<1"}%
                               </span>
-                              <span className="flex items-center gap-1.5 text-[12px] tabular-nums">
-                                {value !== null ? (
-                                  <span className="text-muted-foreground">{hidden ? AMOUNT_MASK : usd(value)}</span>
-                                ) : null}
-                                {/* 24h move — a market fact, not a holding, so it
-                                    stays visible under privacy masking. */}
-                                {change !== undefined ? (
-                                  <span className={change >= 0 ? "text-credit" : "text-debit"}>
-                                    {change >= 0 ? "+" : ""}{change.toFixed(1)}%
-                                  </span>
-                                ) : null}
-                              </span>
-                            </span>
+                            </>
+                          ) : null}
+                        </span>
+
+                        <span className="hidden w-[112px] shrink-0 text-right text-[13.5px] tabular-nums text-muted-foreground sm:block">
+                          {hidden ? AMOUNT_MASK : amount}
+                        </span>
+
+                        <span className="flex w-[104px] shrink-0 flex-col items-end">
+                          <span className="text-[14px] font-semibold tabular-nums">
+                            {value !== null ? (hidden ? AMOUNT_MASK : usd(value)) : "—"}
                           </span>
-                        }
-                      />
+                          <span className="flex items-center gap-1.5 text-[12px] tabular-nums">
+                            {/* Amount rides under the value where there's no
+                                column for it. */}
+                            <span className="text-muted-foreground sm:hidden">{hidden ? AMOUNT_MASK : amount}</span>
+                            {/* 24h move — a market fact, not a holding, so it
+                                stays visible under privacy masking. */}
+                            {change !== undefined ? (
+                              <span className={change >= 0 ? "text-credit" : "text-debit"}>
+                                {change >= 0 ? "+" : ""}{change.toFixed(1)}%
+                              </span>
+                            ) : null}
+                          </span>
+                        </span>
+
+                        {/* Deposit — credit-tinted on hover (money in), never
+                            gold: that belongs to the page's one primary CTA.
+                            Rests hidden on a pointer device so ten rows aren't
+                            ten competing buttons; always there on touch, which
+                            has no hover to reveal it. */}
+                        <button
+                          type="button"
+                          onClick={() => openReceive(balance.symbol)}
+                          aria-label={`Deposit ${balance.symbol}`}
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground/60 opacity-100 transition-all hover:bg-credit-chip hover:text-credit focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        >
+                          <HugeiconsIcon icon={ArrowDownLeft01Icon} className="h-4 w-4" />
+                        </button>
+                      </div>
                     )
                   })}
                 </div>
