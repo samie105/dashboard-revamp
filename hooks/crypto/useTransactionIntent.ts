@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/components/auth-provider"
@@ -10,6 +10,7 @@ import {
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
 import type { CryptoTransactionIntent, CryptoWalletPackageDocument, SponsorshipOperation } from "@/lib/crypto-backend"
+import { createIdempotencyKeyStore } from "@/lib/crypto-backend/idempotency"
 import { signEvmIntent } from "@/lib/crypto-wallet/evm-signing"
 import { signSponsoredEvmOperation } from "@/lib/crypto-wallet/evm-signing"
 import { signSolanaIntent, signSponsoredSolanaTransaction } from "@/lib/crypto-wallet/solana-signing"
@@ -61,10 +62,18 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
     },
   })
 
+  // One key per distinct transfer, stable across every retry of it. See
+  // lib/crypto-backend/idempotency.ts for why the per-call UUID this
+  // replaces was a double-spend window wearing the costume of protection.
+  const idempotency = useRef(createIdempotencyKeyStore())
+
   const create = useMutation({
     mutationFn: async (input: TransferInput): Promise<CreateIntentResult> => {
       const { sponsorFees, ...transferInput } = input
-      const intent = await cryptoBackendClient.createTransferIntent({ ...transferInput, idempotencyKey: crypto.randomUUID() })
+      const intent = await cryptoBackendClient.createTransferIntent({
+        ...transferInput,
+        idempotencyKey: idempotency.current.keyFor(transferInput),
+      })
       if (!sponsorFees) return { intent, sponsorship: undefined, sponsorshipError: undefined }
       try {
         const sponsorship = await cryptoBackendClient.quoteSponsorship({
@@ -167,6 +176,10 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
   }, [])
 
   const reset = useCallback(() => {
+    // Starting over is the boundary between one transfer and the next: the
+    // keys must not survive it, or a deliberate repeat send would be
+    // deduplicated into the transfer that just finished.
+    idempotency.current.clear()
     setIntentId(undefined)
     setSponsorshipId(undefined)
     create.reset()
