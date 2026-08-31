@@ -12,6 +12,7 @@ import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
 import { WalletSetupFlow } from "@/components/crypto/WalletSetupFlow"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { WalletSecurityModal } from "@/components/crypto/WalletSecurityModal"
+import { SendModal } from "@/components/crypto/SendModal"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { InlineNotice, UnavailablePanel } from "@/components/ui/flow"
 import {
@@ -368,6 +369,7 @@ export function ModernWalletPage() {
   const [unlockOpen, setUnlockOpen] = useState(false)
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
+  const [sendOpen, setSendOpen] = useState(false)
   // True while the setup ceremony owns the page. Creation flips `hasWallet`
   // true the instant it succeeds, so without this the finished wallet would
   // render BEHIND the flow's "Your wallet is ready" card and its "Open your
@@ -805,7 +807,7 @@ export function ModernWalletPage() {
           <Rise delay={80} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
             <div className="flex gap-5">
               <RoundAction icon={DepositGlyph} label="Deposit" primary onClick={() => openReceive()} />
-              <RoundAction icon={SendGlyph} label="Send" href="/wallet/modern/send" />
+              <RoundAction icon={SendGlyph} label="Send" onClick={() => setSendOpen(true)} />
               <RoundAction icon={TradeGlyph} label="Trade" href="/trade" />
               <RoundAction
                 icon={SecurityGlyph}
@@ -989,6 +991,16 @@ export function ModernWalletPage() {
 
       <WalletUnlockDialog open={unlockOpen} onOpenChange={setUnlockOpen} />
       <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} asset={receiveAsset} />
+      {/* Money out opens over the wallet, the way money in already does. */}
+      <SendModal
+        open={sendOpen}
+        onOpenChange={(next) => {
+          setSendOpen(next)
+          // Balances go stale the moment a send lands; re-read on the way out
+          // rather than leaving the hero showing the pre-send figure.
+          if (!next) refreshBalances()
+        }}
+      />
 
       {/* Security lives behind the Security verb rather than as four cards
           stacked below the fold. Mounted only once the package is loaded —

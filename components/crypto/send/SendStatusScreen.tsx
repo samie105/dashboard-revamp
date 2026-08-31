@@ -25,6 +25,7 @@ export function SendStatusScreen({
   explorer,
   onDone,
   onTryAgain,
+  onLeave,
   errorSlot,
 }: {
   state: "processing" | "success" | "failure"
@@ -39,6 +40,10 @@ export function SendStatusScreen({
   explorer: { label: string; href: string } | null
   onDone: () => void
   onTryAgain: () => void
+  /** Supplied when the flow is inside the wallet's send modal: "back to
+   *  wallet" then means CLOSE, not navigate — the wallet is already the
+   *  thing behind the popup. */
+  onLeave?: () => void
   errorSlot?: React.ReactNode
 }) {
   const figure = `-${amount} ${symbol}`
@@ -82,7 +87,7 @@ export function SendStatusScreen({
               ? { label: "Try again", onClick: onTryAgain }
               : undefined
         }
-        secondary={{ label: "Back to wallet", href: "/wallet/modern" }}
+        secondary={onLeave ? { label: "Back to wallet", onClick: onLeave } : { label: "Back to wallet", href: "/wallet/modern" }}
       />
       {errorSlot}
     </div>

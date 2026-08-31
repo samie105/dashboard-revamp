@@ -103,8 +103,28 @@ type CommittedTransfer = {
   toAddress: string
 }
 
-export function SendFlow() {
+/**
+ * The send ceremony, rendered in either of two homes.
+ *
+ * On its own route it wears `FlowShell` — the narrow centred column every
+ * flow page uses. Passed `onClose` it is inside the wallet's send modal
+ * instead, where the popup already supplies the width, the padding and a way
+ * out; the shell would then be a second frame drawn inside the first, and
+ * every "back to wallet" would navigate away from the wallet the user is
+ * already looking at.
+ *
+ * Only the chrome differs. Steps, signing and error handling are the same
+ * code in both, which is the point of doing it this way rather than forking
+ * a modal copy that drifts.
+ */
+export function SendFlow({ onClose }: { onClose?: () => void } = {}) {
   const router = useRouter()
+  const inModal = Boolean(onClose)
+  /** "Leave the flow" — close the modal, or go back to the wallet page. */
+  const leaveFlow = React.useCallback(() => {
+    if (onClose) onClose()
+    else router.push(WALLET_HREF)
+  }, [onClose, router])
   const { user } = useAuth()
   const { wallet, networks } = useCryptoContext()
   const balances = useCryptoBalances()
@@ -516,7 +536,7 @@ export function SendFlow() {
         break
       }
       case "setup-wallet":
-        router.push(WALLET_HREF)
+        leaveFlow()
         break
       case "refresh-session":
         router.refresh()
@@ -573,12 +593,17 @@ export function SendFlow() {
 
   // Back means "the form" only when there is a review to back OUT of; on the
   // fall-through (review step, no quote) the form is already what's rendered.
-  const backTarget: string | (() => void) =
-    step === "review" && intent && committed ? () => setStep("form") : WALLET_HREF
+  const steppedBack = step === "review" && intent && committed
+  const backTarget: string | (() => void) = steppedBack ? () => setStep("form") : onClose ?? WALLET_HREF
+  // In the modal the popup's own close button is the way out, so the back
+  // arrow appears only when it means "back a step" — two controls that both
+  // leave is one control too many.
+  const showBack = steppedBack || !inModal
+  const Shell = inModal ? "div" : FlowShell
   const shell = (body: React.ReactNode) => (
-    <FlowShell>
-      <div className="mb-5 flex items-start gap-2">
-        <BackAction to={backTarget} />
+    <Shell>
+      <div className={`flex items-start gap-2 ${inModal ? "mb-4" : "mb-5"}`}>
+        {showBack ? <BackAction to={backTarget} /> : null}
         <FlowHeader direction="out" title="Send crypto" subtitle="Approved on this device — only you can send" />
       </div>
       {body}
@@ -593,7 +618,7 @@ export function SendFlow() {
           resume?.()
         }}
       />
-    </FlowShell>
+    </Shell>
   )
 
   if (!isCryptoBackendEnabled) {
@@ -612,7 +637,7 @@ export function SendFlow() {
         title="You don't have a Worldstreet wallet yet"
         tone="muted"
         reason="Create your Worldstreet wallet first — it only takes a minute."
-        action={{ label: "Set up your wallet", onClick: () => router.push(WALLET_HREF) }}
+        action={{ label: "Set up your wallet", onClick: leaveFlow }}
       />,
     )
   }
@@ -634,8 +659,8 @@ export function SendFlow() {
       <UnavailablePanel
         title="No network to send on"
         tone="muted"
-        reason="This wallet has no chain that currently accepts transfers. Add a chain under Security, or try again shortly."
-        action={{ label: "Back to wallet", onClick: () => router.push(WALLET_HREF) }}
+        reason="None of your networks can accept a transfer right now. Add one under Security, or try again shortly."
+        action={{ label: "Back to wallet", onClick: leaveFlow }}
       />,
     )
   }
@@ -655,6 +680,7 @@ export function SendFlow() {
         explorer={explorer}
         onDone={resetToForm}
         onTryAgain={tryAgain}
+        onLeave={onClose}
         // `createError` too: a quote failure can no longer strand a user here
         // (refreshQuote leaves this screen before it starts), but if one ever
         // reaches this branch it must be readable rather than invisible.
