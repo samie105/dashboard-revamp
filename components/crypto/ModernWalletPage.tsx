@@ -10,6 +10,7 @@ import { useAuth } from "@/components/auth-provider"
 import { ModeBadge, SectionMessage } from "@/components/crypto/primitives"
 import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
 import { WalletSetupFlow } from "@/components/crypto/WalletSetupFlow"
+import { WalletSkeleton } from "@/components/crypto/WalletSkeleton"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { WalletSecurityModal } from "@/components/crypto/WalletSecurityModal"
 import { SendModal } from "@/components/crypto/SendModal"
@@ -643,7 +644,10 @@ export function ModernWalletPage() {
           never strand a user with no way to make a wallet.
           `resume` is the one thing allowed to overrule the suppression: a
           wallet whose package 404s needs the flow back on screen precisely
-          BECAUSE the wallet exists. */}
+          BECAUSE the wallet exists.
+          (3) IT RENDERS A MODAL, not a card in this position — the position
+          still matters for (1), but nothing appears here in the page flow
+          except the invitation shown once the flow has been dismissed. */}
       <WalletSetupFlow
         walletExists={hasWallet || walletLoading}
         resume={setupIncomplete}
@@ -656,9 +660,17 @@ export function ModernWalletPage() {
         </Rise>
       ) : null}
 
-      {/* The wallet body waits for the ceremony to hand the page over — one
-          screen at a time, so "Open your wallet" always opens something. */}
-      {(hasWallet || walletLoading) && !setupCeremony ? (
+      {/* The ceremony is a modal over this page now, not a card that replaces
+          it, so the page keeps its body and is read through the backdrop's
+          blur. Before a wallet exists there is no body to read, so it holds
+          the outline of the one being made instead of going blank. */}
+      {!hasWallet && !walletLoading && setupCeremony ? (
+        <Rise delay={40}>
+          <WalletSkeleton />
+        </Rise>
+      ) : null}
+
+      {hasWallet || walletLoading ? (
         <>
           {/* ── The hero card + the wallet pocket. The pocket holds every
                  card; clicking one deals it onto the hero, which re-skins to

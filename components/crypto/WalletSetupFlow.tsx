@@ -2,7 +2,21 @@
 
 /**
  * Self-custody setup, as a guided flow (spec §3): Intro → Passphrase →
- * Creating → Done.
+ * Creating → Done → Recovery.
+ *
+ * ── One modal, five steps ──────────────────────────────────────────────────
+ * The whole ceremony is a single dialog over the wallet page, which stays
+ * behind it under the backdrop's blur (and, before there is a wallet, holds
+ * `WalletSkeleton` so there is something to be behind it). Two things follow
+ * from it being ONE dialog rather than a card plus a second dialog:
+ *
+ *  · The recovery secret is the last STEP, not a modal stacked on the last
+ *    screen. It used to derive its own dialog straight off the mutation, so
+ *    it opened on the same tick the "Your wallet is ready" screen did and the
+ *    user got both at once. Now the ready screen asks for it.
+ *  · Dismissal is decided in one place (`dismissible`). It is live while this
+ *    is only an invitation and dead from the moment a wallet is being made,
+ *    which is what stops the one-time secret being escaped away.
  *
  * ── The mount contract (read before restructuring anything) ────────────────
  * `ModernWalletPage` renders this at a FIXED child position and mounts it
@@ -14,9 +28,9 @@
  *     component may never require an unmount/remount to change screens.
  *  2. `walletExists` suppresses the idle INVITATION, not the flow. Creation
  *     invalidates the wallet query the moment it succeeds, so the prop flips
- *     true mid-ceremony; if that also hid the Creating/Done screens and the
- *     recovery modal, the secret would vanish at exactly the wrong moment.
- *     `busyWithSetup` below is what keeps the flow on screen once it starts.
+ *     true mid-ceremony; if that also closed the Creating/Done/Recovery steps
+ *     the secret would vanish at exactly the wrong moment. `committed` below
+ *     is what keeps the flow on screen once it starts.
  *
  * Secrets: the passphrase and the recovery secret are never logged, never put
  * in a query key, and never sent anywhere — the passphrase is cleared from
@@ -56,12 +70,12 @@ import {
   ResponsiveModalHeader,
   ResponsiveModalTitle,
 } from "@/components/ui/responsive-modal"
-import { CardHeader, CardShell, EmptyState, ListRow, Rise, WeightBar } from "@/components/ui/system"
+import { CardShell, EmptyState, ListRow, Rise, WeightBar } from "@/components/ui/system"
 import type { CryptoWalletPackageDocument } from "@/lib/crypto-backend"
 import { passphraseStrength } from "@/lib/crypto-wallet/passphrase-strength"
 import type { WalletSetupStage } from "@/lib/crypto-wallet/wallet-setup"
 
-type Step = "intro" | "passphrase" | "creating" | "done" | "closed"
+type Step = "intro" | "passphrase" | "creating" | "done" | "recovery" | "closed"
 
 /** In the order `createSelfCustodialWallet` actually runs them — the backend
  *  wallet and its accounts exist before there is anything to generate keys
@@ -171,90 +185,78 @@ function packageAddresses(pkg: CryptoWalletPackageDocument | undefined) {
 }
 
 /* ── The one-time recovery secret ──────────────────────────────────────────
-   Blocking by contract: this is the only time the secret is ever displayed,
-   so the ONLY way out is the confirmation checkbox plus the button under it.
-   Escape, the backdrop, and the close affordance are all removed below. ─── */
+   The LAST step of the ceremony, not a second dialog stacked on the finished
+   one. It used to derive its own modal straight off the mutation result,
+   which meant it opened the instant creation resolved — on top of the "Your
+   wallet is ready" screen that resolved at the same moment, so the user met
+   both at once and read neither.
 
-function RecoverySecretModal({ secret, onClose }: { secret: string; onClose: () => void }) {
+   Blocking is still the contract: this is the only time the secret is ever
+   displayed. The step it belongs to refuses every dismissal path, and the
+   only way past it is the confirmation checkbox plus the button under it. ─ */
+
+function RecoverySecretPanel({ secret, onDone }: { secret: string; onDone: () => void }) {
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
 
   return (
-    <ResponsiveModal
-      open
-      // Controlled with a constant `open` and an onOpenChange that refuses
-      // every request: Escape and any programmatic close are answered with
-      // "no". `disablePointerDismissal` stops the outside-press path at the
-      // source rather than letting it ask.
-      onOpenChange={() => {}}
-      disablePointerDismissal
-    >
-      <ResponsiveModalContent showCloseButton={false} className="sm:max-w-lg">
-        <ResponsiveModalHeader>
-          <ResponsiveModalTitle>Save your wallet recovery secret</ResponsiveModalTitle>
-          <ResponsiveModalDescription>
-            This is the only time it will ever be shown. It's how you get back into your wallet if you forget
-            your passphrase or lose this device.
-          </ResponsiveModalDescription>
-        </ResponsiveModalHeader>
-
-        {/* The secret and its two actions are one object — a sunken panel
-            with the controls attached, not three loose blocks. */}
-        <div className="flex flex-col rounded-xl bg-surface-sunken/70 p-1.5 ring-1 ring-border/25">
-          <code className="block max-h-40 select-all overflow-auto break-all rounded-lg px-3 py-3.5 text-center font-mono text-[13px] leading-6">
-            {secret}
-          </code>
-          <div className="flex gap-1 border-t border-border/15 pt-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                void navigator.clipboard?.writeText(secret).then(() => {
-                  setCopied(true)
-                  setTimeout(() => setCopied(false), 1600)
-                }).catch(() => {})
-              }}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors ${copied ? "text-credit" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
-            >
-              <HugeiconsIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} className="h-3.5 w-3.5" />
-              {copied ? "Copied" : "Copy"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const blob = new Blob([secret], { type: "text/plain" })
-                const url = URL.createObjectURL(blob)
-                const anchor = document.createElement("a")
-                anchor.href = url
-                anchor.download = "worldstreet-wallet-recovery-secret.txt"
-                anchor.click()
-                URL.revokeObjectURL(url)
-              }}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <HugeiconsIcon icon={Download01Icon} className="h-3.5 w-3.5" />
-              Download
-            </button>
-          </div>
+    <>
+      {/* The secret and its two actions are one object — a sunken panel
+          with the controls attached, not three loose blocks. */}
+      <div className="flex flex-col rounded-xl bg-surface-sunken/70 p-1.5 ring-1 ring-border/25">
+        <code className="block max-h-40 select-all overflow-auto break-all rounded-lg px-3 py-3.5 text-center font-mono text-[13px] leading-6">
+          {secret}
+        </code>
+        <div className="flex gap-1 border-t border-border/15 pt-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard?.writeText(secret).then(() => {
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1600)
+              }).catch(() => {})
+            }}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors ${copied ? "text-credit" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+          >
+            <HugeiconsIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} className="h-3.5 w-3.5" />
+            {copied ? "Copied" : "Copy"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const blob = new Blob([secret], { type: "text/plain" })
+              const url = URL.createObjectURL(blob)
+              const anchor = document.createElement("a")
+              anchor.href = url
+              anchor.download = "worldstreet-wallet-recovery-secret.txt"
+              anchor.click()
+              URL.revokeObjectURL(url)
+            }}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <HugeiconsIcon icon={Download01Icon} className="h-3.5 w-3.5" />
+            Download
+          </button>
         </div>
+      </div>
 
-        <InlineNotice tone="warning">
-          Keep it offline. Worldstreet cannot show it again, reissue it, or recover your wallet without it.
-        </InlineNotice>
+      <InlineNotice tone="warning">
+        Keep it offline. Worldstreet cannot show it again, reissue it, or recover your wallet without it.
+      </InlineNotice>
 
-        <label className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-surface-sunken/40 p-3 text-[13px] leading-snug ring-1 ring-border/20 transition-colors hover:bg-surface-sunken/70">
-          <input
-            type="checkbox"
-            checked={saved}
-            onChange={(event) => setSaved(event.target.checked)}
-            className="h-4 w-4 shrink-0 accent-primary"
-          />
-          <span>I have saved this recovery secret somewhere secure and offline.</span>
-        </label>
-        <button type="button" disabled={!saved} onClick={onClose} className={PILL}>
-          I saved it — continue
-        </button>
-      </ResponsiveModalContent>
-    </ResponsiveModal>
+      <label className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-surface-sunken/40 p-3 text-[13px] leading-snug ring-1 ring-border/20 transition-colors hover:bg-surface-sunken/70">
+        <input
+          type="checkbox"
+          checked={saved}
+          onChange={(event) => setSaved(event.target.checked)}
+          className="h-4 w-4 shrink-0 accent-primary"
+        />
+        <span>I have saved this recovery secret somewhere secure and offline.</span>
+      </label>
+      <button type="button" disabled={!saved} onClick={onDone} className={PILL}>
+        I saved it — continue
+      </button>
+    </>
   )
 }
 
@@ -294,25 +296,26 @@ export function WalletSetupFlow({
 
   const step: Step = chosenStep ?? (resume ? "passphrase" : "intro")
   const setStep = setChosenStep
-  // The secret exists ONLY in this mutation result and is shown exactly once,
-  // so the modal is derived from it rather than mirrored into an effect — one
-  // less way for the user's only copy to be lost to a render ordering bug. It
-  // stands until they confirm they've saved it.
-  const recoveryModalOpen = Boolean(setup.data?.recoverySecret) && !secretAcknowledged
+  // The secret exists ONLY in this mutation result and dies with this
+  // instance, so it is read straight off the mutation rather than mirrored
+  // into state — one less way for the user's only copy to be lost to a render
+  // ordering bug. It is owed until they confirm they've saved it, and that
+  // debt is what makes the flow refuse to close.
+  const pendingSecret = Boolean(setup.data?.recoverySecret) && !secretAcknowledged
 
-  // Closing the tab between the backend wallet and the committed package is
-  // exactly the interruption the resume path exists to repair — cheaper to
-  // warn than to repair, so the whole creating window is guarded, not just
-  // the final write.
+  // Closing the tab costs something from the moment the backend wallet exists:
+  // mid-creation it strands a wallet with no package (the interruption the
+  // resume path exists to repair), and after creation it takes the recovery
+  // secret with it, which nothing can reissue. Both windows are guarded.
   useEffect(() => {
-    if (step !== "creating") return
+    if (step !== "creating" && !pendingSecret) return
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ""
     }
     window.addEventListener("beforeunload", warn)
     return () => window.removeEventListener("beforeunload", warn)
-  }, [step])
+  }, [step, pendingSecret])
 
   const strength = passphraseStrength(passphrase)
   const mismatch = passphraseConfirmation.length > 0 && passphrase !== passphraseConfirmation
@@ -326,17 +329,24 @@ export function WalletSetupFlow({
   const addresses = useMemo(() => packageAddresses(setup.data?.package), [setup.data])
 
   // Suppression is the PROP's job, never the mount's — and only over the idle
-  // invitation. Once the ceremony starts (or the secret is on screen) this
-  // component owns the page until the user leaves it themselves.
-  const busyWithSetup = step === "creating" || step === "done" || recoveryModalOpen
+  // invitation. Once the ceremony starts (or the secret is owed) this flow
+  // owns the screen until the user finishes it.
+  const committed = step === "creating" || step === "done" || step === "recovery" || pendingSecret
   const invited = !walletExists || resume
-  const visible = setup.isReady && step !== "closed" && (busyWithSetup || invited)
+  const open = setup.isReady && step !== "closed" && (committed || invited)
+  // Escape, the backdrop and the close button are all live while this is only
+  // an invitation — nothing has happened yet and trapping someone on a page
+  // they wandered onto would be rude. They all go dead the moment a wallet is
+  // being made: from there the only ways on are the flow's own buttons, which
+  // is what stops the recovery secret being dismissed into oblivion.
+  const dismissible = !committed
 
-  // Announced from an effect, not during render: the parent hides the wallet
-  // body off this, and a setState mid-render would be a cross-component write.
+  // Announced from an effect, not during render: the parent decides what to
+  // put behind this off it, and a setState mid-render would be a
+  // cross-component write.
   useEffect(() => {
-    onVisibilityChange?.(visible)
-  }, [visible, onVisibilityChange])
+    onVisibilityChange?.(open)
+  }, [open, onVisibilityChange])
 
   async function createWallet() {
     if (blocker || setup.isPending) return
@@ -358,28 +368,73 @@ export function WalletSetupFlow({
     }
   }
 
-  if (!visible) return null
+  if (!setup.isReady) return null
 
-  return (
-    <>
-      {/* The ceremony is a focused flow, not dashboard furniture: a narrow
-          centered column (like the send flow), never a full-width card. */}
-      <div className="mx-auto w-full max-w-md">
-      <CardShell>
-        {!secureContext ? (
-          <UnavailablePanel
-            title="A secure connection is required"
-            reason="Open this page over HTTPS to create a wallet."
-          />
-        ) : step === "intro" ? (
-          <div className="flex flex-col gap-5 px-4 pb-5">
-            <Rise>
+  // Closed with no wallet to show: the page would otherwise be empty, so the
+  // way back in stays on it. Deliberately a plain invitation and not the intro
+  // over again — the sales pitch belongs in the flow, not on the page behind
+  // it.
+  if (!open) {
+    if (walletExists && !resume) return null
+    return (
+      <Rise>
+        <div className="mx-auto w-full max-w-md">
+          <CardShell>
+            <div className="flex flex-col gap-4 px-4 pb-5">
               <EmptyState
                 icon={ShieldGlyph}
                 title="Create your Worldstreet wallet"
                 description="A wallet only you can open — set up in about a minute."
                 className="gap-2.5 px-0 pb-1 pt-8"
               />
+              <FlowCta
+                label={resume ? "Finish setting up" : "Create wallet"}
+                onClick={() => setStep(resume ? "passphrase" : "intro")}
+                control={{ target: "wallet-setup-reopen", describe: "Create your Worldstreet wallet", guarded: false }}
+              />
+            </div>
+          </CardShell>
+        </div>
+      </Rise>
+    )
+  }
+
+  return (
+    <ResponsiveModal
+      open
+      // Every dismissal request is answered by the same rule. Once committed,
+      // `dismissible` is false and the answer is always no — Escape and any
+      // programmatic close included — while `disablePointerDismissal` stops
+      // the outside-press path at the source rather than letting it ask.
+      onOpenChange={(next) => {
+        if (!next && dismissible) setStep("closed")
+      }}
+      disablePointerDismissal={!dismissible}
+    >
+      <ResponsiveModalContent
+        showCloseButton={dismissible}
+        className={step === "recovery" ? "sm:max-w-lg" : "sm:max-w-md"}
+      >
+        {!secureContext ? (
+          <UnavailablePanel
+            title="A secure connection is required"
+            reason="Open this page over HTTPS to create a wallet."
+          />
+        ) : step === "intro" ? (
+          <div className="flex flex-col gap-5">
+            <Rise>
+              <ResponsiveModalHeader className="items-center text-center">
+                <span
+                  aria-hidden
+                  className="mx-auto mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"
+                >
+                  <HugeiconsIcon icon={Shield01Icon} className="h-6 w-6" />
+                </span>
+                <ResponsiveModalTitle>Create your Worldstreet wallet</ResponsiveModalTitle>
+                <ResponsiveModalDescription>
+                  A wallet only you can open — set up in about a minute.
+                </ResponsiveModalDescription>
+              </ResponsiveModalHeader>
             </Rise>
             <Rise delay={60}>
               <ul className="flex flex-col gap-1 rounded-xl bg-surface-sunken/50 p-2 ring-1 ring-border/20">
@@ -403,12 +458,13 @@ export function WalletSetupFlow({
           </div>
         ) : step === "passphrase" ? (
           <Rise>
-            <CardHeader
-              className="pb-1 pt-5"
-              title="Choose a wallet passphrase"
-              subtitle="It unlocks your wallet on this device. Worldstreet never sees it and can't reset it."
-            />
-            <div className="flex flex-col gap-5 px-4 pb-5 pt-3">
+            <ResponsiveModalHeader>
+              <ResponsiveModalTitle>Choose a wallet passphrase</ResponsiveModalTitle>
+              <ResponsiveModalDescription>
+                It unlocks your wallet on this device. Worldstreet never sees it and can&apos;t reset it.
+              </ResponsiveModalDescription>
+            </ResponsiveModalHeader>
+            <div className="flex flex-col gap-5 pt-4">
               {resume ? (
                 <InlineNotice tone="warning">
                   Your wallet was created but setup didn&apos;t finish. Pick a passphrase to finish securing it.
@@ -550,29 +606,48 @@ export function WalletSetupFlow({
           </Rise>
         ) : step === "creating" ? (
           <Rise>
-            <CardHeader
-              className="pb-1 pt-5"
-              title="Creating your wallet"
-              subtitle="Keep this tab open — closing it now leaves the setup half-finished."
-            />
-            <div className="flex flex-col gap-4 px-4 pb-5 pt-3">
+            <ResponsiveModalHeader>
+              <ResponsiveModalTitle>Creating your wallet</ResponsiveModalTitle>
+              <ResponsiveModalDescription>
+                Keep this tab open — closing it now leaves the setup half-finished.
+              </ResponsiveModalDescription>
+            </ResponsiveModalHeader>
+            <div className="flex flex-col gap-4 pt-4">
               <SetupCeremony stages={SETUP_STAGES} activeIndex={progress.index} />
+            </div>
+          </Rise>
+        ) : step === "recovery" && setup.data?.recoverySecret ? (
+          <Rise>
+            <ResponsiveModalHeader>
+              <ResponsiveModalTitle>Save your wallet recovery secret</ResponsiveModalTitle>
+              <ResponsiveModalDescription>
+                This is the only time it will ever be shown. It&apos;s how you get back into your wallet if
+                you forget your passphrase or lose this device.
+              </ResponsiveModalDescription>
+            </ResponsiveModalHeader>
+            <div className="flex flex-col gap-4 pt-4">
+              <RecoverySecretPanel
+                secret={setup.data.recoverySecret}
+                onDone={() => {
+                  setSecretAcknowledged(true)
+                  setStep("closed")
+                }}
+              />
             </div>
           </Rise>
         ) : (
           <Rise>
-            <CardHeader
-              className="pb-1 pt-5"
-              title="Your wallet is ready"
-              subtitle={
-                setup.data?.existing
+            <ResponsiveModalHeader>
+              <ResponsiveModalTitle>Your wallet is ready</ResponsiveModalTitle>
+              <ResponsiveModalDescription>
+                {setup.data?.existing
                   ? "This wallet was already set up — nothing about it has changed."
-                  : "These are your addresses. Share one to receive money on that network."
-              }
-            />
-            <div className="flex flex-col gap-4 pb-5 pt-2">
+                  : "These are your addresses. Share one to receive money on that network."}
+              </ResponsiveModalDescription>
+            </ResponsiveModalHeader>
+            <div className="flex flex-col gap-4 pt-2">
               {addresses.length > 0 ? (
-                <Rise delay={60} className="flex flex-col">
+                <Rise delay={60} className="-mx-4 flex flex-col">
                   {addresses.map((account) => (
                     <ListRow
                       key={account.key}
@@ -582,29 +657,32 @@ export function WalletSetupFlow({
                   ))}
                 </Rise>
               ) : (
-                <p className="px-4 text-[13px] text-muted-foreground">
+                <p className="text-[13px] text-muted-foreground">
                   Your addresses are listed under Accounts on this page.
                 </p>
               )}
-              <Rise delay={120} className="px-4">
-                <FlowCta
-                  label="Open your wallet"
-                  onClick={() => setStep("closed")}
-                  control={{ target: "wallet-setup-done", describe: "Finish wallet setup", guarded: false }}
-                />
+              <Rise delay={120}>
+                {/* One screen at a time. The secret used to open on top of this
+                    one because both resolved on the same tick; now it is the
+                    next step, and this button is what asks for it. */}
+                {pendingSecret ? (
+                  <FlowCta
+                    label="Save your recovery secret"
+                    onClick={() => setStep("recovery")}
+                    control={{ target: "wallet-setup-secret", describe: "Show your recovery secret", guarded: false }}
+                  />
+                ) : (
+                  <FlowCta
+                    label="Open your wallet"
+                    onClick={() => setStep("closed")}
+                    control={{ target: "wallet-setup-done", describe: "Finish wallet setup", guarded: false }}
+                  />
+                )}
               </Rise>
             </div>
           </Rise>
         )}
-      </CardShell>
-      </div>
-
-      {recoveryModalOpen && setup.data?.recoverySecret ? (
-        <RecoverySecretModal
-          secret={setup.data.recoverySecret}
-          onClose={() => setSecretAcknowledged(true)}
-        />
-      ) : null}
-    </>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   )
 }
