@@ -504,6 +504,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const [isDollarMode, setIsDollarMode] = React.useState(false)
   const [unlockOpen, setUnlockOpen] = React.useState(false)
   const resumeAfterUnlock = React.useRef<(() => void) | null>(null)
+  const swapIdempotencyKey = React.useRef<string | null>(null)
 
   // Initialize from URL / defaults
   React.useEffect(() => {
@@ -559,6 +560,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   // Fetch real LI.FI quote on amount/token/chain change
   React.useEffect(() => {
     if (numericFrom <= 0 || !fromCoin || !toCoin || !canQuote) {
+      swapIdempotencyKey.current = null
       setQuoteData(null)
       setQuoteError(null)
       setQuoteLoading(false)
@@ -624,7 +626,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
       const amountBaseUnits = toBaseUnits(String(numericFrom), quoteData.fromToken.decimals)
       if (!amountBaseUnits || amountBaseUnits === "0") throw new Error("The amount is too small for this token")
       const networkId = (chain: string) => chain === "ethereum" ? "ethereum-mainnet" : chain === "arbitrum" ? "arbitrum-one" : chain === "solana" ? "solana-mainnet-beta" : "sui-mainnet" as const
-      const intent = await cryptoBackendClient.createModernLifiSwapIntent({ sourceNetworkId: networkId(fromChain), destinationNetworkId: networkId(toChain), sellToken: quoteData.fromToken.address, buyToken: quoteData.toToken.address, sellAmountBaseUnits: amountBaseUnits, slippagePercentage: slippage / 100 })
+      const idempotencyKey = swapIdempotencyKey.current ?? (swapIdempotencyKey.current = crypto.randomUUID())
+      const intent = await cryptoBackendClient.createModernLifiSwapIntent({ sourceNetworkId: networkId(fromChain), destinationNetworkId: networkId(toChain), sellToken: quoteData.fromToken.address, buyToken: quoteData.toToken.address, sellAmountBaseUnits: amountBaseUnits, slippagePercentage: slippage / 100, idempotencyKey })
       const signed = sourceFamily === "solana"
         ? await signSolanaIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
         : sourceFamily === "sui"
@@ -632,6 +635,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
           : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
       const submitted = await cryptoBackendClient.submitIntent(intent.id, signed)
       setSwapResult({ success: true, status: "PENDING", txHash: submitted.txHash })
+      swapIdempotencyKey.current = null
       setFromAmount(""); setQuoteData(null)
     } catch (error) {
       const message = error instanceof CryptoBackendError && error.code === "INSUFFICIENT_FUNDS"
