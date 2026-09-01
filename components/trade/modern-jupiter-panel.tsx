@@ -8,6 +8,11 @@
  * orientation, precision and the base-unit conversion all come from
  * `spot-order.ts`, the same path the USD ticket takes — one refuse-don't-guess
  * gate, so a misoriented row cannot spend the wrong token's scale here either.
+ *
+ * Execution is LI.FI, not Jupiter directly — see `solanaPlan` in
+ * `spot-order.ts`. The registry still labels these rows `venue: "jupiter"`,
+ * which is the backend's name for "this row carries mints", not a statement
+ * about who routes the trade.
  */
 
 import * as React from "react"
@@ -79,16 +84,16 @@ export function ModernJupiterPanel({
     try {
       if (!account?.id) throw new Error("Modern Solana wallet is not ready")
       const plan = buildSolanaSwapPlanFromTokenAmount(market, side, amount)
-      if (plan.kind !== "solana") throw new Error(plan.kind === "unavailable" ? plan.reason : "This pair can't be swapped here.")
+      if (plan.kind !== "lifi") throw new Error(plan.kind === "unavailable" ? plan.reason : "This pair can't be swapped here.")
 
-      const intent = await cryptoBackendClient.createModernSolanaSpotIntent(plan.input)
+      const intent = await cryptoBackendClient.createModernLifiSwapIntent(plan.input)
       const signed = await signSolanaIntent(userId, wallet.id, packageValue, intent, account.id)
       await cryptoBackendClient.submitIntent(intent.id, signed)
       setIntentId(intent.id)
       // Spec §8: a submitted swap is not a fill.
-      setMessage("Jupiter swap submitted. It isn't a fill until the backend confirms it on-chain.")
+      setMessage("Swap submitted. It isn't a fill until the backend confirms it on-chain.")
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Jupiter swap failed")
+      setMessage(e instanceof Error ? e.message : "Swap failed")
     } finally {
       setBusy(false)
     }
@@ -100,7 +105,7 @@ export function ModernJupiterPanel({
         <h3 className="text-sm font-bold">
           {base}/{quote} · token amount
         </h3>
-        <span className="text-[11px] text-muted-foreground">Jupiter</span>
+        <span className="text-[11px] text-muted-foreground">LI.FI</span>
       </div>
       <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-surface-sunken p-1">
         {(["buy", "sell"] as const).map((v) => (
@@ -153,7 +158,7 @@ export function ModernJupiterPanel({
         onClick={submit}
         className="mt-3 w-full rounded-full bg-primary py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
       >
-        {busy ? "Preparing and signing…" : rowProblem ? "Pair unavailable" : "Review Jupiter swap"}
+        {busy ? "Preparing and signing…" : rowProblem ? "Pair unavailable" : "Review swap"}
       </button>
     </div>
   )

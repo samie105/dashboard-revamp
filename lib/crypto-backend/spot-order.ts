@@ -4,7 +4,9 @@
  * The modern wallet has no hardcoded market catalogue: every tradable pair
  * arrives from `/trading/spot/markets`, and this module is the only place that
  * turns one of those rows plus a USD amount into the exact payload the backend
- * expects — 0x on EVM, Jupiter on Solana.
+ * expects. Both venues route through LI.FI; the registry's `venue` field
+ * (`0x` / `jupiter`) says which token identifiers the row carries, not who
+ * executes the trade.
  *
  * The law here is REFUSE, NEVER GUESS. A mis-scaled order is the catastrophic
  * failure mode of this screen: one wrong decimal exponent sells 1e12 times the
@@ -18,7 +20,7 @@ import { toBaseUnits } from "@/lib/crypto-wallet/address-validation"
 import type { CryptoBackendClient } from "./client"
 
 type EvmSpotInput = Parameters<CryptoBackendClient["createModernSpotIntent"]>[0]
-type SolanaSpotInput = Parameters<CryptoBackendClient["createModernSolanaSpotIntent"]>[0]
+type LifiSwapInput = Parameters<CryptoBackendClient["createModernLifiSwapIntent"]>[0]
 
 /** The live registry row, exactly as `getModernSpotMarkets` returns it. */
 type RegistryRow = Awaited<ReturnType<CryptoBackendClient["getModernSpotMarkets"]>>["markets"][number]
@@ -51,12 +53,17 @@ export type RegistryRowIsAccepted = RegistryRow extends ModernSpotMarketRow ? tr
 
 export type SpotOrderPlan =
   | { kind: "evm"; input: EvmSpotInput }
-  | { kind: "solana"; input: SolanaSpotInput }
+  | { kind: "lifi"; input: LifiSwapInput }
   | { kind: "unavailable"; reason: string }
 
-/** One source for slippage across both venues (0x takes a fraction, Jupiter bps). */
+/**
+ * One slippage figure for every spot route, as a fraction.
+ *
+ * Solana used to take its own `slippageBps` because it went to Jupiter, which
+ * speaks basis points. Both routes are LI.FI now and both take the fraction,
+ * so the two constants that had to be kept in agreement are one constant.
+ */
 export const SLIPPAGE_PERCENTAGE = 0.01
-export const SLIPPAGE_BPS = 100
 
 /**
  * Until the registry carries decimals (backend request filed — see the plan's
@@ -320,16 +327,7 @@ export function buildSolanaSwapPlanFromTokenAmount(
   }
   if (amountBaseUnits === "0") return unavailable(`Enter a ${legs.spentSymbol} amount above zero.`)
 
-  return {
-    kind: "solana",
-    input: {
-      inputMint: legs.inputMint,
-      outputMint: legs.outputMint,
-      amountBaseUnits,
-      slippageBps: SLIPPAGE_BPS,
-      idempotencyKey: newIdempotencyKey(),
-    },
-  }
+  return solanaPlan(legs, amountBaseUnits)
 }
 
 function buildSolanaPlan(row: ModernSpotMarketRow, side: "buy" | "sell", amountUsd: number, price: number): SpotOrderPlan {
@@ -339,13 +337,34 @@ function buildSolanaPlan(row: ModernSpotMarketRow, side: "buy" | "sell", amountU
   const sized = sizeInBaseUnits(side === "buy" ? amountUsd : amountUsd / price, legs.inputDecimals)
   if ("problem" in sized) return unavailable(sizingReason(sized.problem, legs.label))
 
+  return solanaPlan(legs, sized.units)
+}
+
+/**
+ * A Solana spot swap, routed through LI.FI rather than Jupiter directly.
+ *
+ * Jupiter built the transaction on its own side and handed us the result, so
+ * its failures arrived as a simulation error against a transaction nobody here
+ * had composed — `custom program error: 0x1` with no statement of which token
+ * was short. The LI.FI intent route is the one the rest of the product already
+ * uses, and it reports an underfunded account as `INSUFFICIENT_FUNDS` instead.
+ *
+ * Source and destination are the same chain: this is a spot trade, not a
+ * bridge. The mints go through verbatim as the sell/buy tokens.
+ */
+function solanaPlan(
+  legs: { inputMint: string; outputMint: string },
+  sellAmountBaseUnits: string,
+): SpotOrderPlan {
   return {
-    kind: "solana",
+    kind: "lifi",
     input: {
-      inputMint: legs.inputMint,
-      outputMint: legs.outputMint,
-      amountBaseUnits: sized.units,
-      slippageBps: SLIPPAGE_BPS,
+      sourceNetworkId: "solana-mainnet-beta",
+      destinationNetworkId: "solana-mainnet-beta",
+      sellToken: legs.inputMint,
+      buyToken: legs.outputMint,
+      sellAmountBaseUnits,
+      slippagePercentage: SLIPPAGE_PERCENTAGE,
       idempotencyKey: newIdempotencyKey(),
     },
   }

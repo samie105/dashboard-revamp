@@ -601,10 +601,12 @@ export function TradeClient() {
               : "Your Worldstreet wallet doesn't have a Solana account yet."
           )
         }
+        // Solana spot goes through the same LI.FI intent route the swap
+        // screen uses, not Jupiter directly (see `solanaPlan`).
         const intent =
           plan.kind === "evm"
             ? await cryptoBackendClient.createModernSpotIntent(plan.input)
-            : await cryptoBackendClient.createModernSolanaSpotIntent(plan.input)
+            : await cryptoBackendClient.createModernLifiSwapIntent(plan.input)
         const signed =
           plan.kind === "evm"
             ? await signEvmIntent(

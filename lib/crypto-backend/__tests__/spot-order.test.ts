@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   buildSolanaSwapPlanFromTokenAmount,
   buildSpotOrderPlan,
-  SLIPPAGE_BPS,
   SLIPPAGE_PERCENTAGE,
   solanaSwapProblem,
   tokenDecimalsFor,
@@ -84,26 +83,26 @@ describe("buildSpotOrderPlan — 0x rows", () => {
   })
 })
 
-describe("buildSpotOrderPlan — Jupiter rows", () => {
+describe("buildSpotOrderPlan — Solana rows", () => {
   it("buys the base by spending the quote mint", () => {
     const plan = buildSpotOrderPlan(solRow, "buy", 50, 200)
-    expect(plan.kind).toBe("solana")
-    if (plan.kind !== "solana") return
-    expect(plan.input.inputMint).toBe(SOL_USDC)
-    expect(plan.input.outputMint).toBe(SOL_MINT)
-    expect(plan.input.amountBaseUnits).toBe("50000000")
-    expect(plan.input.slippageBps).toBe(SLIPPAGE_BPS)
+    expect(plan.kind).toBe("lifi")
+    if (plan.kind !== "lifi") return
+    expect(plan.input.sellToken).toBe(SOL_USDC)
+    expect(plan.input.buyToken).toBe(SOL_MINT)
+    expect(plan.input.sellAmountBaseUnits).toBe("50000000")
+    expect(plan.input.slippagePercentage).toBe(SLIPPAGE_PERCENTAGE)
     expect(plan.input.idempotencyKey).toEqual(expect.any(String))
   })
 
   it("sells the base mint, sized at 9 decimals", () => {
     const plan = buildSpotOrderPlan(solRow, "sell", 50, 200)
-    expect(plan.kind).toBe("solana")
-    if (plan.kind !== "solana") return
-    expect(plan.input.inputMint).toBe(SOL_MINT)
-    expect(plan.input.outputMint).toBe(SOL_USDC)
+    expect(plan.kind).toBe("lifi")
+    if (plan.kind !== "lifi") return
+    expect(plan.input.sellToken).toBe(SOL_MINT)
+    expect(plan.input.buyToken).toBe(SOL_USDC)
     // 50 / 200 = 0.25 SOL at 9 decimals.
-    expect(plan.input.amountBaseUnits).toBe("250000000")
+    expect(plan.input.sellAmountBaseUnits).toBe("250000000")
   })
 })
 
@@ -190,22 +189,22 @@ describe("buildSpotOrderPlan — refuses rather than guesses", () => {
   })
 })
 
-describe("token-denominated Jupiter swaps share the one refuse-don't-guess path", () => {
+describe("token-denominated Solana swaps share the one refuse-don't-guess path", () => {
   it("sizes a buy in the quote mint's own units", () => {
     const plan = buildSolanaSwapPlanFromTokenAmount(solRow, "buy", "10")
-    expect(plan.kind).toBe("solana")
-    if (plan.kind !== "solana") return
-    expect(plan.input.inputMint).toBe(SOL_USDC)
-    expect(plan.input.outputMint).toBe(SOL_MINT)
-    expect(plan.input.amountBaseUnits).toBe("10000000") // 10 USDC at 6dp
-    expect(plan.input.slippageBps).toBe(SLIPPAGE_BPS)
+    expect(plan.kind).toBe("lifi")
+    if (plan.kind !== "lifi") return
+    expect(plan.input.sellToken).toBe(SOL_USDC)
+    expect(plan.input.buyToken).toBe(SOL_MINT)
+    expect(plan.input.sellAmountBaseUnits).toBe("10000000") // 10 USDC at 6dp
+    expect(plan.input.slippagePercentage).toBe(SLIPPAGE_PERCENTAGE)
   })
 
   it("sizes a sell in the base mint's own units", () => {
     const plan = buildSolanaSwapPlanFromTokenAmount(solRow, "sell", "0.5")
-    if (plan.kind !== "solana") throw new Error("expected a solana plan")
-    expect(plan.input.inputMint).toBe(SOL_MINT)
-    expect(plan.input.amountBaseUnits).toBe("500000000") // 0.5 SOL at 9dp
+    if (plan.kind !== "lifi") throw new Error("expected a lifi plan")
+    expect(plan.input.sellToken).toBe(SOL_MINT)
+    expect(plan.input.sellAmountBaseUnits).toBe("500000000") // 0.5 SOL at 9dp
   })
 
   it("refuses a misoriented row instead of spending the wrong token's scale", () => {
