@@ -57,6 +57,7 @@ import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { OrderPlacedModal, orderCopy } from "@/components/trade/order-placed-modal"
 import { useAuth } from "@/components/auth-provider"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
+import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
 import {
   fetchHlOrderBook,
   fetchHl24hStats,
@@ -319,7 +320,10 @@ export function TradeClient() {
         .getModernSpotMarkets()
         .then((result) =>
           setMarkets({
-            minOrderUsd: 1,
+            // Spot settles as an on-chain swap, so the only real floor is what
+            // the route can carry without the amount vanishing into fees. A
+            // whole dollar was a house rule with nothing behind it.
+            minOrderUsd: 0.5,
             futures: [],
             spot: result.markets
               .filter((coin) => coin.chartSupported)
@@ -541,6 +545,30 @@ export function TradeClient() {
         : null,
     [usingModern, market, current, side]
   )
+  /* What the wallet actually holds of the token this order spends — USDC on a
+     buy, the base token on a sell. The ticket used to quote the Hyperliquid
+     account's USDC here, which on a modern spot row is always null: the money
+     is in the self-custody wallet, on the row's own chain. So the one figure
+     that answers "how much can I sell?" was never on screen. */
+  const { balances: modernBalances, isLoading: balancesLoading } = useCryptoBalances()
+  const spendable = React.useMemo(() => {
+    if (!(usingModern && market === "spot") || !current || !spentSymbol) return null
+    const networkId = "networkId" in current ? current.networkId : undefined
+    if (!networkId) return null
+    const rows = modernBalances.filter(
+      (b) =>
+        b.symbol.toUpperCase() === spentSymbol.toUpperCase() &&
+        b.networkId === networkId,
+    )
+    // A snapshot that hasn't arrived is not a zero balance. Say nothing until
+    // it has: "avail 0.00" against a funded wallet is worse than no figure.
+    if (rows.length === 0 && balancesLoading) return null
+    return rows.reduce(
+      (sum, b) => sum + Number(formatCryptoAmount(b.amountBaseUnits, b.decimals, 12)),
+      0,
+    )
+  }, [modernBalances, balancesLoading, usingModern, market, current, spentSymbol])
+
   /* A buy spends the quote, and every quote we size against is a dollar
      stablecoin — so "USD | USDC" offered two names for one unit. The switch
      belongs on the side where the units genuinely differ: a sell, which spends
@@ -987,7 +1015,15 @@ export function TradeClient() {
   // order is capped by the POSITION, not the balance — it opens nothing, so
   // "Max" there means the whole position and leverage does not enter (spec §9).
   const maxNotional =
-    market === "spot"
+    // Modern spot spends the self-custody wallet, so the ceiling is what it
+    // holds of the token being spent — including on a SELL, which used to be
+    // 0 here and so offered no percent chips at all.
+    usingModern && market === "spot"
+      ? inTokenUnit
+        ? (spendable ?? 0)
+        : (spendable ?? 0) *
+          (spentSymbol && sizesLikeUsd(spentSymbol) ? 1 : price)
+      : market === "spot"
       ? side === "buy"
         ? (balances?.spotUsdc ?? 0)
         : 0
@@ -1335,11 +1371,38 @@ export function TradeClient() {
         <label className="flex flex-col gap-1">
           <span className="flex items-center justify-between text-xs text-subtle">
             <span>Amount</span>
-            {market === "spot" && side === "buy" && balances && (
+            {/* The wallet's real holding of the token this side spends, on
+              this row's chain. Legacy spot keeps quoting the trading account's
+              USDC; modern spot has no such account and never did. */}
+            {usingModern && market === "spot" ? (
+              spendable !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (spendable <= 0) return
+                    // Tapping the balance means "all of it", in whichever unit
+                    // the field is currently in.
+                    setAmountUsd(
+                      String(
+                        inTokenUnit
+                          ? spendable
+                          : Number((spendable * (spentSymbol && sizesLikeUsd(spentSymbol) ? 1 : price)).toFixed(2)),
+                      ),
+                    )
+                  }}
+                  data-vivid-target="trade-amount-balance"
+                  data-vivid-label="Use the whole available balance"
+                  className="tabular-nums transition-colors hover:text-foreground"
+                >
+                  avail {spendable.toLocaleString(undefined, { maximumFractionDigits: 6 })}{" "}
+                  {spentSymbol}
+                </button>
+              )
+            ) : market === "spot" && side === "buy" && balances ? (
               <span className="tabular-nums">
                 avail ${balances.spotUsdc.toFixed(2)}
               </span>
-            )}
+            ) : null}
             {/* Reduce-only spends nothing, so the free balance is the wrong
               ceiling to quote — the open position is. */}
             {modernFutures && reduceOnly ? (
@@ -1418,7 +1481,7 @@ export function TradeClient() {
           </div>
         </label>
 
-        {!inTokenUnit && maxNotional > 0 && (
+        {maxNotional > 0 && (
           <div className="grid grid-cols-4 gap-1">
             {[0.25, 0.5, 0.75, 1].map((pct) => (
               <button
@@ -1438,13 +1501,20 @@ export function TradeClient() {
                     ? "Use the full available balance as the amount"
                     : `Use ${pct * 100} percent of the available balance as the amount`
                 }
-                onClick={() =>
+                onClick={() => {
+                  // Two decimals is a dollar's precision. A token amount
+                  // rounded to cents is a different order — and for anything
+                  // priced under a cent, rounds to nothing at all.
+                  const places = inTokenUnit ? 6 : 2
+                  const scale = 10 ** places
                   setAmountUsd(
                     pct === 1
-                      ? String(Math.floor(maxNotional * 100) / 100)
-                      : (maxNotional * pct).toFixed(2)
+                      ? String(Math.floor(maxNotional * scale) / scale)
+                      : String(
+                          Math.floor(maxNotional * pct * scale) / scale,
+                        ),
                   )
-                }
+                }}
                 className="rounded-lg bg-surface-sunken py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
               >
                 {pct === 1 ? "Max" : `${pct * 100}%`}
