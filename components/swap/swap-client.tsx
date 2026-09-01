@@ -24,10 +24,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useAuth } from "@/components/auth-provider"
-import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled, CryptoBackendError } from "@/lib/crypto-backend"
 import { signEvmIntent, signSolanaIntent, signSuiIntent } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { toBaseUnits } from "@/lib/crypto-wallet/address-validation"
+import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 
 /* ── Token Select Modal ── */
 function TokenSelectModal({
@@ -463,6 +464,10 @@ interface SwapClientProps {
   compact?: boolean
 }
 
+function shortTransactionHash(hash?: string) {
+  return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "pending confirmation"
+}
+
 export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const available = coins.filter((c) => c.price > 0)
   const { user } = useAuth()
@@ -497,6 +502,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const [toChain, setToChain] = React.useState("ethereum")
   const [quoteLoading, setQuoteLoading] = React.useState(false)
   const [isDollarMode, setIsDollarMode] = React.useState(false)
+  const [unlockOpen, setUnlockOpen] = React.useState(false)
+  const resumeAfterUnlock = React.useRef<(() => void) | null>(null)
 
   // Initialize from URL / defaults
   React.useEffect(() => {
@@ -605,8 +612,12 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     setSwapLoading(true)
     setSwapResult(null)
     try {
-      if (!user?.userId || !modernWallet.data?.id || !modernPackage.data) throw new Error("Set up and unlock the modern wallet before swapping")
-      if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) throw new Error("Unlock the modern wallet locally before swapping")
+      if (!user?.userId || !modernWallet.data?.id || !modernPackage.data) throw new Error("Set up the modern wallet before swapping")
+      if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) {
+        resumeAfterUnlock.current = () => void handleSwap()
+        setUnlockOpen(true)
+        return
+      }
       const sourceFamily = fromChain === "solana" ? "solana" : fromChain === "sui" ? "sui" : "evm"
       const account = modernWallet.data.accounts.find((item) => item.chainFamily === sourceFamily && item.state === "active")
       if (!account?.id) throw new Error("Your modern wallet account for this network is not ready")
@@ -619,11 +630,14 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         : sourceFamily === "sui"
           ? await signSuiIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
           : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
-      await cryptoBackendClient.submitIntent(intent.id, signed)
-      setSwapResult({ success: true, status: "PENDING" })
+      const submitted = await cryptoBackendClient.submitIntent(intent.id, signed)
+      setSwapResult({ success: true, status: "PENDING", txHash: submitted.txHash })
       setFromAmount(""); setQuoteData(null)
     } catch (error) {
-      setSwapResult({ success: false, error: error instanceof Error ? error.message : "Swap failed" })
+      const message = error instanceof CryptoBackendError && error.code === "INSUFFICIENT_FUNDS"
+        ? "Insufficient SOL for this swap and its network costs. Add more SOL, then request a fresh quote."
+        : error instanceof Error ? error.message : "Swap failed"
+      setSwapResult({ success: false, error: message })
     } finally {
       setSwapLoading(false)
     }
@@ -890,9 +904,9 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                     : "bg-debit-chip text-debit"
                 }`}>
                   {swapResult.success && swapResult.status === "DONE"
-                    ? `Swap confirmed — ${swapResult.txHash?.slice(0, 10)}…${swapResult.txHash?.slice(-6)}. It will appear in your history shortly.`
+                    ? `Swap confirmed — ${shortTransactionHash(swapResult.txHash)}. It will appear in your history shortly.`
                     : swapResult.success && swapResult.status === "PENDING"
-                    ? `Swap submitted — waiting for the chain to confirm (${swapResult.txHash?.slice(0, 10)}…${swapResult.txHash?.slice(-6)}). Safe to leave this page.`
+                    ? `Swap submitted — waiting for the chain to confirm (${shortTransactionHash(swapResult.txHash)}). Safe to leave this page.`
                     : swapResult.error}
                 </div>
               )}
@@ -921,6 +935,15 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
           </div>
 
       {/* Token Modals */}
+      <WalletUnlockDialog
+        open={unlockOpen}
+        onOpenChange={setUnlockOpen}
+        onUnlocked={() => {
+          const resume = resumeAfterUnlock.current
+          resumeAfterUnlock.current = null
+          resume?.()
+        }}
+      />
       <TokenSelectModal
         open={showFromModal}
         onClose={() => setShowFromModal(false)}
