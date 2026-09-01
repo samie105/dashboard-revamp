@@ -34,7 +34,7 @@ import {
   type IllustrationKey,
 } from "@/components/ui/system"
 import { fetchProfile } from "@/lib/profile-actions"
-import { ModernSwapClient } from "@/components/swap/modern-swap-client"
+import { SwapClient } from "@/components/swap/swap-client"
 import { ActivityCard } from "@/components/dashboard/activity-card"
 import { WorldstreetTokenCard } from "@/components/dashboard/worldstreet-token-card"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
@@ -970,7 +970,7 @@ export function DashboardGrid({ coins, initialTrades, prices, error }: Dashboard
         {/* [&>div]:h-full — the compact swap card is shorter than the trades
             list; stretch its shell so the pair shares one bottom edge. */}
         <div className="rise min-w-0 lg:col-span-2 [&>div]:h-full" style={cell(390)}>
-          <ModernSwapClient compact />
+          <SwapClient coins={coins} prices={prices} error={error} compact />
         </div>
       </div>
     </div>
