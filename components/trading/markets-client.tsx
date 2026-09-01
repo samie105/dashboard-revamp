@@ -24,6 +24,8 @@ import { useSparklines } from "@/hooks/useSparklines"
 import { Sparkline, Skel } from "@/components/ui/system"
 import { useAuth } from "@/components/auth-provider"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
+import { useSpotRegistry, tradeHref, type RegistryRow } from "@/hooks/useSpotRegistry"
+import { chainLabel, ALL_CHAINS } from "@/lib/spot-market-search"
 
 /* The "7D Chart" column used to be Math.sin() noise seeded from the coin's
    own symbol — deterministic, so it looked stable and trustworthy, and
@@ -35,15 +37,42 @@ import { getCoinImage, coinFallback } from "@/lib/coin-images"
    module cache. A coin the feed doesn't cover renders nothing rather than a
    plausible invention. */
 
-function TradeButton({ symbol }: { symbol: string }) {
+/**
+ * Trade affordance for a feed row.
+ *
+ * It used to be an unconditional link built from the symbol alone. Most of
+ * this table is not tradable — the feed is a price feed, the registry is the
+ * catalogue — and a "Trade" button on a row with no market behind it sent the
+ * user to a ticket for something else entirely. The button now names the
+ * chain it would route on, and rows with no market say so instead.
+ *
+ * A symbol listed on more than one chain gets one link per chain: WETH on
+ * Arbitrum and WETH on Ethereum are different markets at different prices, and
+ * collapsing them into one "Trade" is how an order lands on the wrong chain.
+ */
+function TradeButton({ rows }: { rows: RegistryRow[] | undefined }) {
+  if (!rows) {
+    // The registry never loaded. Keep the old symbol-only link rather than
+    // telling the user their asset is untradable on our own outage.
+    return null
+  }
+  if (rows.length === 0) {
+    return <span className="text-[11px] text-muted-foreground/50">Not listed</span>
+  }
   return (
-    <Link
-      href={`/trade?market=spot&symbol=${symbol}`}
-      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    >
-      Trade
-      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-    </Link>
+    <span className="inline-flex items-center justify-end gap-1">
+      {rows.map((row) => (
+        <Link
+          key={row.id}
+          href={tradeHref(row)}
+          title={`Trade ${row.symbol}/${row.quote} on ${chainLabel(row.networkId)}`}
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          {rows.length > 1 ? chainLabel(row.networkId) : "Trade"}
+          <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+        </Link>
+      ))}
+    </span>
   )
 }
 
@@ -211,9 +240,25 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
   const [sortBy, setSortBy] = React.useState<SortKey>("marketCap")
   const [sortAsc, setSortAsc] = React.useState(false)
   const [favorites, setFavorites] = React.useState<Set<string>>(new Set())
+  /* The feed carries no chain, so the filter is joined in from the tradable
+     registry — which is also the only place the answer exists. Picking a chain
+     narrows the table to assets that actually route there, which is a stronger
+     statement than "hide some rows": it turns this page into a list of things
+     you can act on. */
+  const [chainFilter, setChainFilter] = React.useState<string>(ALL_CHAINS)
   const { user } = useAuth()
   const { positions, loading: positionsLoading } = useHyperliquidPositions()
   const { balances: spotHoldings, loading: spotHoldingsLoading } = useHyperliquidBalance(user?.userId, !!user)
+  const registry = useSpotRegistry()
+
+  /** The registry rows trading a feed symbol — `undefined` when unknown. */
+  const tradableRows = React.useCallback(
+    (symbol: string): RegistryRow[] | undefined =>
+      registry.bySymbol.size === 0
+        ? undefined
+        : (registry.bySymbol.get(symbol.toUpperCase()) ?? []),
+    [registry],
+  )
 
   const priceOf = React.useMemo(() => {
     const map = new Map<string, number>()
@@ -283,6 +328,13 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
         (c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q),
       )
     }
+    if (chainFilter !== ALL_CHAINS) {
+      list = list.filter((c) =>
+        (registry.bySymbol.get(c.symbol.toUpperCase()) ?? []).some(
+          (r) => r.networkId === chainFilter,
+        ),
+      )
+    }
     if (tab === "Main") list = list.slice(0, search ? list.length : 20)
     const key = sortBy
     list.sort((a, b) => {
@@ -292,7 +344,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
       return sortAsc ? av - bv : bv - av
     })
     return list
-  }, [coins, spotMarkets, tab, search, sortBy, sortAsc])
+  }, [coins, spotMarkets, tab, search, sortBy, sortAsc, chainFilter, registry])
 
   // ── Futures-mode memos ──────────────────────────────────────────────────
 
@@ -630,7 +682,28 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                 {isFutures ? filteredFutures.length : filtered.length}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Chain chips — spot only. A perp is one venue, so offering to
+                  filter futures by chain would be a control that does nothing. */}
+              {!isFutures && registry.chains.length > 1 && (
+                <div className="flex items-center gap-1.5">
+                  {[{ id: ALL_CHAINS, label: "All chains", count: 0 }, ...registry.chains].map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setChainFilter(c.id)}
+                      aria-pressed={chainFilter === c.id}
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                        chainFilter === c.id
+                          ? "bg-primary/[0.14] text-primary"
+                          : "bg-accent/50 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {c.label}
+                      {c.count > 0 && <span className="ml-1 tabular-nums opacity-60">{c.count}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="relative">
                 <HugeiconsIcon
                   icon={Search01Icon}
@@ -740,7 +813,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <TradeButton symbol={coin.symbol} />
+                          <TradeButton rows={tradableRows(coin.symbol)} />
                         </td>
                       </tr>
                     )

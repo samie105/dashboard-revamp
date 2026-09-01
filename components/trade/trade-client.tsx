@@ -32,7 +32,6 @@ import {
   type HlSpotMarket,
   type HlFuturesMarket,
 } from "@/lib/crypto-api"
-import { networkMetaFor } from "@/lib/crypto-backend/network-meta"
 import {
   cryptoBackendClient,
   cryptoQueryKeys,
@@ -61,6 +60,8 @@ import { CandleChart } from "@/components/trade/candle-chart"
 import { OrderBook } from "@/components/trade/order-book"
 import { PositionsPanel } from "@/components/trade/positions-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
+import { MarketPicker } from "@/components/trade/market-picker"
+import { noteRecentMarket } from "@/hooks/useMarketPrefs"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import {
   BackAction,
@@ -179,7 +180,6 @@ export function TradeClient() {
   const [reduceOnly, setReduceOnly] = React.useState(false)
   const [tpPrice, setTpPrice] = React.useState("")
   const [slPrice, setSlPrice] = React.useState("")
-  const [search, setSearch] = React.useState("")
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [outcome, setOutcome] = React.useState<HlOrderOutcome | null>(null)
@@ -544,6 +544,13 @@ export function TradeClient() {
     router.replace(`/trade?market=${m}`)
   }
 
+  // A pair you have actually opened is the strongest signal about what you
+  // trade, and it costs nothing to record — the picker surfaces it as
+  // "Recent" so the common case stops being a scroll through the registry.
+  React.useEffect(() => {
+    if (current) noteRecentMarket(marketRowKey(current))
+  }, [current])
+
   // Keep the address bar honest — it's what gets refreshed, shared and
   // bookmarked, so it must name the row actually on screen, id included.
   React.useEffect(() => {
@@ -869,12 +876,6 @@ export function TradeClient() {
     []
   )
 
-  const filtered = React.useMemo(() => {
-    if (!search) return list
-    const q = search.toLowerCase()
-    return list.filter((m) => m.symbol.toLowerCase().includes(q))
-  }, [list, search])
-
   // Book click → hand the price to the ticket as a limit order.
   const pickPrice = React.useCallback((p: number) => {
     setOrderType("limit")
@@ -902,72 +903,28 @@ export function TradeClient() {
   const changeUp = (stats?.changePct ?? 0) >= 0
 
   /* ── Pair picker dropdown ─────────────────────────────────────────────── */
+  // Same MarketPicker as the rail, in its compact shape: on the narrow
+  // viewports where the rail is hidden, the dropdown is the ONLY way to change
+  // pairs, and it used to be the weaker of the two — no chain filter, no
+  // pinning, its own copy of the substring filter.
   const picker = pickerOpen && (
     <>
       <button
         aria-label="Close market picker"
         className="fixed inset-0 z-40 cursor-default"
-        onClick={() => {
-          setPickerOpen(false)
-          setSearch("")
-        }}
+        onClick={() => setPickerOpen(false)}
       />
-      <div className="absolute top-full left-0 z-50 mt-2 w-[320px] rounded-2xl bg-card p-2 shadow-2xl ring-1 ring-border/40">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search markets…"
+      <div className="absolute top-full left-0 z-50 mt-2 w-[340px] rounded-2xl bg-card pb-1 shadow-2xl ring-1 ring-border/40">
+        <MarketPicker
+          list={list}
+          selected={selection}
+          variant="popover"
           autoFocus
-          data-vivid-target="trade-pair-search"
-          data-vivid-label="Search the pair list"
-          className="w-full rounded-xl bg-surface-sunken px-3 py-2 text-sm outline-none placeholder:text-subtle"
+          onSelect={(rowKey) => {
+            setSelection(rowKey)
+            setPickerOpen(false)
+          }}
         />
-        <div className="mt-1.5 max-h-72 overflow-y-auto">
-          {filtered.length === 0 ? (
-            <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-              No markets match.
-            </p>
-          ) : (
-            filtered.map((m) => (
-              <button
-                key={marketRowKey(m)}
-                onClick={() => {
-                  setSelection(marketRowKey(m))
-                  setPickerOpen(false)
-                  setSearch("")
-                }}
-                data-vivid-target={`pick-pair-${marketRowKey(m)}`}
-                data-vivid-label={`Switch to the ${m.symbol} market${"networkId" in m && m.networkId ? ` on ${m.networkId}` : ""}`}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent ${marketRowKey(m) === selection ? "bg-accent" : ""}`}
-              >
-                <span className="flex items-center gap-2 font-semibold">
-                  <CoinAvatar
-                    symbol={"coinName" in m ? m.coinName : m.symbol}
-                    src={"icon" in m ? m.icon : undefined}
-                    size="md"
-                  />
-                  {m.symbol}
-                  <span className="ml-1 text-[10px] font-medium text-subtle">
-                    {market === "futures" ? "PERP" : quoteOf(m)}
-                  </span>
-                  {"networkId" in m && m.networkId && (
-                    <span className="ml-1 rounded bg-surface-sunken px-1 py-0.5 text-[9px] font-medium text-subtle">
-                      {networkMetaFor(m.networkId)?.label ?? m.networkId}
-                    </span>
-                  )}
-                  {"maxLeverage" in m && (
-                    <span className="ml-1.5 rounded bg-primary/[0.12] px-1 py-0.5 text-[9px] font-bold text-primary">
-                      {m.maxLeverage}×
-                    </span>
-                  )}
-                </span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  ${fmtPx(m.price)}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
       </div>
     </>
   )
@@ -1738,10 +1695,9 @@ export function TradeClient() {
             is one click, not a menu dive. */}
         <MarketsRail
           list={list}
-          market={market}
           selected={selection}
           onSelect={setSelection}
-          className="hidden w-[236px] shrink-0 border-r border-border/30 xl:flex"
+          className="hidden w-[260px] shrink-0 border-r border-border/30 xl:flex"
         />
 
         {/* Chart + bottom panel */}
