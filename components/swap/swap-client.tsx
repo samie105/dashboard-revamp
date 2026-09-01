@@ -569,7 +569,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         amount: numericFrom.toString(),
         slippage: (slippage / 100).toString(),
       })
-      fetch(`/api/swap?${qs}`, { signal: controller.signal })
+      fetch(`/api/crypto/trading/spot/lifi/quote?${qs}`, { signal: controller.signal })
         .then((r) => r.json())
         .then((data) => {
           if (data.success && data.quote) {
