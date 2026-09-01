@@ -1157,3 +1157,58 @@ input[type="range"]::-moz-range-track {
   /* The standing gold stroke stays; only the travelling glint stops. */
   .ws-ring-shimmer::before { animation: none; opacity: 0; }
 }
+
+/* ── App launcher (the W sheet) ────────────────────────────────────────────
+   The ecosystem's front door: tapping the mark opens a short sheet holding
+   the Worldstreet apps and nothing else. It borrows the money-flow modal's
+   register — glow behind glass, content resolving out of a blur — but NOT
+   its gold rim: that stays reserved for the money surface.
+
+   Opening: the glass rises, a gold bloom lights the crown, the W lands with
+   its rotational settle, then the app tiles deal in top-to-bottom, each
+   resolving from soft to sharp. One pass, never loops.
+
+   Outro: the tiles pour out downward — bottom row first, as if leaving ahead
+   of the glass — while the sheet slides off. Driven by the popup's
+   [data-ending-style] (Base UI sets it for the exit transition), and every
+   outro beat finishes inside the popup's own transition window, because
+   that transition is what Base UI waits on before unmounting.
+
+   fill-mode on entrances is `backwards`, not `both`: an animation that fills
+   forwards keeps winning the cascade after it ends, which would kill the
+   tiles' press-down (`active:scale`). Backwards covers the delay and then
+   gets out of the way. The outro fills `forwards` deliberately — those
+   elements are leaving and must not flash back before unmount. */
+@keyframes ws-launch-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.94); filter: blur(5px); }
+  to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+.ws-launch {
+  animation: ws-launch-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--ws-launch-delay, 0ms);
+}
+
+@keyframes ws-launch-out {
+  to { opacity: 0; transform: translateY(12px) scale(0.96); filter: blur(3px); }
+}
+[data-slot="sheet-content"][data-ending-style] .ws-launch {
+  animation: ws-launch-out 180ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation-delay: var(--ws-out-delay, 0ms);
+}
+
+/* The bloom — reuses ws-glow-in (scale-up fade, both fill) on the way in and
+   the launch outro on the way out. Atmosphere, not information: it's static
+   under reduced motion rather than removed. */
+.ws-launch-glow { animation: ws-glow-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+[data-slot="sheet-content"][data-ending-style] .ws-launch-glow {
+  animation: ws-launch-out 200ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-launch,
+  .ws-launch-glow,
+  [data-slot="sheet-content"][data-ending-style] .ws-launch,
+  [data-slot="sheet-content"][data-ending-style] .ws-launch-glow {
+    animation: none;
+  }
+}
