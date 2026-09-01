@@ -2,201 +2,109 @@
 
 import * as React from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   DashboardSquare01Icon,
   ChartCandlestickIcon,
-  Exchange01Icon,
   Chart01Icon,
-  Menu01Icon,
   Store01Icon,
   Book01Icon,
   UserGroup02Icon,
   Video01Icon,
   Brain01Icon,
-  UserIcon,
-  Shield01Icon,
-  Settings01Icon,
   ArrowUpRight01Icon,
-  ArrowDown01Icon,
-  ArrowUp01Icon,
-  Wallet01Icon,
-  CreditCardIcon,
-  File01Icon,
-  Activity01Icon,
+  ArrowRight01Icon,
   RepeatIcon,
-  Link01Icon,
-  Copy01Icon,
-  BarChartIcon,
-  ComputerTerminal01Icon,
   Cancel01Icon,
   DollarCircleIcon,
-  Rocket01Icon,
+  EyeIcon,
 } from "@hugeicons/core-free-icons"
 import {
   Sheet,
   SheetTrigger,
   SheetContent,
+  SheetTitle,
+  SheetDescription,
 } from "@/components/ui/sheet"
 
-/* ── Bottom nav items ── */
-const NAV_ITEMS = [
+/* ── Bottom nav ────────────────────────────────────────────────────────────
+   Four destinations flanking the launcher. The centre slot is the WorldStreet
+   mark — the one place in the bar that opens the wider ecosystem rather than
+   going somewhere in this app. */
+type BarItem = { label: string; href: string; icon: typeof Chart01Icon }
+
+const BAR_LEFT: readonly BarItem[] = [
   { label: "Home", href: "/", icon: DashboardSquare01Icon },
   { label: "Trade", href: "/trade", icon: ChartCandlestickIcon },
-  { label: "Swap", href: "/swap", icon: Exchange01Icon },
-  { label: "Portfolio", href: "/portfolio", icon: Chart01Icon },
-] as const
+]
 
-/* ── Sidebar nav groups (mirrors app-sidebar) ── */
-interface SidebarItem {
+const BAR_RIGHT: readonly BarItem[] = [
+  { label: "Portfolio", href: "/portfolio", icon: Chart01Icon },
+  { label: "Swap", href: "/swap", icon: RepeatIcon },
+]
+
+/* ── Launcher contents — the Worldstreet ecosystem, and only that ──────────
+   Dashboard sections (Assets, Markets, Settings, …) live in the sidebar and
+   the bar; the W sheet is reserved for the family of apps. Mirrors the
+   sidebar's Worldstreet group. */
+interface EcosystemApp {
   name: string
   url: string
-  icon: typeof Activity01Icon
-  external?: boolean
+  icon: typeof Chart01Icon
 }
 
-interface SidebarGroup {
-  label: string
-  icon: typeof Activity01Icon
-  items: readonly SidebarItem[]
-}
-
-const SIDEBAR_GROUPS: SidebarGroup[] = [
-  {
-    label: "Overview",
-    icon: DashboardSquare01Icon,
-    items: [
-      { name: "Dashboard", url: "/", icon: DashboardSquare01Icon },
-      { name: "Portfolio", url: "/portfolio", icon: ChartCandlestickIcon },
-      { name: "Assets", url: "/assets", icon: Wallet01Icon },
-      { name: "Transactions", url: "/transactions", icon: File01Icon },
-    ],
-  },
-  {
-    label: "Community",
-    icon: UserGroup02Icon,
-    items: [
-      { name: "Community", url: "/community", icon: UserGroup02Icon },
-    ],
-  },
-  {
-    label: "Trading",
-    icon: Activity01Icon,
-    items: [
-      { name: "Markets", url: "/trading/markets", icon: BarChartIcon },
-      { name: "Spot Trading", url: "/trade", icon: Activity01Icon },
-      { name: "Futures", url: "/trade?market=futures", icon: Chart01Icon },
-      { name: "Swap", url: "/swap", icon: RepeatIcon },
-    ],
-  },
-  {
-    label: "Account",
-    icon: UserIcon,
-    items: [
-      { name: "Profile", url: "/profile", icon: UserIcon },
-      { name: "Security", url: "/security", icon: Shield01Icon },
-      { name: "Verification", url: "/verification", icon: File01Icon },
-    ],
-  },
-  {
-    label: "Worldstreet",
-    icon: Rocket01Icon,
-    items: [
-      { name: "Store", url: "https://shop.worldstreetgold.com", icon: Store01Icon, external: true },
-      { name: "Academy", url: "https://academy.worldstreetgold.com", icon: Book01Icon, external: true },
-      { name: "Social", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon, external: true },
-      { name: "Xstream", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon, external: true },
-      { name: "Forex Trading", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon, external: true },
-      { name: "Vivid AI", url: "/vivid", icon: Brain01Icon },
-    ],
-  },
+const ECOSYSTEM_APPS: readonly EcosystemApp[] = [
+  { name: "Store", url: "https://shop.worldstreetgold.com", icon: Store01Icon },
+  { name: "Academy", url: "https://academy.worldstreetgold.com", icon: Book01Icon },
+  { name: "Social", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon },
+  { name: "Xstream", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
+  { name: "Forex", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
+  { name: "Vision", url: "https://vision.worldstreetgold.com", icon: EyeIcon },
 ]
+
+const LOGO_SRC = "/worldstreet-logo/WorldStreet1.png"
+
+/* Entrance beats (ms): header first, then the grid deals out, Vivid lands
+   last. Outro delays run the other way — the bottom leaves first, pouring
+   out ahead of the glass — and every beat + its 180ms duration fits inside
+   the popup's 300ms exit transition, which is what Base UI waits on. */
+const beat = (inDelay: number, outDelay: number) =>
+  ({
+    "--ws-launch-delay": `${inDelay}ms`,
+    "--ws-out-delay": `${outDelay}ms`,
+  }) as React.CSSProperties
 
 function isActivePath(pathname: string, href: string) {
   if (href === "/") return pathname === "/" || pathname === "/dashboard"
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-function isExternal(url: string) {
-  return url.startsWith("http://") || url.startsWith("https://")
-}
-
-function groupHasActive(pathname: string, items: readonly SidebarItem[]) {
-  return items.some((item) => !isExternal(item.url) && isActivePath(pathname, item.url))
-}
-
-/* ── Collapsible sidebar group ── */
-function CollapsibleGroup({
-  group,
-  pathname,
-  onNavigate,
-}: {
-  group: SidebarGroup
-  pathname: string
-  onNavigate: () => void
-}) {
-  const hasActive = groupHasActive(pathname, group.items)
-  const [open, setOpen] = React.useState(hasActive)
-
-  return (
-    <div>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "flex w-full items-center gap-2.5 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors",
-          hasActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <HugeiconsIcon icon={group.icon} className="h-4 w-4 shrink-0" />
-        <span className="flex-1 text-left">{group.label}</span>
-        <HugeiconsIcon
-          icon={open ? ArrowUp01Icon : ArrowDown01Icon}
-          className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50"
-        />
-      </button>
-      {open && (
-        <div className="flex flex-col gap-px px-2 pb-1">
-          {group.items.map((item) => {
-            const ext = isExternal(item.url)
-            const active = !ext && isActivePath(pathname, item.url)
-            const Component = ext ? "a" : Link
-            const extraProps = ext
-              ? { target: "_blank" as const, rel: "noopener noreferrer" as const }
-              : {}
-
-            return (
-              <Component
-                key={item.name}
-                href={item.url}
-                onClick={() => !ext && onNavigate()}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                  active
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-foreground/70 hover:bg-accent/50 hover:text-foreground",
-                )}
-                {...extraProps}
-              >
-                <HugeiconsIcon icon={item.icon} className="h-4 w-4 shrink-0" />
-                <span className="flex-1">{item.name}</span>
-                {ext && (
-                  <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3 text-muted-foreground/40" />
-                )}
-              </Component>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export function MobileBottomNav() {
   const pathname = usePathname()
   const [menuOpen, setMenuOpen] = React.useState(false)
+
+  const closeMenu = React.useCallback(() => setMenuOpen(false), [])
+
+  const renderBarItem = (item: BarItem) => {
+    const active = isActivePath(pathname, item.href)
+    return (
+      <Link
+        key={item.label}
+        href={item.href}
+        className={cn(
+          "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-full px-1 py-1.5 transition-all active:scale-95 motion-reduce:active:scale-100",
+          active
+            ? "bg-accent text-foreground shadow-sm ring-1 ring-foreground/[0.08]"
+            : "text-muted-foreground",
+        )}
+      >
+        <HugeiconsIcon icon={item.icon} className={cn("h-5 w-5", active && "text-primary")} />
+        <span className="text-[10px] font-semibold leading-none">{item.label}</span>
+      </Link>
+    )
+  }
 
   return (
     <>
@@ -205,131 +113,158 @@ export function MobileBottomNav() {
              raised lozenge. ── */}
       <nav className="pointer-events-none fixed inset-x-4 bottom-3 z-50 md:hidden safe-area-bottom">
         <div className="ws-glass ws-glass-edge pointer-events-auto relative mx-auto flex max-w-sm items-center justify-between gap-0.5 rounded-full p-1.5 shadow-[0_18px_44px_-16px_rgb(0_0_0/0.65)] ring-1 ring-foreground/10">
-          {NAV_ITEMS.map((item) => {
-            /* "Trade" used to be a sentinel href that opened a modal listing
-               the trading destinations — a tab that answered a tap with a
-               question. It goes straight to the trading screen now, like every
-               other tab in the bar. */
-            const active = isActivePath(pathname, item.href)
+          {BAR_LEFT.map(renderBarItem)}
 
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={cn(
-                  "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-full px-1 py-1.5 transition-all active:scale-95 motion-reduce:active:scale-100",
-                  active
-                    ? "bg-accent text-foreground shadow-sm ring-1 ring-foreground/[0.08]"
-                    : "text-muted-foreground",
-                )}
-              >
-                <HugeiconsIcon
-                  icon={item.icon}
-                  className={cn("h-5 w-5", active && "text-primary")}
-                />
-                <span className="text-[10px] font-semibold leading-none">
-                  {item.label}
-                </span>
-              </Link>
-            )
-          })}
-
-          {/* Menu button — opens sidebar sheet */}
+          {/* ── The mark — the bar's anchor. Gold because it's the brand,
+                 lit because it's open. ── */}
           <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
             <SheetTrigger
               render={
                 <button
+                  aria-label="Worldstreet apps"
                   className={cn(
                     "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-full px-1 py-1.5 transition-all active:scale-95 motion-reduce:active:scale-100",
-                    menuOpen ? "text-foreground" : "text-muted-foreground",
+                    menuOpen
+                      ? "bg-primary/[0.14] text-foreground ring-1 ring-primary/25"
+                      : "text-muted-foreground",
                   )}
                 />
               }
             >
-              <HugeiconsIcon icon={Menu01Icon} className="h-5 w-5" />
-              <span className="text-[10px] font-semibold leading-none">Menu</span>
+              {/* The W is a wide mark, so it gets a 24×20 box rather than the
+                  20×20 the line icons sit in — that's what makes its optical
+                  weight match theirs instead of reading as a smaller sibling. */}
+              {/* Plain <img>, deliberately not next/image: a 24px static PNG
+                  gains nothing from the optimizer, and the optimizer is one
+                  more thing that can fail — which it did (the W vanished from
+                  the bar while every line icon kept rendering). */}
+              <span className="flex h-5 w-6 items-center justify-center">
+                <img
+                  src={LOGO_SRC}
+                  alt=""
+                  width={24}
+                  height={11}
+                  className={cn(
+                    "h-auto w-6 object-contain transition-opacity",
+                    menuOpen ? "opacity-100" : "opacity-90",
+                  )}
+                />
+              </span>
+              <span className="text-[10px] font-semibold leading-none">Apps</span>
             </SheetTrigger>
 
-            {/* ── Mobile Sidebar Sheet ── */}
+            {/* ── Launcher sheet — the Worldstreet ecosystem ── */}
             <SheetContent
-              side="left"
-              className="w-70 p-0 bg-background border-r border-border/20"
+              side="bottom"
               showCloseButton={false}
+              className="gap-0 rounded-t-[26px] p-0 duration-[380ms]"
             >
-              <div className="flex h-full flex-col">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-4 border-b border-border/20">
-                  <div className="flex items-center gap-2">
-                    <Image
-                      src="/worldstreet-logo/WorldStreet1x.png"
-                      alt="Worldstreet"
-                      width={96}
-                      height={24}
-                      className="h-6 w-auto object-contain"
-                    />
-                    <span className="font-semibold text-sm">Worldstreet</span>
-                  </div>
-                  <button
-                    onClick={() => setMenuOpen(false)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              {/* The bloom — a gold wash lighting the sheet's crown as it
+                  arrives. Atmosphere behind everything, never interactive. */}
+              <div
+                aria-hidden
+                className="ws-launch-glow pointer-events-none absolute inset-x-0 top-0 h-44 rounded-t-[26px] bg-[radial-gradient(85%_100%_at_50%_0%,color-mix(in_oklab,var(--primary)_13%,transparent)_0%,transparent_72%)]"
+              />
+
+              {/* Grab handle */}
+              <div aria-hidden className="mx-auto mt-2.5 h-1 w-9 shrink-0 rounded-full bg-foreground/15" />
+
+              {/* Header — the W lands with its rotational settle, the words
+                  follow a beat behind. */}
+              <div className="flex shrink-0 items-center gap-3 px-5 pb-4 pt-4">
+                <span className="ws-launch" style={beat(40, 120)}>
+                  <img
+                    src={LOGO_SRC}
+                    alt=""
+                    width={34}
+                    height={16}
+                    className="ws-badge-pop h-auto w-[34px] shrink-0 object-contain"
+                  />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <SheetTitle
+                    className="ws-launch font-display text-[16px] font-semibold tracking-[-0.01em]"
+                    style={beat(90, 110)}
                   >
-                    <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
-                  </button>
+                    WorldStreet
+                  </SheetTitle>
+                  <SheetDescription
+                    className="ws-launch text-[11px] leading-tight text-muted-foreground"
+                    style={beat(130, 100)}
+                  >
+                    One account, every app
+                  </SheetDescription>
                 </div>
+                <button
+                  onClick={closeMenu}
+                  aria-label="Close"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
+                </button>
+              </div>
 
-                {/* Quick actions */}
-                <div className="px-4 py-3 border-b border-border/20">
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[
-                      { label: "Deposit", href: "/buy", icon: Exchange01Icon, accent: true },
-                      { label: "Withdraw", href: "/sell", icon: CreditCardIcon },
-                      { label: "Swap", href: "/swap", icon: RepeatIcon },
-                      { label: "Transfer", href: "/transactions", icon: ArrowDown01Icon },
-                    ].map((action) => (
-                      <Link
-                        key={action.label}
-                        href={action.href}
-                        onClick={() => setMenuOpen(false)}
-                        className={cn(
-                          "flex flex-col items-center gap-1.5 rounded-xl py-2.5 text-center transition-colors",
-                          action.accent
-                            ? "bg-primary/10 text-primary"
-                            : "bg-accent/40 text-foreground/70 hover:bg-accent hover:text-foreground",
-                        )}
-                      >
-                        <HugeiconsIcon icon={action.icon} className="h-4.5 w-4.5" />
-                        <span className="text-[10px] font-medium leading-none">{action.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Navigation groups — collapsible */}
-                <div className="flex-1 overflow-y-auto py-1">
-                  {SIDEBAR_GROUPS.map((group) => (
-                    <CollapsibleGroup
-                      key={group.label}
-                      group={group}
-                      pathname={pathname}
-                      onNavigate={() => setMenuOpen(false)}
-                    />
+              {/* The apps — six tiles dealing in top-to-bottom. All external:
+                  each opens its corner of the ecosystem in a new tab. */}
+              <div className="px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+                <div className="grid grid-cols-3 gap-1.5">
+                  {ECOSYSTEM_APPS.map((app, i) => (
+                    <a
+                      key={app.name}
+                      href={app.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={beat(170 + i * 45, 16 + (5 - i) * 14)}
+                      className="ws-launch relative flex flex-col items-center gap-2 rounded-2xl bg-foreground/[0.04] px-1.5 py-3.5 transition-colors active:scale-[0.96] active:bg-foreground/[0.08] motion-reduce:active:scale-100"
+                    >
+                      <span className="flex size-11 items-center justify-center rounded-[14px] bg-foreground/[0.06] text-muted-foreground">
+                        <HugeiconsIcon icon={app.icon} className="size-[21px]" />
+                      </span>
+                      <span className="text-center text-[11px] font-semibold leading-tight text-foreground/80">
+                        {app.name}
+                      </span>
+                      <HugeiconsIcon
+                        icon={ArrowUpRight01Icon}
+                        className="absolute right-2 top-2 size-3 text-muted-foreground/40"
+                      />
+                    </a>
                   ))}
                 </div>
 
-                {/* Footer */}
-                <div className="border-t border-border/20 px-4 py-3">
-                  <Link
-                    href="/settings"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                  >
-                    <HugeiconsIcon icon={Settings01Icon} className="h-4.5 w-4.5" />
-                    Settings
-                  </Link>
-                </div>
+                {/* Vivid — the one in-app door, so it closes the sheet instead
+                    of opening a tab, and it gets the wide closing tile. */}
+                <Link
+                  href="/vivid"
+                  onClick={closeMenu}
+                  style={beat(450, 0)}
+                  className={cn(
+                    "ws-launch mt-1.5 flex items-center gap-3 rounded-2xl px-4 py-3.5 ring-1 transition-colors active:scale-[0.98] motion-reduce:active:scale-100",
+                    isActivePath(pathname, "/vivid")
+                      ? "bg-primary/[0.12] ring-primary/25"
+                      : "bg-primary/[0.06] ring-primary/15 active:bg-primary/[0.1]",
+                  )}
+                >
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-[14px] bg-primary/[0.16] text-primary">
+                    <HugeiconsIcon icon={Brain01Icon} className="size-[21px]" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-semibold leading-tight text-foreground">
+                      Vivid AI
+                    </span>
+                    <span className="block text-[11px] leading-tight text-muted-foreground">
+                      AI-powered insights
+                    </span>
+                  </span>
+                  <HugeiconsIcon
+                    icon={ArrowRight01Icon}
+                    className="size-4 shrink-0 text-primary/70"
+                  />
+                </Link>
               </div>
             </SheetContent>
           </Sheet>
+
+          {BAR_RIGHT.map(renderBarItem)}
         </div>
       </nav>
     </>
