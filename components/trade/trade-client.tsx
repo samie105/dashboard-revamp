@@ -309,6 +309,8 @@ export function TradeClient() {
                 buyToken: coin.buyToken,
                 inputMint: coin.inputMint,
                 outputMint: coin.outputMint,
+                baseDecimals: coin.baseDecimals,
+                quoteDecimals: coin.quoteDecimals,
               })),
           })
         )

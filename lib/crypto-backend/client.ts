@@ -330,7 +330,7 @@ export class CryptoBackendClient {
   }
 
   async getModernSpotMarkets(signal?: AbortSignal) {
-    return this.request<{ markets: Array<{ id: string; symbol: string; quote: string; networkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta"; venue: "0x" | "jupiter"; chartSymbol: string; chartSupported: boolean; price?: number; icon?: string | null; sellToken?: string; buyToken?: string; inputMint?: string; outputMint?: string }> }>("/trading/spot/markets", {}, { signal })
+    return this.request<{ markets: Array<{ id: string; symbol: string; quote: string; networkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta"; venue: "0x" | "jupiter"; chartSymbol: string; chartSupported: boolean; price?: number; icon?: string | null; sellToken?: string; buyToken?: string; inputMint?: string; outputMint?: string; baseDecimals?: number; quoteDecimals?: number }> }>("/trading/spot/markets", {}, { signal })
   }
 
   async createModernSolanaSpotIntent(input: {

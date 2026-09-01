@@ -42,6 +42,8 @@ export type ModernSpotMarketRow = {
   buyToken?: string
   inputMint?: string
   outputMint?: string
+  baseDecimals?: number
+  quoteDecimals?: number
 }
 
 /** Compile-time proof a real registry row is accepted as-is (spec §8). */
@@ -228,7 +230,9 @@ function buildEvmPlan(
 
   const sellToken = side === "buy" ? quoteToken : baseToken
   const buyToken = side === "buy" ? baseToken : quoteToken
-  const sellDecimals = tokenDecimalsFor(networkId, sellToken)
+  const sellDecimals = side === "buy"
+    ? row.quoteDecimals ?? tokenDecimalsFor(networkId, sellToken)
+    : row.baseDecimals ?? tokenDecimalsFor(networkId, sellToken)
   if (sellDecimals === undefined) {
     return unavailable(precisionReason(side === "buy" ? quoteSymbol : label, networkId))
   }
@@ -279,7 +283,9 @@ function resolveSolanaLegs(
   const inputMint = side === "buy" ? quoteMint : baseMint
   const outputMint = side === "buy" ? baseMint : quoteMint
   const spentSymbol = side === "buy" ? quoteSymbol : label
-  const inputDecimals = tokenDecimalsFor(networkId, inputMint)
+  const inputDecimals = side === "buy"
+    ? row.quoteDecimals ?? tokenDecimalsFor(networkId, inputMint)
+    : row.baseDecimals ?? tokenDecimalsFor(networkId, inputMint)
   if (inputDecimals === undefined) return { reason: precisionReason(spentSymbol, networkId) }
 
   return { inputMint, outputMint, inputDecimals, spentSymbol, label }
