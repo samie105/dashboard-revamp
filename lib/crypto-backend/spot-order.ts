@@ -357,6 +357,17 @@ export function spotOrderProblem(row: ModernSpotMarketRow, side: "buy" | "sell")
   return "reason" in legs ? legs.reason : null
 }
 
+/**
+ * Whether an amount in this token is already an amount in dollars.
+ *
+ * The ticket offers a USD/token unit switch, and against a dollar stablecoin
+ * the two options are the same number under two names — noise on the one
+ * control that decides how much money moves.
+ */
+export function sizesLikeUsd(symbol: string): boolean {
+  return USD_QUOTE_SYMBOLS.has(symbol.toUpperCase())
+}
+
 /** The symbol the amount field is denominated in when it isn't USD. */
 export function spentTokenSymbol(row: ModernSpotMarketRow, side: "buy" | "sell"): string | null {
   const legs = resolveSpotLegs(row, side)

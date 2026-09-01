@@ -44,6 +44,7 @@ import {
 import {
   buildSpotOrderPlan,
   buildSpotOrderPlanFromTokenAmount,
+  sizesLikeUsd,
   spentTokenSymbol,
 } from "@/lib/crypto-backend/spot-order"
 import {
@@ -52,6 +53,7 @@ import {
   signSolanaIntent,
 } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
+import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { useAuth } from "@/components/auth-provider"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import {
@@ -184,6 +186,12 @@ export function TradeClient() {
      second form bolted under the workspace. It belongs here, on the one
      ticket, as a unit switch. */
   const [amountUnit, setAmountUnit] = React.useState<"usd" | "token">("usd")
+  /* The unlock DEK lives in memory only, so every page load starts locked.
+     The swap screen answers that by unlocking and carrying on; the trade
+     ticket used to throw instead, which read as "Order failed. Try again."
+     for the single most routine state this screen can be in. */
+  const [unlockOpen, setUnlockOpen] = React.useState(false)
+  const resumeAfterUnlock = React.useRef<(() => void) | null>(null)
   const [leverage, setLeverage] = React.useState(1)
   // Modern futures only (spec §9): an order that may only shrink exposure.
   const [reduceOnly, setReduceOnly] = React.useState(false)
@@ -410,6 +418,18 @@ export function TradeClient() {
     setLeverage((l) => Math.min(l, maxLev))
   }, [market, current, maxLev])
 
+  /* Buy and sell spend different tokens, so a token-denominated figure does
+     not survive the flip — 0.5 TRUMP is not 0.5 USDC. */
+  const prevSide = React.useRef(side)
+  React.useEffect(() => {
+    if (prevSide.current === side) return
+    prevSide.current = side
+    if (amountUnit === "token") {
+      setAmountUnit("usd")
+      setAmountUsd("")
+    }
+  }, [side, amountUnit])
+
   // A new row or market invalidates everything priced in the old one.
   React.useEffect(() => {
     setLimitPrice("")
@@ -510,7 +530,12 @@ export function TradeClient() {
         : null,
     [usingModern, market, current, side]
   )
-  const inTokenUnit = amountUnit === "token" && Boolean(spentSymbol)
+  /* A buy spends the quote, and every quote we size against is a dollar
+     stablecoin — so "USD | USDC" offered two names for one unit. The switch
+     belongs on the side where the units genuinely differ: a sell, which spends
+     the base token. */
+  const unitSwitchable = Boolean(spentSymbol && !sizesLikeUsd(spentSymbol))
+  const inTokenUnit = amountUnit === "token" && unitSwitchable
 
   /**
    * The order as currently typed. One builder call for both the pre-submit
@@ -612,8 +637,13 @@ export function TradeClient() {
       const packageValue = modernPackage.data
       if (!user?.userId || !modernWallet.data?.id || !packageValue)
         throw new Error("Set up and unlock the modern wallet before trading")
-      if (!getUnlockedWalletState(user.userId, modernWallet.data.id))
-        throw new Error("Unlock the modern wallet locally before trading")
+      if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) {
+        // Not an error — an unmet precondition with a remedy. Ask for it, then
+        // place the order the user already pressed.
+        resumeAfterUnlock.current = () => void submit()
+        setUnlockOpen(true)
+        return
+      }
       if (market === "spot") {
         // The registry row is the whole order: venue, network, token
         // identifiers and precision all come from it (spec §8).
@@ -702,8 +732,15 @@ export function TradeClient() {
       })
       return
     } catch (e) {
+      /* Every throw above this line carries a sentence written to be read —
+         "Unlock the modern wallet locally before trading", "…doesn't have a
+         Solana account yet". Collapsing all of them into "Order failed. Try
+         again." threw away the only part that told the user what to do, and
+         did it precisely in the cases that never reach the network, where
+         there is no request to inspect either. Same shape as the futures
+         confirm handler below, which always did this correctly. */
       setError(
-        e instanceof CryptoApiError ? e.message : "Order failed. Try again."
+        e instanceof Error ? e.message : "Order failed. Try again."
       )
     } finally {
       setSubmitting(false)
@@ -1319,7 +1356,7 @@ export function TradeClient() {
                 the ticket can size the order in it — which is what the second
                 "swap" form under the workspace used to exist for. Switching
                 clears the field: the same digits mean a different order. */}
-            {spentSymbol ? (
+            {unitSwitchable ? (
               <div className="mr-1.5 flex shrink-0 items-center gap-0.5 rounded-lg bg-background/60 p-0.5">
                 {(
                   [
@@ -1349,7 +1386,11 @@ export function TradeClient() {
                 ))}
               </div>
             ) : (
-              <span className="pr-3 text-[11px] text-subtle">USD</span>
+              // One unit, so name it rather than offering a choice between
+              // two spellings of it.
+              <span className="pr-3 text-[11px] text-subtle">
+                {spentSymbol ?? "USD"}
+              </span>
             )}
           </div>
         </label>
@@ -1975,6 +2016,18 @@ export function TradeClient() {
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* Unlock, then place the order the user already pressed — the same
+          resume the swap screen does. */}
+      <WalletUnlockDialog
+        open={unlockOpen}
+        onOpenChange={setUnlockOpen}
+        onUnlocked={() => {
+          const resume = resumeAfterUnlock.current
+          resumeAfterUnlock.current = null
+          resume?.()
+        }}
+      />
     </div>
   )
 }
