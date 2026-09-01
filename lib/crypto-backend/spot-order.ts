@@ -184,6 +184,138 @@ function sizeInBaseUnits(quantity: number, decimals: number): { units: string } 
  * reverses it. Buys are already denominated in USD (≈ the quote stablecoin);
  * sells convert `amountUsd / price` into the base token's own units.
  */
+/**
+ * The legs of a spot order: what is spent, what is received, and at what
+ * precision. Resolving these is the whole safety argument of this module, so
+ * it happens ONCE, for both venues, and every entry point goes through it —
+ * the USD ticket, the token-amount ticket, and the can-I-even-trade-this check
+ * the screen runs before the user types.
+ *
+ * `sellDecimals` belongs to the token being SPENT, which flips with the side.
+ * That is the number a wrong guess would scale an order by, which is why it is
+ * never defaulted.
+ */
+type SpotLegs = {
+  venue: "evm" | "solana"
+  networkId: string
+  sellIdentifier: string
+  buyIdentifier: string
+  sellDecimals: number
+  /** Symbol of the token being spent — what the amount field is denominated in. */
+  spentSymbol: string
+  label: string
+}
+
+function resolveEvmLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): SpotLegs | { reason: string } {
+  const label = row.symbol ? row.symbol.toUpperCase() : "This market"
+  const quoteSymbol = (row.quote ?? "").toUpperCase()
+  if (!quoteSymbol) return { reason: missingQuoteReason(label) }
+
+  const networkId = row.networkId as EvmSpotInput["networkId"] | undefined
+  if (!networkId || !EVM_SPOT_NETWORKS.has(networkId)) {
+    return {
+      reason: `${label} settles on ${row.networkId ?? "an unnamed network"}, which Worldstreet spot doesn't cover yet.`,
+    }
+  }
+  // The registry states the buy direction: sell the quote, buy the base.
+  const quoteToken = row.sellToken
+  const baseToken = row.buyToken
+  if (!quoteToken || !baseToken) {
+    return { reason: `The market registry didn't include the token addresses for ${label}, so we can't build the order.` }
+  }
+  const misoriented = orientationProblem(networkId, quoteToken, quoteSymbol, label)
+  if (misoriented) return { reason: misoriented }
+
+  const sellIdentifier = side === "buy" ? quoteToken : baseToken
+  const buyIdentifier = side === "buy" ? baseToken : quoteToken
+  const spentSymbol = side === "buy" ? quoteSymbol : label
+  const sellDecimals = side === "buy"
+    ? row.quoteDecimals ?? tokenDecimalsFor(networkId, sellIdentifier)
+    : row.baseDecimals ?? tokenDecimalsFor(networkId, sellIdentifier)
+  if (sellDecimals === undefined) return { reason: precisionReason(spentSymbol, networkId) }
+
+  return { venue: "evm", networkId, sellIdentifier, buyIdentifier, sellDecimals, spentSymbol, label }
+}
+
+function resolveSolanaLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): SpotLegs | { reason: string } {
+  const label = row.symbol ? row.symbol.toUpperCase() : "This market"
+  const quoteSymbol = (row.quote ?? "").toUpperCase()
+  if (!quoteSymbol) return { reason: missingQuoteReason(label) }
+
+  const networkId = row.networkId ?? "solana-mainnet-beta"
+  // The registry states the buy direction: spend the quote mint for the base.
+  const quoteMint = row.inputMint
+  const baseMint = row.outputMint
+  if (!quoteMint || !baseMint) {
+    return { reason: `The market registry didn't include the token mints for ${label}, so we can't build the swap.` }
+  }
+  const misoriented = orientationProblem(networkId, quoteMint, quoteSymbol, label)
+  if (misoriented) return { reason: misoriented }
+
+  const sellIdentifier = side === "buy" ? quoteMint : baseMint
+  const buyIdentifier = side === "buy" ? baseMint : quoteMint
+  const spentSymbol = side === "buy" ? quoteSymbol : label
+  const sellDecimals = side === "buy"
+    ? row.quoteDecimals ?? tokenDecimalsFor(networkId, sellIdentifier)
+    : row.baseDecimals ?? tokenDecimalsFor(networkId, sellIdentifier)
+  if (sellDecimals === undefined) return { reason: precisionReason(spentSymbol, networkId) }
+
+  return { venue: "solana", networkId, sellIdentifier, buyIdentifier, sellDecimals, spentSymbol, label }
+}
+
+/** Venue dispatch — the only place that reads `row.venue`. */
+function resolveSpotLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): SpotLegs | { reason: string } {
+  if (row.venue === "0x") return resolveEvmLegs(row, side)
+  if (row.venue === "jupiter") return resolveSolanaLegs(row, side)
+  return { reason: venueReason(row.venue, row.symbol ? row.symbol.toUpperCase() : "This market") }
+}
+
+/**
+ * Legs + an exact base-unit amount → the intent input.
+ *
+ * Solana rows go through LI.FI rather than Jupiter directly. Jupiter built the
+ * transaction on its own side and handed us the result, so its failures
+ * arrived as a simulation error against a transaction nobody here had
+ * composed — `custom program error: 0x1`, with no statement of which token was
+ * short. The LI.FI intent route is the one the rest of the product already
+ * uses, and it reports an underfunded account as `INSUFFICIENT_FUNDS`.
+ *
+ * Source and destination are the same chain: this is a spot trade, not a bridge.
+ */
+function planFromLegs(legs: SpotLegs, sellAmountBaseUnits: string): SpotOrderPlan {
+  if (legs.venue === "evm") {
+    return {
+      kind: "evm",
+      input: {
+        networkId: legs.networkId as EvmSpotInput["networkId"],
+        sellToken: legs.sellIdentifier,
+        buyToken: legs.buyIdentifier,
+        sellAmountBaseUnits,
+        slippagePercentage: SLIPPAGE_PERCENTAGE,
+        idempotencyKey: newIdempotencyKey(),
+      },
+    }
+  }
+  return {
+    kind: "lifi",
+    input: {
+      sourceNetworkId: "solana-mainnet-beta",
+      destinationNetworkId: "solana-mainnet-beta",
+      sellToken: legs.sellIdentifier,
+      buyToken: legs.buyIdentifier,
+      sellAmountBaseUnits,
+      slippagePercentage: SLIPPAGE_PERCENTAGE,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  }
+}
+
+/**
+ * Turn a registry row + ticket state into the exact intent input, or say why
+ * we won't. `side === "buy"` spends the quote token for the base; `"sell"`
+ * reverses it. Buys are already denominated in USD (≈ the quote stablecoin);
+ * sells convert `amountUsd / price` into the base token's own units.
+ */
 export function buildSpotOrderPlan(
   row: ModernSpotMarketRow,
   side: "buy" | "sell",
@@ -207,167 +339,54 @@ export function buildSpotOrderPlan(
     return unavailable(`We don't have a live ${label} price yet, so we can't work out how much to sell.`)
   }
 
-  if (row.venue === "0x") return buildEvmPlan(row, side, amountUsd, price, label, quoteSymbol)
-  if (row.venue === "jupiter") return buildSolanaPlan(row, side, amountUsd, price)
-  return unavailable(venueReason(row.venue, label))
-}
+  const legs = resolveSpotLegs(row, side)
+  if ("reason" in legs) return unavailable(legs.reason)
 
-function buildEvmPlan(
-  row: ModernSpotMarketRow,
-  side: "buy" | "sell",
-  amountUsd: number,
-  price: number,
-  label: string,
-  quoteSymbol: string,
-): SpotOrderPlan {
-  const networkId = row.networkId as EvmSpotInput["networkId"] | undefined
-  if (!networkId || !EVM_SPOT_NETWORKS.has(networkId)) {
-    return unavailable(
-      `${label} settles on ${row.networkId ?? "an unnamed network"}, which Worldstreet spot doesn't cover yet.`,
-    )
-  }
-  // The registry states the buy direction: sell the quote, buy the base.
-  const quoteToken = row.sellToken
-  const baseToken = row.buyToken
-  if (!quoteToken || !baseToken) {
-    return unavailable(`The market registry didn't include the token addresses for ${label}, so we can't build the order.`)
-  }
-  const misoriented = orientationProblem(networkId, quoteToken, quoteSymbol, label)
-  if (misoriented) return unavailable(misoriented)
+  const sized = sizeInBaseUnits(side === "buy" ? amountUsd : amountUsd / price, legs.sellDecimals)
+  if ("problem" in sized) return unavailable(sizingReason(sized.problem, legs.label))
 
-  const sellToken = side === "buy" ? quoteToken : baseToken
-  const buyToken = side === "buy" ? baseToken : quoteToken
-  const sellDecimals = side === "buy"
-    ? row.quoteDecimals ?? tokenDecimalsFor(networkId, sellToken)
-    : row.baseDecimals ?? tokenDecimalsFor(networkId, sellToken)
-  if (sellDecimals === undefined) {
-    return unavailable(precisionReason(side === "buy" ? quoteSymbol : label, networkId))
-  }
-
-  const sized = sizeInBaseUnits(side === "buy" ? amountUsd : amountUsd / price, sellDecimals)
-  if ("problem" in sized) return unavailable(sizingReason(sized.problem, label))
-
-  return {
-    kind: "evm",
-    input: {
-      networkId,
-      sellToken,
-      buyToken,
-      sellAmountBaseUnits: sized.units,
-      slippagePercentage: SLIPPAGE_PERCENTAGE,
-      idempotencyKey: newIdempotencyKey(),
-    },
-  }
-}
-
-/**
- * Every containment check a Jupiter row must pass before an amount is even
- * scaled: venue, quote asset, both mints, the orientation self-check, and the
- * precision of the token about to be SPENT. Both Solana entry points — the
- * USD ticket and the token-denominated panel — go through this and nothing
- * else, so neither can drift into deriving mints or decimals on its own.
- */
-function resolveSolanaLegs(
-  row: ModernSpotMarketRow,
-  side: "buy" | "sell",
-): { inputMint: string; outputMint: string; inputDecimals: number; spentSymbol: string; label: string } | { reason: string } {
-  const label = row.symbol ? row.symbol.toUpperCase() : "This market"
-  if (row.venue !== "jupiter") return { reason: venueReason(row.venue, label) }
-
-  const quoteSymbol = (row.quote ?? "").toUpperCase()
-  if (!quoteSymbol) return { reason: missingQuoteReason(label) }
-
-  const networkId = row.networkId ?? "solana-mainnet-beta"
-  // The registry states the buy direction: spend the quote mint for the base.
-  const quoteMint = row.inputMint
-  const baseMint = row.outputMint
-  if (!quoteMint || !baseMint) {
-    return { reason: `The market registry didn't include the token mints for ${label}, so we can't build the swap.` }
-  }
-  const misoriented = orientationProblem(networkId, quoteMint, quoteSymbol, label)
-  if (misoriented) return { reason: misoriented }
-
-  const inputMint = side === "buy" ? quoteMint : baseMint
-  const outputMint = side === "buy" ? baseMint : quoteMint
-  const spentSymbol = side === "buy" ? quoteSymbol : label
-  const inputDecimals = side === "buy"
-    ? row.quoteDecimals ?? tokenDecimalsFor(networkId, inputMint)
-    : row.baseDecimals ?? tokenDecimalsFor(networkId, inputMint)
-  if (inputDecimals === undefined) return { reason: precisionReason(spentSymbol, networkId) }
-
-  return { inputMint, outputMint, inputDecimals, spentSymbol, label }
+  return planFromLegs(legs, sized.units)
 }
 
 /**
  * The same checks, as a yes/no for a screen that wants to refuse BEFORE the
  * user types an amount. `null` means the row is safe to trade on this side.
  */
-export function solanaSwapProblem(row: ModernSpotMarketRow, side: "buy" | "sell"): string | null {
-  const legs = resolveSolanaLegs(row, side)
+export function spotOrderProblem(row: ModernSpotMarketRow, side: "buy" | "sell"): string | null {
+  const legs = resolveSpotLegs(row, side)
   return "reason" in legs ? legs.reason : null
+}
+
+/** The symbol the amount field is denominated in when it isn't USD. */
+export function spentTokenSymbol(row: ModernSpotMarketRow, side: "buy" | "sell"): string | null {
+  const legs = resolveSpotLegs(row, side)
+  return "reason" in legs ? null : legs.spentSymbol
 }
 
 /**
  * The token-denominated sibling of `buildSpotOrderPlan`: the caller already
- * holds an amount in whole units of the token being spent (the Jupiter panel's
- * field), so no price and no USD assumption enters — but every containment
- * check is the same one, in the same order, and the conversion is still exact.
+ * holds an amount in whole units of the token being spent, so no price and no
+ * USD assumption enters — but every containment check is the same one, in the
+ * same order, and the conversion is still exact.
+ *
+ * This is what "Sell 0.5 SOL" means, as opposed to "sell $50 of SOL". The
+ * second needs a live price and inherits its error; the first does not.
  */
-export function buildSolanaSwapPlanFromTokenAmount(
+export function buildSpotOrderPlanFromTokenAmount(
   row: ModernSpotMarketRow,
   side: "buy" | "sell",
   amountText: string,
 ): SpotOrderPlan {
-  const legs = resolveSolanaLegs(row, side)
+  const legs = resolveSpotLegs(row, side)
   if ("reason" in legs) return unavailable(legs.reason)
 
-  const amountBaseUnits = toBaseUnits(amountText.trim(), legs.inputDecimals)
-  if (amountBaseUnits === null) {
-    return unavailable(`Enter a ${legs.spentSymbol} amount with at most ${legs.inputDecimals} decimal places.`)
+  const sellAmountBaseUnits = toBaseUnits(amountText.trim(), legs.sellDecimals)
+  if (sellAmountBaseUnits === null) {
+    return unavailable(`Enter a ${legs.spentSymbol} amount with at most ${legs.sellDecimals} decimal places.`)
   }
-  if (amountBaseUnits === "0") return unavailable(`Enter a ${legs.spentSymbol} amount above zero.`)
+  if (sellAmountBaseUnits === "0") return unavailable(`Enter a ${legs.spentSymbol} amount above zero.`)
 
-  return solanaPlan(legs, amountBaseUnits)
-}
-
-function buildSolanaPlan(row: ModernSpotMarketRow, side: "buy" | "sell", amountUsd: number, price: number): SpotOrderPlan {
-  const legs = resolveSolanaLegs(row, side)
-  if ("reason" in legs) return unavailable(legs.reason)
-
-  const sized = sizeInBaseUnits(side === "buy" ? amountUsd : amountUsd / price, legs.inputDecimals)
-  if ("problem" in sized) return unavailable(sizingReason(sized.problem, legs.label))
-
-  return solanaPlan(legs, sized.units)
-}
-
-/**
- * A Solana spot swap, routed through LI.FI rather than Jupiter directly.
- *
- * Jupiter built the transaction on its own side and handed us the result, so
- * its failures arrived as a simulation error against a transaction nobody here
- * had composed — `custom program error: 0x1` with no statement of which token
- * was short. The LI.FI intent route is the one the rest of the product already
- * uses, and it reports an underfunded account as `INSUFFICIENT_FUNDS` instead.
- *
- * Source and destination are the same chain: this is a spot trade, not a
- * bridge. The mints go through verbatim as the sell/buy tokens.
- */
-function solanaPlan(
-  legs: { inputMint: string; outputMint: string },
-  sellAmountBaseUnits: string,
-): SpotOrderPlan {
-  return {
-    kind: "lifi",
-    input: {
-      sourceNetworkId: "solana-mainnet-beta",
-      destinationNetworkId: "solana-mainnet-beta",
-      sellToken: legs.inputMint,
-      buyToken: legs.outputMint,
-      sellAmountBaseUnits,
-      slippagePercentage: SLIPPAGE_PERCENTAGE,
-      idempotencyKey: newIdempotencyKey(),
-    },
-  }
+  return planFromLegs(legs, sellAmountBaseUnits)
 }
 
 function venueReason(venue: string | undefined, label: string): string {

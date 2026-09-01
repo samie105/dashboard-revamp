@@ -41,7 +41,11 @@ import {
   reduceOnlyProblem,
   type HyperliquidIntent,
 } from "@/lib/crypto-backend"
-import { buildSpotOrderPlan } from "@/lib/crypto-backend/spot-order"
+import {
+  buildSpotOrderPlan,
+  buildSpotOrderPlanFromTokenAmount,
+  spentTokenSymbol,
+} from "@/lib/crypto-backend/spot-order"
 import {
   signHyperliquidIntent,
   signEvmIntent,
@@ -77,7 +81,6 @@ import {
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
 import { ModernFundingPanel } from "./modern-funding-panel"
-import { ModernJupiterPanel } from "./modern-jupiter-panel"
 
 type Market = "spot" | "futures"
 type Side = "buy" | "sell"
@@ -175,6 +178,12 @@ export function TradeClient() {
   const [orderType, setOrderType] = React.useState<OrderType>("market")
   const [amountUsd, setAmountUsd] = React.useState("")
   const [limitPrice, setLimitPrice] = React.useState("")
+  /* What the Amount field is denominated in. "Sell 0.5 SOL" and "sell $50 of
+     SOL" are different orders, and only the first is expressible without a
+     live price — which is exactly why the token unit used to live in its own
+     second form bolted under the workspace. It belongs here, on the one
+     ticket, as a unit switch. */
+  const [amountUnit, setAmountUnit] = React.useState<"usd" | "token">("usd")
   const [leverage, setLeverage] = React.useState(1)
   // Modern futures only (spec §9): an order that may only shrink exposure.
   const [reduceOnly, setReduceOnly] = React.useState(false)
@@ -414,6 +423,8 @@ export function TradeClient() {
     setFuturesReview(null)
     setReduceOnly(false)
     setError(null)
+    // The unit names a token that belongs to the row being left.
+    setAmountUnit("usd")
   }, [selection, market])
 
   // Order book — futures use the bare symbol; spot uses the coinName.
@@ -491,12 +502,39 @@ export function TradeClient() {
   // user is looking at, at the size they could place at minimum, so an
   // unroutable pair says so in the ticket instead of throwing after the press.
   // Legacy rows carry none of this metadata, so the legacy ticket never asks.
-  const spotPlan = React.useMemo(
+  /** The token the Amount field spends when the unit switch is off USD. */
+  const spentSymbol = React.useMemo(
     () =>
       usingModern && market === "spot" && current
-        ? buildSpotOrderPlan(current, side, Math.max(amt, minOrder), price)
+        ? spentTokenSymbol(current, side)
         : null,
-    [usingModern, market, current, side, amt, minOrder, price]
+    [usingModern, market, current, side]
+  )
+  const inTokenUnit = amountUnit === "token" && Boolean(spentSymbol)
+
+  /**
+   * The order as currently typed. One builder call for both the pre-submit
+   * gate and the submit itself, so what the ticket refuses and what the button
+   * sends can never be two different orders.
+   */
+  const planFor = React.useCallback(
+    (amountText: string, usdAmount: number) => {
+      if (!(usingModern && market === "spot" && current)) return null
+      return inTokenUnit
+        ? buildSpotOrderPlanFromTokenAmount(current, side, amountText)
+        : buildSpotOrderPlan(current, side, usdAmount, price)
+    },
+    [usingModern, market, current, side, price, inTokenUnit]
+  )
+
+  const spotPlan = React.useMemo(
+    // Gate at the minimum the user could place, so an unroutable pair says so
+    // before anything is typed. In token units there is no such floor — the
+    // builder's own dust check is the only honest one.
+    // Probe with "1" when the field is empty: this gate is asking whether the
+    // PAIR can be traded, and "enter an amount" is not a fact about the pair.
+    () => planFor(amountUsd.trim() || "1", Math.max(amt, minOrder)),
+    [planFor, amountUsd, amt, minOrder]
   )
   const pairUnavailable = spotPlan?.kind === "unavailable"
 
@@ -509,15 +547,6 @@ export function TradeClient() {
     !current &&
     (marketsError || markets !== null)
 
-  // The Jupiter panel is the selected Solana row's own, or nothing at all. The
-  // registry row goes in whole — the panel derives nothing itself.
-  const jupiterMarket = React.useMemo(
-    () =>
-      current && "venue" in current && current.venue === "jupiter"
-        ? current
-        : null,
-    [current]
-  )
   /** The modern-mode perpetuals ticket — the only path spec §9 governs. */
   const modernFutures = usingModern && market === "futures"
   const openPosition = account?.positions.find((p) => p.symbol === symbol)
@@ -528,10 +557,13 @@ export function TradeClient() {
     modernFutures && reduceOnly
       ? reduceOnlyProblem(openPosition, symbol || "this market", side)
       : null
+  // The house minimum is denominated in USD, so it is only a bound on a USD
+  // amount. In token units the builder's own dust check is the real floor.
+  const amountSufficient = inTokenUnit ? amt > 0 : amt >= minOrder
   const canSubmit =
     !submitting &&
     !!current &&
-    amt >= minOrder &&
+    amountSufficient &&
     (orderType === "market" || parseFloat(limitPrice) > 0) &&
     !tpslError &&
     !pairUnavailable &&
@@ -585,7 +617,8 @@ export function TradeClient() {
       if (market === "spot") {
         // The registry row is the whole order: venue, network, token
         // identifiers and precision all come from it (spec §8).
-        const plan = buildSpotOrderPlan(current, side, amt, price)
+        const plan = planFor(amountUsd, amt)
+        if (!plan) return
         if (plan.kind === "unavailable") {
           setError(plan.reason)
           return
@@ -861,7 +894,7 @@ export function TradeClient() {
               ? "markets not loaded"
               : spotPlan?.kind === "unavailable"
                 ? spotPlan.reason
-                : amt < minOrder
+                : !amountSufficient
                   ? `amount below the ${minOrder} minimum`
                   : (reduceOnlyError ?? tpslError ?? "limit price missing"),
           }),
@@ -1269,16 +1302,59 @@ export function TradeClient() {
               }
               inputMode="decimal"
               data-vivid-target="trade-amount"
-              data-vivid-label="Order amount in USD (the notional)"
-              aria-label="Order amount in USD"
-              placeholder={`Min ${minOrder}`}
+              data-vivid-label={
+                inTokenUnit
+                  ? `Order amount in ${spentSymbol}`
+                  : "Order amount in USD (the notional)"
+              }
+              aria-label={
+                inTokenUnit
+                  ? `Order amount in ${spentSymbol}`
+                  : "Order amount in USD"
+              }
+              placeholder={inTokenUnit ? `0.00 ${spentSymbol}` : `Min ${minOrder}`}
               className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
             />
-            <span className="pr-3 text-[11px] text-subtle">USD</span>
+            {/* The unit switch. Where a spot row names the token being spent,
+                the ticket can size the order in it — which is what the second
+                "swap" form under the workspace used to exist for. Switching
+                clears the field: the same digits mean a different order. */}
+            {spentSymbol ? (
+              <div className="mr-1.5 flex shrink-0 items-center gap-0.5 rounded-lg bg-background/60 p-0.5">
+                {(
+                  [
+                    ["usd", "USD"],
+                    ["token", spentSymbol],
+                  ] as const
+                ).map(([unit, unitLabel]) => (
+                  <button
+                    key={unit}
+                    type="button"
+                    onClick={() => {
+                      if (amountUnit === unit) return
+                      setAmountUnit(unit)
+                      setAmountUsd("")
+                    }}
+                    aria-pressed={amountUnit === unit}
+                    data-vivid-target={`trade-amount-unit-${unit}`}
+                    data-vivid-label={`Size this order in ${unitLabel}`}
+                    className={`rounded-md px-1.5 py-1 text-[10px] font-bold transition-colors ${
+                      amountUnit === unit
+                        ? "bg-surface-sunken text-foreground"
+                        : "text-subtle hover:text-foreground"
+                    }`}
+                  >
+                    {unitLabel}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="pr-3 text-[11px] text-subtle">USD</span>
+            )}
           </div>
         </label>
 
-        {maxNotional > 0 && (
+        {!inTokenUnit && maxNotional > 0 && (
           <div className="grid grid-cols-4 gap-1">
             {[0.25, 0.5, 0.75, 1].map((pct) => (
               <button
@@ -1423,7 +1499,7 @@ export function TradeClient() {
           </p>
         )}
 
-        {amt > 0 && price > 0 && (
+        {!inTokenUnit && amt > 0 && price > 0 && (
           <div className="divide-y divide-border/15 rounded-xl bg-surface-sunken/70 px-3 text-xs tabular-nums">
             <div className="flex justify-between py-1.5">
               <span className="text-subtle">Qty</span>
@@ -1508,8 +1584,8 @@ export function TradeClient() {
           data-vivid-guard={modernFutures ? undefined : ""}
           aria-label={
             modernFutures
-              ? `Review order — ${side === "buy" ? "long" : "short"} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${reduceOnly ? ", reduce only" : leverage > 1 ? ` at ${leverage}x` : ""}`
-              : `Place order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${market === "futures" && leverage > 1 ? ` at ${leverage}x` : ""}`
+              ? `Review order — ${side === "buy" ? "long" : "short"} ${symbol}${amt > 0 ? ` for ${inTokenUnit ? `${amt} ${spentSymbol}` : `$${amt}`}` : ""}${reduceOnly ? ", reduce only" : leverage > 1 ? ` at ${leverage}x` : ""}`
+              : `Place order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol}${amt > 0 ? ` for ${inTokenUnit ? `${amt} ${spentSymbol}` : `$${amt}`}` : ""}${market === "futures" && leverage > 1 ? ` at ${leverage}x` : ""}`
           }
           data-vivid-label={
             modernFutures
@@ -1826,27 +1902,6 @@ export function TradeClient() {
           {ticket}
         </aside>
       </div>
-
-      {/* Jupiter's token-denominated panel belongs to the selected Solana pair
-          only — it takes that row's mints, never a fixed SOL/USDC pair. The
-          key remounts it per row: its typed amount, message and polled intent
-          all belong to the pair they were entered against, not the next one. */}
-      {usingModern &&
-      market === "spot" &&
-      jupiterMarket &&
-      user?.userId &&
-      modernWallet.data &&
-      modernPackage.data ? (
-        <div className="border-t border-border/30 px-3 py-3 lg:block">
-          <ModernJupiterPanel
-            key={marketRowKey(jupiterMarket)}
-            userId={user.userId}
-            wallet={modernWallet.data}
-            packageValue={modernPackage.data}
-            market={jupiterMarket}
-          />
-        </div>
-      ) : null}
 
       {/* Mobile action bar — the ticket is one tap away at all times, and the
           tap already says which side you meant. */}

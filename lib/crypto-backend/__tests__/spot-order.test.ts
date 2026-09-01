@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
-  buildSolanaSwapPlanFromTokenAmount,
+  buildSpotOrderPlanFromTokenAmount,
   buildSpotOrderPlan,
   SLIPPAGE_PERCENTAGE,
-  solanaSwapProblem,
+  spotOrderProblem,
+  spentTokenSymbol,
   tokenDecimalsFor,
   type ModernSpotMarketRow,
 } from "@/lib/crypto-backend/spot-order"
@@ -189,9 +190,56 @@ describe("buildSpotOrderPlan — refuses rather than guesses", () => {
   })
 })
 
+describe("token-denominated sizing works on BOTH venues", () => {
+  /* This path used to be Solana-only, which is why sizing an order in the
+     token you are spending needed a second form that only appeared on Solana
+     pairs. One resolver now serves both venues, so the ticket can offer the
+     unit everywhere. */
+  it("sizes an EVM sell in the base token's own units", () => {
+    const plan = buildSpotOrderPlanFromTokenAmount(wethRow, "sell", "0.25")
+    expect(plan.kind).toBe("evm")
+    if (plan.kind !== "evm") return
+    expect(plan.input.sellToken).toBe(ARB_WETH)
+    expect(plan.input.buyToken).toBe(ARB_USDC)
+    expect(plan.input.sellAmountBaseUnits).toBe("250000000000000000") // 0.25 at 18dp
+  })
+
+  it("sizes an EVM buy in the quote token's own units", () => {
+    const plan = buildSpotOrderPlanFromTokenAmount(wethRow, "buy", "40")
+    if (plan.kind !== "evm") throw new Error("expected an evm plan")
+    expect(plan.input.sellToken).toBe(ARB_USDC)
+    expect(plan.input.sellAmountBaseUnits).toBe("40000000") // 40 USDC at 6dp
+  })
+
+  it("needs no price, which is the point", () => {
+    // The USD path refuses a sell without one; the token path never asks.
+    expect(buildSpotOrderPlan({ ...wethRow, price: 0 }, "sell", 100, 0).kind).toBe("unavailable")
+    expect(buildSpotOrderPlanFromTokenAmount({ ...wethRow, price: 0 }, "sell", "0.25").kind).toBe("evm")
+  })
+
+  it("refuses more decimals than the token can carry rather than rounding", () => {
+    const tooPrecise = buildSpotOrderPlanFromTokenAmount(solRow, "buy", "1.0000001")
+    expect(tooPrecise.kind).toBe("unavailable")
+    if (tooPrecise.kind !== "unavailable") return
+    expect(tooPrecise.reason).toMatch(/at most 6 decimal places/i)
+  })
+})
+
+describe("spentTokenSymbol names the unit the amount field spends", () => {
+  it("is the quote on a buy and the base on a sell", () => {
+    expect(spentTokenSymbol(wethRow, "buy")).toBe("USDC")
+    expect(spentTokenSymbol(wethRow, "sell")).toBe("WETH")
+    expect(spentTokenSymbol(solRow, "sell")).toBe("SOL")
+  })
+
+  it("is null for a row that cannot be traded, so no unit switch is offered", () => {
+    expect(spentTokenSymbol({ ...solRow, venue: "uniswap" }, "buy")).toBeNull()
+  })
+})
+
 describe("token-denominated Solana swaps share the one refuse-don't-guess path", () => {
   it("sizes a buy in the quote mint's own units", () => {
-    const plan = buildSolanaSwapPlanFromTokenAmount(solRow, "buy", "10")
+    const plan = buildSpotOrderPlanFromTokenAmount(solRow, "buy", "10")
     expect(plan.kind).toBe("lifi")
     if (plan.kind !== "lifi") return
     expect(plan.input.sellToken).toBe(SOL_USDC)
@@ -201,7 +249,7 @@ describe("token-denominated Solana swaps share the one refuse-don't-guess path",
   })
 
   it("sizes a sell in the base mint's own units", () => {
-    const plan = buildSolanaSwapPlanFromTokenAmount(solRow, "sell", "0.5")
+    const plan = buildSpotOrderPlanFromTokenAmount(solRow, "sell", "0.5")
     if (plan.kind !== "lifi") throw new Error("expected a lifi plan")
     expect(plan.input.sellToken).toBe(SOL_MINT)
     expect(plan.input.sellAmountBaseUnits).toBe("500000000") // 0.5 SOL at 9dp
@@ -211,28 +259,32 @@ describe("token-denominated Solana swaps share the one refuse-don't-guess path",
     // The failure this guards: field says "USDC amount", 10 typed, SOL's 9
     // decimals applied → 10 SOL (10e9 lamports) spent for a 10 USDC order.
     const misoriented = { ...solRow, inputMint: SOL_MINT, outputMint: SOL_USDC }
-    expect(solanaSwapProblem(misoriented, "buy")).toMatch(/don't line up with the USDC quote/i)
-    expect(buildSolanaSwapPlanFromTokenAmount(misoriented, "buy", "10").kind).toBe("unavailable")
+    expect(spotOrderProblem(misoriented, "buy")).toMatch(/don't line up with the USDC quote/i)
+    expect(buildSpotOrderPlanFromTokenAmount(misoriented, "buy", "10").kind).toBe("unavailable")
   })
 
   it("refuses an unknown mint, a foreign venue and a missing quote", () => {
-    expect(solanaSwapProblem({ ...solRow, inputMint: "Mystery1111111111111111111111111111111111" }, "buy")).toMatch(/precision/i)
-    expect(solanaSwapProblem({ ...solRow, venue: "0x" }, "buy")).toMatch(/route/i)
-    expect(solanaSwapProblem({ ...solRow, quote: undefined }, "buy")).toMatch(/quoted in/i)
+    expect(spotOrderProblem({ ...solRow, inputMint: "Mystery1111111111111111111111111111111111" }, "buy")).toMatch(/precision/i)
+    // The resolver dispatches on venue, so a Solana row mislabelled "0x" is
+    // now refused by the EVM branch — for its network, which is the honest
+    // reason — rather than by a Solana-only guard.
+    expect(spotOrderProblem({ ...solRow, venue: "0x" }, "buy")).toMatch(/solana-mainnet-beta/i)
+    expect(spotOrderProblem({ ...solRow, venue: "uniswap" }, "buy")).toMatch(/route/i)
+    expect(spotOrderProblem({ ...solRow, quote: undefined }, "buy")).toMatch(/quoted in/i)
   })
 
   it("passes a healthy row", () => {
-    expect(solanaSwapProblem(solRow, "buy")).toBeNull()
-    expect(solanaSwapProblem(solRow, "sell")).toBeNull()
+    expect(spotOrderProblem(solRow, "buy")).toBeNull()
+    expect(spotOrderProblem(solRow, "sell")).toBeNull()
   })
 
   it("refuses amounts the mint cannot represent", () => {
-    const tooPrecise = buildSolanaSwapPlanFromTokenAmount(solRow, "buy", "1.1234567")
+    const tooPrecise = buildSpotOrderPlanFromTokenAmount(solRow, "buy", "1.1234567")
     expect(tooPrecise.kind).toBe("unavailable")
     if (tooPrecise.kind !== "unavailable") return
     expect(tooPrecise.reason).toMatch(/decimal places/i)
 
-    const zero = buildSolanaSwapPlanFromTokenAmount(solRow, "buy", "0")
+    const zero = buildSpotOrderPlanFromTokenAmount(solRow, "buy", "0")
     expect(zero.kind).toBe("unavailable")
     if (zero.kind !== "unavailable") return
     expect(zero.reason).toMatch(/above zero/i)
