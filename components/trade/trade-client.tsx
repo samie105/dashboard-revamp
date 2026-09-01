@@ -4,7 +4,8 @@
  * Worldstreet trading workspace. Modern-wallet futures orders use the
  * crypto backend's Hyperliquid intent flow; spot discovery comes from the
  * broader Worldstreet market feed and is never sourced from Hyperliquid.
- * Legacy Privy trading remains available through the existing routes.
+ * Trading is modern-wallet only. Legacy Privy wallet support may remain on
+ * other dashboard surfaces, but it is not a trading source.
  *
  * URL contract: /trade?market=spot|futures&symbol=BTC — nav and the trade
  * selector deep-link into it.
@@ -23,12 +24,6 @@ import Image from "next/image"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Dialog } from "@base-ui/react/dialog"
 import {
-  fetchHlMarkets,
-  fetchHlAccount,
-  placeSpotOrder,
-  placeFuturesOrder,
-  closePosition,
-  cancelOrder,
   CryptoApiError,
   type HlMarkets,
   type HlAccount,
@@ -48,10 +43,13 @@ import {
   type HyperliquidIntent,
 } from "@/lib/crypto-backend"
 import { buildSpotOrderPlan } from "@/lib/crypto-backend/spot-order"
-import { signHyperliquidIntent, signEvmIntent, signSolanaIntent } from "@/lib/crypto-wallet"
+import {
+  signHyperliquidIntent,
+  signEvmIntent,
+  signSolanaIntent,
+} from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { useAuth } from "@/components/auth-provider"
-import { useWalletMode } from "@/components/wallet-mode-provider"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import {
   fetchHlOrderBook,
@@ -64,8 +62,17 @@ import { OrderBook } from "@/components/trade/order-book"
 import { PositionsPanel } from "@/components/trade/positions-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { BackAction, Eyebrow, Segmented, type SegmentedOption } from "@/components/ui/system"
-import { AnnouncementBanner, DetailPanel, InlineNotice } from "@/components/ui/flow"
+import {
+  BackAction,
+  Eyebrow,
+  Segmented,
+  type SegmentedOption,
+} from "@/components/ui/system"
+import {
+  AnnouncementBanner,
+  DetailPanel,
+  InlineNotice,
+} from "@/components/ui/flow"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
 import { ModernFundingPanel } from "./modern-funding-panel"
@@ -183,38 +190,49 @@ export function TradeClient() {
   // while this is set: nothing has reached the venue until the user confirms.
   // The ticket state is snapshotted alongside it so the review screen states
   // the order that was actually built, not whatever the form says later.
-  const [futuresReview, setFuturesReview] = React.useState<FuturesReview | null>(null)
+  const [futuresReview, setFuturesReview] =
+    React.useState<FuturesReview | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [busyKey, setBusyKey] = React.useState<string | null>(null)
   // Mobile-only view state: which pane sits under the chart, and whether the
   // order ticket sheet is up.
-  const [mobilePane, setMobilePane] = React.useState<"book" | "positions" | "orders">("book")
+  const [mobilePane, setMobilePane] = React.useState<
+    "book" | "positions" | "orders"
+  >("book")
   const [ticketOpen, setTicketOpen] = React.useState(false)
   // Load failures are tracked apart from order errors: an unreachable account
   // must never be mistaken for an account that exists but isn't set up.
   const [marketsError, setMarketsError] = React.useState(false)
   const [accountError, setAccountError] = React.useState(false)
-  const { mode: walletSource, setMode: setWalletSource, canChoose: canChooseWallet } = useWalletMode()
-
-  const usingModern = walletSource === "modern" && isCryptoBackendEnabled
+  const usingModern = isCryptoBackendEnabled
 
   // Spot intent status — the same poll `useTransactionIntent` runs for
   // transfers, on the same cache key, so a spot order's terminal state comes
   // from the backend rather than from the fact that we managed to submit it.
   // It stops only on a terminal status; anything else is still in flight.
   const spotIntentQuery = useQuery({
-    queryKey: cryptoQueryKeys.intent(user?.userId ?? "anonymous", spotIntentId ?? "none"),
-    queryFn: ({ signal }) => cryptoBackendClient.getIntent(spotIntentId as string, signal),
+    queryKey: cryptoQueryKeys.intent(
+      user?.userId ?? "anonymous",
+      spotIntentId ?? "none"
+    ),
+    queryFn: ({ signal }) =>
+      cryptoBackendClient.getIntent(spotIntentId as string, signal),
     enabled: isCryptoBackendEnabled && Boolean(spotIntentId),
     refetchInterval: (query) => {
       // The backend's terminal statuses (see `sendStageIndex` for the full
       // vocabulary); everything else — created/signed/submitted/pending/
       // unknown, or a status this client hasn't been taught — is still moving.
       const status = query.state.data?.status
-      return status === "confirmed" || status === "failed" || status === "expired" ? false : 5_000
+      return status === "confirmed" ||
+        status === "failed" ||
+        status === "expired"
+        ? false
+        : 5_000
     },
   })
-  const spotIntentStatus = spotIntentId ? spotIntentQuery.data?.status : undefined
+  const spotIntentStatus = spotIntentId
+    ? spotIntentQuery.data?.status
+    : undefined
 
   // The balance snapshot has `staleTime: Infinity` (spec §5's explicit-
   // invalidation list) — a confirmed spot trade has to say so itself or the
@@ -223,56 +241,82 @@ export function TradeClient() {
   // once per intent.
   const spotBalancesInvalidatedFor = React.useRef<string | null>(null)
   React.useEffect(() => {
-    if (spotIntentStatus !== "confirmed" || !spotIntentId || spotBalancesInvalidatedFor.current === spotIntentId) return
+    if (
+      spotIntentStatus !== "confirmed" ||
+      !spotIntentId ||
+      spotBalancesInvalidatedFor.current === spotIntentId
+    )
+      return
     spotBalancesInvalidatedFor.current = spotIntentId
     const uid = user?.userId ?? "anonymous"
-    void queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balanceSnapshot(uid) })
-    void queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balances(uid) })
+    void queryClient.invalidateQueries({
+      queryKey: cryptoQueryKeys.balanceSnapshot(uid),
+    })
+    void queryClient.invalidateQueries({
+      queryKey: cryptoQueryKeys.balances(uid),
+    })
   }, [spotIntentStatus, spotIntentId, queryClient, user?.userId])
 
   // Markets + account
   const refreshAccount = React.useCallback(() => {
-    if (market === "spot") { setAccount(null); setAccountError(false); return }
-    const request = usingModern ? cryptoBackendClient.getHyperliquidAccount() : fetchHlAccount()
-    request
-      .then((a) => { setAccount(a as HlAccount); setAccountError(false) })
+    if (market === "spot") {
+      setAccount(null)
+      setAccountError(false)
+      return
+    }
+    if (!isCryptoBackendEnabled) {
+      setAccountError(true)
+      return
+    }
+    cryptoBackendClient
+      .getHyperliquidAccount()
+      .then((a) => {
+        setAccount(a as HlAccount)
+        setAccountError(false)
+      })
       .catch(() => setAccountError(true))
-  }, [usingModern, market])
+  }, [market])
 
   const loadMarkets = React.useCallback(() => {
     setMarketsError(false)
-    if (!usingModern) {
-      fetchHlMarkets().then(setMarkets).catch(() => setMarketsError(true))
+    if (!isCryptoBackendEnabled) {
+      setMarketsError(true)
       return
     }
     if (market === "spot") {
       // Spec §8: the registry IS the catalogue. Every field the order builder
       // needs — quote asset, token addresses, mints — is carried through
       // verbatim; nothing downstream may re-derive them from the symbol.
-      cryptoBackendClient.getModernSpotMarkets()
-        .then((result) => setMarkets({
-          minOrderUsd: 1,
-          futures: [],
-          spot: result.markets.filter((coin) => coin.chartSupported).map((coin) => ({
-            id: coin.id,
-            symbol: coin.symbol.toUpperCase(),
-            coinName: `${coin.symbol.toUpperCase()} · ${coin.networkId}`,
-            price: coin.price ?? 0,
-            icon: coin.icon,
-            networkId: coin.networkId,
-            venue: coin.venue,
-            quote: coin.quote,
-            chartSymbol: coin.chartSymbol,
-            sellToken: coin.sellToken,
-            buyToken: coin.buyToken,
-            inputMint: coin.inputMint,
-            outputMint: coin.outputMint,
-          })),
-        }))
+      cryptoBackendClient
+        .getModernSpotMarkets()
+        .then((result) =>
+          setMarkets({
+            minOrderUsd: 1,
+            futures: [],
+            spot: result.markets
+              .filter((coin) => coin.chartSupported)
+              .map((coin) => ({
+                id: coin.id,
+                symbol: coin.symbol.toUpperCase(),
+                coinName: `${coin.symbol.toUpperCase()} · ${coin.networkId}`,
+                price: coin.price ?? 0,
+                icon: coin.icon,
+                networkId: coin.networkId,
+                venue: coin.venue,
+                quote: coin.quote,
+                chartSymbol: coin.chartSymbol,
+                sellToken: coin.sellToken,
+                buyToken: coin.buyToken,
+                inputMint: coin.inputMint,
+                outputMint: coin.outputMint,
+              })),
+          })
+        )
         .catch(() => setMarketsError(true))
       return
     }
-    cryptoBackendClient.getHyperliquidMarkets()
+    cryptoBackendClient
+      .getHyperliquidMarkets()
       .then((modern) => {
         // Hyperliquid's spot catalogue is intentionally not used. The broad
         // Worldstreet market feed supplies spot discovery; Hyperliquid is
@@ -287,14 +331,16 @@ export function TradeClient() {
             symbol: item.symbol,
             price: item.price,
             maxLeverage: item.maxLeverage ?? 1,
-            ...(typeof item.szDecimals === "number" ? { szDecimals: item.szDecimals } : {}),
+            ...(typeof item.szDecimals === "number"
+              ? { szDecimals: item.szDecimals }
+              : {}),
             ...(item.onlyIsolated ? { onlyIsolated: true } : {}),
           })),
           spot: [],
         })
       })
       .catch(() => setMarketsError(true))
-  }, [usingModern, market])
+  }, [market])
 
   React.useEffect(() => {
     loadMarkets()
@@ -308,21 +354,27 @@ export function TradeClient() {
   // networks (spec §8). The symbol remains the fallback for shared links and
   // for the legacy/futures rows that carry no id.
   const list = React.useMemo(
-    () => (market === "spot" ? (markets?.spot ?? []) : (markets?.futures ?? [])),
-    [markets, market],
+    () =>
+      market === "spot" ? (markets?.spot ?? []) : (markets?.futures ?? []),
+    [markets, market]
   )
   React.useEffect(() => {
     if (!list.length) return
     const wanted = urlSymbol.toUpperCase()
     const chosen =
       (urlRowId ? list.find((m) => marketRowKey(m) === urlRowId) : undefined) ??
-      (wanted ? list.find((m) => m.symbol.toUpperCase() === wanted) : undefined) ??
+      (wanted
+        ? list.find((m) => m.symbol.toUpperCase() === wanted)
+        : undefined) ??
       list.find((m) => m.symbol === "BTC") ??
       list[0]
     setSelection(marketRowKey(chosen))
   }, [list, urlSymbol, urlRowId])
 
-  const current = React.useMemo(() => list.find((m) => marketRowKey(m) === selection), [list, selection])
+  const current = React.useMemo(
+    () => list.find((m) => marketRowKey(m) === selection),
+    [list, selection]
+  )
   const symbol = current?.symbol ?? ""
   const maxLev = current && "maxLeverage" in current ? current.maxLeverage : 1
   /**
@@ -335,7 +387,9 @@ export function TradeClient() {
     current && "szDecimals" in current && typeof current.szDecimals === "number"
       ? Math.min(Math.max(Math.trunc(current.szDecimals), 0), 8)
       : null
-  const onlyIsolated = Boolean(current && "onlyIsolated" in current && current.onlyIsolated)
+  const onlyIsolated = Boolean(
+    current && "onlyIsolated" in current && current.onlyIsolated
+  )
 
   // Clamp leverage when switching to a contract with a lower max — otherwise
   // the stale higher value is displayed and sent. Futures only: on the Spot
@@ -345,27 +399,27 @@ export function TradeClient() {
     setLeverage((l) => Math.min(l, maxLev))
   }, [market, current, maxLev])
 
-  // A new row, market or wallet mode invalidates everything priced in the old
-  // one — including the modern swap being polled, which belongs to neither the
-  // next pair nor the legacy ticket.
+  // A new row or market invalidates everything priced in the old one.
   React.useEffect(() => {
     setLimitPrice("")
     setTpPrice("")
     setSlPrice("")
     setOutcome(null)
     setSpotIntentId(null)
-    // A review holds an intent priced for one contract in one wallet mode. It
-    // is discarded rather than carried: an unsigned intent expires on its own,
-    // and confirming a stale one would trade the pair the user just left.
+    // A review holds an intent priced for one contract. It is discarded rather
+    // than carried: an unsigned intent expires on its own, and confirming a
+    // stale one would trade the pair the user just left.
     setFuturesReview(null)
     setReduceOnly(false)
     setError(null)
-  }, [selection, market, walletSource])
+  }, [selection, market])
 
   // Order book — futures use the bare symbol; spot uses the coinName.
   const bookCoin = React.useMemo(() => {
     if (!current || (usingModern && market === "spot")) return null
-    return market === "spot" ? (current as { coinName: string }).coinName : current.symbol
+    return market === "spot"
+      ? (current as { coinName: string }).coinName
+      : current.symbol
   }, [current, market, usingModern])
 
   React.useEffect(() => {
@@ -387,7 +441,10 @@ export function TradeClient() {
         .catch(() => {})
     load()
     const id = setInterval(load, 3000)
-    return () => { cancelled = true; clearInterval(id) }
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
   }, [bookCoin])
 
   // 24h stats for the header — derived from public candles, refreshed slowly.
@@ -396,10 +453,17 @@ export function TradeClient() {
     let cancelled = false
     setStats(null)
     const load = () =>
-      fetchHl24hStats(bookCoin).then((s) => { if (!cancelled) setStats(s) }).catch(() => {})
+      fetchHl24hStats(bookCoin)
+        .then((s) => {
+          if (!cancelled) setStats(s)
+        })
+        .catch(() => {})
     load()
     const id = setInterval(load, 60_000)
-    return () => { cancelled = true; clearInterval(id) }
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
   }, [bookCoin])
 
   const price = book?.midPrice ?? current?.price ?? 0
@@ -426,21 +490,31 @@ export function TradeClient() {
   // unroutable pair says so in the ticket instead of throwing after the press.
   // Legacy rows carry none of this metadata, so the legacy ticket never asks.
   const spotPlan = React.useMemo(
-    () => (usingModern && market === "spot" && current ? buildSpotOrderPlan(current, side, Math.max(amt, minOrder), price) : null),
-    [usingModern, market, current, side, amt, minOrder, price],
+    () =>
+      usingModern && market === "spot" && current
+        ? buildSpotOrderPlan(current, side, Math.max(amt, minOrder), price)
+        : null,
+    [usingModern, market, current, side, amt, minOrder, price]
   )
   const pairUnavailable = spotPlan?.kind === "unavailable"
 
   // No row to trade: the registry failed, came back empty, or the selected
   // market vanished from a refresh. `markets === null` is still loading, and
   // must not be reported as unavailable.
-  const spotMarketsUnavailable = usingModern && market === "spot" && !current && (marketsError || markets !== null)
+  const spotMarketsUnavailable =
+    usingModern &&
+    market === "spot" &&
+    !current &&
+    (marketsError || markets !== null)
 
   // The Jupiter panel is the selected Solana row's own, or nothing at all. The
   // registry row goes in whole — the panel derives nothing itself.
   const jupiterMarket = React.useMemo(
-    () => (current && "venue" in current && current.venue === "jupiter" ? current : null),
-    [current],
+    () =>
+      current && "venue" in current && current.venue === "jupiter"
+        ? current
+        : null,
+    [current]
   )
   /** The modern-mode perpetuals ticket — the only path spec §9 governs. */
   const modernFutures = usingModern && market === "futures"
@@ -449,10 +523,16 @@ export function TradeClient() {
   // ticket refuses an order the venue would reject rather than discovering it
   // after a signature (spec §9).
   const reduceOnlyError =
-    modernFutures && reduceOnly ? reduceOnlyProblem(openPosition, symbol || "this market", side) : null
+    modernFutures && reduceOnly
+      ? reduceOnlyProblem(openPosition, symbol || "this market", side)
+      : null
   const canSubmit =
-    !submitting && !!current && amt >= minOrder &&
-    (orderType === "market" || parseFloat(limitPrice) > 0) && !tpslError && !pairUnavailable &&
+    !submitting &&
+    !!current &&
+    amt >= minOrder &&
+    (orderType === "market" || parseFloat(limitPrice) > 0) &&
+    !tpslError &&
+    !pairUnavailable &&
     !reduceOnlyError
 
   // Switching market carries no symbol: a spot pair name is meaningless on the
@@ -467,9 +547,13 @@ export function TradeClient() {
   React.useEffect(() => {
     if (!current) return
     const rowId = "id" in current && current.id ? current.id : ""
-    if (urlSymbol.toUpperCase() === current.symbol.toUpperCase() && urlRowId === rowId) return
+    if (
+      urlSymbol.toUpperCase() === current.symbol.toUpperCase() &&
+      urlRowId === rowId
+    )
+      return
     router.replace(
-      `/trade?market=${market}&symbol=${encodeURIComponent(current.symbol)}${rowId ? `&id=${encodeURIComponent(rowId)}` : ""}`,
+      `/trade?market=${market}&symbol=${encodeURIComponent(current.symbol)}${rowId ? `&id=${encodeURIComponent(rowId)}` : ""}`
     )
   }, [current, market, urlSymbol, urlRowId, router])
 
@@ -480,84 +564,103 @@ export function TradeClient() {
     setOutcome(null)
     setSpotIntentId(null)
     try {
-      const base = {
+      const accountFor = (family: string) =>
+        modernWallet.data?.accounts.find(
+          (item) => item.chainFamily === family && item.state === "active"
+        )
+      const packageValue = modernPackage.data
+      if (!user?.userId || !modernWallet.data?.id || !packageValue)
+        throw new Error("Set up and unlock the modern wallet before trading")
+      if (!getUnlockedWalletState(user.userId, modernWallet.data.id))
+        throw new Error("Unlock the modern wallet locally before trading")
+      if (market === "spot") {
+        // The registry row is the whole order: venue, network, token
+        // identifiers and precision all come from it (spec §8).
+        const plan = buildSpotOrderPlan(current, side, amt, price)
+        if (plan.kind === "unavailable") {
+          setError(plan.reason)
+          return
+        }
+        const walletId = modernWallet.data.id
+        const signingAccount = accountFor(
+          plan.kind === "evm" ? "evm" : "solana"
+        )
+        if (!signingAccount) {
+          throw new Error(
+            plan.kind === "evm"
+              ? "Your Worldstreet wallet doesn't have an Ethereum account yet."
+              : "Your Worldstreet wallet doesn't have a Solana account yet."
+          )
+        }
+        const intent =
+          plan.kind === "evm"
+            ? await cryptoBackendClient.createModernSpotIntent(plan.input)
+            : await cryptoBackendClient.createModernSolanaSpotIntent(plan.input)
+        const signed =
+          plan.kind === "evm"
+            ? await signEvmIntent(
+                user.userId,
+                walletId,
+                packageValue,
+                intent,
+                signingAccount.id
+              )
+            : await signSolanaIntent(
+                user.userId,
+                walletId,
+                packageValue,
+                intent,
+                signingAccount.id
+              )
+        await cryptoBackendClient.submitIntent(intent.id, signed)
+        // Submitted is not filled: the status line below follows the intent
+        // poll and only reads as complete once the backend says `confirmed`.
+        setSpotIntentId(intent.id)
+        return
+      }
+      const evmAccount = accountFor("evm")
+      if (!evmAccount)
+        throw new Error("Set up and unlock the modern wallet before trading")
+      // Spec §9: review and explicit approval come BEFORE the signature. The
+      // intent the backend builds here is unsigned — no leverage change, no
+      // order, nothing has reached the venue — so the review screen can state
+      // the backend's own size, price, fee and liquidation figures and let
+      // the user walk away from them. `confirmFuturesOrder` does the signing.
+      const intent = await cryptoBackendClient.createHyperliquidIntent({
+        type: "order",
+        market: "futures",
         symbol: current.symbol,
         side,
         orderType,
         amountUsd: amt,
-        ...(orderType === "limit" ? { limitPrice: parseFloat(limitPrice) } : {}),
-      }
-      if (usingModern) {
-        const accountFor = (family: string) =>
-          modernWallet.data?.accounts.find((item) => item.chainFamily === family && item.state === "active")
-        const packageValue = modernPackage.data
-        if (!user?.userId || !modernWallet.data?.id || !packageValue) throw new Error("Set up and unlock the modern wallet before trading")
-        if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) throw new Error("Unlock the modern wallet locally before trading")
-        if (market === "spot") {
-          // The registry row is the whole order: venue, network, token
-          // identifiers and precision all come from it (spec §8).
-          const plan = buildSpotOrderPlan(current, side, amt, price)
-          if (plan.kind === "unavailable") { setError(plan.reason); return }
-          const walletId = modernWallet.data.id
-          const signingAccount = accountFor(plan.kind === "evm" ? "evm" : "solana")
-          if (!signingAccount) {
-            throw new Error(plan.kind === "evm"
-              ? "Your Worldstreet wallet doesn't have an Ethereum account yet."
-              : "Your Worldstreet wallet doesn't have a Solana account yet.")
-          }
-          const intent = plan.kind === "evm"
-            ? await cryptoBackendClient.createModernSpotIntent(plan.input)
-            : await cryptoBackendClient.createModernSolanaSpotIntent(plan.input)
-          const signed = plan.kind === "evm"
-            ? await signEvmIntent(user.userId, walletId, packageValue, intent, signingAccount.id)
-            : await signSolanaIntent(user.userId, walletId, packageValue, intent, signingAccount.id)
-          await cryptoBackendClient.submitIntent(intent.id, signed)
-          // Submitted is not filled: the status line below follows the intent
-          // poll and only reads as complete once the backend says `confirmed`.
-          setSpotIntentId(intent.id)
-          return
-        }
-        const evmAccount = accountFor("evm")
-        if (!evmAccount) throw new Error("Set up and unlock the modern wallet before trading")
-        // Spec §9: review and explicit approval come BEFORE the signature. The
-        // intent the backend builds here is unsigned — no leverage change, no
-        // order, nothing has reached the venue — so the review screen can state
-        // the backend's own size, price, fee and liquidation figures and let
-        // the user walk away from them. `confirmFuturesOrder` does the signing.
-        const intent = await cryptoBackendClient.createHyperliquidIntent({
-          type: "order", market: "futures", symbol: current.symbol, side, orderType, amountUsd: amt,
-          ...(orderType === "limit" ? { limitPrice: parseFloat(limitPrice) } : {}),
-          // A reduce-only order opens no new exposure, so it carries neither a
-          // leverage setting nor protective triggers — the same shape the
-          // position-close path already sends.
-          ...(reduceOnly ? { reduceOnly: true } : { leverage }),
-          ...(!reduceOnly && tp > 0 ? { takeProfitPrice: tp } : {}),
-          ...(!reduceOnly && sl > 0 ? { stopLossPrice: sl } : {}),
-          idempotencyKey: crypto.randomUUID(),
-        })
-        setFuturesReview({
-          intent,
-          symbol: current.symbol,
-          side,
-          orderType,
-          amountUsd: amt,
-          limitPrice: orderType === "limit" ? parseFloat(limitPrice) : null,
-          leverage,
-          reduceOnly,
-          takeProfit: !reduceOnly && tp > 0 ? tp : null,
-          stopLoss: !reduceOnly && sl > 0 ? sl : null,
-        })
-        return
-      } else {
-        const res = market === "spot"
-          ? await placeSpotOrder(base)
-          : await placeFuturesOrder({ ...base, leverage, ...(tp > 0 ? { takeProfitPrice: tp } : {}), ...(sl > 0 ? { stopLossPrice: sl } : {}) })
-        setOutcome(res)
-        if (!res.success && res.error) setError(res.error)
-      }
-      refreshAccount()
+        ...(orderType === "limit"
+          ? { limitPrice: parseFloat(limitPrice) }
+          : {}),
+        // A reduce-only order opens no new exposure, so it carries neither a
+        // leverage setting nor protective triggers — the same shape the
+        // position-close path already sends.
+        ...(reduceOnly ? { reduceOnly: true } : { leverage }),
+        ...(!reduceOnly && tp > 0 ? { takeProfitPrice: tp } : {}),
+        ...(!reduceOnly && sl > 0 ? { stopLossPrice: sl } : {}),
+        idempotencyKey: crypto.randomUUID(),
+      })
+      setFuturesReview({
+        intent,
+        symbol: current.symbol,
+        side,
+        orderType,
+        amountUsd: amt,
+        limitPrice: orderType === "limit" ? parseFloat(limitPrice) : null,
+        leverage,
+        reduceOnly,
+        takeProfit: !reduceOnly && tp > 0 ? tp : null,
+        stopLoss: !reduceOnly && sl > 0 ? sl : null,
+      })
+      return
     } catch (e) {
-      setError(e instanceof CryptoApiError ? e.message : "Order failed. Try again.")
+      setError(
+        e instanceof CryptoApiError ? e.message : "Order failed. Try again."
+      )
     } finally {
       setSubmitting(false)
     }
@@ -577,26 +680,47 @@ export function TradeClient() {
     setOutcome(null)
     try {
       const evmAccount = modernWallet.data?.accounts.find(
-        (item) => item.chainFamily === "evm" && item.state === "active",
+        (item) => item.chainFamily === "evm" && item.state === "active"
       )
       const packageValue = modernPackage.data
-      if (!user?.userId || !modernWallet.data?.id || !packageValue || !evmAccount) {
+      if (
+        !user?.userId ||
+        !modernWallet.data?.id ||
+        !packageValue ||
+        !evmAccount
+      ) {
         throw new Error("Set up and unlock the modern wallet before trading")
       }
       if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) {
         throw new Error("Unlock the modern wallet locally before trading")
       }
       const signatures = await signHyperliquidIntent(
-        user.userId, modernWallet.data.id, packageValue, evmAccount.id, review.intent.steps,
+        user.userId,
+        modernWallet.data.id,
+        packageValue,
+        evmAccount.id,
+        review.intent.steps
       )
-      const submitted = await cryptoBackendClient.submitHyperliquidIntent(review.intent.id, signatures)
-      const result = submitted.results[submitted.results.length - 1] as { response?: { data?: { statuses?: unknown[] } } }
-      const status = result?.response?.data?.statuses?.[0] as Record<string, unknown> | undefined
-      const filled = status && "filled" in status ? status.filled as Record<string, unknown> : undefined
+      const submitted = await cryptoBackendClient.submitHyperliquidIntent(
+        review.intent.id,
+        signatures
+      )
+      const result = submitted.results[submitted.results.length - 1] as {
+        response?: { data?: { statuses?: unknown[] } }
+      }
+      const status = result?.response?.data?.statuses?.[0] as
+        | Record<string, unknown>
+        | undefined
+      const filled =
+        status && "filled" in status
+          ? (status.filled as Record<string, unknown>)
+          : undefined
       const resting = status && "resting" in status
       const figures = readFuturesOrderFigures(review.intent.summary)
       setOutcome({
-        success: true, symbol: review.symbol, side: review.side,
+        success: true,
+        symbol: review.symbol,
+        side: review.side,
         size: figures.size ?? 0,
         executionPrice: figures.price ?? price,
         filledSize: filled ? parseFloat(String(filled.totalSz ?? 0)) : 0,
@@ -608,7 +732,13 @@ export function TradeClient() {
       setFuturesReview(null)
       refreshAccount()
     } catch (e) {
-      setError(e instanceof CryptoApiError ? e.message : e instanceof Error ? e.message : "Order failed. Try again.")
+      setError(
+        e instanceof CryptoApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : "Order failed. Try again."
+      )
     } finally {
       setSubmitting(false)
     }
@@ -618,13 +748,35 @@ export function TradeClient() {
     setBusyKey(`close:${sym}`)
     try {
       const position = account?.positions.find((item) => item.symbol === sym)
-      if (usingModern) {
-        const evmAccount = modernWallet.data?.accounts.find((item) => item.chainFamily === "evm" && item.state === "active")
-        if (!user?.userId || !modernWallet.data?.id || !modernPackage.data || !evmAccount || !position) throw new Error("Unlock the modern wallet before closing a position")
-        const intent = await cryptoBackendClient.createHyperliquidIntent({ type: "order", market: "futures", symbol: sym, side: position.side === "long" ? "sell" : "buy", orderType: "market", size: Math.abs(Number(position.size)), reduceOnly: true, idempotencyKey: crypto.randomUUID() })
-        const signatures = await signHyperliquidIntent(user.userId, modernWallet.data.id, modernPackage.data, evmAccount.id, intent.steps)
-        await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
-      } else await closePosition({ symbol: sym })
+      const evmAccount = modernWallet.data?.accounts.find(
+        (item) => item.chainFamily === "evm" && item.state === "active"
+      )
+      if (
+        !user?.userId ||
+        !modernWallet.data?.id ||
+        !modernPackage.data ||
+        !evmAccount ||
+        !position
+      )
+        throw new Error("Unlock the modern wallet before closing a position")
+      const intent = await cryptoBackendClient.createHyperliquidIntent({
+        type: "order",
+        market: "futures",
+        symbol: sym,
+        side: position.side === "long" ? "sell" : "buy",
+        orderType: "market",
+        size: Math.abs(Number(position.size)),
+        reduceOnly: true,
+        idempotencyKey: crypto.randomUUID(),
+      })
+      const signatures = await signHyperliquidIntent(
+        user.userId,
+        modernWallet.data.id,
+        modernPackage.data,
+        evmAccount.id,
+        intent.steps
+      )
+      await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
       refreshAccount()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Close failed")
@@ -636,16 +788,37 @@ export function TradeClient() {
   async function handleCancel(oid: number, sym: string, mkt: Market) {
     setBusyKey(`cancel:${oid}`)
     try {
-      if (usingModern) {
-        // Worldstreet-wallet spot is an on-chain swap, not a resting order on
-        // the perpetuals venue — there is nothing here to cancel.
-        if (mkt === "spot") throw new Error("Worldstreet wallet spot orders are on-chain swaps — there's no resting order to cancel.")
-        const evmAccount = modernWallet.data?.accounts.find((item) => item.chainFamily === "evm" && item.state === "active")
-        if (!user?.userId || !modernWallet.data?.id || !modernPackage.data || !evmAccount) throw new Error("Unlock the modern wallet before cancelling an order")
-        const intent = await cryptoBackendClient.createHyperliquidIntent({ type: "cancel", market: "futures", symbol: sym, oid, idempotencyKey: crypto.randomUUID() })
-        const signatures = await signHyperliquidIntent(user.userId, modernWallet.data.id, modernPackage.data, evmAccount.id, intent.steps)
-        await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
-      } else await cancelOrder({ oid, symbol: sym, market: mkt })
+      // Worldstreet-wallet spot is an on-chain swap, not a resting order on
+      // the perpetuals venue — there is nothing here to cancel.
+      if (mkt === "spot")
+        throw new Error(
+          "Worldstreet wallet spot orders are on-chain swaps — there's no resting order to cancel."
+        )
+      const evmAccount = modernWallet.data?.accounts.find(
+        (item) => item.chainFamily === "evm" && item.state === "active"
+      )
+      if (
+        !user?.userId ||
+        !modernWallet.data?.id ||
+        !modernPackage.data ||
+        !evmAccount
+      )
+        throw new Error("Unlock the modern wallet before cancelling an order")
+      const intent = await cryptoBackendClient.createHyperliquidIntent({
+        type: "cancel",
+        market: "futures",
+        symbol: sym,
+        oid,
+        idempotencyKey: crypto.randomUUID(),
+      })
+      const signatures = await signHyperliquidIntent(
+        user.userId,
+        modernWallet.data.id,
+        modernPackage.data,
+        evmAccount.id,
+        intent.steps
+      )
+      await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
       refreshAccount()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cancel failed")
@@ -665,10 +838,22 @@ export function TradeClient() {
       orderType,
       amountUsd: amountUsd || "(empty)",
       ...(orderType === "limit" ? { limitPrice: limitPrice || "(empty)" } : {}),
-      ...(market === "futures" ? { leverage, takeProfit: tpPrice || null, stopLoss: slPrice || null } : {}),
+      ...(market === "futures"
+        ? { leverage, takeProfit: tpPrice || null, stopLoss: slPrice || null }
+        : {}),
       ...(modernFutures ? { reduceOnly } : {}),
       readyToSubmit: canSubmit,
-      ...(canSubmit ? {} : { blockedBecause: !current ? "markets not loaded" : spotPlan?.kind === "unavailable" ? spotPlan.reason : amt < minOrder ? `amount below the ${minOrder} minimum` : reduceOnlyError ?? tpslError ?? "limit price missing" }),
+      ...(canSubmit
+        ? {}
+        : {
+            blockedBecause: !current
+              ? "markets not loaded"
+              : spotPlan?.kind === "unavailable"
+                ? spotPlan.reason
+                : amt < minOrder
+                  ? `amount below the ${minOrder} minimum`
+                  : (reduceOnlyError ?? tpslError ?? "limit price missing"),
+          }),
     },
     // Spec §9: a reviewed-but-unsigned order is a distinct state — nothing has
     // been sent, and the next press is the one that spends money.
@@ -677,7 +862,10 @@ export function TradeClient() {
     openOrders: account?.openOrders.length ?? 0,
     tradingAccountReady: account?.ready ?? false,
   }
-  React.useEffect(() => registerVividContext("tradeWorkspace", () => vividSnap.current), [])
+  React.useEffect(
+    () => registerVividContext("tradeWorkspace", () => vividSnap.current),
+    []
+  )
 
   const filtered = React.useMemo(() => {
     if (!search) return list
@@ -703,10 +891,10 @@ export function TradeClient() {
   const maxNotional =
     market === "spot"
       ? side === "buy"
-        ? balances?.spotUsdc ?? 0
+        ? (balances?.spotUsdc ?? 0)
         : 0
       : modernFutures && reduceOnly
-        ? openPosition?.notionalUsd ?? 0
+        ? (openPosition?.notionalUsd ?? 0)
         : (balances?.perpsWithdrawableUsdc ?? 0) * leverage
 
   const changeUp = (stats?.changePct ?? 0) >= 0
@@ -717,9 +905,12 @@ export function TradeClient() {
       <button
         aria-label="Close market picker"
         className="fixed inset-0 z-40 cursor-default"
-        onClick={() => { setPickerOpen(false); setSearch("") }}
+        onClick={() => {
+          setPickerOpen(false)
+          setSearch("")
+        }}
       />
-      <div className="absolute left-0 top-full z-50 mt-2 w-[320px] rounded-2xl bg-card p-2 shadow-2xl ring-1 ring-border/40">
+      <div className="absolute top-full left-0 z-50 mt-2 w-[320px] rounded-2xl bg-card p-2 shadow-2xl ring-1 ring-border/40">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -731,18 +922,28 @@ export function TradeClient() {
         />
         <div className="mt-1.5 max-h-72 overflow-y-auto">
           {filtered.length === 0 ? (
-            <p className="px-3 py-6 text-center text-xs text-muted-foreground">No markets match.</p>
+            <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+              No markets match.
+            </p>
           ) : (
             filtered.map((m) => (
               <button
                 key={marketRowKey(m)}
-                onClick={() => { setSelection(marketRowKey(m)); setPickerOpen(false); setSearch("") }}
+                onClick={() => {
+                  setSelection(marketRowKey(m))
+                  setPickerOpen(false)
+                  setSearch("")
+                }}
                 data-vivid-target={`pick-pair-${marketRowKey(m)}`}
                 data-vivid-label={`Switch to the ${m.symbol} market${"networkId" in m && m.networkId ? ` on ${m.networkId}` : ""}`}
                 className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent ${marketRowKey(m) === selection ? "bg-accent" : ""}`}
               >
                 <span className="flex items-center gap-2 font-semibold">
-                  <CoinAvatar symbol={"coinName" in m ? m.coinName : m.symbol} src={"icon" in m ? m.icon : undefined} size="md" />
+                  <CoinAvatar
+                    symbol={"coinName" in m ? m.coinName : m.symbol}
+                    src={"icon" in m ? m.icon : undefined}
+                    size="md"
+                  />
                   {m.symbol}
                   <span className="ml-1 text-[10px] font-medium text-subtle">
                     {market === "futures" ? "PERP" : quoteOf(m)}
@@ -758,7 +959,9 @@ export function TradeClient() {
                     </span>
                   )}
                 </span>
-                <span className="text-xs tabular-nums text-muted-foreground">${fmtPx(m.price)}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  ${fmtPx(m.price)}
+                </span>
               </button>
             ))
           )}
@@ -779,25 +982,36 @@ export function TradeClient() {
       <div className="flex flex-col gap-1">
         <p className="text-sm font-semibold">Review your order</p>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Nothing has been sent yet. Confirming signs this order on this device and submits it.
+          Nothing has been sent yet. Confirming signs this order on this device
+          and submits it.
         </p>
       </div>
 
       <DetailPanel
         rows={[
           { label: "Contract", value: `${futuresReview.symbol} PERP` },
-          { label: "Direction", value: futuresReview.side === "buy" ? "Long" : "Short" },
+          {
+            label: "Direction",
+            value: futuresReview.side === "buy" ? "Long" : "Short",
+          },
           {
             label: "Order type",
-            value: futuresReview.orderType === "limit" && futuresReview.limitPrice !== null
-              ? `Limit @ $${fmtPx(futuresReview.limitPrice)}`
-              : futuresReview.orderType === "limit"
-              ? "Limit"
-              : "Market",
+            value:
+              futuresReview.orderType === "limit" &&
+              futuresReview.limitPrice !== null
+                ? `Limit @ $${fmtPx(futuresReview.limitPrice)}`
+                : futuresReview.orderType === "limit"
+                  ? "Limit"
+                  : "Market",
           },
           { label: "Amount", value: `$${futuresReview.amountUsd.toFixed(2)}` },
           ...(reviewFigures.size !== null
-            ? [{ label: "Size", value: `${reviewFigures.size} ${futuresReview.symbol}` }]
+            ? [
+                {
+                  label: "Size",
+                  value: `${reviewFigures.size} ${futuresReview.symbol}`,
+                },
+              ]
             : []),
           ...(reviewFigures.price !== null
             ? [{ label: "Price", value: `$${fmtPx(reviewFigures.price)}` }]
@@ -806,16 +1020,37 @@ export function TradeClient() {
             ? [{ label: "Reduce only", value: "Yes" }]
             : [{ label: "Leverage", value: `${futuresReview.leverage}×` }]),
           ...(futuresReview.takeProfit !== null
-            ? [{ label: "Take profit", value: `$${fmtPx(futuresReview.takeProfit)}` }]
+            ? [
+                {
+                  label: "Take profit",
+                  value: `$${fmtPx(futuresReview.takeProfit)}`,
+                },
+              ]
             : []),
           ...(futuresReview.stopLoss !== null
-            ? [{ label: "Stop loss", value: `$${fmtPx(futuresReview.stopLoss)}` }]
+            ? [
+                {
+                  label: "Stop loss",
+                  value: `$${fmtPx(futuresReview.stopLoss)}`,
+                },
+              ]
             : []),
           ...(reviewFigures.liquidationPrice !== null
-            ? [{ label: "Liquidation price", value: `$${fmtPx(reviewFigures.liquidationPrice)}` }]
+            ? [
+                {
+                  label: "Liquidation price",
+                  value: `$${fmtPx(reviewFigures.liquidationPrice)}`,
+                },
+              ]
             : []),
           ...(reviewFigures.feeUsd !== null
-            ? [{ label: "Estimated fee", value: `$${reviewFigures.feeUsd.toFixed(2)}`, strong: true }]
+            ? [
+                {
+                  label: "Estimated fee",
+                  value: `$${reviewFigures.feeUsd.toFixed(2)}`,
+                  strong: true,
+                },
+              ]
             : []),
         ]}
       />
@@ -834,13 +1069,18 @@ export function TradeClient() {
         aria-label={`Confirm and sign — ${futuresReview.side === "buy" ? "long" : "short"} ${futuresReview.symbol} for $${futuresReview.amountUsd}`}
         data-vivid-label={`Sign and submit the reviewed ${futuresReview.symbol} order. Moves real money.`}
         className={`w-full rounded-full py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-          futuresReview.side === "buy" ? "bg-credit hover:bg-credit/90" : "bg-debit hover:bg-debit/90"
+          futuresReview.side === "buy"
+            ? "bg-credit hover:bg-credit/90"
+            : "bg-debit hover:bg-debit/90"
         }`}
       >
         {submitting ? "Signing…" : "Confirm & sign"}
       </button>
       <button
-        onClick={() => { setFuturesReview(null); setError(null) }}
+        onClick={() => {
+          setFuturesReview(null)
+          setError(null)
+        }}
         disabled={submitting}
         data-vivid-target="trade-cancel-review"
         data-vivid-label="Go back to the ticket without placing this order"
@@ -857,367 +1097,484 @@ export function TradeClient() {
   // `refreshAccount` deliberately nulls on the spot tab). Gating the ticket on
   // that account would leave modern spot as a permanent loading skeleton.
   const needsTradingAccount = !(usingModern && market === "spot")
-  const ticket = needsTradingAccount && accountError ? (
-    <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-warning"><circle cx="12" cy="12" r="10" /><path d="M12 8v5" /><path d="M12 16h.01" /></svg>
-      </span>
-      <div>
-        <p className="text-sm font-semibold">Can&apos;t reach your trading account</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-          Your balances and positions couldn&apos;t be loaded, so orders are on hold. Nothing has
-          been placed or cancelled.
-        </p>
-      </div>
-      <button
-        onClick={refreshAccount}
-        className="mt-1 flex h-10 w-full items-center justify-center rounded-full bg-surface-sunken text-sm font-semibold transition-colors hover:bg-accent"
-      >
-        Try again
-      </button>
-    </div>
-  ) : needsTradingAccount && !account ? (
-    <div className="flex flex-col gap-3 p-3.5">
-      <div className="grid grid-cols-2 gap-1.5">
-        <div className="h-10 animate-pulse rounded-xl bg-surface-sunken" />
-        <div className="h-10 animate-pulse rounded-xl bg-surface-sunken" />
-      </div>
-      <div className="h-7 w-32 animate-pulse rounded-full bg-surface-sunken" />
-      <div className="h-[52px] animate-pulse rounded-xl bg-surface-sunken" />
-      <div className="h-11 animate-pulse rounded-full bg-surface-sunken" />
-    </div>
-  ) : needsTradingAccount && !ready ? (
-    <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.12]">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg>
-      </span>
-      <div>
-        <p className="text-sm font-semibold">Trading account not set up</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-          One-time setup, then fund it with USDC to start trading.
-        </p>
-      </div>
-      <button
-        onClick={() => openFlow("fund")}
-        className="mt-1 flex h-10 w-full items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
-      >
-        Set up &amp; fund
-      </button>
-    </div>
-  ) : reviewScreen ? (
-    reviewScreen
-  ) : (
-    <div className="flex flex-col gap-3 p-3.5">
-      {spotMarketsUnavailable && (
-        <AnnouncementBanner
-          tone="warning"
-          title="Markets are unavailable right now"
-          detail={marketsError
-            ? "The market registry didn't load. Your wallet and balances are unaffected."
-            : "The market registry came back empty, so there's nothing to trade here yet."}
-          action={{ label: "Try again", onClick: loadMarkets }}
-        />
-      )}
-
-      {/* Spec §8: an unroutable pair says so before the press, in the pair's
-          own words, with the legacy router offered when it's available. */}
-      {spotPlan?.kind === "unavailable" && (
-        <AnnouncementBanner
-          tone="warning"
-          title="This pair isn't available on the new wallet yet"
-          detail={spotPlan.reason}
-          action={canChooseWallet ? { label: "Use old wallet", onClick: () => setWalletSource("legacy") } : undefined}
-        />
-      )}
-
-      {/* Side */}
-      <div className="grid grid-cols-2 gap-1.5">
-        {(["buy", "sell"] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setSide(s)}
-            aria-label={market === "futures" ? (s === "buy" ? "Long side" : "Short side") : (s === "buy" ? "Buy side" : "Sell side")}
-            data-vivid-target={s === "buy" ? "trade-side-buy" : "trade-side-sell"}
-            data-vivid-label={market === "futures" ? (s === "buy" ? "Long side" : "Short side") : (s === "buy" ? "Buy side" : "Sell side")}
-            className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${
-              side === s
-                ? s === "buy" ? "bg-credit text-white" : "bg-debit text-white"
-                : "bg-surface-sunken text-muted-foreground hover:bg-accent"
-            }`}
+  const ticket =
+    needsTradingAccount && accountError ? (
+      <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-warning"
           >
-            {market === "futures" ? (s === "buy" ? "Long" : "Short") : (s === "buy" ? "Buy" : "Sell")}
-          </button>
-        ))}
-      </div>
-
-      {/* Type — the house Segmented, same control as everywhere else */}
-      <Segmented
-        size="sm"
-        value={orderType}
-        onChange={setOrderType}
-        options={ORDER_TYPES}
-        className="self-start"
-        vividPrefix="order-type"
-      />
-
-      {orderType === "limit" && (
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-subtle">Limit price</span>
-          <div className="flex items-center rounded-xl bg-surface-sunken focus-within:ring-1 focus-within:ring-foreground/[0.12]">
-            <input
-              value={limitPrice}
-              onChange={(e) => setLimitPrice(e.target.value.replace(/[^0-9.]/g, ""))}
-              inputMode="decimal"
-              data-vivid-target="trade-limit-price"
-              data-vivid-label="Limit price in USD"
-              aria-label="Limit price in USD"
-              placeholder={price ? fmtPx(price) : "…"}
-              className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
-            />
-            <span className="pr-3 text-xs text-subtle">USD</span>
-          </div>
-        </label>
-      )}
-
-      <label className="flex flex-col gap-1">
-        <span className="flex items-center justify-between text-xs text-subtle">
-          <span>Amount</span>
-          {market === "spot" && side === "buy" && balances && (
-            <span className="tabular-nums">avail ${balances.spotUsdc.toFixed(2)}</span>
-          )}
-          {/* Reduce-only spends nothing, so the free balance is the wrong
-              ceiling to quote — the open position is. */}
-          {modernFutures && reduceOnly ? (
-            openPosition && (
-              <span className="tabular-nums">position ${openPosition.notionalUsd.toFixed(2)}</span>
-            )
-          ) : market === "futures" && balances ? (
-            <span className="tabular-nums">avail ${balances.perpsWithdrawableUsdc.toFixed(2)}</span>
-          ) : null}
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 8v5" />
+            <path d="M12 16h.01" />
+          </svg>
         </span>
-        <div className="flex items-center rounded-xl bg-surface-sunken focus-within:ring-1 focus-within:ring-foreground/[0.12]">
-          <input
-            value={amountUsd}
-            onChange={(e) => setAmountUsd(e.target.value.replace(/[^0-9.]/g, ""))}
-            inputMode="decimal"
-            data-vivid-target="trade-amount"
-            data-vivid-label="Order amount in USD (the notional)"
-            aria-label="Order amount in USD"
-            placeholder={`Min ${minOrder}`}
-            className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
-          />
-          <span className="pr-3 text-[11px] text-subtle">USD</span>
+        <div>
+          <p className="text-sm font-semibold">
+            Can&apos;t reach your trading account
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Your balances and positions couldn&apos;t be loaded, so orders are
+            on hold. Nothing has been placed or cancelled.
+          </p>
         </div>
-      </label>
+        <button
+          onClick={refreshAccount}
+          className="mt-1 flex h-10 w-full items-center justify-center rounded-full bg-surface-sunken text-sm font-semibold transition-colors hover:bg-accent"
+        >
+          Try again
+        </button>
+      </div>
+    ) : needsTradingAccount && !account ? (
+      <div className="flex flex-col gap-3 p-3.5">
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="h-10 animate-pulse rounded-xl bg-surface-sunken" />
+          <div className="h-10 animate-pulse rounded-xl bg-surface-sunken" />
+        </div>
+        <div className="h-7 w-32 animate-pulse rounded-full bg-surface-sunken" />
+        <div className="h-[52px] animate-pulse rounded-xl bg-surface-sunken" />
+        <div className="h-11 animate-pulse rounded-full bg-surface-sunken" />
+      </div>
+    ) : needsTradingAccount && !ready ? (
+      <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.12]">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-primary"
+          >
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+          </svg>
+        </span>
+        <div>
+          <p className="text-sm font-semibold">Trading account not set up</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            One-time setup, then fund it with USDC to start trading.
+          </p>
+        </div>
+        <button
+          onClick={() => openFlow("fund")}
+          className="mt-1 flex h-10 w-full items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          Set up &amp; fund
+        </button>
+      </div>
+    ) : reviewScreen ? (
+      reviewScreen
+    ) : (
+      <div className="flex flex-col gap-3 p-3.5">
+        {spotMarketsUnavailable && (
+          <AnnouncementBanner
+            tone="warning"
+            title="Markets are unavailable right now"
+            detail={
+              marketsError
+                ? "The market registry didn't load. Your wallet and balances are unaffected."
+                : "The market registry came back empty, so there's nothing to trade here yet."
+            }
+            action={{ label: "Try again", onClick: loadMarkets }}
+          />
+        )}
 
-      {maxNotional > 0 && (
-        <div className="grid grid-cols-4 gap-1">
-          {[0.25, 0.5, 0.75, 1].map((pct) => (
+        {/* Spec §8: an unroutable pair says so before the press. */}
+        {spotPlan?.kind === "unavailable" && (
+          <AnnouncementBanner
+            tone="warning"
+            title="This pair isn't available on the new wallet yet"
+            detail={spotPlan.reason}
+          />
+        )}
+
+        {/* Side */}
+        <div className="grid grid-cols-2 gap-1.5">
+          {(["buy", "sell"] as const).map((s) => (
             <button
-              key={pct}
-              data-vivid-target={pct === 1 ? "trade-amount-max" : `trade-amount-${pct * 100}pct`}
-              data-vivid-label={pct === 1 ? "Use the full available balance" : `Use ${pct * 100}% of the available balance`}
-              aria-label={pct === 1 ? "Use the full available balance as the amount" : `Use ${pct * 100} percent of the available balance as the amount`}
-              onClick={() =>
-                setAmountUsd(
-                  pct === 1
-                    ? String(Math.floor(maxNotional * 100) / 100)
-                    : (maxNotional * pct).toFixed(2),
-                )
+              key={s}
+              onClick={() => setSide(s)}
+              aria-label={
+                market === "futures"
+                  ? s === "buy"
+                    ? "Long side"
+                    : "Short side"
+                  : s === "buy"
+                    ? "Buy side"
+                    : "Sell side"
               }
-              className="rounded-lg bg-surface-sunken py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              data-vivid-target={
+                s === "buy" ? "trade-side-buy" : "trade-side-sell"
+              }
+              data-vivid-label={
+                market === "futures"
+                  ? s === "buy"
+                    ? "Long side"
+                    : "Short side"
+                  : s === "buy"
+                    ? "Buy side"
+                    : "Sell side"
+              }
+              className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${
+                side === s
+                  ? s === "buy"
+                    ? "bg-credit text-white"
+                    : "bg-debit text-white"
+                  : "bg-surface-sunken text-muted-foreground hover:bg-accent"
+              }`}
             >
-              {pct === 1 ? "Max" : `${pct * 100}%`}
+              {market === "futures"
+                ? s === "buy"
+                  ? "Long"
+                  : "Short"
+                : s === "buy"
+                  ? "Buy"
+                  : "Sell"}
             </button>
           ))}
         </div>
-      )}
 
-      {/* Reduce-only (spec §9) — modern perps only. It changes what the rest
-          of the ticket even means, so it sits above the controls it removes. */}
-      {modernFutures && (
-        <label className="flex items-center justify-between gap-3 rounded-xl bg-surface-sunken px-3 py-2">
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-xs font-semibold">Reduce only</span>
-            <span className="text-[10px] leading-snug text-subtle">
-              Shrinks an open position — never opens a new one.
-            </span>
+        {/* Type — the house Segmented, same control as everywhere else */}
+        <Segmented
+          size="sm"
+          value={orderType}
+          onChange={setOrderType}
+          options={ORDER_TYPES}
+          className="self-start"
+          vividPrefix="order-type"
+        />
+
+        {orderType === "limit" && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-subtle">Limit price</span>
+            <div className="flex items-center rounded-xl bg-surface-sunken focus-within:ring-1 focus-within:ring-foreground/[0.12]">
+              <input
+                value={limitPrice}
+                onChange={(e) =>
+                  setLimitPrice(e.target.value.replace(/[^0-9.]/g, ""))
+                }
+                inputMode="decimal"
+                data-vivid-target="trade-limit-price"
+                data-vivid-label="Limit price in USD"
+                aria-label="Limit price in USD"
+                placeholder={price ? fmtPx(price) : "…"}
+                className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
+              />
+              <span className="pr-3 text-xs text-subtle">USD</span>
+            </div>
+          </label>
+        )}
+
+        <label className="flex flex-col gap-1">
+          <span className="flex items-center justify-between text-xs text-subtle">
+            <span>Amount</span>
+            {market === "spot" && side === "buy" && balances && (
+              <span className="tabular-nums">
+                avail ${balances.spotUsdc.toFixed(2)}
+              </span>
+            )}
+            {/* Reduce-only spends nothing, so the free balance is the wrong
+              ceiling to quote — the open position is. */}
+            {modernFutures && reduceOnly ? (
+              openPosition && (
+                <span className="tabular-nums">
+                  position ${openPosition.notionalUsd.toFixed(2)}
+                </span>
+              )
+            ) : market === "futures" && balances ? (
+              <span className="tabular-nums">
+                avail ${balances.perpsWithdrawableUsdc.toFixed(2)}
+              </span>
+            ) : null}
           </span>
-          <input
-            type="checkbox"
-            checked={reduceOnly}
-            onChange={(e) => setReduceOnly(e.target.checked)}
-            data-vivid-target="trade-reduce-only"
-            data-vivid-label="Reduce-only toggle — the order can only close existing exposure"
-            aria-label="Reduce only — the order can only close existing exposure"
-            className="h-4 w-4 shrink-0 accent-[var(--primary)]"
-          />
+          <div className="flex items-center rounded-xl bg-surface-sunken focus-within:ring-1 focus-within:ring-foreground/[0.12]">
+            <input
+              value={amountUsd}
+              onChange={(e) =>
+                setAmountUsd(e.target.value.replace(/[^0-9.]/g, ""))
+              }
+              inputMode="decimal"
+              data-vivid-target="trade-amount"
+              data-vivid-label="Order amount in USD (the notional)"
+              aria-label="Order amount in USD"
+              placeholder={`Min ${minOrder}`}
+              className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
+            />
+            <span className="pr-3 text-[11px] text-subtle">USD</span>
+          </div>
         </label>
-      )}
 
-      {market === "futures" && !(modernFutures && reduceOnly) && (
-        <div>
-          <div className="flex justify-between text-xs text-subtle">
-            <span>Leverage</span>
-            <span className="font-bold tabular-nums text-foreground">{leverage}×</span>
+        {maxNotional > 0 && (
+          <div className="grid grid-cols-4 gap-1">
+            {[0.25, 0.5, 0.75, 1].map((pct) => (
+              <button
+                key={pct}
+                data-vivid-target={
+                  pct === 1
+                    ? "trade-amount-max"
+                    : `trade-amount-${pct * 100}pct`
+                }
+                data-vivid-label={
+                  pct === 1
+                    ? "Use the full available balance"
+                    : `Use ${pct * 100}% of the available balance`
+                }
+                aria-label={
+                  pct === 1
+                    ? "Use the full available balance as the amount"
+                    : `Use ${pct * 100} percent of the available balance as the amount`
+                }
+                onClick={() =>
+                  setAmountUsd(
+                    pct === 1
+                      ? String(Math.floor(maxNotional * 100) / 100)
+                      : (maxNotional * pct).toFixed(2)
+                  )
+                }
+                className="rounded-lg bg-surface-sunken py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+              >
+                {pct === 1 ? "Max" : `${pct * 100}%`}
+              </button>
+            ))}
           </div>
-          <input
-            type="range"
-            min={1}
-            max={maxLev}
-            value={leverage}
-            onChange={(e) => setLeverage(parseInt(e.target.value))}
-            data-vivid-target="trade-leverage"
-            data-vivid-label={`Leverage slider, 1 to ${maxLev}. Fill with a whole number.`}
-            aria-label={`Leverage multiplier, 1 to ${maxLev}`}
-            className="mt-1 w-full accent-[var(--primary)]"
-          />
-          <div className="flex justify-between text-[9px] text-subtle">
-            <span>1×</span>
-            <span>{maxLev}×</span>
-          </div>
-          {/* The venue's own constraint, stated rather than assumed (spec §9).
+        )}
+
+        {/* Reduce-only (spec §9) — modern perps only. It changes what the rest
+          of the ticket even means, so it sits above the controls it removes. */}
+        {modernFutures && (
+          <label className="flex items-center justify-between gap-3 rounded-xl bg-surface-sunken px-3 py-2">
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-xs font-semibold">Reduce only</span>
+              <span className="text-[10px] leading-snug text-subtle">
+                Shrinks an open position — never opens a new one.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={reduceOnly}
+              onChange={(e) => setReduceOnly(e.target.checked)}
+              data-vivid-target="trade-reduce-only"
+              data-vivid-label="Reduce-only toggle — the order can only close existing exposure"
+              aria-label="Reduce only — the order can only close existing exposure"
+              className="h-4 w-4 shrink-0 accent-[var(--primary)]"
+            />
+          </label>
+        )}
+
+        {market === "futures" && !(modernFutures && reduceOnly) && (
+          <div>
+            <div className="flex justify-between text-xs text-subtle">
+              <span>Leverage</span>
+              <span className="font-bold text-foreground tabular-nums">
+                {leverage}×
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={maxLev}
+              value={leverage}
+              onChange={(e) => setLeverage(parseInt(e.target.value))}
+              data-vivid-target="trade-leverage"
+              data-vivid-label={`Leverage slider, 1 to ${maxLev}. Fill with a whole number.`}
+              aria-label={`Leverage multiplier, 1 to ${maxLev}`}
+              className="mt-1 w-full accent-[var(--primary)]"
+            />
+            <div className="flex justify-between text-[9px] text-subtle">
+              <span>1×</span>
+              <span>{maxLev}×</span>
+            </div>
+            {/* The venue's own constraint, stated rather than assumed (spec §9).
               There is no cross-margin control to hide — this contract simply
               has one margin mode, and the ticket says which. */}
-          {onlyIsolated && (
-            <p className="mt-1.5 text-[10px] leading-snug text-subtle">
-              Isolated margin only — the margin you commit here backs this position alone.
-            </p>
-          )}
-        </div>
-      )}
+            {onlyIsolated && (
+              <p className="mt-1.5 text-[10px] leading-snug text-subtle">
+                Isolated margin only — the margin you commit here backs this
+                position alone.
+              </p>
+            )}
+          </div>
+        )}
 
-      {market === "futures" && !(modernFutures && reduceOnly) && (
-        <div className="grid grid-cols-2 gap-1.5">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-subtle">Take profit</span>
-            <input
-              value={tpPrice}
-              onChange={(e) => setTpPrice(e.target.value.replace(/[^0-9.]/g, ""))}
-              inputMode="decimal"
-              data-vivid-target="trade-take-profit"
-              data-vivid-label="Take profit trigger price (optional)"
-              aria-label="Take profit trigger price"
-              placeholder="Optional"
-              className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-credit/40"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-subtle">Stop loss</span>
-            <input
-              value={slPrice}
-              onChange={(e) => setSlPrice(e.target.value.replace(/[^0-9.]/g, ""))}
-              inputMode="decimal"
-              data-vivid-target="trade-stop-loss"
-              data-vivid-label="Stop loss trigger price (optional)"
-              aria-label="Stop loss trigger price"
-              placeholder="Optional"
-              className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-debit/40"
-            />
-          </label>
-        </div>
-      )}
+        {market === "futures" && !(modernFutures && reduceOnly) && (
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-subtle">Take profit</span>
+              <input
+                value={tpPrice}
+                onChange={(e) =>
+                  setTpPrice(e.target.value.replace(/[^0-9.]/g, ""))
+                }
+                inputMode="decimal"
+                data-vivid-target="trade-take-profit"
+                data-vivid-label="Take profit trigger price (optional)"
+                aria-label="Take profit trigger price"
+                placeholder="Optional"
+                className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-credit/40"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-subtle">Stop loss</span>
+              <input
+                value={slPrice}
+                onChange={(e) =>
+                  setSlPrice(e.target.value.replace(/[^0-9.]/g, ""))
+                }
+                inputMode="decimal"
+                data-vivid-target="trade-stop-loss"
+                data-vivid-label="Stop loss trigger price (optional)"
+                aria-label="Stop loss trigger price"
+                placeholder="Optional"
+                className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-debit/40"
+              />
+            </label>
+          </div>
+        )}
 
-      {tpslError && (
-        <p role="alert" className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed text-warning">{tpslError}</p>
-      )}
+        {tpslError && (
+          <p
+            role="alert"
+            className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed text-warning"
+          >
+            {tpslError}
+          </p>
+        )}
 
-      {reduceOnlyError && (
-        <p role="alert" className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed text-warning">{reduceOnlyError}</p>
-      )}
+        {reduceOnlyError && (
+          <p
+            role="alert"
+            className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed text-warning"
+          >
+            {reduceOnlyError}
+          </p>
+        )}
 
-      {amt > 0 && price > 0 && (
-        <div className="divide-y divide-border/15 rounded-xl bg-surface-sunken/70 px-3 text-xs tabular-nums">
-          <div className="flex justify-between py-1.5">
-            <span className="text-subtle">Qty</span>
-            {/* Amount IS the notional; leverage only sets the margin used. The
+        {amt > 0 && price > 0 && (
+          <div className="divide-y divide-border/15 rounded-xl bg-surface-sunken/70 px-3 text-xs tabular-nums">
+            <div className="flex justify-between py-1.5">
+              <span className="text-subtle">Qty</span>
+              {/* Amount IS the notional; leverage only sets the margin used. The
                 places shown are the contract's own `szDecimals` where the
                 backend stated it (spec §9) — the estimate should not promise
                 precision the venue will round away. */}
-            <span>≈ {(amt / price).toFixed(szDecimals ?? 6)} {symbol}</span>
-          </div>
-          {market === "futures" && !(modernFutures && reduceOnly) && leverage > 1 && (
-            <div className="flex justify-between py-1.5">
-              <span className="text-subtle">Margin at {leverage}×</span>
-              <span>≈ ${(amt / leverage).toFixed(2)}</span>
+              <span>
+                ≈ {(amt / price).toFixed(szDecimals ?? 6)} {symbol}
+              </span>
             </div>
-          )}
-        </div>
-      )}
+            {market === "futures" &&
+              !(modernFutures && reduceOnly) &&
+              leverage > 1 && (
+                <div className="flex justify-between py-1.5">
+                  <span className="text-subtle">Margin at {leverage}×</span>
+                  <span>≈ ${(amt / leverage).toFixed(2)}</span>
+                </div>
+              )}
+          </div>
+        )}
 
-      {error && (
-        <p role="alert" className="rounded-lg bg-debit-chip px-2.5 py-1.5 text-xs leading-relaxed text-debit">{error}</p>
-      )}
-      {outcome?.success && (
-        <p role="status" className="rounded-lg bg-credit-chip px-2.5 py-1.5 text-xs leading-relaxed text-credit">
-          {outcome.resting
-            ? "Limit order resting on the book."
-            : `Filled ${outcome.filledSize ?? ""} ${outcome.symbol} @ $${outcome.avgFillPrice?.toFixed(2) ?? "—"}`}
-        </p>
-      )}
-      {outcome?.success && outcome.tpslWarning && (
-        <p role="alert" className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs font-semibold leading-relaxed text-warning">
-          ⚠ {outcome.tpslWarning} — your position is open without that protection.
-        </p>
-      )}
-      {/* Spec §8: a submitted swap is not a fill. This line follows the intent
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg bg-debit-chip px-2.5 py-1.5 text-xs leading-relaxed text-debit"
+          >
+            {error}
+          </p>
+        )}
+        {outcome?.success && (
+          <p
+            role="status"
+            className="rounded-lg bg-credit-chip px-2.5 py-1.5 text-xs leading-relaxed text-credit"
+          >
+            {outcome.resting
+              ? "Limit order resting on the book."
+              : `Filled ${outcome.filledSize ?? ""} ${outcome.symbol} @ $${outcome.avgFillPrice?.toFixed(2) ?? "—"}`}
+          </p>
+        )}
+        {outcome?.success && outcome.tpslWarning && (
+          <p
+            role="alert"
+            className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed font-semibold text-warning"
+          >
+            ⚠ {outcome.tpslWarning} — your position is open without that
+            protection.
+          </p>
+        )}
+        {/* Spec §8: a submitted swap is not a fill. This line follows the intent
           poll and only reads as done on `confirmed`. Modern spot only — the
           legacy ticket must never show a Worldstreet-wallet swap's status. */}
-      {usingModern && market === "spot" && spotIntentId && (
-        <p
-          role="status"
-          aria-live="polite"
-          className={`rounded-lg px-2.5 py-1.5 text-xs leading-relaxed ${
-            spotIntentStatus === "confirmed"
-              ? "bg-credit-chip text-credit"
-              : spotIntentStatus === "failed" || spotIntentStatus === "expired"
-              ? "bg-debit-chip text-debit"
-              : "bg-surface-sunken text-muted-foreground"
+        {usingModern && market === "spot" && spotIntentId && (
+          <p
+            role="status"
+            aria-live="polite"
+            className={`rounded-lg px-2.5 py-1.5 text-xs leading-relaxed ${
+              spotIntentStatus === "confirmed"
+                ? "bg-credit-chip text-credit"
+                : spotIntentStatus === "failed" ||
+                    spotIntentStatus === "expired"
+                  ? "bg-debit-chip text-debit"
+                  : "bg-surface-sunken text-muted-foreground"
+            }`}
+          >
+            {spotIntentStatus === "confirmed"
+              ? `Swap confirmed on-chain. Your ${symbol} balance updates shortly.`
+              : spotIntentStatus === "failed"
+                ? "The swap didn't go through — nothing left your wallet beyond network fees."
+                : spotIntentStatus === "expired"
+                  ? "The swap expired before it confirmed. Nothing was swapped."
+                  : "Swap submitted. Waiting for on-chain confirmation — this isn't a fill yet."}
+          </p>
+        )}
+
+        {/* Modern perps: this press only BUILDS the order — the review screen's
+          confirm is the one that spends, and it is the one carrying the guard. */}
+        <button
+          onClick={submit}
+          disabled={!canSubmit}
+          data-vivid-target="trade-submit"
+          data-vivid-guard={modernFutures ? undefined : ""}
+          aria-label={
+            modernFutures
+              ? `Review order — ${side === "buy" ? "long" : "short"} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${reduceOnly ? ", reduce only" : leverage > 1 ? ` at ${leverage}x` : ""}`
+              : `Place order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${market === "futures" && leverage > 1 ? ` at ${leverage}x` : ""}`
+          }
+          data-vivid-label={
+            modernFutures
+              ? `Build the order and open the review screen — ${side === "buy" ? "long" : "short"} ${symbol}. Nothing is sent until you confirm there.`
+              : `Place the order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol} for the amount shown. Moves real money.`
+          }
+          className={`w-full rounded-full py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            side === "buy"
+              ? "bg-credit hover:bg-credit/90"
+              : "bg-debit hover:bg-debit/90"
           }`}
         >
-          {spotIntentStatus === "confirmed"
-            ? `Swap confirmed on-chain. Your ${symbol} balance updates shortly.`
-            : spotIntentStatus === "failed"
-            ? "The swap didn't go through — nothing left your wallet beyond network fees."
-            : spotIntentStatus === "expired"
-            ? "The swap expired before it confirmed. Nothing was swapped."
-            : "Swap submitted. Waiting for on-chain confirmation — this isn't a fill yet."}
-        </p>
-      )}
-
-      {/* Modern perps: this press only BUILDS the order — the review screen's
-          confirm is the one that spends, and it is the one carrying the guard. */}
-      <button
-        onClick={submit}
-        disabled={!canSubmit}
-        data-vivid-target="trade-submit"
-        data-vivid-guard={modernFutures ? undefined : ""}
-        aria-label={
-          modernFutures
-            ? `Review order — ${side === "buy" ? "long" : "short"} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${reduceOnly ? ", reduce only" : leverage > 1 ? ` at ${leverage}x` : ""}`
-            : `Place order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol}${amt > 0 ? ` for $${amt}` : ""}${market === "futures" && leverage > 1 ? ` at ${leverage}x` : ""}`
-        }
-        data-vivid-label={
-          modernFutures
-            ? `Build the order and open the review screen — ${side === "buy" ? "long" : "short"} ${symbol}. Nothing is sent until you confirm there.`
-            : `Place the order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol} for the amount shown. Moves real money.`
-        }
-        className={`w-full rounded-full py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-          side === "buy" ? "bg-credit hover:bg-credit/90" : "bg-debit hover:bg-debit/90"
-        }`}
-      >
-        {submitting
-          ? modernFutures ? "Pricing…" : "Placing…"
-          : pairUnavailable
-          ? "Pair unavailable"
-          : reduceOnlyError
-          ? "Nothing to reduce"
-          : modernFutures
-          ? "Review order"
-          : `${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
-      </button>
-    </div>
-  )
+          {submitting
+            ? modernFutures
+              ? "Pricing…"
+              : "Placing…"
+            : pairUnavailable
+              ? "Pair unavailable"
+              : reduceOnlyError
+                ? "Nothing to reduce"
+                : modernFutures
+                  ? "Review order"
+                  : `${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
+        </button>
+      </div>
+    )
 
   /* ── Workspace ────────────────────────────────────────────────────────── */
   return (
@@ -1228,8 +1585,18 @@ export function TradeClient() {
             out — a back control, not just a clickable logo. */}
         <div className="order-1 flex shrink-0 items-center gap-1.5 lg:order-none">
           <BackAction to="/" className="mt-0" />
-          <Link href="/" className="hidden items-center sm:flex" title="Dashboard">
-            <Image src="/worldstreet-logo/WorldStreet1x.png" alt="Worldstreet" width={72} height={18} className="h-[18px] w-auto object-contain" />
+          <Link
+            href="/"
+            className="hidden items-center sm:flex"
+            title="Dashboard"
+          >
+            <Image
+              src="/worldstreet-logo/WorldStreet1x.png"
+              alt="Worldstreet"
+              width={72}
+              height={18}
+              className="h-[18px] w-auto object-contain"
+            />
           </Link>
         </div>
         <span className="hidden h-6 w-px bg-border/40 sm:block" />
@@ -1243,20 +1610,9 @@ export function TradeClient() {
           vividPrefix="market-tab"
         />
 
-        {canChooseWallet ? (
-          <Segmented
-            value={walletSource}
-            onChange={(value) => {
-              setWalletSource(value)
-              // No `id` here: the row id belongs to one catalogue, and this
-              // switch swaps the catalogue. The symbol is the honest carry-over.
-              router.replace(`/trade?market=${market}${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}&wallet=${value}`)
-            }}
-            options={[{ key: "modern", label: "New wallet" }, { key: "legacy", label: "Old wallet" }]}
-            vividPrefix="wallet-tab"
-            className="order-4 shrink-0 lg:order-none"
-          />
-        ) : null}
+        <span className="order-4 shrink-0 rounded-full border border-border/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase lg:order-none">
+          Modern wallet
+        </span>
 
         {/* Pair — the rail owns switching on wide screens; this dropdown
             covers every width below xl and still works above it. */}
@@ -1267,41 +1623,75 @@ export function TradeClient() {
             aria-expanded={pickerOpen}
             data-vivid-target="trade-pair-picker"
             data-vivid-label="Open the pair picker dropdown"
-            className="flex items-center gap-1.5 rounded-xl bg-surface-sunken px-2.5 py-2 text-[15px] font-bold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-3.5"
+            className="flex items-center gap-1.5 rounded-xl bg-surface-sunken px-2.5 py-2 text-[15px] font-bold transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-3.5"
           >
             <CoinAvatar symbol={bookCoin ?? symbol} size="md" />
             {symbol || "—"}
-            <span className="hidden text-[11px] font-semibold text-subtle sm:inline">{market === "futures" ? "PERP" : `/${quoteOf(current)}`}</span>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-subtle"><path d="M6 9l6 6 6-6" /></svg>
+            <span className="hidden text-[11px] font-semibold text-subtle sm:inline">
+              {market === "futures" ? "PERP" : `/${quoteOf(current)}`}
+            </span>
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-subtle"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
           </button>
           {picker}
         </div>
 
         {/* Price + 24h stats */}
-        <div className="order-3 ml-auto flex min-w-0 items-center gap-3 overflow-x-auto scrollbar-none sm:gap-5 lg:order-none lg:ml-0">
+        <div className="scrollbar-none order-3 ml-auto flex min-w-0 items-center gap-3 overflow-x-auto sm:gap-5 lg:order-none lg:ml-0">
           <span
             aria-live="polite"
-            className={`shrink-0 text-xl font-bold tabular-nums tracking-tight sm:text-2xl ${
-              lastTick === "up" ? "text-credit" : lastTick === "down" ? "text-debit" : ""
+            className={`shrink-0 text-xl font-bold tracking-tight tabular-nums sm:text-2xl ${
+              lastTick === "up"
+                ? "text-credit"
+                : lastTick === "down"
+                  ? "text-debit"
+                  : ""
             }`}
           >
             ${fmtPx(price)}
           </span>
-          <span className={`shrink-0 text-sm font-semibold tabular-nums ${changeUp ? "text-credit" : "text-debit"}`}>
-            {stats ? `${changeUp ? "+" : ""}${stats.changePct.toFixed(2)}%` : "—"}
+          <span
+            className={`shrink-0 text-sm font-semibold tabular-nums ${changeUp ? "text-credit" : "text-debit"}`}
+          >
+            {stats
+              ? `${changeUp ? "+" : ""}${stats.changePct.toFixed(2)}%`
+              : "—"}
           </span>
-          <Stat label="24h High" value={stats ? `$${fmtPx(stats.high)}` : "—"} />
+          <Stat
+            label="24h High"
+            value={stats ? `$${fmtPx(stats.high)}` : "—"}
+          />
           <Stat label="24h Low" value={stats ? `$${fmtPx(stats.low)}` : "—"} />
-          <Stat label="24h Volume" value={stats ? fmtCompact(stats.quoteVolume) : "—"} />
+          <Stat
+            label="24h Volume"
+            value={stats ? fmtCompact(stats.quoteVolume) : "—"}
+          />
         </div>
 
         {/* Balances + money doors */}
         <div className="order-5 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 lg:order-none">
           {balances && (
-            <span className="hidden text-xs tabular-nums text-muted-foreground 2xl:block">
-              Spot <span className="font-semibold text-foreground">${balances.spotUsdc.toFixed(2)}</span>
+            <span className="hidden text-xs text-muted-foreground tabular-nums 2xl:block">
+              Spot{" "}
+              <span className="font-semibold text-foreground">
+                ${balances.spotUsdc.toFixed(2)}
+              </span>
               <span className="mx-1 text-subtle">·</span>
-              Futures <span className="font-semibold text-foreground">${balances.perpsWithdrawableUsdc.toFixed(2)}</span>
+              Futures{" "}
+              <span className="font-semibold text-foreground">
+                ${balances.perpsWithdrawableUsdc.toFixed(2)}
+              </span>
             </span>
           )}
           {/* Funding is a detour from trading, not a destination — it opens
@@ -1323,7 +1713,7 @@ export function TradeClient() {
                 onClick={() => openFlow("fund")}
                 data-vivid-target="trade-fund-button"
                 data-vivid-label="Open the fund-trading-account modal"
-                className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
+                className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
               >
                 Fund
               </button>
@@ -1331,7 +1721,7 @@ export function TradeClient() {
                 onClick={() => openFlow("trading-withdraw")}
                 data-vivid-target="trade-withdraw-button"
                 data-vivid-label="Open the withdraw-trading-balance modal"
-                className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm"
+                className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
               >
                 Withdraw
               </button>
@@ -1362,13 +1752,29 @@ export function TradeClient() {
             {marketsError ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-warning"><circle cx="12" cy="12" r="10" /><path d="M12 8v5" /><path d="M12 16h.01" /></svg>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-warning"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 8v5" />
+                    <path d="M12 16h.01" />
+                  </svg>
                 </span>
                 <div>
-                  <p className="text-sm font-semibold">Markets couldn&apos;t be loaded</p>
+                  <p className="text-sm font-semibold">
+                    Markets couldn&apos;t be loaded
+                  </p>
                   <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
-                    Prices and the order book are unavailable right now. Your balances and open
-                    positions are unaffected.
+                    Prices and the order book are unavailable right now. Your
+                    balances and open positions are unaffected.
                   </p>
                 </div>
                 <button
@@ -1409,8 +1815,16 @@ export function TradeClient() {
                 onChange={setMobilePane}
                 options={[
                   { key: "book", label: "Book" },
-                  { key: "positions", label: positionCount ? `Positions · ${positionCount}` : "Positions" },
-                  { key: "orders", label: orderCount ? `Orders · ${orderCount}` : "Orders" },
+                  {
+                    key: "positions",
+                    label: positionCount
+                      ? `Positions · ${positionCount}`
+                      : "Positions",
+                  },
+                  {
+                    key: "orders",
+                    label: orderCount ? `Orders · ${orderCount}` : "Orders",
+                  },
                 ]}
               />
             </div>
@@ -1418,7 +1832,10 @@ export function TradeClient() {
               <OrderBook
                 book={book}
                 lastTick={lastTick}
-                onPickPrice={(p) => { pickPrice(p); setTicketOpen(true) }}
+                onPickPrice={(p) => {
+                  pickPrice(p)
+                  setTicketOpen(true)
+                }}
                 className="min-h-0 flex-1"
               />
             ) : (
@@ -1454,7 +1871,12 @@ export function TradeClient() {
           only — it takes that row's mints, never a fixed SOL/USDC pair. The
           key remounts it per row: its typed amount, message and polled intent
           all belong to the pair they were entered against, not the next one. */}
-      {usingModern && market === "spot" && jupiterMarket && user?.userId && modernWallet.data && modernPackage.data ? (
+      {usingModern &&
+      market === "spot" &&
+      jupiterMarket &&
+      user?.userId &&
+      modernWallet.data &&
+      modernPackage.data ? (
         <div className="border-t border-border/30 px-3 py-3 lg:block">
           <ModernJupiterPanel
             key={marketRowKey(jupiterMarket)}
@@ -1468,20 +1890,26 @@ export function TradeClient() {
 
       {/* Mobile action bar — the ticket is one tap away at all times, and the
           tap already says which side you meant. */}
-      <div className="flex shrink-0 items-center gap-2 border-t border-border/30 bg-background px-3 py-2.5 safe-area-bottom lg:hidden">
+      <div className="safe-area-bottom flex shrink-0 items-center gap-2 border-t border-border/30 bg-background px-3 py-2.5 lg:hidden">
         <button
-          onClick={() => { setSide("buy"); setTicketOpen(true) }}
+          onClick={() => {
+            setSide("buy")
+            setTicketOpen(true)
+          }}
           data-vivid-target="trade-open-ticket-long"
           data-vivid-label="Open the order ticket on the buy/long side"
-          className="flex-1 rounded-full bg-credit py-3 text-sm font-bold text-white transition-colors hover:bg-credit/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-credit/40"
+          className="flex-1 rounded-full bg-credit py-3 text-sm font-bold text-white transition-colors hover:bg-credit/90 focus-visible:ring-2 focus-visible:ring-credit/40 focus-visible:outline-none"
         >
           {market === "futures" ? "Long" : "Buy"}
         </button>
         <button
-          onClick={() => { setSide("sell"); setTicketOpen(true) }}
+          onClick={() => {
+            setSide("sell")
+            setTicketOpen(true)
+          }}
           data-vivid-target="trade-open-ticket-short"
           data-vivid-label="Open the order ticket on the sell/short side"
-          className="flex-1 rounded-full bg-debit py-3 text-sm font-bold text-white transition-colors hover:bg-debit/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-debit/40"
+          className="flex-1 rounded-full bg-debit py-3 text-sm font-bold text-white transition-colors hover:bg-debit/90 focus-visible:ring-2 focus-visible:ring-debit/40 focus-visible:outline-none"
         >
           {market === "futures" ? "Short" : "Sell"}
         </button>
@@ -1493,9 +1921,12 @@ export function TradeClient() {
           <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/45 transition-opacity duration-300 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-md lg:hidden" />
           <Dialog.Popup
             aria-label={`${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
-            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] translate-y-0 flex-col rounded-t-3xl bg-card shadow-2xl outline-none transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-y-full data-starting-style:translate-y-full safe-area-bottom lg:hidden"
+            className="safe-area-bottom fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] translate-y-0 flex-col rounded-t-3xl bg-card shadow-2xl transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] outline-none data-ending-style:translate-y-full data-starting-style:translate-y-full lg:hidden"
           >
-            <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/[0.16]" />
+            <div
+              aria-hidden
+              className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/[0.16]"
+            />
             <div className="flex shrink-0 items-center justify-between px-4 pt-2">
               <span className="flex items-center gap-2 text-sm font-bold">
                 <CoinAvatar symbol={bookCoin ?? symbol} size="sm" />
@@ -1510,10 +1941,22 @@ export function TradeClient() {
                 aria-label="Close"
                 className="-mr-1 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{ticket}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {ticket}
+            </div>
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>

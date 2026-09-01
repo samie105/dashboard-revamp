@@ -53,3 +53,5 @@ Start with internal Clerk users, then a small cohort. Monitor proxy 4xx/5xx rate
 - Deploy the updated backend EVM adapter before enabling EVM signing; the local backend now returns and validates the complete transaction request.
 - Session-key UI remains disabled until a registered, audited EVM/Solana authority adapter exists.
 - Mainnet and unsupported chains remain disabled until backend policy, RPC, and security signoff are complete.
+
+Trading cutover: the dashboard trade screen supports the modern self-custodial wallet only. Legacy Privy records may remain for non-trading migration compatibility, but legacy trading is not supported.
