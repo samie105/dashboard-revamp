@@ -329,6 +329,20 @@ export class CryptoBackendClient {
     }, { signal })
   }
 
+  async createModernLifiSwapIntent(input: {
+    sourceNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet"
+    destinationNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet"
+    sellToken: string
+    buyToken: string
+    sellAmountBaseUnits: string
+    slippagePercentage?: number
+    idempotencyKey?: string
+  }, signal?: AbortSignal): Promise<CryptoTransactionIntent> {
+    return this.request<CryptoTransactionIntent>("/trading/spot/lifi/intents", {
+      method: "POST", body: JSON.stringify(input),
+    }, { signal })
+  }
+
   async getModernSpotMarkets(signal?: AbortSignal) {
     return this.request<{ markets: Array<{ id: string; symbol: string; quote: string; networkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta"; venue: "0x" | "jupiter"; chartSymbol: string; chartSupported: boolean; price?: number; icon?: string | null; sellToken?: string; buyToken?: string; inputMint?: string; outputMint?: string; baseDecimals?: number; quoteDecimals?: number }> }>("/trading/spot/markets", {}, { signal })
   }
