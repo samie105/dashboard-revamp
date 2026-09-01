@@ -54,6 +54,7 @@ import {
 } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
+import { OrderPlacedModal, orderCopy } from "@/components/trade/order-placed-modal"
 import { useAuth } from "@/components/auth-provider"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import {
@@ -192,6 +193,16 @@ export function TradeClient() {
      for the single most routine state this screen can be in. */
   const [unlockOpen, setUnlockOpen] = React.useState(false)
   const resumeAfterUnlock = React.useRef<(() => void) | null>(null)
+  /* The order AS PLACED. Snapshotted because the ticket stays live behind the
+     confirmation — the fields can be edited for the next order while this one
+     is still filling, and the receipt must describe the order that was sent. */
+  const [placedOrder, setPlacedOrder] = React.useState<{
+    side: Side
+    symbol: string
+    amount: string
+    quantity: string | null
+  } | null>(null)
+  const [orderModalOpen, setOrderModalOpen] = React.useState(false)
   const [leverage, setLeverage] = React.useState(1)
   // Modern futures only (spec §9): an order that may only shrink exposure.
   const [reduceOnly, setReduceOnly] = React.useState(false)
@@ -687,9 +698,21 @@ export function TradeClient() {
                 signingAccount.id
               )
         await cryptoBackendClient.submitIntent(intent.id, signed)
-        // Submitted is not filled: the status line below follows the intent
-        // poll and only reads as complete once the backend says `confirmed`.
+        // Submitted is not filled: the confirmation follows the intent poll
+        // and only reads as complete once the backend says `confirmed`.
         setSpotIntentId(intent.id)
+        setPlacedOrder({
+          side,
+          symbol,
+          amount: inTokenUnit ? `${amt} ${spentSymbol}` : `$${amt}`,
+          // Only where a live price makes it a real estimate — a size we
+          // cannot compute is left off the receipt rather than shown as zero.
+          quantity:
+            !inTokenUnit && price > 0
+              ? `≈ ${(amt / price).toFixed(szDecimals ?? 6)} ${symbol}`
+              : null,
+        })
+        setOrderModalOpen(true)
         return
       }
       const evmAccount = accountFor("evm")
@@ -1590,10 +1613,13 @@ export function TradeClient() {
             protection.
           </p>
         )}
-        {/* Spec §8: a submitted swap is not a fill. This line follows the intent
-          poll and only reads as done on `confirmed`. Modern spot only — the
-          legacy ticket must never show a Worldstreet-wallet swap's status. */}
-        {usingModern && market === "spot" && spotIntentId && (
+        {/* Spec §8: a submitted order is not a fill. This line follows the same
+          intent poll as the confirmation modal and says the same thing in the
+          same words (`orderCopy`) — it is what remains once the modal is
+          dismissed, so the two are never on screen together. Modern spot only:
+          the legacy ticket must never show a Worldstreet-wallet order's
+          status. */}
+        {usingModern && market === "spot" && spotIntentId && !orderModalOpen && (
           <p
             role="status"
             aria-live="polite"
@@ -1606,13 +1632,7 @@ export function TradeClient() {
                   : "bg-surface-sunken text-muted-foreground"
             }`}
           >
-            {spotIntentStatus === "confirmed"
-              ? `Swap confirmed on-chain. Your ${symbol} balance updates shortly.`
-              : spotIntentStatus === "failed"
-                ? "The swap didn't go through — nothing left your wallet beyond network fees."
-                : spotIntentStatus === "expired"
-                  ? "The swap expired before it confirmed. Nothing was swapped."
-                  : "Swap submitted. Waiting for on-chain confirmation — this isn't a fill yet."}
+            {orderCopy(spotIntentStatus, symbol).body}
           </p>
         )}
 
@@ -2016,6 +2036,21 @@ export function TradeClient() {
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* The order's own acknowledgement. Driven by the same intent poll as
+          the ticket's inline line, so it can never claim a fill the poll
+          hasn't reported. */}
+      {placedOrder && (
+        <OrderPlacedModal
+          open={orderModalOpen}
+          onOpenChange={setOrderModalOpen}
+          status={spotIntentStatus}
+          side={placedOrder.side}
+          symbol={placedOrder.symbol}
+          amount={placedOrder.amount}
+          quantity={placedOrder.quantity}
+        />
+      )}
 
       {/* Unlock, then place the order the user already pressed — the same
           resume the swap screen does. */}
