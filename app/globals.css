@@ -906,6 +906,78 @@ input[type="range"]::-moz-range-track {
   100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
 }
 .ws-casc-pop { animation: ws-casc-pop 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* A value that arrived in a field on its own — a generated passphrase — rings
+   once and fades. It fires on an event and never repeats, so it points at the
+   change without becoming ambient decoration. Reduced motion drops the ring
+   entirely: the value is already visible in the field, which is the fact that
+   mattered. */
+@keyframes ws-field-flash {
+  0%   { opacity: 0; }
+  18%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.ws-field-flash { animation: ws-field-flash 1s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .ws-field-flash { animation: none; opacity: 0; }
+}
+
+/* ── The wallet — cards, the pocket, and the deal ─────────────────────────
+   A card only reads as an object if it behaves like one. Three motions,
+   all of them things a physical wallet does:
+
+     · cards DEAL into the pocket on arrival, back to front, each landing
+       out of a slight tilt (`--deal-tilt` lets a card pick its own lean so
+       the stack doesn't look machine-fed);
+     · the card face SETTLES when a new card is dealt onto the hero — it
+       overshoots a hair and comes to rest, the way a card dropped on a
+       table bounces once;
+     · light SWEEPS the laminate on arrival and on every change. This is
+       the one that sells "physical object" over "coloured rectangle".
+
+   All three are off under reduced motion; the wallet still reads, it just
+   stops moving. The sweep needs a positioned, clipping parent — the caller
+   owns that, as everywhere else in this file. */
+@keyframes ws-card-deal {
+  from { opacity: 0; transform: translateY(28px) rotate(var(--deal-tilt, -3deg)); }
+  to   { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+.ws-card-deal { animation: ws-card-deal 0.62s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes ws-card-face-in {
+  0%   { opacity: 0; transform: translateY(14px) scale(0.985); }
+  68%  { opacity: 1; transform: translateY(-2px) scale(1.003); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.ws-card-face-in { animation: ws-card-face-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes ws-card-sheen {
+  from { transform: translateX(-140%) skewX(-18deg); }
+  to   { transform: translateX(260%) skewX(-18deg); }
+}
+.ws-card-sheen::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -40%;
+  bottom: -40%;
+  width: 42%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.07) 42%,
+    rgb(255 255 255 / 0.15) 50%,
+    rgb(255 255 255 / 0.07) 58%,
+    transparent
+  );
+  animation: ws-card-sheen 1.25s cubic-bezier(0.4, 0, 0.2, 1) 0.2s both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-card-deal, .ws-card-face-in { animation: none; }
+  .ws-card-sheen::after { display: none; }
+}
+
 /* ── Flow terminal ────────────────────────────────────────────────────────
    The money modal's instrument layout. Two standing motions, both quiet:
    a light beam travels the route rail in the direction of the money, and

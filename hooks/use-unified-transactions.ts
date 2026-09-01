@@ -1,6 +1,16 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useAuth } from "@/components/auth-provider"
+import { useWalletMode } from "@/components/wallet-mode-provider"
+import {
+  cryptoBackendClient,
+  cryptoQueryKeys,
+  isCryptoBackendEnabled,
+} from "@/lib/crypto-backend"
+import type { CryptoTransactionRecord } from "@/lib/crypto-backend"
+import { modernDataEnabled } from "@/lib/wallet-mode"
 import type {
   UnifiedTransaction,
   TransactionStats,
@@ -36,10 +46,63 @@ const DEFAULT_STATS: TransactionStats = {
   netVolume: 0,
 }
 
+function mapCryptoStatus(status: string): UnifiedTransaction["status"] {
+  if (status === "confirmed") return "completed"
+  if (status === "failed") return "failed"
+  if (status === "submitted") return "processing"
+  return "pending"
+}
+
+function mapCryptoTransaction(transaction: CryptoTransactionRecord): UnifiedTransaction {
+  const asset = transaction.assetSummary
+  const amount = typeof transaction.amount === "number" ? transaction.amount : 0
+  return {
+    id: transaction.id,
+    type: "transfer",
+    subType: "send",
+    amount,
+    token: asset?.identifier ?? "Unknown",
+    chain: transaction.networkId ?? transaction.chainFamily,
+    status: mapCryptoStatus(transaction.status),
+    fromAddress: transaction.fromAddress,
+    toAddress: transaction.toAddress,
+    txHash: transaction.txHash,
+    direction: "outgoing",
+    createdAt: transaction.createdAt ?? transaction.submittedAt ?? new Date(0).toISOString(),
+    completedAt: transaction.confirmedAt,
+  }
+}
+
+function matchesCryptoFilters(transaction: UnifiedTransaction, filters: TransactionFilters) {
+  if (filters.type && transaction.type !== filters.type) return false
+  if (filters.status && transaction.status !== filters.status) return false
+  if (filters.search) {
+    const search = filters.search.toLowerCase()
+    const haystack = `${transaction.id} ${transaction.token} ${transaction.chain ?? ""} ${transaction.txHash ?? ""}`.toLowerCase()
+    if (!haystack.includes(search)) return false
+  }
+  if (filters.dateFrom && transaction.createdAt < filters.dateFrom) return false
+  if (filters.dateTo && transaction.createdAt > filters.dateTo) return false
+  return true
+}
+
+function getCryptoStats(transactions: UnifiedTransaction[]): TransactionStats {
+  return {
+    ...DEFAULT_STATS,
+    totalTransfers: transactions.length,
+    netVolume: transactions.reduce((total, transaction) => total + transaction.amount, 0),
+  }
+}
+
 export function useUnifiedTransactions(
   options: UseUnifiedTransactionsOptions = {},
 ): UseUnifiedTransactionsReturn {
   const { pollInterval = 30000 } = options
+  const { user, isLoaded, isSignedIn } = useAuth()
+  const { mode } = useWalletMode()
+  const userId = user?.userId ?? "anonymous"
+  const backendEnabled =
+    modernDataEnabled({ modernEnabled: isCryptoBackendEnabled, mode }) && isLoaded && isSignedIn
 
   const [transactions, setTransactions] = useState<UnifiedTransaction[]>([])
   const [stats, setStats] = useState<TransactionStats | null>(null)
@@ -52,6 +115,12 @@ export function useUnifiedTransactions(
   const [filters, setFiltersState] = useState<TransactionFilters>({ limit: 30 })
   const observerRef = useRef<IntersectionObserver | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const cryptoQuery = useQuery({
+    queryKey: cryptoQueryKeys.transactions(userId, filters),
+    queryFn: ({ signal }) => cryptoBackendClient.listTransactions(filters.limit || 30, signal),
+    enabled: backendEnabled,
+  })
 
   const buildUrl = useCallback(
     (cursor?: string) => {
@@ -70,6 +139,7 @@ export function useUnifiedTransactions(
 
   const fetchTransactions = useCallback(
     async (append = false) => {
+      if (backendEnabled) return
       try {
         if (append) {
           setIsLoadingMore(true)
@@ -103,17 +173,18 @@ export function useUnifiedTransactions(
         setIsLoadingMore(false)
       }
     },
-    [buildUrl, nextCursor],
+    [backendEnabled, buildUrl, nextCursor],
   )
 
   useEffect(() => {
+    if (backendEnabled) return
     setNextCursor(undefined)
     fetchTransactions(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.type, filters.status, filters.search, filters.dateFrom, filters.dateTo])
+  }, [backendEnabled, filters.type, filters.status, filters.search, filters.dateFrom, filters.dateTo])
 
   useEffect(() => {
-    if (pollInterval <= 0) return
+    if (backendEnabled || pollInterval <= 0) return
 
     pollRef.current = setInterval(() => {
       fetchTransactions(false)
@@ -123,7 +194,7 @@ export function useUnifiedTransactions(
       if (pollRef.current) clearInterval(pollRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pollInterval, filters])
+  }, [backendEnabled, pollInterval, filters])
 
   const loadMore = useCallback(() => {
     if (!isLoadingMore && hasMore && nextCursor) {
@@ -154,17 +225,32 @@ export function useUnifiedTransactions(
   }, [])
 
   const refresh = useCallback(() => {
+    if (backendEnabled) {
+      void cryptoQuery.refetch()
+      return
+    }
     setNextCursor(undefined)
     fetchTransactions(false)
-  }, [fetchTransactions])
+  }, [backendEnabled, cryptoQuery, fetchTransactions])
+
+  const backendTransactions = (cryptoQuery.data ?? [])
+    .map(mapCryptoTransaction)
+    .filter((transaction) => matchesCryptoFilters(transaction, filters))
+  const visibleTransactions = backendEnabled ? backendTransactions : transactions
 
   return {
-    transactions,
-    stats,
-    isLoading,
-    isLoadingMore,
-    error,
-    hasMore,
+    transactions: visibleTransactions,
+    stats: backendEnabled ? getCryptoStats(visibleTransactions) : stats,
+    isLoading: backendEnabled ? cryptoQuery.isLoading : isLoading,
+    isLoadingMore: backendEnabled ? false : isLoadingMore,
+    error: backendEnabled
+      ? cryptoQuery.error instanceof Error
+        ? cryptoQuery.error.message
+        : cryptoQuery.error
+          ? "Failed to load transactions"
+          : null
+      : error,
+    hasMore: backendEnabled ? false : hasMore,
     filters,
     setFilters,
     loadMore,

@@ -51,7 +51,6 @@ function toPlain(doc: unknown): ProfileData {
   } as ProfileData
 }
 
-// ── Server Actions ───────────────────────────────────────────────────────
 
 export async function fetchProfile(): Promise<ProfileResult> {
   try {
@@ -60,7 +59,6 @@ export async function fetchProfile(): Promise<ProfileResult> {
       const authResult = await auth()
       userId = authResult.userId
     } catch {
-      // auth() itself failed — treat as unauthenticated
       return { success: false, error: "Unauthorized" }
     }
 

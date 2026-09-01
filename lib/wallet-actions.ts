@@ -6,8 +6,21 @@ import { connectDB } from "@/lib/mongodb"
 import { auth } from "@clerk/nextjs/server"
 
 // The Privy app new signups are created in (0 = old, 1 = second, 2 = third,
-// 3 = fourth). Bump when the current app hits Privy's account limit.
-const SIGNUP_PRIVY_TYPE = 3
+// 3 = fourth). Prefer an explicit tier, then fall back to the highest tier
+// that is actually configured locally. This keeps legacy wallet support alive
+// without retrying forever against a missing FOURTH_PRIVY_APP_ID.
+function configuredSignupPrivyType() {
+  const requested = Number(process.env.SIGNUP_PRIVY_TYPE)
+  const candidates = Number.isInteger(requested) && requested >= 0 && requested <= 3
+    ? [requested]
+    : [3, 2, 1, 0]
+  return candidates.find((type) => {
+    const prefix = type === 0 ? "PRIVY" : type === 1 ? "NEW_PRIVY" : type === 2 ? "THIRD_PRIVY" : "FOURTH_PRIVY"
+    return Boolean(process.env[`${prefix}_APP_ID`] && process.env[`${prefix}_APP_SECRET`])
+  }) ?? 0
+}
+
+const SIGNUP_PRIVY_TYPE = configuredSignupPrivyType()
 
 function createPrivyClient(privyType: number = 0) {
   if (privyType === 3) {
@@ -80,6 +93,7 @@ export type WalletResult = {
   wallets?: Record<string, WalletInfo>
   tradingWallet?: { walletId: string; address: string; chainType: string } | null
   error?: string
+  notFound?: boolean
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -279,7 +293,7 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
 
     const existing = await UserWallet.findOne({ email }).lean()
     if (!existing) {
-      return { success: false, error: "User record not found" }
+      return { success: false, error: "User record not found", notFound: true }
     }
 
     const selectedPrivyType = existing.privy_type ?? 0
@@ -290,7 +304,7 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
     try {
       user = await privy.users().getByEmailAddress({ address: email })
     } catch {
-      return { success: false, error: "User not found in Privy. Please create wallets first." }
+      return { success: false, error: "User not found in Privy. Please create wallets first.", notFound: true }
     }
 
     if (!user) {
@@ -319,5 +333,26 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     }
+  }
+}
+
+/**
+ * Lookup-only: reports whether this email already owns legacy Privy wallets.
+ * MUST NOT create anything — this is the spec §1 gate that keeps new users
+ * from being provisioned a legacy wallet.
+ */
+export async function getExistingWallets(email: string): Promise<
+  | { success: true; exists: boolean; wallets?: WalletResult["wallets"]; tradingWallet?: WalletResult["tradingWallet"]; privy_type?: number }
+  | { success: false; error: string }
+> {
+  try {
+    const result = await refreshWallet(email)
+    if (result.success && result.wallets) {
+      return { success: true, exists: true, wallets: result.wallets, tradingWallet: result.tradingWallet ?? null, privy_type: result.privy_type }
+    }
+    if (result.notFound) return { success: true, exists: false }
+    return { success: false, error: result.error ?? "Wallet lookup failed" }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Wallet lookup failed" }
   }
 }

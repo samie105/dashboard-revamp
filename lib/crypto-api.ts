@@ -465,13 +465,59 @@ export function fetchTransactions(params?: Record<string, string>): Promise<Tran
 
 // ── Hyperliquid trading (/api/trade/*) — mirrors mobile's trade.ts 1:1 ──────
 
-export type HlSpotMarket = { symbol: string; coinName: string; price: number }
-export type HlFuturesMarket = { symbol: string; price: number; maxLeverage: number }
+/**
+ * A spot row. The modern-wallet path fills the optional half from the backend
+ * market registry (spec §8) and carries it end to end: the order builder needs
+ * the quote asset and the exact token identifiers, and must never re-derive
+ * them from the symbol.
+ */
+export type HlSpotMarket = {
+  id?: string
+  symbol: string
+  coinName: string
+  price: number
+  icon?: string | null
+  networkId?: string
+  venue?: string
+  quote?: string
+  chartSymbol?: string
+  sellToken?: string
+  buyToken?: string
+  inputMint?: string
+  outputMint?: string
+}
+/**
+ * A perpetual contract row. `szDecimals` and `onlyIsolated` are the venue's own
+ * constraints (spec §9: the backend is the authority on venue constraints) and
+ * are carried through verbatim so the ticket states them rather than assuming a
+ * house default. Both are optional: the legacy `/api/trade/markets` feed does
+ * not report them, and a row without them must read as "unstated", never as
+ * "cross-margin, six decimals".
+ */
+export type HlFuturesMarket = {
+  symbol: string
+  price: number
+  maxLeverage: number
+  szDecimals?: number
+  onlyIsolated?: boolean
+}
 
 export type HlMarkets = {
   spot: HlSpotMarket[]
   futures: HlFuturesMarket[]
   minOrderUsd: number
+}
+
+/**
+ * A market row's identity (spec §8): the backend registry `id` when the row
+ * has one, else the symbol. Symbols are NOT unique across the registry — WETH
+ * exists on arbitrum-one and on ethereum-mainnet — so anything that selects,
+ * keys or looks up a row must go through this, or the two rows collapse into
+ * one and an order can route to a chain the user didn't pick. Legacy
+ * Hyperliquid rows carry no id and keep their symbol identity.
+ */
+export function marketRowKey(m: HlSpotMarket | HlFuturesMarket): string {
+  return "id" in m && m.id ? m.id : m.symbol
 }
 
 export type HlPosition = {

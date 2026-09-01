@@ -19,7 +19,7 @@ import { Copy01Icon, CheckmarkCircle01Icon, AlertCircleIcon } from "@hugeicons/c
 import { cn } from "@/lib/utils"
 import { Eyebrow } from "@/components/ui/system"
 import { ChoiceRow } from "@/components/ui/flow"
-import { NETWORKS, NETWORK_ICON } from "@/lib/networks"
+import { NETWORKS, NETWORK_ICON, type WalletChain } from "@/lib/networks"
 import { useWallet } from "@/components/wallet-provider"
 
 export function ReceivePanel({
@@ -33,12 +33,25 @@ export function ReceivePanel({
    */
   asset = "USDT",
   className,
+  /** Override the legacy wallet-provider addresses (modern wallet passes its own). */
+  addresses: addressesProp,
+  /** Extra confirmation line under the warning (e.g. the self-custody note). */
+  note,
 }: {
   only?: string[]
   asset?: string | null
   className?: string
+  addresses?: Partial<Record<WalletChain, string>> | null
+  note?: string
 }) {
-  const { addresses, walletsGenerated } = useWallet()
+  // Always called — hooks rules — even when the modern wallet overrides the
+  // value below with its own addresses. The legacy wallet-generated flag only
+  // matters for the legacy path: a source-agnostic caller already knows
+  // whether it has an address map to show (an empty one just yields no
+  // available networks, which the length check below already handles).
+  const legacy = useWallet()
+  const addresses = addressesProp ?? legacy.addresses
+  const walletsGenerated = addressesProp === undefined ? legacy.walletsGenerated : true
 
   const available = React.useMemo(
     () => NETWORKS.filter((n) => (!only || only.includes(n.key)) && addresses?.[n.chain]),
@@ -113,9 +126,13 @@ export function ReceivePanel({
           <Eyebrow>Your {active?.label} address</Eyebrow>
           <button
             onClick={() => {
-              navigator.clipboard.writeText(address)
-              setCopied(true)
-              setTimeout(() => setCopied(false), 1600)
+              // Optional-chained through the whole call: no clipboard API
+              // (non-HTTPS, older browser) or a permission rejection both
+              // short-circuit to a no-op instead of an unhandled rejection.
+              void navigator.clipboard?.writeText(address).then(() => {
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1600)
+              }).catch(() => {})
             }}
             className="flex w-full items-center gap-2 rounded-xl bg-surface-sunken px-3 py-3 text-left transition-colors hover:bg-accent"
           >
@@ -149,6 +166,8 @@ export function ReceivePanel({
             )}
           </p>
         </div>
+
+        {note && <p className="text-[12px] leading-relaxed text-muted-foreground">{note}</p>}
       </div>
     </div>
   )

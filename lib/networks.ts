@@ -23,6 +23,7 @@ export type NetworkMeta = {
   hue: string
   explorerName: string
   explorerUrl: (address: string) => string
+  txUrl: (hash: string) => string
 }
 
 export const NETWORKS: NetworkMeta[] = [
@@ -34,15 +35,17 @@ export const NETWORKS: NetworkMeta[] = [
     hue: "#627EEA",
     explorerName: "Etherscan",
     explorerUrl: (a) => `https://etherscan.io/address/${a}`,
+    txUrl: (h) => `https://etherscan.io/tx/${h}`,
   },
   {
     key: "arbitrum",
     label: "Arbitrum",
     chain: "ethereum",
-    nativeSymbol: "ARB",
+    nativeSymbol: "ETH",
     hue: "#2D374B",
     explorerName: "Arbiscan",
     explorerUrl: (a) => `https://arbiscan.io/address/${a}`,
+    txUrl: (h) => `https://arbiscan.io/tx/${h}`,
   },
   {
     key: "solana",
@@ -52,6 +55,7 @@ export const NETWORKS: NetworkMeta[] = [
     hue: "#9945FF",
     explorerName: "Solscan",
     explorerUrl: (a) => `https://solscan.io/account/${a}`,
+    txUrl: (h) => `https://solscan.io/tx/${h}`,
   },
   {
     key: "sui",
@@ -61,6 +65,7 @@ export const NETWORKS: NetworkMeta[] = [
     hue: "#4DA2FF",
     explorerName: "Suiscan",
     explorerUrl: (a) => `https://suiscan.xyz/mainnet/account/${a}`,
+    txUrl: (h) => `https://suiscan.xyz/mainnet/tx/${h}`,
   },
   {
     key: "ton",
@@ -70,6 +75,7 @@ export const NETWORKS: NetworkMeta[] = [
     hue: "#0098EA",
     explorerName: "Tonviewer",
     explorerUrl: (a) => `https://tonviewer.com/${a}`,
+    txUrl: (h) => `https://tonviewer.com/transaction/${h}`,
   },
   {
     key: "tron",
@@ -79,6 +85,7 @@ export const NETWORKS: NetworkMeta[] = [
     hue: "#FF060A",
     explorerName: "Tronscan",
     explorerUrl: (a) => `https://tronscan.org/#/address/${a}`,
+    txUrl: (h) => `https://tronscan.org/#/transaction/${h}`,
   },
 ]
 

@@ -751,63 +751,11 @@ export async function getPrices(): Promise<PricesResponse> {
   }
 }
 
-// ── getSpotMarkets (Hyperliquid spotMeta) ──────────────────────────────────
+// ── getSpotMarkets (Worldstreet market feed) ───────────────────────────────
 
 let spotMarketCache: CoinData[] | null = null
 let spotMarketCacheTs = 0
 const SPOT_MARKET_TTL = 30_000
-
-async function fetchHyperliquidSpotMarkets(): Promise<CoinData[] | null> {
-  try {
-    const [spotMeta, mids] = await Promise.all([
-      hlPost({ type: "spotMeta" }),
-      hlPost({ type: "allMids" }),
-    ])
-
-    if (!spotMeta?.universe || !spotMeta?.tokens || !mids) return null
-
-    const markets: CoinData[] = []
-
-    for (const entry of spotMeta.universe) {
-      const baseTokenIdx = entry.tokens[0]
-      const quoteTokenIdx = entry.tokens[1]
-      const baseToken = spotMeta.tokens[baseTokenIdx]
-      const quoteToken = spotMeta.tokens[quoteTokenIdx]
-
-      if (!baseToken) continue
-
-      const coinName = entry.name as string
-      const price = parseFloat(mids[coinName] ?? "0")
-      if (price <= 0) continue
-
-      const baseName: string = baseToken.name ?? "UNKNOWN"
-      const quoteName: string = quoteToken?.name ?? "USDC"
-
-      const coinId =
-        Object.entries(ID_TO_SYMBOL).find(([, s]) => s === baseName)?.[0] ||
-        baseName.toLowerCase()
-
-      markets.push({
-        id: coinId,
-        symbol: baseName,
-        name: SYMBOL_NAME[baseName] || COIN_NAMES[coinId] || baseName,
-        price,
-        change24h: 0,
-        marketCap: 0,
-        volume24h: 0,
-        image: SYMBOL_IMAGE[baseName] || COIN_IMAGES[coinId] || "",
-        quoteAsset: quoteName,
-        szDecimals: baseToken.szDecimals ?? 8,
-        hlName: coinName,
-      })
-    }
-
-    return markets.length > 0 ? markets : null
-  } catch (error) {
-    console.error("[SpotMarkets] fetch error:", error)
-    return null
-  }
-}
 
 export async function getSpotMarkets(): Promise<{
   markets: CoinData[]
@@ -822,43 +770,25 @@ export async function getSpotMarkets(): Promise<{
     return sanitize({ markets: spotMarketCache, prices })
   }
 
-  const markets = await fetchHyperliquidSpotMarkets()
-  if (!markets || markets.length === 0) {
+  // Spot is deliberately sourced from Worldstreet's broad market feed. The
+  // Hyperliquid catalogue is a perps-first venue and must not determine the
+  // spot list shown to users. This also keeps spot discovery independent from
+  // the Hyperliquid futures/API availability.
+  const pricesResponse = await getPrices()
+  const markets = pricesResponse.coins
+    .filter((coin) => coin.price > 0)
+    .map((coin) => ({
+      ...coin,
+      quoteAsset: "USDC",
+    }))
+
+  if (markets.length === 0) {
     if (spotMarketCache) {
       const prices: Record<string, number> = { USDT: 1, USDC: 1 }
       for (const m of spotMarketCache) prices[m.symbol] = m.price
       return sanitize({ markets: spotMarketCache, prices })
     }
     return { markets: [], prices: {}, error: "Failed to fetch spot markets" }
-  }
-
-  // Enrich with KuCoin 24h change + volume
-  try {
-    const kcRes = await fetch("https://api.kucoin.com/api/v1/market/allTickers", {
-      signal: AbortSignal.timeout(5_000),
-    })
-    if (kcRes.ok) {
-      const kcJson = await kcRes.json()
-      if (kcJson.code === "200000" && kcJson.data?.ticker) {
-        const kcMap = new Map<string, { change: number; volume: number }>()
-        for (const ticker of kcJson.data.ticker) {
-          const sym = ticker.symbol.replace(/-USDT$/, "").replace(/-USDC$/, "")
-          kcMap.set(sym, {
-            change: (parseFloat(ticker.changeRate) || 0) * 100,
-            volume: parseFloat(ticker.volValue) || 0,
-          })
-        }
-        for (const m of markets) {
-          const kc = kcMap.get(m.symbol)
-          if (kc) {
-            m.change24h = kc.change
-            m.volume24h = kc.volume
-          }
-        }
-      }
-    }
-  } catch {
-    // KuCoin enrichment is optional
   }
 
   markets.sort((a, b) => b.volume24h - a.volume24h)
