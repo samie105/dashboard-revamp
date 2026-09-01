@@ -38,6 +38,15 @@ export async function connectDB(): Promise<typeof mongoose> {
       socketTimeoutMS: 30_000,
       connectTimeoutMS: 15_000,
       maxPoolSize: 10,
+      // Per *node*, not per cluster: a 3-node replica set means up to 30 sockets
+      // per process. Without maxIdleTimeMS the pool only ever ratchets upward —
+      // it grows to maxPoolSize under load and holds there while idle, so every
+      // traffic spike permanently raises this process's floor on the cluster.
+      minPoolSize: 0,
+      maxIdleTimeMS: 60_000,
+      // Several services share this cluster and the "user-account" db. Without
+      // an appName they're indistinguishable in Atlas's connection metrics.
+      appName: process.env.MONGODB_APP_NAME?.trim() || "dashboard-revamp",
       retryWrites: true,
       retryReads: true,
       family: 4,
