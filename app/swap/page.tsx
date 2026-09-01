@@ -1,17 +1,9 @@
 import { Suspense } from "react"
-import { getPrices } from "@/lib/actions"
-import { SwapClient } from "@/components/swap/swap-client"
+import { ModernSwapClient } from "@/components/swap/modern-swap-client"
 import { SwapCardSkeleton, SwapHistorySkeleton, SwapTimelineSkeleton } from "@/components/dashboard/skeletons"
 
 async function SwapLoader() {
-  const pricesData = await getPrices()
-  return (
-    <SwapClient
-      coins={pricesData.coins}
-      prices={pricesData.prices}
-      error={pricesData.error || (pricesData.coins.length === 0 ? "No market data available" : undefined)}
-    />
-  )
+  return <ModernSwapClient />
 }
 
 function SwapPageSkeleton() {
