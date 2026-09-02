@@ -7,6 +7,7 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   ArrowUpRight01Icon,
+  CreditCardIcon,
   Settings02Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons"
@@ -30,6 +31,15 @@ import {
   type SeenSnapshot,
 } from "@/lib/welcome-guide"
 
+type GuideCard = {
+  icon: typeof Wallet01Icon
+  title: string
+  /** A function where the text has to know what it is looking at. */
+  body: string | ((simple: boolean) => string)
+  /** An optional way to act on the card, offered under Next. */
+  action?: { label: string; href: string }
+}
+
 /**
  * The crypto dashboard introducing itself, once.
  *
@@ -38,16 +48,29 @@ import {
  * the reader is expected to already own. It describes outcomes, and it never
  * implies Worldstreet can open the wallet.
  *
- * Four cards, because four is what it takes to answer the four questions a
- * newcomer actually arrives with: what is this, how do I put money in, how
- * do I get it out, and why does the screen look simpler than my friend's.
+ * Five cards, in the order a newcomer actually meets the problem: what is
+ * this, how do I get my first coin, how do I add coins I already hold, how do
+ * I send them, and why does this screen look simpler than my friend's.
  */
-const CARDS = [
+const CARDS: GuideCard[] = [
   {
     icon: Wallet01Icon,
     title: "Welcome to your wallet",
     body:
       "Everything you hold sits here, in one place, valued in dollars. Only you can open it — not even Worldstreet can.",
+  },
+  {
+    /* Was a promo card on the dashboard, in a rail that autoplayed past it
+       and carried its own dismiss X. That put the one step a person with no
+       crypto has to take — buying some — behind a carousel they could close
+       by accident and never see again. It belongs in the guide that already
+       has their attention, and it is second because it is the first thing
+       someone starting from zero needs. */
+    icon: CreditCardIcon,
+    title: "Buy your first crypto",
+    body:
+      "Don't hold any yet? Your Dollar Account can buy some. Turn dollars into USDT on Solana, Ethereum or Tron, and it lands right here.",
+    action: { label: "Buy crypto", href: "/buy" },
   },
   {
     icon: ArrowDownLeft01Icon,
@@ -72,7 +95,7 @@ const CARDS = [
         ? "You're in Simple, which shows the essentials. Pro adds the full breakdown for every place your money sits. Switch at the top of the page whenever you like."
         : "You're in Pro, which shows the full breakdown for every place your money sits. Simple trims it back to the essentials. Switch at the top of the page whenever you like.",
   },
-] as const
+]
 
 const SEEN_VALUE = "seen"
 
@@ -303,6 +326,20 @@ export function CryptoWelcomeGuide({
               {isLast ? "Start using my wallet" : "Next"}
               {!isLast && <HugeiconsIcon icon={ArrowRight01Icon} className="h-4 w-4" />}
             </button>
+
+            {/* A card that can be acted on says so, under Next rather than in
+                place of it — leaving here is a choice, not the only way
+                forward. Safe to leave: the guide marks itself seen when it
+                opens, so walking out mid-way does not earn a second showing. */}
+            {current.action && (
+              <a
+                href={current.action.href}
+                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-surface-sunken px-5 text-[13px] font-semibold transition-colors hover:bg-accent"
+              >
+                {current.action.label}
+                <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5" />
+              </a>
+            )}
 
             <div className="flex items-center justify-between">
               <button

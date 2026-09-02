@@ -44,14 +44,12 @@ export const PROMO_CARDS: PromoCard[] = [
     href: "/trade",
     cta: "Open trading",
   },
-  {
-    key: "crypto-buy",
-    hero: "Buy your first crypto",
-    tagline: "Turn your Dollar Account into USDT on Solana, Ethereum or Tron.",
-    art: "cryptoBuy",
-    href: "/buy",
-    cta: "Buy now",
-  },
+  /* "Buy your first crypto" used to sit here. It moved into the wallet's
+     welcome guide (components/crypto/CryptoWelcomeGuide.tsx): the one step a
+     person holding no crypto has to take should not be the second slide of an
+     autoplaying rail with its own dismiss X, where it can be closed by
+     accident and never seen again. The rail keeps the cards that are
+     genuinely optional — a place to go next, not a place to start. */
   {
     key: "crypto-swap",
     hero: "Swap in one move",
