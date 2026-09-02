@@ -57,6 +57,8 @@ import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { OrderPlacedModal, orderCopy } from "@/components/trade/order-placed-modal"
 import { useAuth } from "@/components/auth-provider"
+import { useUiMode } from "@/components/ui-mode-provider"
+import { ModeSwitch } from "@/components/ui/mode-switch"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
 import {
@@ -230,6 +232,7 @@ export function TradeClient() {
   const params = useSearchParams()
   const router = useRouter()
   const { openFlow } = useMoneyFlow()
+  const { trade: tradeView } = useUiMode()
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const modernWallet = useCryptoWalletState()
@@ -713,7 +716,13 @@ export function TradeClient() {
      stablecoin — so "USD | USDC" offered two names for one unit. The switch
      belongs on the side where the units genuinely differ: a sell, which spends
      the base token. */
-  const unitSwitchable = Boolean(spentSymbol && !sizesLikeUsd(spentSymbol))
+  /* Simple mode sizes every order in dollars. "Do you want to sell 0.031 ETH
+     or $95 of ETH" is a question about units, not about the trade, and the
+     percentage buttons underneath already answer it a better way. Pro keeps
+     the switch. Note this also forces `inTokenUnit` false, so the whole
+     token-sizing branch — placeholder, estimate line, max rounding — follows
+     without needing its own guard. */
+  const unitSwitchable = Boolean(spentSymbol && !sizesLikeUsd(spentSymbol)) && tradeView.unitSwitch
   const inTokenUnit = amountUnit === "token" && unitSwitchable
 
   /**
@@ -1954,6 +1963,10 @@ export function TradeClient() {
           Modern wallet
         </span>
 
+        {/* Same control, same place in the reading order as on the wallet:
+            beside the screen's own identity, not buried in a settings menu. */}
+        <ModeSwitch className="order-4 shrink-0 lg:order-none" />
+
         {/* Pair — the rail owns switching on wide screens; this dropdown
             covers every width below xl and still works above it. */}
         <div className="relative order-2 shrink-0 lg:order-none">
@@ -2010,9 +2023,14 @@ export function TradeClient() {
           </span>
           {/* A figure we don't have is left out, not printed as an em-dash in
               a column that never fills. */}
-          {high24h !== null && <Stat label="24h High" value={`$${fmtPx(high24h)}`} />}
-          {low24h !== null && <Stat label="24h Low" value={`$${fmtPx(low24h)}`} />}
-          {volume24h !== null && (
+          {/* The 24h cluster is reference data for someone reading a market.
+              The price and its move answer "is it up or down"; High/Low/
+              Volume answer questions a first-time buyer has not asked yet,
+              and on a phone they push the price itself off the row. Pro
+              keeps all three. */}
+          {tradeView.marketStats && high24h !== null && <Stat label="24h High" value={`$${fmtPx(high24h)}`} />}
+          {tradeView.marketStats && low24h !== null && <Stat label="24h Low" value={`$${fmtPx(low24h)}`} />}
+          {tradeView.marketStats && volume24h !== null && (
             <Stat label="24h Volume" value={fmtCompact(volume24h)} />
           )}
         </div>

@@ -3,7 +3,7 @@
 import { useMemo, useState, type ComponentType, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, CheckmarkCircle02Icon, Copy01Icon, EyeIcon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, CheckmarkCircle02Icon, Copy01Icon, EyeIcon, HelpCircleIcon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
 import Link from "next/link"
 
 import { useAuth } from "@/components/auth-provider"
@@ -47,6 +47,10 @@ import {
 } from "@/lib/crypto-backend"
 import { networkMetaFor } from "@/lib/crypto-backend/network-meta"
 import { usd } from "@/lib/num"
+import { groupBalancesBySymbol } from "@/lib/balance-grouping"
+import { useUiMode } from "@/components/ui-mode-provider"
+import { ModeSwitch } from "@/components/ui/mode-switch"
+import { CryptoWelcomeGuide } from "./CryptoWelcomeGuide"
 import { missingChainFamilies } from "./WalletChainProvisioningPanel"
 
 const PAGE = "flex flex-col gap-6 p-4 md:p-6 lg:p-8"
@@ -356,6 +360,7 @@ function asOfLabel(generatedAt: string | null): string | null {
 
 export function ModernWalletPage() {
   const { user } = useAuth()
+  const { wallet: view, isSimple } = useUiMode()
   const wallet = useCryptoWalletState()
   const networks = useCryptoNetworks()
   const balances = useCryptoBalances()
@@ -371,6 +376,9 @@ export function ModernWalletPage() {
   })
 
   const [unlockOpen, setUnlockOpen] = useState(false)
+  // Bumped by the header's help button to re-open the welcome guide. A
+  // counter, so a second press re-opens it without a reset in between.
+  const [helpSignal, setHelpSignal] = useState(0)
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
   const [sendOpen, setSendOpen] = useState(false)
@@ -482,6 +490,75 @@ export function ModernWalletPage() {
     return rows
   }, [balances.balances, usdIndex, totalUsd])
 
+  /**
+   * Simple mode's balance list: one row per ASSET, not per asset per
+   * network. Three rows reading USDC/Ethereum, USDC/Arbitrum, USDC/Solana
+   * are three rows of the same dollars to anyone who hasn't been taught
+   * otherwise — which is most of the people arriving now. The per-network
+   * truth is a press away in Pro, and it is still the truth the send flow
+   * works from; this only changes what the wallet shows at rest.
+   */
+  const groupedBalances = useMemo(
+    () =>
+      groupBalancesBySymbol(
+        balances.balances.map((balance) => ({
+          symbol: balance.symbol,
+          amountBaseUnits: balance.amountBaseUnits,
+          decimals: balance.decimals,
+          networkId: balance.networkId,
+          networkName: balance.networkName,
+          logo: balance.logo,
+          value: usdValueOf(balance, usdIndex),
+        })),
+      ),
+    [balances.balances, usdIndex],
+  )
+
+  /**
+   * The rows the balances card actually renders, in whichever mode is on.
+   *
+   * Both modes are normalised into ONE shape rather than the card growing
+   * two parallel row markups — the layout, the privacy masking, the hover
+   * Deposit and the column geometry are identical in both, and only the
+   * source and the subtitle differ. Two copies of that JSX would drift.
+   */
+  const displayRows = useMemo(() => {
+    if (view.groupBySymbol) {
+      const top = groupedBalances[0]?.value ?? 0
+      return groupedBalances.map((group, index) => ({
+        key: `group:${group.symbol}`,
+        symbol: group.symbol,
+        logo: group.logo,
+        // Only ever says something true: one place gets named, several get
+        // counted, and neither is shown when it adds nothing.
+        subtitle:
+          group.placeCount > 1
+            ? `In ${group.placeCount} places`
+            : group.networkName && !view.networkPerRow
+              ? null
+              : group.networkName,
+        amount: group.amount,
+        value: group.value,
+        depositAsset: group.symbol,
+        rank: index,
+        share: group.value !== null && totalUsd > 0 ? (group.value / totalUsd) * 100 : null,
+        relative: group.value !== null && top > 0 ? (group.value / top) * 100 : null,
+      }))
+    }
+    return sortedBalances.map(({ balance, value, share, relative, rank }) => ({
+      key: `${balance.accountId}:${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`,
+      symbol: balance.symbol,
+      logo: balance.logo,
+      subtitle: balance.networkName,
+      amount: formatCryptoAmount(balance.amountBaseUnits, balance.decimals),
+      value,
+      depositAsset: balance.symbol,
+      rank,
+      share,
+      relative,
+    }))
+  }, [view.groupBySymbol, view.networkPerRow, groupedBalances, sortedBalances, totalUsd])
+
   // Portfolio allocation by asset for the strip above the balance rows —
   // top four assets named, everything else folded into "Other".
   const allocation = useMemo(() => {
@@ -541,7 +618,12 @@ export function ModernWalletPage() {
       ...chainCards,
     ]
   }, [wallet.data, networks.data, valuation, totalUsd, primaryAccount])
-  const activeCard = walletCards.find((card) => card.key === selectedCard) ?? walletCards[0]
+  // Simple mode hides the pocket, so a chain card selected in Pro must not
+  // stay dealt on the hero — the user would be looking at one network's
+  // balance with no visible control explaining why, and no way back.
+  const activeCard =
+    (view.chainCards ? walletCards.find((card) => card.key === selectedCard) : walletCards[0]) ??
+    walletCards[0]
   const isTotalCard = activeCard.key === "worldstreet"
   const selectCard = (key: string) => {
     setSelectedCard(key)
@@ -621,11 +703,42 @@ export function ModernWalletPage() {
     />
   )
 
+  /* The switch sits in the page header, beside the title, because that is
+     where it reads as "this page has two densities" rather than as a setting
+     buried somewhere. The help button beside it is what stops the welcome
+     guide being a thing that happens to you once and can never be consulted
+     again — the reason people ask support instead. */
+  const headerActions = (
+    <>
+      <ModeSwitch />
+      <IconAction
+        icon={({ className }: { className?: string }) => (
+          <HugeiconsIcon icon={HelpCircleIcon} className={className} />
+        )}
+        label="How this wallet works"
+        onClick={() => setHelpSignal((value) => value + 1)}
+      />
+      <span className="hidden sm:inline-flex">
+        <ModeBadge mode="modern" />
+      </span>
+    </>
+  )
+
   return (
     <div className={PAGE}>
       <Rise>
-        <PageHeader title="Wallet" subtitle={SUBTITLE} actions={<ModeBadge mode="modern" />} />
+        <PageHeader title="Wallet" subtitle={SUBTITLE} actions={headerActions} />
       </Rise>
+
+      {/* Shown once per person, and only once a wallet exists and the setup
+          ceremony has let go of the screen — two modals at once is the
+          failure this guards. Re-openable from the header. */}
+      <CryptoWelcomeGuide
+        eligible={isCryptoBackendEnabled && Boolean(user?.userId)}
+        walletReady={hasWallet}
+        ceremonyVisible={setupCeremony}
+        openSignal={helpSignal}
+      />
 
       {/* Two invariants live on this one line — read both before editing it.
           (1) FIXED POSITION, MOUNTED UNCONDITIONALLY: this component owns the
@@ -783,7 +896,13 @@ export function ModernWalletPage() {
                   </div>
                 </div>
 
-                <div className="flex items-end justify-between gap-3">
+                {/* Simple mode drops this whole line. A raw address is the
+                    single most alarming thing on the card to someone new, and
+                    it is not the way they should be receiving anyway — the
+                    Deposit button below asks what they're adding first and
+                    then shows the right address for it, which is the step
+                    that stops money being sent somewhere it can't arrive. */}
+                <div className={`flex items-end justify-between gap-3 ${view.heroAddress || view.heroNetworks ? "" : "hidden"}`}>
                   {/* This is a button, and it used to read as a line of type:
                       thin, dimmed, no affordance at all. It carries the one
                       thing on the card people actually come to take away, so
@@ -826,14 +945,19 @@ export function ModernWalletPage() {
               </div>
             </section>
 
-            <WalletPocket
-              cards={walletCards}
-              selected={activeCard.key}
-              onSelect={selectCard}
-              hidden={hidden}
-              totalUsd={totalUsd}
-              loading={heroLoading}
-            />
+            {/* The pocket IS the chain metaphor — five cards saying "your
+                money lives in five different places". True, and the last
+                thing a newcomer needs on their first visit. Pro keeps it. */}
+            {view.chainCards && (
+              <WalletPocket
+                cards={walletCards}
+                selected={activeCard.key}
+                onSelect={selectCard}
+                hidden={hidden}
+                totalUsd={totalUsd}
+                loading={heroLoading}
+              />
+            )}
           </Rise>
 
           {/* The verbs, in the round grammar every wallet trains — gold on
@@ -855,7 +979,10 @@ export function ModernWalletPage() {
               />
             </div>
             <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:gap-5">
-              <div className="flex flex-1 items-center divide-x divide-border/40 sm:flex-none">
+              {/* ASSETS · NETWORKS · ACCOUNTS. Three counters that answer
+                  questions a newcomer has not thought to ask, in words two of
+                  which mean nothing to them yet. Pro keeps them. */}
+              <div className={`flex-1 items-center divide-x divide-border/40 sm:flex-none ${view.heroStats ? "flex" : "hidden"}`}>
                 {heroStats.map((stat) => (
                   <div
                     key={stat.label}
@@ -887,8 +1014,14 @@ export function ModernWalletPage() {
           <Rise delay={160}>
             <CardShell>
               <CardHeader
-                title="Balances"
-                subtitle={balances.balances.length > 0 ? `${balances.balances.length} assets across ${new Set(balances.balances.map((b) => b.networkId)).size} networks` : undefined}
+                title={isSimple ? "What you hold" : "Balances"}
+                subtitle={
+                  displayRows.length === 0
+                    ? undefined
+                    : isSimple
+                      ? `${displayRows.length} ${displayRows.length === 1 ? "holding" : "holdings"}`
+                      : `${balances.balances.length} assets across ${new Set(balances.balances.map((b) => b.networkId)).size} networks`
+                }
                 right={refreshAction}
               />
               {/* Portfolio allocation — the same rank ladder the rows below
@@ -949,7 +1082,7 @@ export function ModernWalletPage() {
                     <span className="min-w-0 flex-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
                       Asset
                     </span>
-                    <span className="hidden w-[150px] shrink-0 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 lg:block">
+                    <span className={`w-[150px] shrink-0 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 ${view.shareColumn ? "hidden lg:block" : "hidden"}`}>
                       Share of wallet
                     </span>
                     <span className="hidden w-[112px] shrink-0 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 sm:block">
@@ -960,25 +1093,26 @@ export function ModernWalletPage() {
                     </span>
                     <span className="w-8 shrink-0" />
                   </div>
-                  {sortedBalances.map(({ balance, value, share, relative, rank }) => {
-                    const change = changeIndex?.[(balance.symbol ?? "").toUpperCase()]
-                    const amount = formatCryptoAmount(balance.amountBaseUnits, balance.decimals)
+                  {displayRows.map(({ key, symbol, logo, subtitle, amount, value, depositAsset, share, relative, rank }) => {
+                    const change = changeIndex?.[(symbol ?? "").toUpperCase()]
                     return (
                       <div
-                        key={`${balance.accountId}:${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`}
+                        key={key}
                         className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/40"
                       >
-                        <CoinAvatar symbol={balance.symbol} src={balance.logo} size="lg" className="h-9 w-9 shrink-0" />
+                        <CoinAvatar symbol={symbol} src={logo} size="lg" className="h-9 w-9 shrink-0" />
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate text-[14px] font-semibold">{balance.symbol}</span>
-                          <span className="truncate text-[12.5px] text-muted-foreground">{balance.networkName}</span>
+                          <span className="truncate text-[14px] font-semibold">{symbol}</span>
+                          {subtitle ? (
+                            <span className="truncate text-[12.5px] text-muted-foreground">{subtitle}</span>
+                          ) : null}
                         </span>
 
                         {/* What this holding is OF the wallet — the fact the
                             wide card had room for and wasn't showing. Shares
                             the house rank ladder, so a row's colour matches
                             its slice on Assets and Portfolio. */}
-                        <span className="hidden w-[150px] shrink-0 items-center gap-2.5 lg:flex">
+                        <span className={`w-[150px] shrink-0 items-center gap-2.5 ${view.shareColumn ? "hidden lg:flex" : "hidden"}`}>
                           {share !== null && relative !== null && !hidden ? (
                             <>
                               <WeightBar pct={relative} rank={rank} className="flex-1" />
@@ -1018,8 +1152,8 @@ export function ModernWalletPage() {
                             has no hover to reveal it. */}
                         <button
                           type="button"
-                          onClick={() => openReceive(balance.symbol)}
-                          aria-label={`Deposit ${balance.symbol}`}
+                          onClick={() => openReceive(depositAsset)}
+                          aria-label={`Deposit ${symbol}`}
                           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground/60 opacity-100 transition-all hover:bg-credit-chip hover:text-credit focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                         >
                           <HugeiconsIcon icon={ArrowDownLeft01Icon} className="h-4 w-4" />
