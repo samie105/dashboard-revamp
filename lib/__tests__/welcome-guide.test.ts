@@ -4,7 +4,6 @@ import { WELCOME_GUIDE_KEY, WELCOME_SEEN_PREFIX, welcomeSeenKey, welcomeGuideSur
 
 const ready = {
   eligible: true,
-  walletReady: true,
   ceremonyVisible: false,
   seenLocally: false,
   seenOnProfile: false,
@@ -22,7 +21,7 @@ describe("welcomeSeenKey", () => {
 })
 
 describe("welcomeGuideSurfaces", () => {
-  it("shows once for a signed-in user with a wallet who has never seen it", () => {
+  it("shows once for a signed-in user who has never seen it", () => {
     expect(welcomeGuideSurfaces(ready)).toEqual({ guide: true })
   })
 
@@ -30,10 +29,12 @@ describe("welcomeGuideSurfaces", () => {
     expect(welcomeGuideSurfaces({ ...ready, eligible: false })).toEqual({ guide: false })
   })
 
-  // Two modals at once is the failure this exists to prevent: a brand-new
-  // user belongs to the setup ceremony until it is done with them.
-  it("waits for a wallet to exist", () => {
-    expect(welcomeGuideSurfaces({ ...ready, walletReady: false })).toEqual({ guide: false })
+  /* The guide's whole audience is people who have never done this before,
+     and they arrive with no wallet. Greeting them only after they have
+     already worked out the setup ceremony is greeting them too late — which
+     is what an earlier `walletReady` condition did. */
+  it("greets a newcomer who has not made a wallet yet", () => {
+    expect(welcomeGuideSurfaces(ready)).toEqual({ guide: true })
   })
 
   it("waits for the setup ceremony to leave the screen", () => {

@@ -30,8 +30,6 @@ export type SeenSnapshot = boolean | "unknown"
 export function welcomeGuideSurfaces(input: {
   /** The crypto wallet is switched on and there is a signed-in user. */
   eligible: boolean
-  /** A wallet exists. Before that, the setup ceremony owns the screen. */
-  walletReady: boolean
   /** `WalletSetupFlow` currently owns the page. Two modals at once is the
    *  thing this flag exists to prevent — the guide waits, then greets the
    *  person the moment setup lets go. */
@@ -39,7 +37,15 @@ export function welcomeGuideSurfaces(input: {
   seenLocally: SeenSnapshot
   seenOnProfile: SeenSnapshot
 }): { guide: boolean } {
-  if (!input.eligible || !input.walletReady || input.ceremonyVisible) return { guide: false }
+  /* There used to be a `walletReady` condition here — the guide waited until
+     a wallet existed. It had the effect of hiding the guide from exactly the
+     person it was written for: someone arriving with no wallet met the crypto
+     dashboard cold, worked out the setup ceremony unaided, and was greeted
+     with "here is what this screen is" only afterwards. A newcomer needs the
+     explanation BEFORE the work, not as a receipt for it.
+     Nothing is lost by dropping it. `ceremonyVisible` is what actually keeps
+     two modals off the screen at once, and it still does. */
+  if (!input.eligible || input.ceremonyVisible) return { guide: false }
   if (input.seenLocally === "unknown" || input.seenOnProfile === "unknown") return { guide: false }
   return { guide: !input.seenLocally && !input.seenOnProfile }
 }

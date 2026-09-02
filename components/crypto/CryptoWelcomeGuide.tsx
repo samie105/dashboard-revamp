@@ -185,13 +185,11 @@ let showing: "pending" | "open" | "closed" = "pending"
 
 export function CryptoWelcomeGuide({
   eligible,
-  walletReady,
   ceremonyVisible,
   openSignal,
   onOpenChange,
 }: {
   eligible: boolean
-  walletReady: boolean
   /** The setup ceremony currently owns the page. */
   ceremonyVisible: boolean
   /** Incremented by the page's help button to re-open the guide on demand.
@@ -221,7 +219,6 @@ export function CryptoWelcomeGuide({
 
   const show = welcomeGuideSurfaces({
     eligible,
-    walletReady,
     ceremonyVisible,
     seenLocally,
     seenOnProfile,

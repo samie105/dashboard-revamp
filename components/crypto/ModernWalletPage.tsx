@@ -734,8 +734,7 @@ export function ModernWalletPage() {
           ceremony has let go of the screen — two modals at once is the
           failure this guards. Re-openable from the header. */}
       <CryptoWelcomeGuide
-        eligible={isCryptoBackendEnabled && Boolean(user?.userId)}
-        walletReady={hasWallet}
+        eligible={isCryptoBackendEnabled && Boolean(user?.userId)}
         ceremonyVisible={setupCeremony}
         openSignal={helpSignal}
       />
