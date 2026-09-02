@@ -439,10 +439,13 @@ function getIntent(intentId: string) {
 
 // ── Spot & Hyperliquid ──────────────────────────────────────────────────────
 
+// Convention (lib/crypto-backend/spot-order.ts): the token SPENT is the quote,
+// the token RECEIVED is the base. sellToken/inputMint = USDC, buyToken/outputMint
+// = the coin. Reversed rows chart the stablecoin and fail the pair gate.
 const SPOT_MARKETS = [
-  { id: "weth-usdc-ethereum", symbol: "WETH", quote: "USDC", networkId: "ethereum-mainnet", venue: "0x", chartSymbol: "ETHUSDT", chartSupported: true, price: 4486.2, icon: null, sellToken: WETH_ETH, buyToken: USDC_ETH },
-  { id: "weth-usdc-arbitrum", symbol: "WETH", quote: "USDC", networkId: "arbitrum-one", venue: "0x", chartSymbol: "ETHUSDT", chartSupported: true, price: 4486.2, icon: null, sellToken: WETH_ARB, buyToken: USDC_ARB },
-  { id: "sol-usdc-solana", symbol: "SOL", quote: "USDC", networkId: "solana-mainnet-beta", venue: "jupiter", chartSymbol: "SOLUSDT", chartSupported: true, price: 216.4, icon: null, inputMint: SOL_MINT, outputMint: USDC_MINT },
+  { id: "weth-usdc-ethereum", symbol: "WETH", quote: "USDC", networkId: "ethereum-mainnet", venue: "0x", chartSymbol: "ETHUSDT", chartSupported: true, price: 4486.2, icon: null, sellToken: USDC_ETH, buyToken: WETH_ETH },
+  { id: "weth-usdc-arbitrum", symbol: "WETH", quote: "USDC", networkId: "arbitrum-one", venue: "0x", chartSymbol: "ETHUSDT", chartSupported: true, price: 4486.2, icon: null, sellToken: USDC_ARB, buyToken: WETH_ARB },
+  { id: "sol-usdc-solana", symbol: "SOL", quote: "USDC", networkId: "solana-mainnet-beta", venue: "jupiter", chartSymbol: "SOLUSDT", chartSupported: true, price: 216.4, icon: null, inputMint: USDC_MINT, outputMint: SOL_MINT },
 ]
 
 const HL_FUTURES = [
