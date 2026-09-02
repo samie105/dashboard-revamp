@@ -7,20 +7,13 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Wallet01Icon,
   Notification01Icon,
-  Call02Icon,
-  Video01Icon,
   Cancel01Icon,
-  CallIncoming04Icon,
-  CallOutgoing04Icon,
   Exchange01Icon,
   Activity01Icon,
   ArrowRight01Icon,
   Megaphone01Icon,
-  Search01Icon,
 } from "@hugeicons/core-free-icons"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { cn, avatarUrl } from "@/lib/utils"
-import { useProfile } from "@/components/profile-provider"
+import { cn } from "@/lib/utils"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
@@ -39,47 +32,13 @@ import {
   type LedgerBalance,
   type PositionInfo,
 } from "@/lib/trade-adapter"
-import {
-  getRecentUsers,
-  type UserSearchResult,
-} from "@/lib/community/actions/messages"
-import {
-  getRecentCalls,
-  type RecentCallItem,
-} from "@/lib/community/actions/calls"
-import { useGlobalCall } from "@/components/community/incoming-call-provider"
 
 /* ─── Types ─── */
-type ActiveSection = "wallet" | "calls" | "notifications" | null
-type CallsTab = "contacts" | "recent"
+type ActiveSection = "wallet" | "notifications" | null
 
-const SECTIONS: ActiveSection[] = ["wallet", "calls", "notifications"]
+const SECTIONS: ActiveSection[] = ["wallet", "notifications"]
 
 /* ─── Helpers ─── */
-function timeAgo(date: Date) {
-  const diff = Date.now() - new Date(date).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return "now"
-  if (mins < 60) return `${mins}m`
-  const hours = Math.floor(diff / 3600000)
-  if (hours < 24) return `${hours}h`
-  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-}
-
-function fmtDuration(seconds: number) {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return m > 0 ? `${m}m ${s}s` : `${s}s`
-}
-
-function callLabel(call: RecentCallItem) {
-  if (call.status === "missed") return { text: call.isCaller ? "No answer" : "Missed", negative: true }
-  if (call.status === "declined") return { text: "Declined", negative: true }
-  if (call.status === "failed") return { text: "Failed", negative: true }
-  if (call.duration > 0) return { text: fmtDuration(call.duration), negative: false }
-  return { text: "Completed", negative: false }
-}
-
 const INITIAL_ANNOUNCEMENTS = [
   { id: "1", title: "New: SOL/USDT Futures Live", desc: "Trade Solana perpetual futures with up to 20x leverage.", time: "2h ago", isNew: true },
   { id: "2", title: "Maintenance Window", desc: "Scheduled maintenance on March 15, 2:00-3:00 UTC.", time: "1d ago", isNew: false },
@@ -88,13 +47,11 @@ const INITIAL_ANNOUNCEMENTS = [
 
 /* ─────────────────────────────────────────────────
    NavbarActions — Unified grouped popover
-   wallet · calls · notifications
+   wallet · notifications
    ───────────────────────────────────────────────── */
 export function NavbarActions() {
   const { user } = useAuth()
   const { mode: walletMode, setMode: setWalletMode, canChoose: canChooseWallet } = useWalletMode()
-  const { profile } = useProfile()
-  const { startCall } = useGlobalCall()
   const { openFlow } = useMoneyFlow()
   /* The wallet section's own money doors. These used to open the cash flow —
      "buy" and "sell" against the DOLLAR account — from a panel sitting under
@@ -162,49 +119,19 @@ export function NavbarActions() {
     return onChain + spot + hlAccountValue
   }, [chainBal, prices, spotLedger, spotPositions, hlAccountValue])
 
-  /* ── Calls + contacts data ── */
-  const [calls, setCalls] = useState<RecentCallItem[]>([])
-  const [users, setUsers] = useState<UserSearchResult[]>([])
-  const missedCount = useMemo(() => calls.filter(c => c.status === "missed" && !c.isCaller).length, [calls])
-
   /* ── Notification data ── */
   const [notifs, setNotifs] = useState(INITIAL_ANNOUNCEMENTS)
   const newNotifCount = notifs.filter(n => n.isNew).length
 
   /* ── UI state ── */
   const [section, setSection] = useState<ActiveSection>(null)
-  const [callsTab, setCallsTab] = useState<CallsTab>("contacts")
-  const [contactSearch, setContactSearch] = useState("")
   const containerRef = useRef<HTMLDivElement>(null)
   const pillRef = useRef<HTMLDivElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const tabContentRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevRef = useRef<ActiveSection>(null)
   const wasOpenRef = useRef(false)
-
-  /* ── Load data ── */
-  useEffect(() => {
-    if (!profile?.authUserId) return
-    const load = async () => {
-      const [cl, us] = await Promise.all([
-        getRecentCalls(20),
-        getRecentUsers(),
-      ])
-      if (cl.success) setCalls(cl.calls)
-      if (us.success && us.users) setUsers(us.users)
-    }
-    load()
-    const i = setInterval(load, 30_000)
-    return () => clearInterval(i)
-  }, [profile?.authUserId])
-
-  const filteredContacts = useMemo(() => {
-    if (!contactSearch.trim()) return users
-    const q = contactSearch.toLowerCase()
-    return users.filter(u => u.name.toLowerCase().includes(q))
-  }, [users, contactSearch])
 
   /* ── Pill entrance ── */
   useEffect(() => {
@@ -230,12 +157,6 @@ export function NavbarActions() {
     const dir = SECTIONS.indexOf(section)! > SECTIONS.indexOf(prev)! ? 1 : -1
     gsap.fromTo(contentRef.current, { opacity: 0, x: dir * 16 }, { opacity: 1, x: 0, duration: 0.18, ease: "power2.out" })
   }, [section])
-
-  /* ── Tab content fade ── */
-  useEffect(() => {
-    if (!tabContentRef.current || section !== "calls") return
-    gsap.fromTo(tabContentRef.current, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: 0.15, ease: "power2.out" })
-  }, [callsTab, section])
 
   /* ── Desktop hover ── */
   const enter = useCallback((s: ActiveSection) => {
@@ -265,11 +186,6 @@ export function NavbarActions() {
     return () => document.removeEventListener("mousedown", h)
   }, [section, isMobile])
 
-  const doCall = useCallback((uid: string, type: "video" | "audio", name: string, avatar?: string | null) => {
-    setSection(null)
-    startCall({ participantId: uid, participantName: name, participantAvatar: avatar || undefined, callType: type })
-  }, [startCall])
-
   const dismissNotif = useCallback((id: string) => setNotifs(p => p.filter(n => n.id !== id)), [])
 
   return (
@@ -278,8 +194,8 @@ export function NavbarActions() {
       <div ref={pillRef} className="flex items-center gap-0.5 overflow-visible">
         {/* Wallet */}
         {isMobile ? (
-          <button onClick={() => tap("wallet")} className={cn("flex items-center justify-center h-8 w-8 rounded-full transition-colors", section === "wallet" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
-            <HugeiconsIcon icon={Wallet01Icon} size={14} />
+          <button onClick={() => tap("wallet")} className={cn("flex h-10 w-10 items-center justify-center rounded-full transition-colors", section === "wallet" ? "bg-primary/10 text-primary" : "text-muted-foreground/70 active:bg-muted/50 active:text-foreground")}>
+            <HugeiconsIcon icon={Wallet01Icon} size={17} />
           </button>
         ) : (
           <button onMouseEnter={() => enter("wallet")} className={cn("flex h-8 w-8 items-center justify-center rounded-full transition-colors", section === "wallet" ? "bg-accent text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
@@ -287,30 +203,11 @@ export function NavbarActions() {
           </button>
         )}
 
-        {/* Calls */}
-        <div className="relative">
-          {isMobile ? (
-            <button onClick={() => tap("calls")} className={cn("flex items-center justify-center h-8 w-8 rounded-full transition-colors relative", section === "calls" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
-              <HugeiconsIcon icon={Call02Icon} size={14} />
-              {missedCount > 0 && (
-                <div className="absolute -top-0.5 -right-0.5 h-3 min-w-3 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[7px] flex items-center justify-center font-bold">{missedCount > 9 ? "9+" : missedCount}</div>
-              )}
-            </button>
-          ) : (
-            <button onMouseEnter={() => enter("calls")} className={cn("relative flex h-8 w-8 items-center justify-center rounded-full transition-colors", section === "calls" ? "bg-accent text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
-              <HugeiconsIcon icon={Call02Icon} size={16} />
-              {missedCount > 0 && (
-                <div className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[8px] flex items-center justify-center font-bold">{missedCount > 9 ? "9+" : missedCount}</div>
-              )}
-            </button>
-          )}
-        </div>
-
         {/* Notifications */}
         <div className="relative">
           {isMobile ? (
-            <button onClick={() => tap("notifications")} className={cn("flex items-center justify-center h-8 w-8 rounded-full transition-colors relative", section === "notifications" ? "bg-primary/10 text-primary" : "text-muted-foreground/60 active:text-foreground active:bg-muted/50")}>
-              <HugeiconsIcon icon={Notification01Icon} size={14} />
+            <button onClick={() => tap("notifications")} className={cn("relative flex h-10 w-10 items-center justify-center rounded-full transition-colors", section === "notifications" ? "bg-primary/10 text-primary" : "text-muted-foreground/70 active:bg-muted/50 active:text-foreground")}>
+              <HugeiconsIcon icon={Notification01Icon} size={17} />
               {newNotifCount > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 h-3 min-w-3 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[7px] flex items-center justify-center font-bold">{newNotifCount}</div>
               )}
@@ -338,13 +235,8 @@ export function NavbarActions() {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/6">
               <span className="text-[13px] font-semibold text-foreground/90 tracking-tight">
-                {section === "wallet" ? "Wallet" : section === "calls" ? "Calls" : "Notifications"}
+                {section === "wallet" ? "Wallet" : "Notifications"}
               </span>
-              {section === "calls" && missedCount > 0 && (
-                <span className="text-[10px] font-medium text-destructive bg-destructive/10 px-1.5 py-0.5 rounded-full">
-                  {missedCount} missed
-                </span>
-              )}
               {isMobile && (
                 <button onClick={() => setSection(null)} className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted/50 transition-colors">
                   <HugeiconsIcon icon={Cancel01Icon} size={10} />
@@ -422,182 +314,6 @@ export function NavbarActions() {
                       <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary" />
                       <span className="flex-1 font-medium">Worldstreet Wallet</span>
                       <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 opacity-0 -translate-x-1 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all" />
-                    </Link>
-                  </div>
-                </div>
-              )}
-
-              {/* ══════ Calls ══════ */}
-              {section === "calls" && (
-                <div>
-                  {/* Tab switcher */}
-                  <div className="flex items-center gap-0.5 p-1 bg-muted/30 rounded-xl mx-3.5 mt-3 mb-2">
-                    {(["contacts", "recent"] as CallsTab[]).map(t => (
-                      <button
-                        key={t}
-                        onClick={() => setCallsTab(t)}
-                        className={cn(
-                          "flex-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all duration-200",
-                          callsTab === t
-                            ? "bg-background shadow-[0_1px_3px_rgba(0,0,0,0.08)] text-foreground"
-                            : "text-muted-foreground/50 hover:text-muted-foreground"
-                        )}
-                      >
-                        {t === "contacts" ? "Contacts" : "Recent"}
-                        {t === "recent" && missedCount > 0 && (
-                          <span className="ml-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[8px] font-bold px-0.5">
-                            {missedCount}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div ref={tabContentRef}>
-                    {/* ── Contacts tab ── */}
-                    {callsTab === "contacts" && (
-                      <div>
-                        {/* Search */}
-                        <div className="px-3.5 pb-2">
-                          <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 ring-1 ring-border/10 focus-within:ring-primary/20 transition-all">
-                            <HugeiconsIcon icon={Search01Icon} size={12} className="text-muted-foreground/40 shrink-0" />
-                            <input
-                              type="text"
-                              value={contactSearch}
-                              onChange={e => setContactSearch(e.target.value)}
-                              placeholder="Search contacts..."
-                              className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/40 outline-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="max-h-70 overflow-y-auto scrollbar-thin">
-                          {filteredContacts.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center gap-1.5 py-10 text-center">
-                              <HugeiconsIcon icon={Call02Icon} size={24} className="text-muted-foreground/20" />
-                              <span className="text-xs text-muted-foreground/50">
-                                {contactSearch ? "No matching contacts" : "No contacts yet"}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="px-1.5 pb-2">
-                              {filteredContacts.map(u => (
-                                <div
-                                  key={u.id}
-                                  className="flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-muted/40 transition-all group/row"
-                                >
-                                  <Avatar className="h-9 w-9 shrink-0">
-                                    <AvatarImage src={avatarUrl(u.avatar, u.name)} />
-                                    <AvatarFallback className="text-[10px] bg-muted font-semibold">{u.name[0]?.toUpperCase()}</AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex-1 min-w-0">
-                                    <span className="text-[12.5px] font-medium text-foreground/85 truncate block">{u.name}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1 opacity-60 group-hover/row:opacity-100 transition-opacity">
-                                    <button
-                                      onClick={() => doCall(u.id, "audio", u.name, u.avatar)}
-                                      className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 transition-all active:scale-90"
-                                      title="Voice call"
-                                    >
-                                      <HugeiconsIcon icon={Call02Icon} size={13} />
-                                    </button>
-                                    <button
-                                      onClick={() => doCall(u.id, "video", u.name, u.avatar)}
-                                      className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10 transition-all active:scale-90"
-                                      title="Video call"
-                                    >
-                                      <HugeiconsIcon icon={Video01Icon} size={13} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ── Recent tab ── */}
-                    {callsTab === "recent" && (
-                      <div className="max-h-80 overflow-y-auto scrollbar-thin">
-                        {calls.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center gap-1.5 py-10 text-center">
-                            <HugeiconsIcon icon={Call02Icon} size={24} className="text-muted-foreground/20" />
-                            <span className="text-xs text-muted-foreground/50">No recent calls</span>
-                          </div>
-                        ) : (
-                          <div className="px-1.5 pb-2">
-                            {calls.slice(0, 15).map(call => {
-                              const lbl = callLabel(call)
-                              const isVideo = call.type === "video"
-                              const TypeIcon = isVideo ? Video01Icon : Call02Icon
-                              return (
-                                <div
-                                  key={call.id}
-                                  className={cn(
-                                    "flex items-center gap-3 px-2.5 py-2 rounded-xl transition-all group/row",
-                                    lbl.negative && !call.isCaller
-                                      ? "hover:bg-destructive/4 bg-destructive/2"
-                                      : "hover:bg-muted/40"
-                                  )}
-                                >
-                                  <div className="relative shrink-0">
-                                    <Avatar className="h-9 w-9">
-                                      <AvatarImage src={avatarUrl(call.participantAvatar, call.participantName)} />
-                                      <AvatarFallback className="text-[10px] bg-muted font-semibold">{call.participantName[0]?.toUpperCase()}</AvatarFallback>
-                                    </Avatar>
-                                    {/* Call type mini badge */}
-                                    <div className={cn(
-                                      "absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full flex items-center justify-center border-2 border-popover",
-                                      isVideo ? "bg-blue-500/15" : "bg-emerald-500/15"
-                                    )}>
-                                      <HugeiconsIcon icon={TypeIcon} size={8} className={isVideo ? "text-blue-500" : "text-emerald-500"} />
-                                    </div>
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <span className="text-[12.5px] font-medium text-foreground/85 truncate block">{call.participantName}</span>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                      <HugeiconsIcon
-                                        icon={call.isCaller ? CallOutgoing04Icon : CallIncoming04Icon}
-                                        size={10}
-                                        className={lbl.negative ? "text-destructive" : "text-muted-foreground/40"}
-                                      />
-                                      <span className={cn(
-                                        "text-[10px] font-medium",
-                                        lbl.negative ? "text-destructive" : "text-muted-foreground/40"
-                                      )}>
-                                        {lbl.text}
-                                      </span>
-                                      <span className="text-[9px] text-muted-foreground/25 ml-auto shrink-0 tabular-nums">
-                                        {timeAgo(new Date(call.createdAt))}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <button
-                                    onClick={() => doCall(call.participantId, call.type, call.participantName, call.participantAvatar)}
-                                    className={cn(
-                                      "h-7 w-7 rounded-lg flex items-center justify-center opacity-60 group-hover/row:opacity-100 transition-all active:scale-90 shrink-0",
-                                      isVideo
-                                        ? "text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10"
-                                        : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10"
-                                    )}
-                                    title={isVideo ? "Video call" : "Voice call"}
-                                  >
-                                    <HugeiconsIcon icon={TypeIcon} size={13} />
-                                  </button>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Footer */}
-                  <div className="border-t border-white/4 px-4 py-2">
-                    <Link href="/community" onClick={() => setSection(null)} className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
-                      Open Community →
                     </Link>
                   </div>
                 </div>

@@ -99,11 +99,11 @@ export function Navbar() {
   )
 
   const profileTrigger = (
-    <button className="group flex h-8 items-center gap-1 rounded-full pl-1 pr-1.5 transition-colors hover:bg-accent/60 focus:outline-none active:scale-[0.97]">
+    <button className="group flex h-10 items-center gap-1 rounded-full pl-1 pr-1 transition-colors hover:bg-accent/60 focus:outline-none active:scale-[0.97] md:h-8 md:pr-1.5">
       <div className="relative">
-        <Avatar className="h-6 w-6">
+        <Avatar className="h-8 w-8 md:h-6 md:w-6">
           <AvatarImage src={user?.imageUrl} alt={displayName} />
-          <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-semibold">{initials}</AvatarFallback>
+          <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold md:text-[10px]">{initials}</AvatarFallback>
         </Avatar>
         <span className="absolute -bottom-px -right-px h-2 w-2 rounded-full border-[1.5px] border-background bg-emerald-500" />
       </div>
@@ -118,9 +118,9 @@ export function Navbar() {
     // rail: rounded-full, translucent card fill, hairline ring, blur.
     <header className="relative z-40 flex h-14 w-full shrink-0 items-center gap-2 px-3 md:h-16 md:gap-3 md:px-6 lg:px-8">
       {/* Mobile: logo */}
-      <div className="flex md:hidden items-center gap-2">
-        <img src="/worldstreet-logo/WorldStreet4x.png" alt="WS" className="h-5 w-5 rounded-full" />
-        <span className="font-display text-sm font-semibold">WorldStreet</span>
+      <div className="flex min-w-0 items-center gap-2 md:hidden">
+        <img src="/worldstreet-logo/WorldStreet4x.png" alt="WS" className="h-6 w-6 shrink-0 rounded-full" />
+        <span className="truncate font-display text-[15px] font-semibold tracking-[-0.01em]">WorldStreet</span>
       </div>
 
       {/* Search — the bar's one wide instrument, centered between clusters.
@@ -177,9 +177,9 @@ export function Navbar() {
       {/* Utility cluster — one glass pill: actions · account.
           (The theme control is gone: the app is dark-only. See
           components/theme-provider.tsx to restore it.) */}
-      <div className="ml-auto flex shrink-0 items-center gap-0.5 md:h-10 md:rounded-full md:bg-card/35 md:px-1.5 md:ring-1 md:ring-border/50 md:backdrop-blur-xl">
+      <div className="ws-nav-glass ml-auto flex h-11 shrink-0 items-center gap-0.5 rounded-full bg-card/35 px-1 ring-1 ring-border/50 backdrop-blur-xl md:h-10 md:px-1.5">
         <NavbarActions />
-        <div className="mx-0.5 hidden h-4 w-px bg-border/60 md:block" />
+        <div className="mx-0.5 h-4 w-px bg-border/60" />
 
         {/* Profile — bottom sheet on mobile, popover on desktop */}
         {isMobile ? (
