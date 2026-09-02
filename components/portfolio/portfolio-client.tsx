@@ -4,19 +4,14 @@ import * as React from "react"
 import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
-  Wallet01Icon,
   Chart01Icon,
   Search01Icon,
-  Copy01Icon,
   Exchange01Icon,
   RefreshIcon,
-  Shield01Icon,
   ArrowRight01Icon,
   StarIcon,
   Cancel01Icon,
   Add01Icon,
-  CheckmarkCircle01Icon,
-  Loading03Icon,
   ArrowUpRight01Icon,
   ArrowDownLeft01Icon,
 } from "@hugeicons/core-free-icons"
@@ -26,27 +21,24 @@ import {
   CardHeader,
   CardShell,
   Eyebrow,
+  allocationColor,
   IconAction,
   PageHeader,
   Segmented,
   Skel,
   Sparkline,
-  WeightBar,
 } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { numOr, pctSigned, price, qty, share, usd } from "@/lib/num"
 import { useSparklines } from "@/hooks/useSparklines"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
-import { useAuth } from "@/components/auth-provider"
-import { useWallet } from "@/components/wallet-provider"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { usePortfolioTotal } from "@/hooks/usePortfolioTotal"
 import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { getUserBalances } from "@/lib/actions"
-import type { CoinData, UserBalance } from "@/lib/actions"
-import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
-import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
+import type { CoinData } from "@/lib/actions"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -81,23 +73,9 @@ function formatUSD(n: unknown) {
   return usd(n)
 }
 
-function truncAddr(addr: string) {
-  if (!addr || addr.length < 14) return addr
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
-}
-
 function formatPrice(value: unknown) {
   return price(value)
 }
-
-const CHAINS = [
-  { key: "ethereum", label: "Ethereum",  symbol: "ETH", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
-  { key: "arbitrum", label: "Arbitrum",  symbol: "ETH", icon: "https://coin-images.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg" },
-  { key: "solana",   label: "Solana",    symbol: "SOL", icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
-  { key: "sui",      label: "Sui",       symbol: "SUI", icon: "https://coin-images.coingecko.com/coins/images/26375/small/sui-ocean-square.png" },
-  { key: "ton",      label: "TON",       symbol: "TON", icon: "https://coin-images.coingecko.com/coins/images/17980/small/ton_symbol.png" },
-  { key: "tron",     label: "Tron",      symbol: "TRX", icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
-] as const
 
 const INITIAL_WATCHLIST = ["BTC", "ETH", "SOL", "SUI", "TON", "TRX", "USDT"]
 
@@ -299,11 +277,8 @@ function PortfolioTradeButton() {
 // ── Main Component ───────────────────────────────────────────────────────
 
 export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
-  const { user } = useAuth()
-  const { addresses, tradingWallet, walletsGenerated, isLoading: walletsLoading, refreshWallets } = useWallet()
   const { profile, updateProfile } = useProfile()
   const [activeTab, setActiveTab] = React.useState<Tab>("overview")
-  const [copiedAddr, setCopiedAddr] = React.useState<string | null>(null)
   const [watchlistSymbols, setWatchlistSymbols] = React.useState<string[]>(
     profile?.watchlist?.length ? profile.watchlist : INITIAL_WATCHLIST,
   )
@@ -324,101 +299,48 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
     [updateProfile],
   )
 
-  // Balance state from backend
-  const [accountBalances, setAccountBalances] = React.useState<UserBalance[]>([])
-  const [accountTotal, setAccountTotal] = React.useState(0)
+  /* The new wallet architecture, and only it.
+     This page read three legacy sources at once: `getUserBalances` (the Privy
+     ledger), `getSpotBalances`/`getSpotPositions` (the Hyperliquid trading
+     account), and `useWallet` for addresses. None of them is where the money
+     is any more, so a funded self-custodial wallet reported a net worth of
+     zero across two accounts that no longer exist.
 
-  // SpotV2 ledger data
-  const [spotBalances, setSpotBalances] = React.useState<LedgerBalance[]>([])
-  const [spotPositions, setSpotPositions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
+     `usePortfolioTotal` is the same arithmetic the navbar and the dashboard
+     hero read, so all three agree by construction rather than by coincidence. */
+  const { balances: walletBalances, isLoading: balancesLoading, refetch: refreshBalances } =
+    useWalletBalances()
+  const { total: totalNetWorth, onChain, futures, cash } = usePortfolioTotal(prices)
 
-  React.useEffect(() => {
-    const uid = user?.userId
-    if (!uid) return
-    // Fetch legacy balances for funding account
-    getUserBalances(uid).then((r) => {
-      if (r.success) {
-        setAccountBalances(r.balances)
-      }
-    })
-    // Fetch SpotV2 balances for trading account
-    Promise.all([getSpotBalances(), getSpotPositions()])
-      .then(async ([balances, positions]) => {
-        setSpotBalances(balances)
-        const tokens = positions.map((p) => p.token)
-        const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
-        setSpotPositions(positions.map((p) => ({ ...p, currentPrice: priceMap.get(p.token) ?? 0 })))
+  /* Holdings with each one's SHARE worked out once.
+     A column of dollar figures says what a holding is worth; it takes mental
+     arithmetic to learn whether it is most of your money or a rounding error,
+     and that comparison is the whole reason to open a portfolio. */
+  const holdings = React.useMemo(() => {
+    const rows = walletBalances
+      .filter((balance) => balance.balance > 0)
+      .map((balance) => {
+        const symbol = balance.symbol.toUpperCase()
+        const feed = prices[symbol] ?? prices[balance.symbol]
+        // A symbol the feed hasn't priced is worth an unknown amount, which is
+        // not zero — the row says so rather than claiming $0.00.
+        const priced =
+          typeof feed === "number" && Number.isFinite(feed) && feed > 0
+            ? feed
+            : symbol === "USDC" || symbol === "USDT"
+              ? 1
+              : null
+        return {
+          ...balance,
+          usdValue: priced === null ? null : balance.balance * priced,
+        }
       })
-      .catch(() => {})
-  }, [user?.userId])
-
-  // SpotV2-sourced trading account values
-  const usdcEntry = spotBalances.find((b) => b.token === "USDC")
-  const availableUsdc = usdcEntry?.available ?? 0
-  const lockedUsdc = usdcEntry?.locked ?? 0
-  const positionsValue = spotPositions.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0)
-  const tradingValue = availableUsdc + lockedUsdc + positionsValue
-  const inOrders = lockedUsdc
-
-  // What the funding (main) wallet is worth. Keyed off the balances themselves
-  // rather than the CHAINS display list, so nothing is counted twice.
-  const fundingValue = React.useMemo(
-    () =>
-      accountBalances.reduce(
-        (sum, b) =>
-          sum + numOr(numOr(b.available) + numOr(b.locked)) * numOr(prices[b.asset.toUpperCase()]),
-        0,
-      ),
-    [accountBalances, prices],
-  )
-
-  /** One chain's funding balance. Matched on CHAIN, not asset: Ethereum and
-   *  Arbitrum share the symbol ETH, and an asset-first match handed Arbitrum
-   *  Ethereum's balance — the same money shown (and counted) twice. */
-  const chainBalance = React.useCallback(
-    (chainKey: string) => {
-      const b = accountBalances.find((x) => x.chain === chainKey)
-      return b ? b.available + b.locked : 0
-    },
-    [accountBalances],
-  )
-
-  // Net worth is every account this page shows. It previously reported the
-  // trading account alone while the funding table listed thousands more.
-  const totalNetWorth = tradingValue + fundingValue
-
-  /* The funding table's rows, with each holding's SHARE of the account worked
-     out once. A column of dollar figures tells you what a holding is worth; it
-     takes mental arithmetic to learn whether it's most of your money or a
-     rounding error, and that comparison is the whole reason to look at a
-     portfolio. `rank` drives the colour, so the ladder reads as an ordering —
-     the same ladder the Assets donut uses, so the two pages agree. */
-  const fundingRows = React.useMemo(() => {
-    const rows = CHAINS.map((chain) => {
-      const amount = numOr(chainBalance(chain.key), 0)
-      // A symbol the feed hasn't priced yet is worth an unknown amount, which
-      // is not the same as zero — the row says so instead of claiming $0.00.
-      const p = prices[chain.symbol]
-      const priced = typeof p === "number" && Number.isFinite(p)
-      return { chain, amount, usdValue: priced ? amount * p : null, priced }
-    })
-    const ranked = [...rows]
+    return rows
       .sort((a, b) => numOr(b.usdValue) - numOr(a.usdValue))
-      .map((r) => r.chain.key)
-    return rows.map((r) => ({
-      ...r,
-      pct: share(r.usdValue, fundingValue),
-      rank: ranked.indexOf(r.chain.key),
-    }))
-  }, [chainBalance, prices, fundingValue])
+      .map((row, index) => ({ ...row, pct: share(row.usdValue, onChain), rank: index }))
+  }, [walletBalances, prices, onChain])
 
   const isOnboardingDone = profile?.onboardingCompleted?.includes("portfolio")
-
-  const copyAddr = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setCopiedAddr(text)
-    setTimeout(() => setCopiedAddr(null), 1500)
-  }
 
   return (
     <>
@@ -432,10 +354,10 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
           actions={
             <IconAction
               icon={({ className }: { className?: string }) => (
-                <HugeiconsIcon icon={RefreshIcon} className={`${className} ${walletsLoading ? "animate-spin" : ""}`} />
+                <HugeiconsIcon icon={RefreshIcon} className={`${className} ${balancesLoading ? "animate-spin" : ""}`} />
               )}
               label="Refresh"
-              onClick={() => refreshWallets()}
+              onClick={() => void refreshBalances()}
             />
           }
         />
@@ -443,10 +365,14 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
         <div className="flex flex-col gap-1">
           <Eyebrow>Net Worth</Eyebrow>
           <Balance value={formatUSD(totalNetWorth)} className="text-[clamp(2rem,3.5vw,2.75rem)]" />
-          {/* Say what the figure covers — it's the sum of the two accounts
-              listed below, so the page reconciles with itself. */}
-          <p className="text-[13px] text-muted-foreground">
-            Trading {formatUSD(tradingValue)} · Funding {formatUSD(fundingValue)}
+          {/* Say what the figure covers, so the page reconciles with itself.
+              The accounts named are the ones that exist: the self-custodial
+              wallet, the perps account, and the Dollar Account. "Trading" and
+              "Funding" described a split that no longer does. */}
+          <p className="flex flex-wrap gap-x-3 text-[13px] text-muted-foreground">
+            <span>Wallet {formatUSD(onChain)}</span>
+            {futures > 0 && <span>· Perps {formatUSD(futures)}</span>}
+            {cash > 0 && <span>· Cash {formatUSD(cash)}</span>}
           </p>
         </div>
         {/* The verbs sit under the figure they act on. */}
@@ -482,197 +408,132 @@ export function PortfolioClient({ coins, prices }: PortfolioClientProps) {
                       system separates surfaces by fill. */}
                   <div className="rounded-2xl bg-surface-sunken/70 p-4">
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <Eyebrow>Trading Account</Eyebrow>
+                      <Eyebrow>Accounts</Eyebrow>
                       <PortfolioTradeButton />
                     </div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <div>
-                        <p className="mb-0.5 text-[13px] text-muted-foreground">Account Value</p>
-                        <p className="text-[17px] font-semibold tabular-nums">{formatUSD(tradingValue)}</p>
+                        <p className="mb-0.5 text-[13px] text-muted-foreground">Wallet</p>
+                        <p className="text-[17px] font-semibold tabular-nums">{formatUSD(onChain)}</p>
                       </div>
                       <div>
-                        <p className="mb-0.5 text-[13px] text-muted-foreground">Available USDC</p>
-                        <p className="text-[17px] font-semibold tabular-nums text-credit">{formatUSD(availableUsdc)}</p>
+                        <p className="mb-0.5 text-[13px] text-muted-foreground">Perps</p>
+                        <p className="text-[17px] font-semibold tabular-nums">{formatUSD(futures)}</p>
                       </div>
                       <div>
-                        <p className="mb-0.5 text-[13px] text-muted-foreground">In Orders</p>
-                        <p className="text-[17px] font-semibold tabular-nums">{formatUSD(inOrders)}</p>
+                        <p className="mb-0.5 text-[13px] text-muted-foreground">Cash</p>
+                        <p className="text-[17px] font-semibold tabular-nums">{formatUSD(cash)}</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Funding Account — the other half of net worth, so it names
-                      its total instead of making the reader add up a column. */}
+                  {/* Holdings — every token the wallet actually holds, biggest
+                      first, with its share of the wallet drawn rather than left
+                      as arithmetic. A table on a desktop; stacked rows on a
+                      phone, because five columns at 375px is a horizontal
+                      scrollbar pretending to be a layout. */}
                   <div className="pt-1">
                     <div className="mb-2 flex items-center justify-between gap-3">
-                      <Eyebrow>Funding Account · Main Wallet</Eyebrow>
-                      <span className="text-[13px] font-semibold tabular-nums">{formatUSD(fundingValue)}</span>
+                      <Eyebrow>Holdings</Eyebrow>
+                      <span className="text-[13px] font-semibold tabular-nums">{formatUSD(onChain)}</span>
                     </div>
-                    <div className="overflow-hidden rounded-2xl bg-surface-sunken/70">
-                      <table className="w-full text-[13px]">
-                        <thead>
-                          <tr className="text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
-                            <th className="px-3 py-2 text-left font-semibold">Asset</th>
-                            <th className="hidden px-3 py-2 text-left font-semibold sm:table-cell">Chain</th>
-                            <th className="hidden px-3 py-2 text-left font-semibold md:table-cell">Share</th>
-                            <th className="px-3 py-2 text-right font-semibold">Balance</th>
-                            <th className="px-3 py-2 text-right font-semibold">Value</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/10">
-                          {walletsLoading ? (
-                            Array.from({ length: 3 }).map((_, i) => (
-                              <tr key={i}><td colSpan={5} className="px-3 py-2.5"><div className="h-4 w-full animate-pulse rounded bg-foreground/[0.06]" /></td></tr>
-                            ))
-                          ) : !walletsGenerated ? (
-                            <tr><td colSpan={5} className="px-3 py-8 text-center text-[13px] text-muted-foreground">No assets found. Set up your wallet to get started.</td></tr>
-                          ) : (
-                            fundingRows.map(({ chain, amount, usdValue, pct, rank }) => (
-                              <tr key={chain.key} className="transition-colors hover:bg-accent/30">
+
+                    {balancesLoading && holdings.length === 0 ? (
+                      <div className="rounded-2xl bg-surface-sunken/70 px-4 py-10 text-center text-[13px] text-muted-foreground">
+                        Loading your holdings…
+                      </div>
+                    ) : holdings.length === 0 ? (
+                      <div className="rounded-2xl bg-surface-sunken/70 px-4 py-10 text-center">
+                        <p className="text-[13px] text-muted-foreground">
+                          Nothing in this wallet yet.
+                        </p>
+                        <Link
+                          href="/wallet/modern"
+                          className="mt-2 inline-block text-[13px] font-semibold text-primary hover:underline"
+                        >
+                          Deposit to get started
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="overflow-hidden rounded-2xl bg-surface-sunken/70">
+                        {/* Phone: one row per holding, two lines. */}
+                        <div className="flex flex-col divide-y divide-border/20 sm:hidden">
+                          {holdings.map((row) => (
+                            <div
+                              key={`${row.chain}-${row.symbol}-${row.contractAddress ?? "native"}`}
+                              className="flex items-center gap-3 px-3 py-3"
+                            >
+                              <CoinAvatar symbol={row.symbol} src={row.logo} size="sm" />
+                              <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                                <span className="truncate text-[13.5px] font-semibold">{row.symbol}</span>
+                                <span className="truncate text-[11.5px] text-muted-foreground">
+                                  {row.networkName ?? row.chain} · {row.pct}
+                                </span>
+                              </span>
+                              <span className="flex shrink-0 flex-col items-end leading-tight">
+                                <span className="text-[13.5px] font-semibold tabular-nums">
+                                  {row.usdValue === null ? "—" : formatUSD(row.usdValue)}
+                                </span>
+                                <span className="text-[11.5px] tabular-nums text-muted-foreground">
+                                  {qty(row.balance)}
+                                </span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <table className="hidden w-full text-[13px] sm:table">
+                          <thead>
+                            <tr className="text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
+                              <th className="px-3 py-2 text-left font-semibold">Asset</th>
+                              <th className="px-3 py-2 text-left font-semibold">Chain</th>
+                              <th className="hidden px-3 py-2 text-left font-semibold md:table-cell">Share</th>
+                              <th className="px-3 py-2 text-right font-semibold">Balance</th>
+                              <th className="px-3 py-2 text-right font-semibold">Value</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/20">
+                            {holdings.map((row) => (
+                              <tr
+                                key={`${row.chain}-${row.symbol}-${row.contractAddress ?? "native"}`}
+                                className="transition-colors hover:bg-accent/30"
+                              >
                                 <td className="px-3 py-2.5">
-                                  <div className="flex items-center gap-2">
-                                    <CoinAvatar src={chain.icon} symbol={chain.symbol} size="sm" />
-                                    <span className="flex min-w-0 flex-col leading-tight">
-                                      <span className="font-semibold">{chain.symbol}</span>
-                                      <span className="text-[11.5px] text-muted-foreground sm:hidden">{chain.label}</span>
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="hidden px-3 py-2.5 text-muted-foreground sm:table-cell">{chain.label}</td>
-                                {/* Share — how much of the funding account this
-                                    row is. Hidden below md, where the column
-                                    would be a 30px stub. */}
-                                <td className="hidden w-[34%] px-3 py-2.5 md:table-cell">
                                   <span className="flex items-center gap-2">
-                                    <WeightBar pct={pct} rank={rank} className="min-w-0 flex-1" />
-                                    <span className="w-9 shrink-0 text-right text-[11.5px] tabular-nums text-muted-foreground">
-                                      {pct >= 0.1 ? `${pct.toFixed(0)}%` : "—"}
-                                    </span>
+                                    <CoinAvatar symbol={row.symbol} src={row.logo} size="sm" />
+                                    <span className="font-semibold">{row.symbol}</span>
                                   </span>
                                 </td>
-                                <td className="px-3 py-2.5 text-right font-medium tabular-nums">{qty(amount)}</td>
-                                <td className="px-3 py-2.5 text-right text-muted-foreground tabular-nums">
-                                  {formatUSD(usdValue)}
+                                <td className="px-3 py-2.5 text-muted-foreground">
+                                  {row.networkName ?? row.chain}
+                                </td>
+                                <td className="hidden px-3 py-2.5 md:table-cell">
+                                  <span className="flex items-center gap-2">
+                                    <span className="h-1.5 w-16 overflow-hidden rounded-full bg-foreground/[0.07]">
+                                      <span
+                                        className="block h-full rounded-full"
+                                        style={{ width: row.pct, background: allocationColor(row.rank) }}
+                                      />
+                                    </span>
+                                    <span className="tabular-nums text-muted-foreground">{row.pct}</span>
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5 text-right tabular-nums">{qty(row.balance)}</td>
+                                <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
+                                  {/* Unknown price is an em-dash, never $0.00
+                                      beside a real balance. */}
+                                  {row.usdValue === null ? "—" : formatUSD(row.usdValue)}
                                 </td>
                               </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
 
-              {/* ─── WALLETS TAB ─── */}
-              {activeTab === "wallets" && (
-                <div className="space-y-4">
-                  {walletsLoading ? (
-                    <div className="flex flex-col items-center gap-3 py-12">
-                      <HugeiconsIcon icon={Loading03Icon} className="h-5 w-5 animate-spin text-primary" />
-                      <p className="text-[13px] text-muted-foreground">Loading wallets…</p>
-                    </div>
-                  ) : !walletsGenerated ? (
-                    <div className="flex flex-col items-center gap-3 py-12 text-center">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/50">
-                        <HugeiconsIcon icon={Wallet01Icon} className="h-6 w-6 text-muted-foreground/40" />
-                      </div>
-                      <div>
-                        <p className="text-[15px] font-semibold">No wallets yet</p>
-                        <p className="mt-1 text-[13px] text-muted-foreground">Your multi-chain wallets appear here once set up.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Trading Wallet — hero card */}
-                      <div className="rounded-2xl bg-surface-sunken/70 p-4 ring-1 ring-primary/20">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                              <HugeiconsIcon icon={Chart01Icon} className="h-4 w-4 text-primary" />
-                            </div>
-                            <div>
-                              <p className="text-[15px] font-semibold leading-tight">Trading Wallet</p>
-                              <p className="text-[13px] text-muted-foreground">Where your spot orders settle</p>
-                            </div>
-                          </div>
-                          <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.08em] ${
-                            tradingWallet?.address ? "bg-credit-chip text-credit" : "bg-muted text-muted-foreground"
-                          }`}>
-                            {tradingWallet?.address ? "Active" : "Not Set Up"}
-                          </span>
-                        </div>
-                        {tradingWallet?.address ? (
-                          <button
-                            onClick={() => copyAddr(tradingWallet.address)}
-                            className="group flex w-full items-center justify-between rounded-xl bg-card px-3 py-2.5 ring-1 ring-border/40 transition-colors hover:ring-primary/40"
-                          >
-                            <code className="font-mono text-[13px] text-foreground/80">{truncAddr(tradingWallet.address)}</code>
-                            <HugeiconsIcon
-                              icon={copiedAddr === tradingWallet.address ? CheckmarkCircle01Icon : Copy01Icon}
-                              className={`h-3.5 w-3.5 transition-colors ${copiedAddr === tradingWallet.address ? "text-credit" : "text-muted-foreground group-hover:text-primary"}`}
-                            />
-                          </button>
-                        ) : (
-                          <div className="flex items-center justify-between rounded-lg border border-dashed border-border/40 bg-card/50 px-3 py-3">
-                            <p className="text-[13px] text-muted-foreground">No trading wallet configured</p>
-                            <Link href="/trade" className="rounded-full bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
-                              Set Up
-                            </Link>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Chain Wallets — compact list */}
-                      <div>
-                        <div className="flex items-center gap-2 mb-2.5">
-                          <HugeiconsIcon icon={Shield01Icon} className="h-3.5 w-3.5 text-muted-foreground" />
-                          <Eyebrow>Chain Wallets</Eyebrow>
-                        </div>
-                        <div className="divide-y divide-border/15 overflow-hidden rounded-2xl bg-surface-sunken/70">
-                          {CHAINS.map((chain) => {
-                            const addrKey = chain.key === "arbitrum" ? "ethereum" : chain.key
-                            const addr = addresses?.[addrKey as keyof typeof addresses] ?? ""
-                            return (
-                              <div key={chain.key} className="flex items-center justify-between px-3.5 py-3 hover:bg-accent/20 transition-colors">
-                                <div className="flex items-center gap-2.5">
-                                  <CoinAvatar src={chain.icon} symbol={chain.symbol} size="sm" />
-                                  <div>
-                                    <p className="text-[13px] font-semibold">{chain.label}</p>
-                                    {addr ? (
-                                      <p className="font-mono text-[12px] text-muted-foreground">{truncAddr(addr)}</p>
-                                    ) : (
-                                      <p className="text-[12px] text-muted-foreground/60">Not generated</p>
-                                    )}
-                                  </div>
-                                </div>
-                                {addr ? (
-                                  <button
-                                    onClick={() => copyAddr(addr)}
-                                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-primary transition-colors"
-                                  >
-                                    <HugeiconsIcon icon={copiedAddr === addr ? CheckmarkCircle01Icon : Copy01Icon} className={`h-3.5 w-3.5 ${copiedAddr === addr ? "text-credit" : ""}`} />
-                                  </button>
-                                ) : (
-                                  <span className="rounded-full bg-muted/50 px-2 py-0.5 text-[10.5px] text-muted-foreground">Pending</span>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Unified account note */}
-                      {addresses?.ethereum === tradingWallet?.address && (
-                        <div className="flex items-center gap-2 rounded-xl bg-credit-chip px-3 py-2.5">
-                          <HugeiconsIcon icon={CheckmarkCircle01Icon} className="h-3.5 w-3.5 text-credit shrink-0" />
-                          <p className="text-[13px] text-credit">Unified account — your Ethereum wallet doubles as your trading wallet.</p>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
 
             </div>
           </CardShell>
