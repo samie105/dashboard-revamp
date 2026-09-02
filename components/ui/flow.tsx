@@ -255,7 +255,7 @@ export function AmountField({
               key={pct}
               onClick={() => onChange(chipAmount(pct, maxSpend))}
               disabled={disabled}
-              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50"
+              className="inline-flex min-h-11 items-center rounded-full bg-surface-sunken px-3.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50 sm:min-h-0 sm:py-1.5"
             >
               {pct === 1 ? "Max" : `${pct * 100}%`}
             </button>
@@ -268,7 +268,7 @@ export function AmountField({
               key={p}
               onClick={() => onChange(String(p))}
               disabled={disabled}
-              className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50"
+              className="inline-flex min-h-11 items-center rounded-full bg-surface-sunken px-3.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-90 motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50 sm:min-h-0 sm:py-1.5"
             >
               {p.toLocaleString()}
             </button>
@@ -310,7 +310,7 @@ export function ChoiceRow<T extends string>({
   disabled?: boolean
 }) {
   return (
-    <div className={cn("grid gap-2", columns === 2 ? "grid-cols-2" : "grid-cols-3")}>
+    <div className={cn("grid gap-2", columns === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3")}>
       {options.map((o) => {
         const active = o.key === value
         return (
@@ -371,11 +371,15 @@ export function DetailPanel({
             {r.label}
           </span>
           <span aria-hidden className="mb-1 flex-1 self-end border-b border-dotted border-foreground/15" />
+          {/* The value must be the side that gives: both halves were shrink-0,
+              so a full-precision amount burst the panel instead of truncating.
+              The dotted leader collapses first, then this truncates. */}
           <span
             className={cn(
-              "shrink-0 tabular-nums",
+              "min-w-0 truncate text-right tabular-nums",
               r.strong ? "text-[15px] font-bold" : "text-[13px] font-medium",
             )}
+            title={typeof r.value === "string" ? r.value : undefined}
           >
             {r.value}
           </span>
@@ -808,7 +812,7 @@ export function StatusScreen({
           <div className="ws-core-breathe relative flex flex-col items-center gap-1">
             {figure ? (
               <>
-                <span className="font-display text-[26px] font-light leading-none tracking-[-0.01em] tabular-nums">
+                <span className="max-w-[168px] text-balance break-words px-1 text-center font-display text-[clamp(1.05rem,4.6vw,26px)] font-light leading-none tracking-[-0.01em] tabular-nums">
                   {figure}
                 </span>
                 <span className="text-[9.5px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
@@ -1022,13 +1026,13 @@ export function AnnouncementBanner({
         )}
         {action &&
           (action.href ? (
-            <Link href={action.href} className="mt-1 w-fit text-[12.5px] font-semibold text-primary hover:underline">
+            <Link href={action.href} className="mt-1 inline-flex min-h-9 w-fit items-center text-[12.5px] font-semibold text-primary hover:underline">
               {action.label} →
             </Link>
           ) : (
             <button
               onClick={action.onClick}
-              className="mt-1 w-fit text-[12.5px] font-semibold text-primary hover:underline"
+              className="mt-1 inline-flex min-h-9 w-fit items-center text-[12.5px] font-semibold text-primary hover:underline"
             >
               {action.label} →
             </button>

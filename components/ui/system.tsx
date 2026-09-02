@@ -318,7 +318,7 @@ export function PageHeader({
  *  rather than a link, and lines up with the title's cap height. */
 export function BackAction({ to, className }: { to: string | (() => void); className?: string }) {
   const cls = cn(
-    "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+    "mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:h-8 sm:w-8",
     className,
   )
   const icon = <HugeiconsIcon icon={ArrowLeft01Icon} className="h-[18px] w-[18px]" />

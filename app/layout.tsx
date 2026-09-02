@@ -18,12 +18,14 @@ export const metadata: Metadata = {
   },
 }
 
+// Pinch-zoom stays ENABLED. Locking it (maximumScale 1 / userScalable false)
+// is a WCAG 1.4.4 failure, and the reason people reach for it — iOS zooming in
+// when a sub-16px input takes focus — does not apply here: Input is
+// `text-base md:text-sm`, so every field is already 16px on a phone.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   minimumScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
 }
 import { ThemeProvider } from "@/components/theme-provider"

@@ -68,28 +68,52 @@ function ResponsiveModalContent({
           "ws-glass ws-glass-edge outline-none text-sm z-50 fixed shadow-2xl ring-1 ring-foreground/10",
           isDesktop
             ? "ws-modal-in data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[0.97] data-closed:duration-200 grid max-w-[calc(100%-2rem)] gap-4 rounded-2xl p-4 sm:max-w-sm top-1/2 left-1/2 w-full -translate-x-1/2 -translate-y-1/2"
-            : "ws-sheet-in data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom-10 data-closed:duration-200 flex flex-col gap-4 inset-x-0 bottom-0 rounded-t-3xl p-4",
+            : // max-h + scroll is load-bearing, not polish: the sheet is
+              // anchored to bottom-0, so content taller than the viewport grows
+              // UPWARD past the top of the screen and becomes unreachable —
+              // the title and the primary action are the first things lost.
+              // 92dvh + overscroll-contain is the recipe the trade ticket sheet
+              // already uses (trade-client.tsx).
+              "ws-sheet-in data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom-10 data-closed:duration-200 flex max-h-[92dvh] flex-col gap-4 overflow-y-auto overscroll-contain inset-x-0 bottom-0 rounded-t-3xl p-4",
           className
         )}
         {...props}
       >
-        {/* Mobile drag handle */}
+        {/* Mobile drag handle. Sticky, and it carries the close button: the
+            sheet is now a scroll container, so an absolutely-positioned X
+            would scroll out of reach on exactly the tall content that made
+            scrolling necessary. `shrink-0` keeps the handle from being
+            squeezed to nothing by a tall child. */}
         {!isDesktop && (
-          <div className="mx-auto h-1 w-10 shrink-0 rounded-full bg-muted-foreground/20" />
+          <div className="sticky top-0 z-20 -mt-1 flex shrink-0 items-center justify-center pt-1 pb-1">
+            <div className="h-1 w-10 rounded-full bg-muted-foreground/20" />
+            {showCloseButton && (
+              <DialogPrimitive.Close
+                data-slot="responsive-modal-close"
+                render={
+                  <Button
+                    variant="ghost"
+                    className="absolute top-0 right-0 size-11"
+                    size="icon"
+                  />
+                }
+              >
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+                <span className="sr-only">Close</span>
+              </DialogPrimitive.Close>
+            )}
+          </div>
         )}
 
         {children}
 
-        {showCloseButton && (
+        {showCloseButton && isDesktop && (
           <DialogPrimitive.Close
             data-slot="responsive-modal-close"
             render={
               <Button
                 variant="ghost"
-                className={cn(
-                  "absolute",
-                  isDesktop ? "top-2 right-2" : "top-3 right-3"
-                )}
+                className="absolute top-2 right-2"
                 size="icon"
               />
             }
