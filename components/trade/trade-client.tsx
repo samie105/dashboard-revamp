@@ -20,6 +20,8 @@
 import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
 import Image from "next/image"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Dialog } from "@base-ui/react/dialog"
@@ -89,7 +91,6 @@ import {
 import { ComingSoon } from "@/components/ui/coming-soon"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
-import { ModernFundingPanel } from "./modern-funding-panel"
 
 type Market = "spot" | "futures"
 type Side = "buy" | "sell"
@@ -112,6 +113,10 @@ type OrderType = "market" | "limit"
  */
 const FUTURES_LIVE: boolean = false
 
+/* Retained while the market toggle is withdrawn — this and `setMarketTab`
+   below are the restoration point for futures, and rewriting them later is
+   strictly worse than leaving them here. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const MARKET_TABS: readonly SegmentedOption<Market>[] = [
   { key: "spot", label: "Spot" },
   // The Futures tab stays visible AND selectable on purpose. A `disabled` tab
@@ -776,6 +781,7 @@ export function TradeClient() {
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's
   // default and the sync effect below writes it back to the URL.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function setMarketTab(m: Market) {
     // FUTURES GATE (1/4): futures is not open, so the press is ANSWERED rather
     // than followed. Nothing navigates: the URL never gains `market=futures`,
@@ -1941,14 +1947,12 @@ export function TradeClient() {
         </div>
         <span className="hidden h-6 w-px bg-border/40 sm:block" />
 
-        {/* Market toggle */}
-        <Segmented
-          value={market}
-          onChange={setMarketTab}
-          options={MARKET_TABS}
-          className="order-4 shrink-0 lg:order-none"
-          vividPrefix="market-tab"
-        />
+        {/* Market toggle — WITHDRAWN while futures is closed.
+            A tab whose only outcome is a "not open yet" notice is a control
+            that exists to disappoint. Everything behind it is intact — the
+            `market` state, the futures ticket, the positions drawer, the
+            gate below — so restoring this element is the whole change when
+            the venue opens. */}
 
         <span className="order-4 hidden shrink-0 rounded-full border border-border/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase lg:order-none lg:inline-flex">
           Modern wallet
@@ -2043,39 +2047,21 @@ export function TradeClient() {
               )}
             </span>
           )}
-          {/* Funding is a detour from trading, not a destination — it opens
-              over the workspace so the chart and the ticket keep their state.
-              Spec §10 keeps the three money doors apart: the modern wallet
-              renders its own Deposit / Transfer / Withdraw triggers, each
-              opening a flow of its own, rather than one blended form. */}
-          {usingModern ? (
-            user?.userId && modernWallet.data && modernPackage.data ? (
-              <ModernFundingPanel
-                userId={user.userId}
-                wallet={modernWallet.data}
-                packageValue={modernPackage.data}
-              />
-            ) : null
-          ) : (
-            <>
-              <button
-                onClick={() => openFlow("fund")}
-                data-vivid-target="trade-fund-button"
-                data-vivid-label="Open the fund-trading-account modal"
-                className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
-              >
-                Fund
-              </button>
-              <button
-                onClick={() => openFlow("trading-withdraw")}
-                data-vivid-target="trade-withdraw-button"
-                data-vivid-label="Open the withdraw-trading-balance modal"
-                className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
-              >
-                Withdraw
-              </button>
-            </>
-          )}
+          {/* One way back, not three money doors.
+              Deposit / Transfer / Withdraw each opened a flow for the TRADING
+              account — a different pot from the wallet the rest of the app
+              now funds — three primary-weight buttons in the corner of a
+              screen whose job is trading. The wallet owns those actions and
+              says so on its own page; this is the door to it. */}
+          <Link
+            href="/wallet/modern"
+            data-vivid-target="trade-back-to-wallet"
+            data-vivid-label="Go back to the wallet"
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
+          >
+            <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5" />
+            Back to wallet
+          </Link>
         </div>
       </div>
 
