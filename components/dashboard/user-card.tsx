@@ -15,7 +15,6 @@ import {
   Wallet01Icon,
   Chart01Icon,
   ChartLineData01Icon,
-  ArrowRight01Icon,
   ArrowUpRight01Icon,
   MoreHorizontalIcon,
   Tick02Icon,
@@ -521,23 +520,18 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             </div>
           </div>
 
-          {/* The breakdown, as a ledger rather than a row of cards.
+          {/* Account cards — the Total's breakdown, every figure on screen at
+              once instead of hidden behind tabs. Each card is a door to the
+              surface where that money actually lives.
 
-              Cards were the problem on a phone: each one stacked to roughly
-              150px of mostly-empty space, so two accounts filled the screen
-              and a third would never have fitted — which is part of why cash
-              and futures were left out of a sum they belong to. A ledger fits
-              all three above the fold, puts every label beside its figure,
-              and lets a row exist without a chart. The gold gradient ring went
-              with them: gold means brand, primary action or active state, and
-              three identical gold-ringed tiles meant none of those.
-
-              One layout at every width. The sparkline is the only thing that
-              waits for room — it appears at md, where there is space for it
-              between the label and the figure. */}
+              Three cards, not two: Cash is in the Total, so it is on screen.
+              It was left out when the sparkline was what made a card a card,
+              which is why the hero used to print a figure its own breakdown
+              could not account for. The chart is now the optional part — an
+              account with nothing to plot still gets its card. */}
           <div
             data-onboarding="dash-balance-cards"
-            className="ws-card-glass divide-y divide-border/25 overflow-hidden rounded-2xl bg-card/70 ring-1 ring-border/30"
+            className="grid grid-cols-1 gap-2.5 sm:grid-cols-3"
           >
             {ACCOUNTS.map((a) => {
               const series = sparkSeries[a.key]
@@ -555,7 +549,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               /* Cash is a dollar balance and an empty account has no history:
                  both draw a dead-flat line with a pulsing dot on the end, which
                  reads as a stray artifact rather than as "nothing happened".
-                 A row is allowed to have no chart. */
+                 Those cards keep their height and skip the chart. */
               const flat =
                 !series || series.length < 2 || Math.max(...series) === Math.min(...series)
               const showSpark = a.key !== "cash" && !flat
@@ -567,48 +561,58 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   href={href}
                   data-vivid-target={`balance-view-${a.key}`}
                   data-vivid-label={`Open the ${a.label} account`}
-                  className="group flex items-center gap-3 px-3.5 py-3.5 transition-colors hover:bg-accent/40 active:bg-accent/60 sm:px-4"
+                  className="ws-card-glass group relative flex min-w-0 flex-col gap-2 rounded-2xl bg-card/70 p-3.5 pb-3 sm:gap-3 sm:p-4 sm:pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0"
                 >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.06] transition-colors group-hover:bg-primary/[0.12]">
-                    <HugeiconsIcon
-                      icon={a.icon}
-                      className="h-[18px] w-[18px] text-muted-foreground transition-colors group-hover:text-primary"
-                    />
-                  </span>
-
-                  <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="text-[13.5px] font-semibold leading-none">{a.label}</span>
-                    <span className="truncate text-[11.5px] leading-none text-muted-foreground">
-                      {a.sub}
+                  {/* Gradient stroke — brand gold dissolving diagonally to
+                      nothing. Masked ring (padding-box XOR) instead of a
+                      border-image so the translucent fill keeps showing the
+                      silk through the card. */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-2xl p-px opacity-80 transition-opacity group-hover:opacity-100"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, color-mix(in oklab, var(--primary) 55%, transparent), color-mix(in oklab, var(--primary) 14%, transparent) 38%, transparent 68%)",
+                      WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                      WebkitMaskComposite: "xor",
+                      mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                      maskComposite: "exclude",
+                    }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.05]">
+                      <HugeiconsIcon icon={a.icon} className="h-4 w-4 text-muted-foreground" />
                     </span>
+                    <Eyebrow>{a.label}</Eyebrow>
+                    <span className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                  <span className="text-[22px] font-semibold leading-none tabular-nums tracking-tight">
+                    {hidden ? "••••" : formatUSD(accountBalances[a.key])}
                   </span>
-
+                  {/* Three states, not two. A chart when there is movement to
+                     draw; the loading skeleton only while the history is still
+                     being computed; and NOTHING at all for an account that will
+                     never have a line — cash does not move, and an empty wallet
+                     has nothing to plot. Reserving the band for those left a
+                     hole in the middle of the card, and a skeleton there would
+                     be promising a chart that is never coming. */}
                   {showSpark ? (
-                    <span className="hidden w-28 shrink-0 md:block">
-                      <Sparkline series={series} tone={tone} />
-                    </span>
+                    <Sparkline series={series!} tone={tone} />
+                  ) : a.key !== "cash" && !series ? (
+                    <Skel className="h-8 w-full rounded-md sm:h-12" />
                   ) : null}
-
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="text-[15px] font-semibold leading-none tabular-nums tracking-tight">
-                      {hidden ? "••••" : formatUSD(accountBalances[a.key])}
-                    </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">{a.sub}</span>
                     {cardChange !== null && tone !== "flat" && !hidden ? (
-                      <ChangeText value={cardChange} className="text-[11px] leading-none" />
+                      <ChangeText value={cardChange} className="text-[11.5px]" />
                     ) : (
-                      /* The period label belongs to the sparkline, and the
-                         sparkline waits for md. On a phone it was a "30d"
-                         under a figure with nothing to compare it to. */
-                      <span className="hidden text-[11px] leading-none text-muted-foreground/50 md:inline">
-                        {showSpark && !hidden ? "30d" : ""}
+                      <span className="text-[11.5px] font-medium tabular-nums text-muted-foreground/50">
+                        {hidden ? "••" : showSpark ? "30d" : ""}
                       </span>
                     )}
-                  </span>
-
-                  <HugeiconsIcon
-                    icon={ArrowRight01Icon}
-                    className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-foreground"
-                  />
+                  </div>
                 </Link>
               )
             })}
