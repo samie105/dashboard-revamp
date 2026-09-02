@@ -435,6 +435,16 @@ export function TradeClient() {
     setLeverage((l) => Math.min(l, maxLev))
   }, [market, current, maxLev])
 
+  /* Spot has no order type to choose, so it must not be left holding one:
+     an orderType of "limit" carried over from the futures tab would still
+     demand a limit price before the button enabled. */
+  React.useEffect(() => {
+    if (market === "spot" && orderType !== "market") {
+      setOrderType("market")
+      setLimitPrice("")
+    }
+  }, [market, orderType])
+
   /* Buy and sell spend different tokens, so a token-denominated figure does
      not survive the flip — 0.5 TRUMP is not 0.5 USDC. */
   const prevSide = React.useRef(side)
@@ -1378,15 +1388,23 @@ export function TradeClient() {
           ))}
         </div>
 
-        {/* Type — the house Segmented, same control as everywhere else */}
-        <Segmented
-          size="sm"
-          value={orderType}
-          onChange={setOrderType}
-          options={ORDER_TYPES}
-          className="self-start"
-          vividPrefix="order-type"
-        />
+        {/* Type — futures only.
+            A spot order is a swap against a liquidity pool: it executes at the
+            pool's price the moment it lands, and there is nowhere for an order
+            to rest. The Limit tab here promised one anyway — `buildSpotOrderPlan`
+            never read `limitPrice`, so it placed a market swap while the ticket
+            demanded a price before it would submit. A control that changes
+            nothing except what it asks of you is worse than no control. */}
+        {market === "futures" && (
+          <Segmented
+            size="sm"
+            value={orderType}
+            onChange={setOrderType}
+            options={ORDER_TYPES}
+            className="self-start"
+            vividPrefix="order-type"
+          />
+        )}
 
         {orderType === "limit" && (
           <label className="flex flex-col gap-1">
