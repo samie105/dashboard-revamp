@@ -23,6 +23,8 @@ import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { ErrorState } from "@/components/error-state"
 import type { CoinData } from "@/lib/actions"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { useWalletMode } from "@/components/wallet-mode-provider"
+import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
 import { useTradeAccount } from "@/hooks/useTradeAccount"
 import { useAccountHistory, type AccountSpec } from "@/hooks/useAccountHistory"
 import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
@@ -169,6 +171,17 @@ const ACCOUNTS = [
 export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const { user, isLoaded } = useAuth()
   const { addresses, walletsGenerated } = useWallet()
+  /* `walletsGenerated` is the LEGACY (Privy) provider reporting that it
+     provisioned its wallets. A modern-wallet user never gets it — there is no
+     Privy wallet to provision — so gating the on-chain total on it zeroed the
+     dashboard for exactly the users whose balances had loaded fine.
+     `useWalletBalances` already follows the active mode; the totals below just
+     have to stop asking the other wallet for permission. Summing an empty
+     list is already 0, so nothing is lost by dropping the guard in modern
+     mode. */
+  const { mode: walletMode } = useWalletMode()
+  const [receiveOpen, setReceiveOpen] = React.useState(false)
+  const balancesReady = walletMode === "modern" || walletsGenerated
   const { openFlow } = useMoneyFlow()
   const { balances: onChainBalances } = useWalletBalances()
   // One /api/trade/account read serves the Spot/Futures figures AND the
@@ -239,14 +252,14 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
 
   // On-chain balance: sum of all on-chain tokens valued in USD
   const onChainTotal = React.useMemo(() => {
-    if (!walletsGenerated) return 0
+    if (!balancesReady) return 0
     let total = 0
     for (const b of onChainBalances) {
       const p = getPrice(livePrices, b.symbol)
       total += b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
     }
     return total
-  }, [onChainBalances, livePrices, walletsGenerated])
+  }, [onChainBalances, livePrices, balancesReady])
 
   // What each chain is worth — the network strip's figures (mobile grammar:
   // the strip carries value, chains are never hidden behind a dropdown).
@@ -275,13 +288,13 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   // ── Today's P&L, per account ──
   // Main: on-chain holdings moved by each coin's 24h change.
   const mainPnL = React.useMemo(() => {
-    if (!walletsGenerated) return 0
+    if (!balancesReady) return 0
     const h: Record<string, number> = {}
     for (const b of onChainBalances) {
       h[b.symbol] = (h[b.symbol] || 0) + b.balance
     }
     return calculateDailyPnL(h, livePrices, coins)
-  }, [onChainBalances, walletsGenerated, livePrices, coins])
+  }, [onChainBalances, balancesReady, livePrices, coins])
 
   // Spot: HL spot token holdings, same 24h-change arithmetic (USDC is flat).
   const spotPnL = React.useMemo(() => {
@@ -377,8 +390,12 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   // No chain selected ("All networks") → no address chip.
   const activeChain = selectedWallet ? WALLETS.find((w) => w.key === selectedWallet) : undefined
 
-  // Deposit/Withdraw open the money-flow modal in place — /buy and /sell
-  // stay as routes for deep links, but the rail shouldn't leave the page.
+  /* Deposit opens in place — funding a self-custodial wallet is being shown
+     its address, which is a modal's worth of content and no reason to leave
+     the page. Withdraw goes to /wallet/modern: sending needs a balance to
+     pick from, a chain, a destination and an unlock, and that is a screen.
+     Legacy mode keeps the cash flow, which is the right one for a wallet the
+     user holds no keys to. */
   const ACTIONS: {
     label: string
     icon: typeof Exchange01Icon
@@ -387,8 +404,12 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     vivid: string
     vividLabel: string
   }[] = [
-    { label: "Deposit",  onClick: () => openFlow("buy"),  icon: Exchange01Icon,     vivid: "open-deposit",  vividLabel: "Open the deposit modal" },
-    { label: "Withdraw", onClick: () => openFlow("sell"), icon: CreditCardIcon,     vivid: "open-withdraw", vividLabel: "Open the withdraw modal" },
+    walletMode === "modern"
+      ? { label: "Deposit", onClick: () => setReceiveOpen(true), icon: Exchange01Icon, vivid: "open-deposit", vividLabel: "Show the wallet's deposit addresses" }
+      : { label: "Deposit", onClick: () => openFlow("buy"), icon: Exchange01Icon, vivid: "open-deposit", vividLabel: "Open the deposit modal" },
+    walletMode === "modern"
+      ? { label: "Withdraw", href: "/wallet/modern", icon: CreditCardIcon, vivid: "open-withdraw", vividLabel: "Go to the wallet to send funds" }
+      : { label: "Withdraw", onClick: () => openFlow("sell"), icon: CreditCardIcon, vivid: "open-withdraw", vividLabel: "Open the withdraw modal" },
     { label: "Swap",     href: "/swap",                   icon: CoinsSwapIcon,      vivid: "go-swap",       vividLabel: "Go to the swap page" },
     { label: "Trade",    href: "/trade",                  icon: ChartLineData01Icon, vivid: "go-trade",     vividLabel: "Go to the trading workspace" },
     { label: "History",  href: "/transactions",           icon: Clock01Icon,        vivid: "go-history",    vividLabel: "Go to transaction history" },
@@ -592,6 +613,9 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
           </div>
         </div>
       </div>
+
+      {/* Deposit's own surface — the wallet's addresses, per chain. */}
+      <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} />
     </div>
   )
 }

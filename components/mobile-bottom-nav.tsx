@@ -16,10 +16,10 @@ import {
   Brain01Icon,
   ArrowUpRight01Icon,
   ArrowRight01Icon,
-  RepeatIcon,
   Cancel01Icon,
   DollarCircleIcon,
   EyeIcon,
+  Wallet01Icon,
 } from "@hugeicons/core-free-icons"
 import {
   Sheet,
@@ -40,9 +40,14 @@ const BAR_LEFT: readonly BarItem[] = [
   { label: "Trade", href: "/trade", icon: ChartCandlestickIcon },
 ]
 
+/* Wallet was reachable only from the desktop sidebar, so on a phone
+   /wallet/modern had no route to it at all — the self-custodial wallet, its
+   addresses and its send flow were simply unreachable. It replaces Swap here:
+   swapping is a thing you do WITH the wallet, and it keeps its own tab in the
+   launcher and its own route. */
 const BAR_RIGHT: readonly BarItem[] = [
   { label: "Portfolio", href: "/portfolio", icon: Chart01Icon },
-  { label: "Swap", href: "/swap", icon: RepeatIcon },
+  { label: "Wallet", href: "/wallet/modern", icon: Wallet01Icon },
 ]
 
 /* ── Launcher contents — the Worldstreet ecosystem, and only that ──────────
