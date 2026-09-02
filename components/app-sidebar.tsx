@@ -31,6 +31,8 @@ import {
   DollarCircleIcon,
   Rocket01Icon,
   EyeIcon,
+  GameController01Icon,
+  ChartUpIcon,
   LinkSquare02Icon,
 } from "@hugeicons/core-free-icons"
 
@@ -120,6 +122,8 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Forex Trading", description: "Currency pairs", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
       { name: "Vivid AI", description: "AI-powered insights", url: "/vivid", icon: Brain01Icon },
       { name: "Vision", description: "Vision broadcast", url: "https://vision.worldstreetgold.com", icon: EyeIcon },
+      { name: "Arcade", description: "Games", url: "https://arcade.worldstreetgold.com", icon: GameController01Icon },
+      { name: "Prediction", description: "Prediction markets", url: "https://prediction.worldstreetgold.com", icon: ChartUpIcon },
     ],
   },
 ]

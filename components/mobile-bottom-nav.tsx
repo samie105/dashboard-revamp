@@ -10,6 +10,8 @@ import {
   ChartCandlestickIcon,
   Chart01Icon,
   Store01Icon,
+  GameController01Icon,
+  ChartUpIcon,
   Book01Icon,
   UserGroup02Icon,
   Video01Icon,
@@ -68,6 +70,10 @@ const ECOSYSTEM_APPS: readonly EcosystemApp[] = [
   { name: "Xstream", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
   { name: "Forex", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
   { name: "Vision", url: "https://vision.worldstreetgold.com", icon: EyeIcon },
+  // The Expo super-app mounts nine platforms; the two below were missing from
+  // this launcher. Both hosts answer 200 (checked 2026-09-02).
+  { name: "Arcade", url: "https://arcade.worldstreetgold.com", icon: GameController01Icon },
+  { name: "Prediction", url: "https://prediction.worldstreetgold.com", icon: ChartUpIcon },
 ]
 
 const LOGO_SRC = "/worldstreet-logo/WorldStreet1.png"
@@ -218,10 +224,10 @@ export function MobileBottomNav() {
                 </button>
               </div>
 
-              {/* The apps — six tiles dealing in top-to-bottom. All external:
+              {/* The apps — eight tiles dealing in top-to-bottom. All external:
                   each opens its corner of the ecosystem in a new tab. */}
               <div className="px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-4 gap-1.5">
                   {ECOSYSTEM_APPS.map((app, i) => (
                     <a
                       key={app.name}
