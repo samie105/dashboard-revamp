@@ -462,8 +462,6 @@ export function TradeClient() {
     setError(null)
     // The unit names a token that belongs to the row being left.
     setAmountUnit("usd")
-    // Spot has no Positions pane; leaving the tab parked there shows nothing.
-    setMobilePane((pane) => (market === "spot" && pane === "positions" ? "orders" : pane))
   }, [selection, market])
 
   /**
@@ -489,13 +487,18 @@ export function TradeClient() {
     setDexStats(null)
   }, [selection])
 
-  // Order book — futures use the bare symbol; spot uses the coinName.
-  const bookCoin = React.useMemo(() => {
-    if (!current || (usingModern && market === "spot")) return null
-    return market === "spot"
-      ? (current as { coinName: string }).coinName
-      : current.symbol
-  }, [current, market, usingModern])
+  /**
+   * The coin whose order book and 24h stats to poll — futures only.
+   *
+   * Spot has no book to show. A spot order is a swap against a liquidity pool:
+   * there are no resting bids and asks to display, no price level to click
+   * into a limit order, and nothing a depth ladder would be describing. The
+   * pane it occupied is the chart's now.
+   */
+  const bookCoin = React.useMemo(
+    () => (current && market === "futures" ? current.symbol : null),
+    [current, market],
+  )
 
   React.useEffect(() => {
     if (!bookCoin) return
@@ -1948,7 +1951,12 @@ export function TradeClient() {
         {/* Chart + bottom panel */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div
-            className="h-[260px] shrink-0 sm:h-[320px] lg:h-auto lg:min-h-0 lg:flex-1"
+            /* Taller on phones: the chart is the reason this screen exists, and
+               260px of it under a market strip read as a strip of noise. Sized
+               against the viewport so it scales with the device instead of
+               being tuned to one handset, and capped so the panes below it
+               stay reachable without a scroll. */
+            className="h-[min(46dvh,420px)] shrink-0 sm:h-[min(50dvh,460px)] lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1"
             data-vivid-target="price-chart"
             data-vivid-label="The candlestick price chart"
           >
@@ -2013,70 +2021,71 @@ export function TradeClient() {
             />
           )}
 
-          {/* Below lg the book and positions share one pane instead of
-              stacking into an endless scroll — one tap to compare, and the
-              chart above never leaves the screen. */}
+          {/* Below lg the panes share one strip instead of stacking into an
+              endless scroll — the chart above never leaves the screen.
+              On spot there is only one pane, so there is no tab bar: a
+              Segmented offering a single choice is a control that does
+              nothing. */}
           <div className="flex min-h-0 flex-1 flex-col border-t border-border/30 lg:hidden">
-            <div className="flex shrink-0 items-center border-b border-border/30 px-2 py-1.5">
-              <Segmented
-                size="sm"
-                value={mobilePane}
-                onChange={setMobilePane}
-                options={
-                  market === "spot"
-                    ? [
-                        { key: "book" as const, label: "Book" },
-                        { key: "orders" as const, label: "Orders" },
-                      ]
-                    : [
-                        { key: "book" as const, label: "Book" },
-                        {
-                          key: "positions" as const,
-                          label: positionCount
-                            ? `Positions · ${positionCount}`
-                            : "Positions",
-                        },
-                        {
-                          key: "orders" as const,
-                          label: orderCount ? `Orders · ${orderCount}` : "Orders",
-                        },
-                      ]
-                }
-              />
-            </div>
-            {mobilePane === "book" ? (
-              <OrderBook
-                book={book}
-                lastTick={lastTick}
-                onPickPrice={(p) => {
-                  pickPrice(p)
-                  setTicketOpen(true)
-                }}
-                className="min-h-0 flex-1"
-              />
-            ) : market === "spot" ? (
+            {market === "spot" ? (
               <OrdersPanel className="min-h-0 flex-1" />
             ) : (
-              <PositionsPanel
-                account={account}
-                busyKey={busyKey}
-                onClosePosition={handleClose}
-                onCancelOrder={handleCancel}
-                className="min-h-0 flex-1"
-                hideTabs
-                tab={mobilePane === "orders" ? "orders" : "positions"}
-              />
+              <>
+                <div className="flex shrink-0 items-center border-b border-border/30 px-2 py-1.5">
+                  <Segmented
+                    size="sm"
+                    value={mobilePane}
+                    onChange={setMobilePane}
+                    options={[
+                      { key: "book" as const, label: "Book" },
+                      {
+                        key: "positions" as const,
+                        label: positionCount
+                          ? `Positions · ${positionCount}`
+                          : "Positions",
+                      },
+                      {
+                        key: "orders" as const,
+                        label: orderCount ? `Orders · ${orderCount}` : "Orders",
+                      },
+                    ]}
+                  />
+                </div>
+                {mobilePane === "book" ? (
+                  <OrderBook
+                    book={book}
+                    lastTick={lastTick}
+                    onPickPrice={(p) => {
+                      pickPrice(p)
+                      setTicketOpen(true)
+                    }}
+                    className="min-h-0 flex-1"
+                  />
+                ) : (
+                  <PositionsPanel
+                    account={account}
+                    busyKey={busyKey}
+                    onClosePosition={handleClose}
+                    onCancelOrder={handleCancel}
+                    className="min-h-0 flex-1"
+                    hideTabs
+                    tab={mobilePane === "orders" ? "orders" : "positions"}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
 
         {/* Order book rail */}
-        <OrderBook
-          book={book}
-          lastTick={lastTick}
-          onPickPrice={pickPrice}
-          className="hidden w-[248px] shrink-0 border-l border-border/30 lg:flex xl:w-[276px]"
-        />
+        {market === "futures" && (
+          <OrderBook
+            book={book}
+            lastTick={lastTick}
+            onPickPrice={pickPrice}
+            className="hidden w-[248px] shrink-0 border-l border-border/30 lg:flex xl:w-[276px]"
+          />
+        )}
 
         {/* Ticket rail — desktop keeps it always-on; below lg it becomes the
             bottom sheet the action bar opens, so the chart owns the screen. */}

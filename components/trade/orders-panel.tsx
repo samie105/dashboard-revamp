@@ -6,30 +6,41 @@
  * Spot used to render the perps drawer: "Positions" and "Open orders" as two
  * tabs, both permanently empty. Neither concept exists here — a swap settles
  * or it doesn't, and what you hold afterwards is a wallet balance, not a
- * position. Two tables that can only say "none" are worse than one table that
- * says something, so they are replaced by the orders themselves.
+ * position. Two tables that can only say "none" are worse than one that says
+ * something, so they are replaced by the orders themselves.
  *
  * The list is the LEDGER's (`useSpotOrders`): the backend records one row per
  * broadcast and reconciles its status against the chain, so it is the only
- * thing that knows an order settled. The value is the CHAIN's: the size is
- * read back out of base units at the token's own precision and priced from the
- * live registry, never from whatever the amount was worth when it was placed.
+ * thing that knows an order settled. The value is the CHAIN's: sizes are read
+ * back out of base units at the token's own stated precision and priced live.
+ *
+ * On a phone the table carries only what identifies an order — market, size,
+ * side — and everything else moves into a detail sheet behind the row. Seven
+ * columns on a 390px screen is a horizontal scrollbar, which is a way of
+ * hiding information while pretending not to.
  */
 
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
+import { ArrowUpRight01Icon, InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+  ResponsiveModalDescription,
+} from "@/components/ui/responsive-modal"
 import { useSpotOrders, type SpotOrder } from "@/hooks/useSpotOrders"
-import { useSpotRegistry, addressKey, type RegistryRow } from "@/hooks/useSpotRegistry"
+import { useSpotRegistry, addressKey, type SpotRegistry } from "@/hooks/useSpotRegistry"
 import { explorerTxUrl } from "@/lib/crypto-backend/network-meta"
 import { chainLabel } from "@/lib/spot-market-search"
 import { formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
 
 const TH =
   "px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-subtle whitespace-nowrap"
-const TD = "px-3 py-2 text-[11.5px] tabular-nums whitespace-nowrap"
+const TD = "px-3 py-2 text-[11.5px] tabular-nums"
 
 /** Ledger status → what to call it and how to colour it. */
 function statusOf(status: string): { label: string; className: string } {
@@ -38,20 +49,20 @@ function statusOf(status: string): { label: string; className: string } {
   if (status === "submitted")
     return { label: "Filling", className: "bg-primary/[0.12] text-primary" }
   // 'unknown' is the reconciler saying it could not reach the chain — which is
-  // not the same as "it didn't happen", and must not be dressed up as either.
+  // not the same as "it didn't happen", and must not be dressed as either.
   return { label: "Unconfirmed", className: "bg-surface-sunken text-muted-foreground" }
 }
 
-function timeOf(iso: string | null): string {
+function timeOf(iso: string | null, long = false): string {
   if (!iso) return "—"
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return "—"
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return date.toLocaleString(
+    undefined,
+    long
+      ? { dateStyle: "medium", timeStyle: "short" }
+      : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" },
+  )
 }
 
 function usd(value: number): string {
@@ -61,109 +72,151 @@ function usd(value: number): string {
   })}`
 }
 
-/**
- * What an order row actually says, resolved from the registry.
- *
- * The ledger records the amount RECEIVED, in the received token's own base
- * units — so a buy's amount is in the base token and a sell's is in the quote.
- * Which one it is decides the side, the precision to read it back at, and
- * whether the value is a price multiplication or already dollars.
- */
-function resolve(order: SpotOrder, market: RegistryRow | undefined) {
-  if (!market || !order.buyToken) return null
-  const received = addressKey(order.networkId, order.buyToken)
-  const isBase = market.address
-    ? received === addressKey(order.networkId, market.address)
-    : false
-  const side: "buy" | "sell" = isBase ? "buy" : "sell"
-  const decimals = isBase ? market.baseDecimals : market.quoteDecimals
-  if (decimals === undefined || !order.amount) {
-    return { side, market, size: null, unit: isBase ? market.symbol : market.quote, value: null }
-  }
-  const size = Number(formatCryptoAmount(order.amount, decimals, 9))
-  // A buy's proceeds are priced; a sell's already are dollars, since every
-  // quote we trade against is a dollar stablecoin.
-  const value = isBase ? (market.price > 0 ? size * market.price : null) : size
-  return { side, market, size, unit: isBase ? market.symbol : market.quote, value }
-}
-
-function Row({ order, market }: { order: SpotOrder; market: RegistryRow | undefined }) {
-  const status = statusOf(order.status)
-  const explorer = order.txHash ? explorerTxUrl(order.networkId, order.txHash) : null
-  const view = resolve(order, market)
-
-  return (
-    <tr className="border-b border-border/20 last:border-0">
-      <td className={cn(TD, "text-muted-foreground")}>{timeOf(order.createdAt)}</td>
-      <td className={TD}>
-        <span className="flex items-center gap-2">
-          <CoinAvatar symbol={market?.symbol ?? "?"} size="sm" />
-          <span className="font-semibold">
-            {market?.symbol ?? shortAddress(order.buyToken)}
-          </span>
-          <span className="rounded bg-surface-sunken px-1 py-0.5 text-[9px] font-medium text-subtle">
-            {chainLabel(order.networkId)}
-          </span>
-        </span>
-      </td>
-      <td className={TD}>
-        {view ? (
-          <span className={view.side === "buy" ? "font-semibold text-credit" : "font-semibold text-debit"}>
-            {view.side === "buy" ? "Buy" : "Sell"}
-          </span>
-        ) : (
-          <span className="text-subtle">—</span>
-        )}
-      </td>
-      <td className={TD}>
-        {/* Blank rather than a number we cannot stand behind: without the
-            token's stated precision, base units are unreadable. */}
-        {view?.size !== null && view
-          ? `${view.size.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${view.unit}`
-          : "—"}
-      </td>
-      <td className={TD}>{view?.value != null ? usd(view.value) : "—"}</td>
-      <td className={TD}>
-        <span
-          className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", status.className)}
-        >
-          {status.label}
-        </span>
-      </td>
-      <td className={cn(TD, "text-right")}>
-        {explorer ? (
-          <a
-            href={explorer}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
-          >
-            View
-            <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-          </a>
-        ) : (
-          <span className="text-subtle">—</span>
-        )}
-      </td>
-    </tr>
-  )
-}
-
 function shortAddress(address: string | null): string {
   if (!address) return "Unknown"
   return `${address.slice(0, 4)}…${address.slice(-4)}`
 }
 
+export type ResolvedOrder = {
+  order: SpotOrder
+  symbol: string
+  side: "buy" | "sell" | null
+  /** Amount received, at the received token's own stated precision. */
+  size: number | null
+  /** What that amount is denominated in. */
+  unit: string
+  valueUsd: number | null
+}
+
+/**
+ * What a ledger row actually says.
+ *
+ * The record stores the amount RECEIVED. A buy receives the base token, so its
+ * market is found from `buyToken`; a sell receives the quote, so it has to be
+ * found from what it SPENT. Matching a sell on its received token was the bug
+ * that labelled every sell "$1": all USDC-quoted markets share one quote
+ * address, so USDC resolved to whichever market was indexed first.
+ */
+export function resolveOrder(order: SpotOrder, registry: SpotRegistry): ResolvedOrder {
+  const lookup = (address: string | null) =>
+    address ? registry.byAddress.get(addressKey(order.networkId, address)) : undefined
+
+  const bought = lookup(order.buyToken)
+  const sold = bought ? undefined : lookup(order.sellToken)
+  const market = bought ?? sold
+  const side: "buy" | "sell" | null = bought ? "buy" : sold ? "sell" : null
+
+  const symbol = market?.symbol ?? shortAddress(order.buyToken)
+  // Precision as the REGISTRY states it. A guessed exponent misstates an order
+  // by a factor of a billion, so an unstated one leaves the cell blank.
+  const decimals = bought ? market?.baseDecimals : market?.quoteDecimals
+  const unit = (bought ? market?.symbol : market?.quote) ?? ""
+
+  if (!market || decimals === undefined || !order.amount) {
+    return { order, symbol, side, size: null, unit, valueUsd: null }
+  }
+
+  const size = Number(formatCryptoAmount(order.amount, decimals, 9))
+  // A sell's proceeds are already dollars — every quote we trade against is a
+  // dollar stablecoin. A buy's are priced from the live registry.
+  const valueUsd = bought ? (market.price > 0 ? size * market.price : null) : size
+  return { order, symbol, side, size, unit, valueUsd }
+}
+
+function sizeText(row: ResolvedOrder): string {
+  if (row.size === null) return "—"
+  return `${row.size.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${row.unit}`
+}
+
+/* ── Detail sheet ─────────────────────────────────────────────────────────
+   Everything the narrow table leaves out, in the house modal — the same glass
+   shell the order confirmation uses, so a row's detail reads as part of the
+   same product rather than a second idea about what a sheet is. */
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-2">
+      <span className="shrink-0 text-[13px] text-muted-foreground">{label}</span>
+      <span className="text-right text-[13px] font-semibold tabular-nums">{value}</span>
+    </div>
+  )
+}
+
+function OrderDetailModal({ row, onClose }: { row: ResolvedOrder | null; onClose: () => void }) {
+  const order = row?.order
+  const status = statusOf(order?.status ?? "")
+  const explorer = order?.txHash ? explorerTxUrl(order.networkId, order.txHash) : null
+
+  return (
+    <ResponsiveModal open={Boolean(row)} onOpenChange={(next) => !next && onClose()}>
+      <ResponsiveModalContent className="sm:max-w-sm">
+        {row && order && (
+          <>
+            <ResponsiveModalHeader className="items-center gap-2 pt-2 text-center">
+              <CoinAvatar symbol={row.symbol} size="lg" />
+              <ResponsiveModalTitle className="text-[17px] font-semibold">
+                {row.side === "sell" ? "Sold" : "Bought"} {row.symbol}
+              </ResponsiveModalTitle>
+              <ResponsiveModalDescription>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                    status.className,
+                  )}
+                >
+                  {status.label}
+                </span>
+              </ResponsiveModalDescription>
+            </ResponsiveModalHeader>
+
+            <div className="divide-y divide-border/40 rounded-xl bg-surface-sunken/70 px-3.5">
+              <DetailRow label="Placed" value={timeOf(order.createdAt, true)} />
+              <DetailRow
+                label="Side"
+                value={
+                  <span className={row.side === "sell" ? "text-debit" : "text-credit"}>
+                    {row.side === "sell" ? "Sell" : row.side === "buy" ? "Buy" : "—"}
+                  </span>
+                }
+              />
+              <DetailRow label="Received" value={sizeText(row)} />
+              <DetailRow label="Value" value={row.valueUsd !== null ? usd(row.valueUsd) : "—"} />
+              <DetailRow label="Network" value={chainLabel(order.networkId)} />
+              {order.router && <DetailRow label="Routed via" value={order.router} />}
+            </div>
+
+            {explorer ? (
+              <a
+                href={explorer}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-primary text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90"
+              >
+                View on {chainLabel(order.networkId)}
+                <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
+              </a>
+            ) : (
+              <p className="text-center text-[11px] text-subtle">
+                No transaction hash was recorded for this order.
+              </p>
+            )}
+          </>
+        )}
+      </ResponsiveModalContent>
+    </ResponsiveModal>
+  )
+}
+
+/* ── Panel ──────────────────────────────────────────────────────────────── */
+
 export function OrdersPanel({ className }: { className?: string }) {
   const { orders, loading } = useSpotOrders()
   const registry = useSpotRegistry()
+  const [detail, setDetail] = React.useState<ResolvedOrder | null>(null)
 
-  const marketFor = React.useCallback(
-    (order: SpotOrder) =>
-      order.buyToken
-        ? registry.byAddress.get(addressKey(order.networkId, order.buyToken))
-        : undefined,
-    [registry],
+  const rows = React.useMemo(
+    () => orders.map((order) => resolveOrder(order, registry)),
+    [orders, registry],
   )
 
   return (
@@ -171,16 +224,16 @@ export function OrdersPanel({ className }: { className?: string }) {
       <div className="flex shrink-0 items-center gap-2 border-b border-border/30 px-3 py-2">
         <h3 className="text-[12px] font-semibold">Orders</h3>
         <span className="rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-          {orders.length}
+          {rows.length}
         </span>
       </div>
 
-      <div className="slim-scroll min-h-0 flex-1 overflow-auto">
+      <div className="slim-scroll min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex h-full items-center justify-center py-8">
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
-        ) : orders.length === 0 ? (
+        ) : rows.length === 0 ? (
           <p className="px-3 py-8 text-center text-[11.5px] text-muted-foreground">
             No spot orders yet — the ones you place appear here with their
             on-chain status.
@@ -189,23 +242,102 @@ export function OrdersPanel({ className }: { className?: string }) {
           <table className="w-full border-collapse">
             <thead className="sticky top-0 z-10 bg-background">
               <tr className="border-b border-border/30">
-                <th className={TH}>Time</th>
+                {/* Narrow screens carry only what identifies an order; the
+                    rest is one tap away rather than one sideways scroll. */}
+                <th className={cn(TH, "hidden md:table-cell")}>Time</th>
                 <th className={TH}>Market</th>
-                <th className={TH}>Side</th>
+                <th className={cn(TH, "hidden lg:table-cell")}>Side</th>
                 <th className={TH}>Received</th>
-                <th className={TH}>Value</th>
-                <th className={TH}>Status</th>
-                <th className={cn(TH, "text-right")}>Tx</th>
+                <th className={cn(TH, "hidden xl:table-cell")}>Value</th>
+                <th className={cn(TH, "hidden sm:table-cell")}>Status</th>
+                <th className={cn(TH, "w-9 text-right")}>
+                  <span className="sr-only">Details</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
-                <Row key={order.id} order={order} market={marketFor(order)} />
-              ))}
+              {rows.map((row) => {
+                const status = statusOf(row.order.status)
+                return (
+                  <tr
+                    key={row.order.id}
+                    className="border-b border-border/20 transition-colors last:border-0 hover:bg-accent/20"
+                  >
+                    <td className={cn(TD, "hidden whitespace-nowrap text-muted-foreground md:table-cell")}>
+                      {timeOf(row.order.createdAt)}
+                    </td>
+                    <td className={TD}>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <CoinAvatar symbol={row.symbol} size="sm" />
+                        <span className="truncate font-semibold">{row.symbol}</span>
+                        {/* Below lg the side rides with the market instead of
+                            taking a column of its own. */}
+                        {row.side && (
+                          <span
+                            className={cn(
+                              "shrink-0 text-[10px] font-bold uppercase lg:hidden",
+                              row.side === "buy" ? "text-credit" : "text-debit",
+                            )}
+                          >
+                            {row.side}
+                          </span>
+                        )}
+                        <span className="hidden shrink-0 rounded bg-surface-sunken px-1 py-0.5 text-[9px] font-medium text-subtle md:inline">
+                          {chainLabel(row.order.networkId)}
+                        </span>
+                      </span>
+                    </td>
+                    <td className={cn(TD, "hidden whitespace-nowrap lg:table-cell")}>
+                      {row.side ? (
+                        <span
+                          className={cn(
+                            "font-semibold",
+                            row.side === "buy" ? "text-credit" : "text-debit",
+                          )}
+                        >
+                          {row.side === "buy" ? "Buy" : "Sell"}
+                        </span>
+                      ) : (
+                        <span className="text-subtle">—</span>
+                      )}
+                    </td>
+                    <td className={TD}>
+                      <span className="block truncate">{sizeText(row)}</span>
+                    </td>
+                    <td className={cn(TD, "hidden whitespace-nowrap xl:table-cell")}>
+                      {row.valueUsd !== null ? usd(row.valueUsd) : "—"}
+                    </td>
+                    <td className={cn(TD, "hidden whitespace-nowrap sm:table-cell")}>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                          status.className,
+                        )}
+                      >
+                        {status.label}
+                      </span>
+                    </td>
+                    <td className={cn(TD, "w-9 pl-0 pr-2 text-right")}>
+                      <button
+                        type="button"
+                        onClick={() => setDetail(row)}
+                        aria-label={`Details for this ${row.symbol} order`}
+                        data-vivid-target={`order-details-${row.order.id}`}
+                        data-vivid-label={`Open the details for this ${row.symbol} order`}
+                        className="inline-flex items-center justify-center rounded-full p-1 text-subtle transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      >
+                        <HugeiconsIcon icon={InformationCircleIcon} className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
       </div>
+
+      <OrderDetailModal row={detail} onClose={() => setDetail(null)} />
     </div>
   )
 }

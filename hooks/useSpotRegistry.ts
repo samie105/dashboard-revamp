@@ -105,12 +105,12 @@ export function useSpotRegistry(enabled = true): SpotRegistry {
       const list = bySymbol.get(r.symbol)
       if (list) list.push(r)
       else bySymbol.set(r.symbol, [r])
+      /* BASE addresses only. Indexing the quote side too looked helpful — a
+         sell receives the quote — but every USDC-quoted market shares one
+         quote address, so USDC resolved to whichever market happened to be
+         indexed first and every sell was labelled with a stranger's ticker.
+         A sell is identified by the token it SPENT; see `resolveOrder`. */
       if (r.address) byAddress.set(addressKey(r.networkId, r.address), r)
-      // The quote side is indexed too, so a SELL — whose received token is the
-      // quote — can still find the market it belongs to.
-      if (r.quoteAddress && !byAddress.has(addressKey(r.networkId, r.quoteAddress))) {
-        byAddress.set(addressKey(r.networkId, r.quoteAddress), r)
-      }
       counts.set(r.networkId, (counts.get(r.networkId) ?? 0) + 1)
     }
     return {
