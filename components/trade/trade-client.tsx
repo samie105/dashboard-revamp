@@ -1432,7 +1432,7 @@ export function TradeClient() {
     ) : reviewScreen ? (
       reviewScreen
     ) : (
-      <div className="flex flex-col gap-3 p-3.5">
+      <div className="flex flex-col gap-3.5 p-4">
         {spotMarketsUnavailable && (
           <AnnouncementBanner
             tone="warning"
@@ -1895,7 +1895,7 @@ export function TradeClient() {
               ? `Build the order and open the review screen — ${side === "buy" ? "long" : "short"} ${symbol}. Nothing is sent until you confirm there.`
               : `Place the order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol} for the amount shown. Moves real money.`
           }
-          className={`w-full rounded-full py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={`min-h-12 w-full rounded-2xl text-[15px] font-bold text-white shadow-[0_10px_28px_-12px_rgb(0_0_0/0.6)] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
             side === "buy"
               ? "bg-credit hover:bg-credit/90"
               : "bg-debit hover:bg-debit/90"
@@ -1920,7 +1920,7 @@ export function TradeClient() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {/* Top bar */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/30 px-3 py-2.5 sm:gap-x-5 lg:flex-nowrap">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:gap-x-5 lg:px-4 lg:py-2.5 xl:flex-nowrap">
         {/* This route has no sidebar or navbar, so it carries its own way
             out — a back control, not just a clickable logo. */}
         <div className="order-1 flex shrink-0 items-center gap-1.5 lg:order-none">
@@ -1950,7 +1950,7 @@ export function TradeClient() {
           vividPrefix="market-tab"
         />
 
-        <span className="order-4 shrink-0 rounded-full border border-border/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase lg:order-none">
+        <span className="order-4 hidden shrink-0 rounded-full border border-border/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase lg:order-none lg:inline-flex">
           Modern wallet
         </span>
 
@@ -1991,7 +1991,7 @@ export function TradeClient() {
         <div className="scrollbar-none order-3 ml-auto flex min-w-0 items-center gap-3 overflow-x-auto sm:gap-5 lg:order-none lg:ml-0">
           <span
             aria-live="polite"
-            className={`shrink-0 text-xl font-bold tracking-tight tabular-nums sm:text-2xl ${
+            className={`shrink-0 font-display text-[22px] font-semibold tracking-[-0.01em] tabular-nums sm:text-2xl ${
               lastTick === "up"
                 ? "text-credit"
                 : lastTick === "down"
@@ -2116,25 +2116,25 @@ export function TradeClient() {
       )}
 
       {/* Workspace body */}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pb-2 lg:flex-row lg:gap-2.5 lg:px-3 lg:pb-3">
         {/* Markets rail — the full list lives on the left so switching pairs
             is one click, not a menu dive. */}
         <MarketsRail
           list={list}
           selected={selection}
           onSelect={setSelection}
-          className="hidden w-[260px] shrink-0 border-r border-border/30 xl:flex"
+          className="hidden w-[272px] shrink-0 overflow-hidden rounded-2xl bg-card xl:flex"
         />
 
         {/* Chart + bottom panel */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 lg:gap-2.5">
           <div
             /* Taller on phones: the chart is the reason this screen exists, and
                260px of it under a market strip read as a strip of noise. Sized
                against the viewport so it scales with the device instead of
                being tuned to one handset, and capped so the panes below it
                stay reachable without a scroll. */
-            className="h-[min(46dvh,420px)] shrink-0 sm:h-[min(50dvh,460px)] lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1"
+            className="h-[min(46dvh,420px)] shrink-0 overflow-hidden rounded-2xl bg-card sm:h-[min(50dvh,460px)] lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1"
             data-vivid-target="price-chart"
             data-vivid-label="The candlestick price chart"
           >
@@ -2188,14 +2188,14 @@ export function TradeClient() {
               there. One Orders table takes their place; futures keeps the
               drawer, where both concepts are real. */}
           {market === "spot" ? (
-            <OrdersPanel className="hidden h-[228px] shrink-0 border-t border-border/30 lg:flex" />
+            <OrdersPanel className="hidden h-[228px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex" />
           ) : (
             <PositionsPanel
               account={account}
               busyKey={busyKey}
               onClosePosition={handleClose}
               onCancelOrder={handleCancel}
-              className="hidden h-[228px] shrink-0 border-t border-border/30 lg:flex"
+              className="hidden h-[228px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex"
             />
           )}
 
@@ -2204,7 +2204,7 @@ export function TradeClient() {
               On spot there is only one pane, so there is no tab bar: a
               Segmented offering a single choice is a control that does
               nothing. */}
-          <div className="flex min-h-0 flex-1 flex-col border-t border-border/30 lg:hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card lg:hidden">
             {market === "spot" ? (
               <OrdersPanel className="min-h-0 flex-1" />
             ) : (
@@ -2267,14 +2267,14 @@ export function TradeClient() {
 
         {/* Ticket rail — desktop keeps it always-on; below lg it becomes the
             bottom sheet the action bar opens, so the chart owns the screen. */}
-        <aside className="hidden shrink-0 lg:block lg:w-[300px] lg:overflow-y-auto lg:border-l lg:border-border/30 xl:w-[320px]">
+        <aside className="hidden shrink-0 overflow-hidden rounded-2xl bg-card lg:block lg:w-[300px] lg:overflow-y-auto xl:w-[328px]">
           {ticket}
         </aside>
       </div>
 
       {/* Mobile action bar — the ticket is one tap away at all times, and the
           tap already says which side you meant. */}
-      <div className="safe-area-bottom flex shrink-0 items-center gap-2 border-t border-border/30 bg-background px-3 py-2.5 lg:hidden">
+      <div className="safe-area-bottom flex shrink-0 items-center gap-2 border-t border-border/20 bg-background px-3 py-2.5 lg:hidden">
         <button
           onClick={() => {
             setSide("buy")
@@ -2282,7 +2282,7 @@ export function TradeClient() {
           }}
           data-vivid-target="trade-open-ticket-long"
           data-vivid-label="Open the order ticket on the buy/long side"
-          className="flex-1 rounded-full bg-credit py-3 text-sm font-bold text-white transition-colors hover:bg-credit/90 focus-visible:ring-2 focus-visible:ring-credit/40 focus-visible:outline-none"
+          className="min-h-12 flex-1 rounded-2xl bg-credit text-[15px] font-bold text-white transition-colors hover:bg-credit/90 focus-visible:ring-2 focus-visible:ring-credit/40 focus-visible:outline-none"
         >
           {market === "futures" ? "Long" : "Buy"}
         </button>
@@ -2293,7 +2293,7 @@ export function TradeClient() {
           }}
           data-vivid-target="trade-open-ticket-short"
           data-vivid-label="Open the order ticket on the sell/short side"
-          className="flex-1 rounded-full bg-debit py-3 text-sm font-bold text-white transition-colors hover:bg-debit/90 focus-visible:ring-2 focus-visible:ring-debit/40 focus-visible:outline-none"
+          className="min-h-12 flex-1 rounded-2xl bg-debit text-[15px] font-bold text-white transition-colors hover:bg-debit/90 focus-visible:ring-2 focus-visible:ring-debit/40 focus-visible:outline-none"
         >
           {market === "futures" ? "Short" : "Sell"}
         </button>
