@@ -177,7 +177,7 @@ export function Navbar() {
       {/* Utility cluster — one glass pill: actions · account.
           (The theme control is gone: the app is dark-only. See
           components/theme-provider.tsx to restore it.) */}
-      <div className="ws-nav-glass ml-auto flex h-11 shrink-0 items-center gap-0.5 rounded-full bg-card/35 px-1 ring-1 ring-border/50 backdrop-blur-xl md:h-10 md:px-1.5">
+      <div className="ml-auto flex h-11 shrink-0 items-center gap-0.5 rounded-full bg-card px-1 ring-1 ring-border/50 md:ws-nav-glass md:h-10 md:bg-card/35 md:px-1.5 md:backdrop-blur-xl">
         <NavbarActions />
         <div className="mx-0.5 h-4 w-px bg-border/60" />
 
@@ -195,7 +195,7 @@ export function Navbar() {
         ) : (
           <Popover open={profileOpen} onOpenChange={setProfileOpen}>
             <PopoverTrigger render={profileTrigger} />
-            <PopoverContent className="w-52 p-1.5 border-0 shadow-xl shadow-black/8 bg-popover/60 backdrop-blur-2xl ring-1 ring-white/10 rounded-xl" align="end" sideOffset={8}>
+            <PopoverContent className="w-52 rounded-xl border-0 bg-popover p-1.5 shadow-xl shadow-black/40 ring-1 ring-border/40" align="end" sideOffset={8}>
               {profileContent}
             </PopoverContent>
           </Popover>

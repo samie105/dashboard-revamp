@@ -23,8 +23,8 @@ import { useIsMobile } from "@/hooks/use-mobile"
 const defaultAnnouncements = [
   {
     id: "1",
-    title: "New: SOL/USDT Futures Live",
-    description: "Trade Solana perpetual futures with up to 20x leverage.",
+    title: "Spot trading is live on six chains",
+    description: "Swap and trade thousands of tokens across Ethereum, Arbitrum, Solana, Sui, TON and Tron.",
     time: "2h ago",
     isNew: true,
   },
@@ -141,7 +141,7 @@ export function NotificationBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={trigger} />
-      <PopoverContent align="end" sideOffset={8} className="w-80 p-0 border-0 shadow-xl shadow-black/8 bg-popover/80 backdrop-blur-2xl ring-1 ring-white/10 rounded-xl overflow-hidden">
+      <PopoverContent align="end" sideOffset={8} className="w-80 p-0 border-0 shadow-xl shadow-black/8 bg-popover ring-1 ring-border/40 rounded-xl overflow-hidden">
         <div className="flex items-center justify-between p-3">
           <div className="flex items-center gap-2">
             <HugeiconsIcon icon={Megaphone01Icon} className="h-4 w-4 text-primary" />

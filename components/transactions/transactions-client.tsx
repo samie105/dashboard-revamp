@@ -516,7 +516,7 @@ export function TransactionsClient() {
             </button>
 
             {showDatePicker && (
-              <div className="absolute right-0 top-full z-20 mt-2 min-w-60 rounded-2xl bg-popover/90 p-3 shadow-2xl ring-1 ring-foreground/10 backdrop-blur-2xl">
+              <div className="absolute right-0 top-full z-20 mt-2 min-w-60 rounded-2xl bg-popover p-3 shadow-2xl ring-1 ring-border/40">
                 <div className="flex flex-col gap-2.5">
                   <div>
                     <label className="mb-1 block text-[12px] text-muted-foreground">From</label>

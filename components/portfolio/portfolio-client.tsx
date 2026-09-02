@@ -201,7 +201,7 @@ function Watchlist({
             <HugeiconsIcon icon={Add01Icon} className="h-3.5 w-3.5" /> Add
           </button>
           {showAdd && (
-            <div className="absolute right-0 top-9 z-50 w-64 rounded-xl border-0 bg-popover/90 backdrop-blur-2xl ring-1 ring-white/10 shadow-xl shadow-black/8 overflow-hidden">
+            <div className="absolute right-0 top-9 z-50 w-64 rounded-xl border-0 bg-popover ring-1 ring-border/40 shadow-xl shadow-black/8 overflow-hidden">
               <div className="border-b border-white/10 p-2">
                 <div className="flex items-center gap-2 rounded-lg bg-accent/40 px-2.5 py-1.5">
                   <HugeiconsIcon icon={Search01Icon} className="h-3 w-3 text-muted-foreground shrink-0" />
