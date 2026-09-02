@@ -820,7 +820,20 @@ export function updateDevMockProfile(updates: Record<string, unknown>) {
   return { ...mockProfile }
 }
 
+/* The welcome guide is the one thing worth SEEING repeatedly while it is
+   being built, and this mock is the only profile localhost has. Recording it
+   here retires the guide for every browser on the machine — private windows
+   included, since the durable half of "seen" lives on this object and not in
+   their storage — until the dev server is restarted. That is a debugging
+   trap, not a faithful mock: production has one profile per person, and this
+   has one profile per machine.
+   Excluded here, so on localhost the guide answers to localStorage alone and
+   replays whenever site data is cleared. Production is untouched — this
+   module is dev-only (see lib/dev-auth-bypass.ts). */
+const DEV_UNRECORDED_ONBOARDING = new Set(["crypto-wallet"])
+
 export function addDevMockOnboarding(key: string) {
+  if (DEV_UNRECORDED_ONBOARDING.has(key)) return
   if (!mockProfile.onboardingCompleted.includes(key)) {
     mockProfile.onboardingCompleted.push(key)
   }

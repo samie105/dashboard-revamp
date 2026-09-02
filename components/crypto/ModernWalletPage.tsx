@@ -50,7 +50,7 @@ import { usd } from "@/lib/num"
 import { groupBalancesBySymbol } from "@/lib/balance-grouping"
 import { useUiMode } from "@/components/ui-mode-provider"
 import { ModeSwitch } from "@/components/ui/mode-switch"
-import { CryptoWelcomeGuide } from "./CryptoWelcomeGuide"
+import { WelcomeGuide } from "@/components/welcome-guide"
 import { missingChainFamilies } from "./WalletChainProvisioningPanel"
 
 const PAGE = "flex flex-col gap-6 p-4 md:p-6 lg:p-8"
@@ -730,14 +730,13 @@ export function ModernWalletPage() {
         <PageHeader title="Wallet" subtitle={SUBTITLE} actions={headerActions} />
       </Rise>
 
-      {/* Shown once per person, and only once a wallet exists and the setup
-          ceremony has let go of the screen — two modals at once is the
-          failure this guards. Re-openable from the header. */}
-      <CryptoWelcomeGuide
-        eligible={isCryptoBackendEnabled && Boolean(user?.userId)}
-        ceremonyVisible={setupCeremony}
-        openSignal={helpSignal}
-      />
+      {/* Shown once per person, app-wide — the dashboard mounts the same
+          guide, so most people meet it before they ever reach this page
+          and this instance stays silent. It is here for the header help
+          button, and because the ceremony is the one thing that has to
+          hold it back: two modals at once is what `ceremonyVisible`
+          guards. */}
+      <WelcomeGuide ceremonyVisible={setupCeremony} openSignal={helpSignal} />
 
       {/* Two invariants live on this one line — read both before editing it.
           (1) FIXED POSITION, MOUNTED UNCONDITIONALLY: this component owns the

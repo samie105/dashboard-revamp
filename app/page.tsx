@@ -10,7 +10,7 @@ import { DashboardOnboarding } from "@/components/dashboard/dashboard-onboarding
 // below together with the card in bento-grid.tsx.
 // import { MnaBanner } from "@/components/dashboard/mna-banner"
 import { Rise } from "@/components/ui/system"
-import { PromoRow } from "@/components/ui/promo-row"
+import { WelcomeGuide } from "@/components/welcome-guide"
 import { getPrices, getTrades } from "@/lib/actions"
 
 async function WalletCardLoader() {
@@ -55,15 +55,19 @@ export default function Page() {
         </Suspense>
       </Rise>
       {/* Paired grid — activity+holdings, markets+watchlist, trades+swap.
-          Marketing goes last. */}
+          The promo rail that used to follow it
+          is now the welcome guide. */}
       <Rise delay={60}>
         <Suspense fallback={<DashboardGridSkeleton />}>
           <DashboardGridLoader />
         </Suspense>
       </Rise>
-      <Rise delay={120}>
-        <PromoRow />
-      </Rise>
+      {/* The app introducing itself, once, to whoever just arrived. It is
+          mounted HERE, on the page people land on, rather than only on the
+          wallet: an intro nobody reaches is an intro that does not exist,
+          and this is where the promo rail it absorbed used to sit. It
+          renders a portal, so its position in this tree is arbitrary. */}
+      <WelcomeGuide />
       <DashboardOnboarding />
     </div>
   )

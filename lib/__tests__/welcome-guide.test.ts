@@ -4,7 +4,7 @@ import { WELCOME_GUIDE_KEY, WELCOME_SEEN_PREFIX, welcomeSeenKey, welcomeGuideSur
 
 const ready = {
   eligible: true,
-  ceremonyVisible: false,
+  blockedByModal: false,
   seenLocally: false,
   seenOnProfile: false,
 }
@@ -37,8 +37,10 @@ describe("welcomeGuideSurfaces", () => {
     expect(welcomeGuideSurfaces(ready)).toEqual({ guide: true })
   })
 
-  it("waits for the setup ceremony to leave the screen", () => {
-    expect(welcomeGuideSurfaces({ ...ready, ceremonyVisible: true })).toEqual({ guide: false })
+  // Two of them feed this: the wallet setup ceremony, and the migration
+  // popup that LayoutShell puts in front of legacy accounts on any page.
+  it("waits for another first-run modal to leave the screen", () => {
+    expect(welcomeGuideSurfaces({ ...ready, blockedByModal: true })).toEqual({ guide: false })
   })
 
   it("does not show again on this device", () => {

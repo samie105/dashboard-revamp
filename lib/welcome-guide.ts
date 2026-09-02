@@ -30,10 +30,11 @@ export type SeenSnapshot = boolean | "unknown"
 export function welcomeGuideSurfaces(input: {
   /** The crypto wallet is switched on and there is a signed-in user. */
   eligible: boolean
-  /** `WalletSetupFlow` currently owns the page. Two modals at once is the
-   *  thing this flag exists to prevent — the guide waits, then greets the
-   *  person the moment setup lets go. */
-  ceremonyVisible: boolean
+  /** Another first-run modal currently owns the screen — the wallet setup
+   *  ceremony, or the migration popup. Two modals at once is the thing this
+   *  flag exists to prevent: the guide waits, then greets the person the
+   *  moment the screen is theirs. */
+  blockedByModal: boolean
   seenLocally: SeenSnapshot
   seenOnProfile: SeenSnapshot
 }): { guide: boolean } {
@@ -43,9 +44,9 @@ export function welcomeGuideSurfaces(input: {
      dashboard cold, worked out the setup ceremony unaided, and was greeted
      with "here is what this screen is" only afterwards. A newcomer needs the
      explanation BEFORE the work, not as a receipt for it.
-     Nothing is lost by dropping it. `ceremonyVisible` is what actually keeps
+     Nothing is lost by dropping it. `blockedByModal` is what actually keeps
      two modals off the screen at once, and it still does. */
-  if (!input.eligible || input.ceremonyVisible) return { guide: false }
+  if (!input.eligible || input.blockedByModal) return { guide: false }
   if (input.seenLocally === "unknown" || input.seenOnProfile === "unknown") return { guide: false }
   return { guide: !input.seenLocally && !input.seenOnProfile }
 }

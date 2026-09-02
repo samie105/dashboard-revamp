@@ -291,6 +291,50 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
 }
 
 /**
+ * Whether this popup currently owns the screen.
+ *
+ * The welcome guide has to know, because two first-run modals on one load is
+ * the exact failure both are written to avoid — and `popupSeen` cannot answer
+ * it: this popup marks itself seen the MOMENT it opens, so the predicate goes
+ * false while the modal is still standing there.
+ *
+ * Module-level, like the dismissal store above and for the same reason: the
+ * fact is about the screen, not about one component instance.
+ */
+const popupOnScreen = (() => {
+  let open = false
+  const listeners = new Set<() => void>()
+  return {
+    set(next: boolean) {
+      if (open === next) return
+      open = next
+      for (const listener of listeners) listener()
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    get: () => open,
+    getServerSnapshot: () => false,
+  }
+})()
+
+/** For anything that must wait its turn behind this popup. */
+export function useMigrationPopupOwnsScreen(): boolean {
+  const live = React.useSyncExternalStore(
+    popupOnScreen.subscribe,
+    popupOnScreen.get,
+    popupOnScreen.getServerSnapshot,
+  )
+  const { eligible, resolved, popupSeen } = useMigrationNoticeState()
+  /* `live` only turns true in an effect, one commit after a sibling could
+     already have opened itself. The predicate is what covers that first
+     render; the store is what covers every render after `markSeen` has made
+     the predicate lie. Either one is reason enough to wait. */
+  return live || migrationNoticeSurfaces({ eligible, resolved, popupSeen }).popup
+}
+
+/**
  * The one-time introduction. Mounted once, app-wide, by LayoutShell.
  *
  * `markSeen` fires when the popup is first shown, not when it is closed: a
@@ -301,13 +345,23 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
 export function MigrationNoticePopup() {
   const { eligible, resolved, popupSeen, dismiss, markSeen } = useMigrationNoticeState()
   const show = migrationNoticeSurfaces({ eligible, resolved, popupSeen }).popup
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpenState] = React.useState(false)
+
+  // Every open/close goes through the shared store as well as local state,
+  // so whatever is waiting behind this popup learns the moment it lets go.
+  const setOpen = React.useCallback((next: boolean) => {
+    setOpenState(next)
+    popupOnScreen.set(next)
+  }, [])
 
   React.useEffect(() => {
     if (!show) return
     setOpen(true)
     markSeen()
-  }, [show, markSeen])
+  }, [show, markSeen, setOpen])
+
+  // A route change that unmounts this must not leave the screen claimed.
+  React.useEffect(() => () => popupOnScreen.set(false), [])
 
   if (!show && !open) return null
 

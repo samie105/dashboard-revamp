@@ -7,7 +7,6 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   ArrowUpRight01Icon,
-  CreditCardIcon,
   Settings02Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons"
@@ -19,9 +18,11 @@ import {
   ResponsiveModalHeader,
   ResponsiveModalTitle,
 } from "@/components/ui/responsive-modal"
+import { illustrations, type IllustrationKey } from "@/components/ui/system"
 import { useAuth } from "@/components/auth-provider"
 import { useProfile } from "@/components/profile-provider"
 import { useUiMode } from "@/components/ui-mode-provider"
+import { useMigrationPopupOwnsScreen } from "@/components/crypto/MigrationNotice"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import {
   WELCOME_GUIDE_KEY,
@@ -32,7 +33,11 @@ import {
 } from "@/lib/welcome-guide"
 
 type GuideCard = {
-  icon: typeof Wallet01Icon
+  /** Either an icon in a gold well, or a house illustration — never both.
+   *  The cards that came in from the promo rail keep the art they shipped
+   *  with; the ones teaching a control keep the icon that names it. */
+  icon?: typeof Wallet01Icon
+  art?: IllustrationKey
   title: string
   /** A function where the text has to know what it is looking at. */
   body: string | ((simple: boolean) => string)
@@ -41,42 +46,59 @@ type GuideCard = {
 }
 
 /**
- * The crypto dashboard introducing itself, once.
+ * Worldstreet introducing itself, once, to the person who just arrived.
  *
- * Copy follows the house plain-language rule enforced across this directory:
- * no "self-custody", no "keys", no "chain", no "gas", no "network" as a noun
- * the reader is expected to already own. It describes outcomes, and it never
- * implies Worldstreet can open the wallet.
+ * Copy follows the house plain-language rule: no "self-custody", no "keys",
+ * no "gas", no "network" as a noun the reader is expected to already own. It
+ * describes outcomes, and it never implies Worldstreet can open the wallet.
+ * The cards lifted wholesale from the promo rail keep the marketing copy they
+ * shipped with, "six chains" included — moving a card is not licence to
+ * rewrite it.
  *
- * Five cards, in the order a newcomer actually meets the problem: what is
- * this, how do I get my first coin, how do I add coins I already hold, how do
- * I send them, and why does this screen look simpler than my friend's.
+ * Seven cards, in the order a newcomer actually meets the problem: what is
+ * this, how do I get my first coin, the two things people come here to do
+ * with it, moving money in and out, and finally why this screen might look
+ * simpler than a friend's.
  */
 const CARDS: GuideCard[] = [
   {
-    icon: Wallet01Icon,
-    title: "Welcome to your wallet",
+    art: "welcome",
+    title: "Welcome to Worldstreet",
     body:
-      "Everything you hold sits here, in one place, valued in dollars. Only you can open it — not even Worldstreet can.",
+      "Your money and your crypto sit here together, valued in dollars. The wallet is yours alone — only you can open it, not even Worldstreet can.",
   },
+  /* The three cards below WERE the dashboard's promo rail: an autoplaying
+     carousel below the markets grid, each card carrying its own dismiss X.
+     That put the whole of a newcomer's "what do I actually do here" behind a
+     thing that moves on its own and can be closed by accident, on a stretch
+     of page they have to scroll to reach. They belong in the guide that
+     already has the person's attention, in the order someone starting from
+     zero needs them. Deleting the rail is the other half of this — a card
+     cannot be in two places and still be "the" invitation. */
   {
-    /* Was a promo card on the dashboard, in a rail that autoplayed past it
-       and carried its own dismiss X. That put the one step a person with no
-       crypto has to take — buying some — behind a carousel they could close
-       by accident and never see again. It belongs in the guide that already
-       has their attention, and it is second because it is the first thing
-       someone starting from zero needs. */
-    icon: CreditCardIcon,
+    art: "cryptoBuy",
     title: "Buy your first crypto",
     body:
-      "Don't hold any yet? Your Dollar Account can buy some. Turn dollars into USDT on Solana, Ethereum or Tron, and it lands right here.",
+      "Don't hold any yet? Your Dollar Account can buy some. Turn dollars into USDT on Solana, Ethereum or Tron, and it lands in your wallet.",
     action: { label: "Buy crypto", href: "/buy" },
+  },
+  {
+    art: "cryptoTrade",
+    title: "Trade across six chains",
+    body: "Thousands of tokens on live markets, priced and routed for you.",
+    action: { label: "Open trading", href: "/trade" },
+  },
+  {
+    art: "cryptoSwap",
+    title: "Swap in one move",
+    body: "Convert cash and tokens at live rates, any pair to any pair.",
+    action: { label: "Swap", href: "/swap" },
   },
   {
     icon: ArrowDownLeft01Icon,
     title: "Adding money",
     body:
-      "Press Deposit. Pick what you're adding, and you'll get an address to send it to. It shows up here once it arrives.",
+      "Press Deposit. Pick what you're adding, and you'll get an address to send it to. It shows up in your wallet once it arrives.",
   },
   {
     icon: ArrowUpRight01Icon,
@@ -92,8 +114,8 @@ const CARDS: GuideCard[] = [
     // wrong, on the card whose whole job is teaching the control.
     body: (simple: boolean) =>
       simple
-        ? "You're in Simple, which shows the essentials. Pro adds the full breakdown for every place your money sits. Switch at the top of the page whenever you like."
-        : "You're in Pro, which shows the full breakdown for every place your money sits. Simple trims it back to the essentials. Switch at the top of the page whenever you like.",
+        ? "You're in Simple, which shows the essentials. Pro adds the full breakdown for every place your money sits. Switch at the top of your wallet whenever you like."
+        : "You're in Pro, which shows the full breakdown for every place your money sits. Simple trims it back to the essentials. Switch at the top of your wallet whenever you like.",
   },
 ]
 
@@ -183,15 +205,14 @@ const welcomeSeenStore = (() => {
  */
 let showing: "pending" | "open" | "closed" = "pending"
 
-export function CryptoWelcomeGuide({
-  eligible,
-  ceremonyVisible,
+export function WelcomeGuide({
+  ceremonyVisible = false,
   openSignal,
   onOpenChange,
 }: {
-  eligible: boolean
-  /** The setup ceremony currently owns the page. */
-  ceremonyVisible: boolean
+  /** The wallet setup ceremony currently owns the page. Only the wallet page
+   *  has one; everywhere else this stays false. */
+  ceremonyVisible?: boolean
   /** Incremented by the page's help button to re-open the guide on demand.
    *  A counter rather than a boolean so repeated presses each re-open it
    *  without the caller having to reset anything. */
@@ -201,6 +222,10 @@ export function CryptoWelcomeGuide({
   const { user } = useAuth()
   const { profile } = useProfile()
   const { isSimple } = useUiMode()
+  /* The other first-run modal. It is mounted by LayoutShell, so it can land
+     on top of this guide on ANY page — asking the caller to pass it down
+     would mean every future mount point remembering to. */
+  const migrationOwnsScreen = useMigrationPopupOwnsScreen()
   const key = welcomeSeenKey(user?.userId)
 
   const getSnapshot = React.useCallback(() => welcomeSeenStore.getSnapshot(key), [key])
@@ -217,9 +242,14 @@ export function CryptoWelcomeGuide({
     ? profile.onboardingCompleted?.includes(WELCOME_GUIDE_KEY) ?? false
     : "unknown"
 
+  /* Eligibility is the guide’s own business now rather than a prop. It is
+     mounted on more than one page (the dashboard people land on, and the
+     wallet, which also owns the help button that re-opens it), and a rule
+     each caller restates is a rule that drifts. Signed in is the whole of
+     it — the cards describe the product, not one backend. */
   const show = welcomeGuideSurfaces({
-    eligible,
-    ceremonyVisible,
+    eligible: Boolean(user?.userId),
+    blockedByModal: ceremonyVisible || migrationOwnsScreen,
     seenLocally,
     seenOnProfile,
   }).guide
@@ -286,8 +316,23 @@ export function CryptoWelcomeGuide({
               sr-only copy beside a visible <h2> made a screen reader announce
               every card's name twice. */}
           <ResponsiveModalHeader className="flex flex-col items-center gap-3 space-y-0 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
-              <HugeiconsIcon icon={Icon} className="h-6 w-6" />
+            {/* One fixed-height slot for both treatments. The art is 76px and
+                the icon well 48px, so without it the title and body jumped up
+                and down as you paged between a moved promo card and a card
+                teaching a control. */}
+            <span className="flex h-[76px] items-center justify-center">
+              {current.art ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={illustrations[current.art]}
+                  alt=""
+                  className="h-[76px] w-[76px] object-contain"
+                />
+              ) : Icon ? (
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
+                  <HugeiconsIcon icon={Icon} className="h-6 w-6" />
+                </span>
+              ) : null}
             </span>
             {/* Keyed so each card's text settles in rather than swapping
                 under the reader mid-sentence. */}
@@ -361,7 +406,7 @@ export function CryptoWelcomeGuide({
           </div>
 
           <p className="text-center text-[11px] text-muted-foreground/60">
-            You can open this again from the help button at the top of the page.
+            You can open this again from the help button on your wallet.
           </p>
         </div>
       </ResponsiveModalContent>
