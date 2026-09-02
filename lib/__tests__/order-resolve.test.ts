@@ -7,6 +7,9 @@ const SOLANA = "solana-mainnet-beta"
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 const TRUMP = "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN"
 const DOLLAR = "D1111111111111111111111111111111111111111111"
+/** LI.FI's spelling of native SOL: the System Program id. */
+const NATIVE_SOL = "11111111111111111111111111111111"
+const WSOL = "So11111111111111111111111111111111111111112"
 
 function market(over: Partial<RegistryRow> & { symbol: string; address: string }): RegistryRow {
   return {
@@ -26,6 +29,8 @@ function market(over: Partial<RegistryRow> & { symbol: string; address: string }
    collision that made every sell render as "$1" on the live screen. */
 const trump = market({ symbol: "TRUMP", address: TRUMP, price: 2.25, baseDecimals: 6 })
 const dollar = market({ symbol: "$1", address: DOLLAR, price: 1 })
+/** The registry lists SOL by its WRAPPED mint — never the sentinel. */
+const sol = market({ symbol: "SOL", address: WSOL, price: 130, baseDecimals: 9 })
 
 const registry: SpotRegistry = {
   loading: false,
@@ -34,6 +39,7 @@ const registry: SpotRegistry = {
   byAddress: new Map([
     [addressKey(SOLANA, DOLLAR), dollar],
     [addressKey(SOLANA, TRUMP), trump],
+    [addressKey(SOLANA, WSOL), sol],
   ]),
 }
 
@@ -122,6 +128,49 @@ describe("resolveOrder", () => {
     expect(row.side).toBeNull()
     expect(row.size).toBeNull()
     expect(row.symbol).toMatch(/^1111….*$/)
+  })
+
+  /* These three are the live rows that rendered as a bare `1111…1111`: LI.FI
+     names native SOL with the System Program id, and the registry lists the
+     wrapped mint, so nothing matched on either leg. */
+  it("resolves a native-SOL buy through the wrapped market", () => {
+    const row = resolveOrder(
+      order({ sellToken: USDC, buyToken: NATIVE_SOL, amount: "8563066" }),
+      registry,
+    )
+    expect(row.symbol).toBe("SOL")
+    expect(row.side).toBe("buy")
+    // 9 decimals, from the native token — not the 6 a USDC market would give.
+    expect(row.size).toBeCloseTo(0.008563066, 12)
+    expect(row.unit).toBe("SOL")
+    expect(row.valueUsd).toBeCloseTo(0.008563066 * 130, 9)
+  })
+
+  it("resolves a native-SOL sell from the leg that was spent", () => {
+    const row = resolveOrder(
+      order({ sellToken: NATIVE_SOL, buyToken: USDC, amount: "1121279" }),
+      registry,
+    )
+    expect(row.symbol).toBe("SOL")
+    expect(row.side).toBe("sell")
+    // Proceeds are USDC at 6dp, and already dollars.
+    expect(row.unit).toBe("USDC")
+    expect(row.size).toBeCloseTo(1.121279, 9)
+    expect(row.valueUsd).toBeCloseTo(1.121279, 9)
+  })
+
+  it("names the native coin even when its market is absent", () => {
+    const noSol: SpotRegistry = { ...registry, byAddress: new Map() }
+    const row = resolveOrder(
+      order({ sellToken: USDC, buyToken: NATIVE_SOL, amount: "8563066" }),
+      noSol,
+    )
+    // The sentinel states the symbol and precision itself; only the price
+    // needed the registry.
+    expect(row.symbol).toBe("SOL")
+    expect(row.side).toBe("buy")
+    expect(row.size).toBeCloseTo(0.008563066, 12)
+    expect(row.valueUsd).toBeNull()
   })
 
   it("omits a buy's value rather than pricing it at zero", () => {

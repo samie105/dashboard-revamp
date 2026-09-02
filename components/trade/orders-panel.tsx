@@ -37,6 +37,7 @@ import { useSpotRegistry, addressKey, type SpotRegistry } from "@/hooks/useSpotR
 import { explorerTxUrl } from "@/lib/crypto-backend/network-meta"
 import { chainLabel } from "@/lib/spot-market-search"
 import { formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
+import { nativeTokenFor } from "@/lib/native-token"
 
 const TH =
   "px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-subtle whitespace-nowrap"
@@ -100,29 +101,61 @@ export type ResolvedOrder = {
  * address, so USDC resolved to whichever market was indexed first.
  */
 export function resolveOrder(order: SpotOrder, registry: SpotRegistry): ResolvedOrder {
-  const lookup = (address: string | null) =>
-    address ? registry.byAddress.get(addressKey(order.networkId, address)) : undefined
+  /* A native coin has no contract, so routers name it with a sentinel while
+     the registry lists the WRAPPED market. Translate before looking up, and
+     keep the native symbol and precision for display — a SOL trade should say
+     SOL, not wSOL, and certainly not `1111…1111`. */
+  const buyNative = nativeTokenFor(order.networkId, order.buyToken)
+  const sellNative = nativeTokenFor(order.networkId, order.sellToken)
+  const lookup = (address: string | null, native: ReturnType<typeof nativeTokenFor>) => {
+    const key = native?.wrapped ?? address
+    return key ? registry.byAddress.get(addressKey(order.networkId, key)) : undefined
+  }
 
-  const bought = lookup(order.buyToken)
-  const sold = bought ? undefined : lookup(order.sellToken)
+  const bought = lookup(order.buyToken, buyNative)
+  const sold = bought ? undefined : lookup(order.sellToken, sellNative)
   const market = bought ?? sold
-  const side: "buy" | "sell" | null = bought ? "buy" : sold ? "sell" : null
 
-  const symbol = market?.symbol ?? shortAddress(order.buyToken)
+  /* A side is known the moment either leg is identified — and a native leg
+     identifies itself, with or without a market behind it. */
+  const side: "buy" | "sell" | null = bought || buyNative
+    ? "buy"
+    : sold || sellNative
+      ? "sell"
+      : null
+
+  // What the order is ABOUT: the base token on a buy, the token sold on a sell.
+  const subjectNative = side === "buy" ? buyNative : sellNative
+  const symbol =
+    subjectNative?.symbol ?? market?.symbol ?? shortAddress(order.buyToken)
   const icon = market?.icon ?? null
-  // Precision as the REGISTRY states it. A guessed exponent misstates an order
-  // by a factor of a billion, so an unstated one leaves the cell blank.
-  const decimals = bought ? market?.baseDecimals : market?.quoteDecimals
-  const unit = (bought ? market?.symbol : market?.quote) ?? ""
 
-  if (!market || decimals === undefined || !order.amount) {
+  /* Precision for the token RECEIVED. The native sentinel states its own;
+     otherwise it is the registry's, and a registry that never stated it leaves
+     the cell blank — a guessed exponent misstates an order by a billion. */
+  const receivedNative = buyNative
+  const decimals =
+    receivedNative?.decimals ??
+    (side === "buy" ? market?.baseDecimals : market?.quoteDecimals)
+  const unit =
+    receivedNative?.symbol ??
+    (side === "buy" ? market?.symbol : market?.quote) ??
+    ""
+
+  if (decimals === undefined || !order.amount) {
     return { order, symbol, icon, side, size: null, unit, valueUsd: null }
   }
 
   const size = Number(formatCryptoAmount(order.amount, decimals, 9))
-  // A sell's proceeds are already dollars — every quote we trade against is a
-  // dollar stablecoin. A buy's are priced from the live registry.
-  const valueUsd = bought ? (market.price > 0 ? size * market.price : null) : size
+  /* A sell's proceeds are already dollars — every quote we trade against is a
+     dollar stablecoin. A buy's are priced from the market, which for a native
+     leg is the wrapped market: wSOL and SOL are the same price. */
+  const valueUsd =
+    side === "buy"
+      ? market && market.price > 0
+        ? size * market.price
+        : null
+      : size
   return { order, symbol, icon, side, size, unit, valueUsd }
 }
 
