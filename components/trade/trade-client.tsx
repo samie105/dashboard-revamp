@@ -68,6 +68,7 @@ import {
 import { CandleChart, type ChartSource, type ChartStats } from "@/components/trade/candle-chart"
 import { OrderBook } from "@/components/trade/order-book"
 import { PositionsPanel } from "@/components/trade/positions-panel"
+import { OrdersPanel } from "@/components/trade/orders-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
 import { MarketPicker } from "@/components/trade/market-picker"
 import { noteRecentMarket } from "@/hooks/useMarketPrefs"
@@ -461,6 +462,8 @@ export function TradeClient() {
     setError(null)
     // The unit names a token that belongs to the row being left.
     setAmountUnit("usd")
+    // Spot has no Positions pane; leaving the tab parked there shows nothing.
+    setMobilePane((pane) => (market === "spot" && pane === "positions" ? "orders" : pane))
   }, [selection, market])
 
   /**
@@ -1994,13 +1997,21 @@ export function TradeClient() {
               <CandleChart source={chartSource} onStats={setDexStats} />
             )}
           </div>
-          <PositionsPanel
-            account={account}
-            busyKey={busyKey}
-            onClosePosition={handleClose}
-            onCancelOrder={handleCancel}
-            className="hidden h-[228px] shrink-0 border-t border-border/30 lg:flex"
-          />
+          {/* Spot has neither positions nor resting orders — a swap settles or
+              it doesn't — so the two perps tabs could only ever read "none"
+              there. One Orders table takes their place; futures keeps the
+              drawer, where both concepts are real. */}
+          {market === "spot" ? (
+            <OrdersPanel className="hidden h-[228px] shrink-0 border-t border-border/30 lg:flex" />
+          ) : (
+            <PositionsPanel
+              account={account}
+              busyKey={busyKey}
+              onClosePosition={handleClose}
+              onCancelOrder={handleCancel}
+              className="hidden h-[228px] shrink-0 border-t border-border/30 lg:flex"
+            />
+          )}
 
           {/* Below lg the book and positions share one pane instead of
               stacking into an endless scroll — one tap to compare, and the
@@ -2011,19 +2022,26 @@ export function TradeClient() {
                 size="sm"
                 value={mobilePane}
                 onChange={setMobilePane}
-                options={[
-                  { key: "book", label: "Book" },
-                  {
-                    key: "positions",
-                    label: positionCount
-                      ? `Positions · ${positionCount}`
-                      : "Positions",
-                  },
-                  {
-                    key: "orders",
-                    label: orderCount ? `Orders · ${orderCount}` : "Orders",
-                  },
-                ]}
+                options={
+                  market === "spot"
+                    ? [
+                        { key: "book" as const, label: "Book" },
+                        { key: "orders" as const, label: "Orders" },
+                      ]
+                    : [
+                        { key: "book" as const, label: "Book" },
+                        {
+                          key: "positions" as const,
+                          label: positionCount
+                            ? `Positions · ${positionCount}`
+                            : "Positions",
+                        },
+                        {
+                          key: "orders" as const,
+                          label: orderCount ? `Orders · ${orderCount}` : "Orders",
+                        },
+                      ]
+                }
               />
             </div>
             {mobilePane === "book" ? (
@@ -2036,6 +2054,8 @@ export function TradeClient() {
                 }}
                 className="min-h-0 flex-1"
               />
+            ) : market === "spot" ? (
+              <OrdersPanel className="min-h-0 flex-1" />
             ) : (
               <PositionsPanel
                 account={account}

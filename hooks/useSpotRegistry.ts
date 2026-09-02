@@ -26,6 +26,16 @@ export type RegistryRow = {
   networkId: string
   quote: string
   price: number
+  /** The base token's address on its chain, where the registry states one. */
+  address: string | null
+  /** The quote token's address — the other side of a sell. */
+  quoteAddress: string | null
+  /* Precision as the REGISTRY states it. Undefined means the backend didn't
+     say, and a size in base units then cannot be read back — a guessed
+     exponent misstates an order by a factor of a billion, so callers refuse
+     rather than assume. */
+  baseDecimals?: number
+  quoteDecimals?: number
 }
 
 export type SpotRegistry = {
@@ -34,9 +44,23 @@ export type SpotRegistry = {
   bySymbol: Map<string, RegistryRow[]>
   /** Chains present in the registry, with how many markets each carries. */
   chains: { id: string; label: string; count: number }[]
+  /** `networkId:loweraddress` → row. Orders carry addresses, not symbols. */
+  byAddress: Map<string, RegistryRow>
 }
 
-const EMPTY: SpotRegistry = { loading: false, bySymbol: new Map(), chains: [] }
+const EMPTY: SpotRegistry = {
+  loading: false,
+  bySymbol: new Map(),
+  chains: [],
+  byAddress: new Map(),
+}
+
+/** The key an address is looked up by — EVM hex is case-insensitive, and a
+ *  Solana mint is base58 and case-SENSITIVE, so both are lowercased for the
+ *  key only and never for use. */
+export function addressKey(networkId: string, address: string): string {
+  return `${networkId}:${address.toLowerCase()}`
+}
 
 export function useSpotRegistry(enabled = true): SpotRegistry {
   const [rows, setRows] = React.useState<RegistryRow[] | null>(null)
@@ -59,6 +83,10 @@ export function useSpotRegistry(enabled = true): SpotRegistry {
               networkId: m.networkId,
               quote: (m.quote ?? "USDC").toUpperCase(),
               price: m.price ?? 0,
+              address: m.buyToken ?? m.outputMint ?? null,
+              quoteAddress: m.sellToken ?? m.inputMint ?? null,
+              ...(typeof m.baseDecimals === "number" ? { baseDecimals: m.baseDecimals } : {}),
+              ...(typeof m.quoteDecimals === "number" ? { quoteDecimals: m.quoteDecimals } : {}),
             })),
         ),
       )
@@ -71,16 +99,24 @@ export function useSpotRegistry(enabled = true): SpotRegistry {
   return React.useMemo(() => {
     if (!rows) return { ...EMPTY, loading }
     const bySymbol = new Map<string, RegistryRow[]>()
+    const byAddress = new Map<string, RegistryRow>()
     const counts = new Map<string, number>()
     for (const r of rows) {
       const list = bySymbol.get(r.symbol)
       if (list) list.push(r)
       else bySymbol.set(r.symbol, [r])
+      if (r.address) byAddress.set(addressKey(r.networkId, r.address), r)
+      // The quote side is indexed too, so a SELL — whose received token is the
+      // quote — can still find the market it belongs to.
+      if (r.quoteAddress && !byAddress.has(addressKey(r.networkId, r.quoteAddress))) {
+        byAddress.set(addressKey(r.networkId, r.quoteAddress), r)
+      }
       counts.set(r.networkId, (counts.get(r.networkId) ?? 0) + 1)
     }
     return {
       loading,
       bySymbol,
+      byAddress,
       chains: [...counts].map(([id, count]) => ({ id, label: chainLabel(id), count })),
     }
   }, [rows, loading])
