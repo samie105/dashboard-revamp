@@ -368,6 +368,21 @@ export function sizesLikeUsd(symbol: string): boolean {
   return USD_QUOTE_SYMBOLS.has(symbol.toUpperCase())
 }
 
+/**
+ * The BASE token's address on its chain — what a chart of this market is a
+ * chart of.
+ *
+ * The registry states its identifiers in the buy direction, so the base is the
+ * token RECEIVED by a buy: `buyToken` on EVM, `outputMint` on Solana. Reading
+ * that convention off the row in a component is how the two sides get swapped
+ * and a chart draws the quote's price, so it is read here, once.
+ */
+export function baseTokenOf(row: ModernSpotMarketRow): string | null {
+  if (row.venue === "0x") return row.buyToken ?? null
+  if (row.venue === "jupiter") return row.outputMint ?? null
+  return null
+}
+
 /** The symbol the amount field is denominated in when it isn't USD. */
 export function spentTokenSymbol(row: ModernSpotMarketRow, side: "buy" | "sell"): string | null {
   const legs = resolveSpotLegs(row, side)

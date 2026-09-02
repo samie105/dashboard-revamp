@@ -1,10 +1,19 @@
 "use client"
 
 /**
- * Candlestick chart for /trade — lightweight-charts v5 over Hyperliquid's
- * public candleSnapshot (lib/hl-public), the same data source mobile's trade
- * screen charts. Re-fetches on coin/interval change and polls to keep the
- * last bar fresh.
+ * The trade chart — TradingView's `lightweight-charts` over whichever source
+ * actually knows the market.
+ *
+ * It used to take a Hyperliquid coin name and nothing else, which is why spot
+ * had no chart: Hyperliquid is a perps venue that knows a few dozen majors by
+ * ticker, and the spot registry is 9,000+ long-tail tokens identified by
+ * contract address. Rather than reach for the TradingView *widget* — which
+ * needs a symbol TradingView carries, and does not carry these — the chart
+ * keeps TradingView's library and takes its data from a source keyed the way
+ * the market actually is: by address, per chain (see /api/charts/ohlcv).
+ *
+ * `source` is a discriminated union so a caller cannot hand a mint to the
+ * perps loader, or a perp ticker to the DEX one.
  */
 
 import * as React from "react"
@@ -19,15 +28,108 @@ import {
 import { fetchHlCandles, type HlCandleInterval } from "@/lib/hl-public"
 
 const INTERVALS: HlCandleInterval[] = ["1m", "5m", "15m", "1h", "4h", "1d"]
-const POLL_MS = 10_000
+const POLL_MS = 15_000
 
-export function CandleChart({ coin, className }: { coin: string | null; className?: string }) {
+export type ChartSource =
+  /** A perpetual contract — Hyperliquid is authoritative for its own venue. */
+  | { kind: "hyperliquid"; coin: string }
+  /** A spot market, identified by the token's contract on its chain. */
+  | { kind: "dex"; networkId: string; token: string }
+
+export type ChartStats = {
+  price: number | null
+  changePct24h: number | null
+  volume24h: number | null
+}
+
+type Candle = {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+/**
+ * Decimals the axis should carry for a price of this size.
+ *
+ * One fixed precision cannot serve this chart: the registry spans BTC at
+ * ~$77,000 and memecoins at 1e-9. Two decimals draws every long-tail token as
+ * a flat line at $0.00; six decimals writes BTC as "77437.000000".
+ */
+function priceFormatFor(price: number): { precision: number; minMove: number } {
+  if (!Number.isFinite(price) || price <= 0) return { precision: 4, minMove: 0.0001 }
+  if (price >= 1000) return { precision: 2, minMove: 0.01 }
+  if (price >= 1) return { precision: 4, minMove: 0.0001 }
+  if (price >= 0.01) return { precision: 6, minMove: 0.000001 }
+  return { precision: 9, minMove: 0.000000001 }
+}
+
+async function loadCandles(
+  source: ChartSource,
+  interval: HlCandleInterval,
+  signal: AbortSignal,
+): Promise<{ candles: Candle[]; stats: ChartStats | null }> {
+  if (source.kind === "hyperliquid") {
+    const candles = await fetchHlCandles(source.coin, interval)
+    return { candles, stats: null }
+  }
+  const url = new URL("/api/charts/ohlcv", window.location.origin)
+  url.searchParams.set("network", source.networkId)
+  url.searchParams.set("token", source.token)
+  url.searchParams.set("interval", interval)
+  const response = await fetch(url, { signal })
+  if (!response.ok) throw new Error(`Chart source returned ${response.status}`)
+  return (await response.json()) as { candles: Candle[]; stats: ChartStats | null }
+}
+
+export function CandleChart({
+  source,
+  onStats,
+  className,
+}: {
+  source: ChartSource | null
+  /** 24h figures from the chart's own source, for the market strip. */
+  onStats?: (stats: ChartStats | null) => void
+  className?: string
+}) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<IChartApi | null>(null)
   const seriesRef = React.useRef<ISeriesApi<"Candlestick"> | null>(null)
   const volumeRef = React.useRef<ISeriesApi<"Histogram"> | null>(null)
   const [interval, setIntervalKey] = React.useState<HlCandleInterval>("1h")
-  const [empty, setEmpty] = React.useState(false)
+  const [state, setState] = React.useState<"loading" | "ready" | "empty">("loading")
+  /* A fit that is owed but cannot be performed yet.
+     The first candles routinely arrive while the pane still measures zero
+     wide — `fitContent` against that computes a bar spacing for a chart of no
+     width, and since bars anchor to the right edge the whole series ends up
+     crushed into the right-hand corner with dead space beside it. So the fit
+     is a debt: taken on when new data lands, paid the moment the container
+     has a width, and never paid twice — a user who has zoomed in is not
+     yanked back by a later layout shift. */
+  const fitOwedRef = React.useRef(false)
+
+  const settleFit = React.useCallback(() => {
+    if (!fitOwedRef.current) return
+    if (!containerRef.current?.clientWidth) return
+    chartRef.current?.timeScale().fitContent()
+    fitOwedRef.current = false
+  }, [])
+
+  // The effect must not re-run because the parent rebuilt an equal object.
+  const sourceKey = source
+    ? source.kind === "hyperliquid"
+      ? `hl:${source.coin}`
+      : `dex:${source.networkId}:${source.token}`
+    : ""
+
+  // `onStats` is usually an inline arrow; holding it in a ref keeps it out of
+  // the effect's deps so a parent re-render can't restart the poll.
+  const onStatsRef = React.useRef(onStats)
+  React.useEffect(() => {
+    onStatsRef.current = onStats
+  })
 
   // Create the chart once; theme-neutral colours so light and dark both work.
   React.useEffect(() => {
@@ -71,25 +173,53 @@ export function CandleChart({ coin, className }: { coin: string | null; classNam
     chartRef.current = chart
     seriesRef.current = series
     volumeRef.current = volume
+
+    // The chart's own `autoSize` handles resizing; this observer exists only
+    // to notice the moment the pane first HAS a width.
+    const observer = new ResizeObserver(() => settleFit())
+    observer.observe(el)
+
     return () => {
+      observer.disconnect()
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
       volumeRef.current = null
     }
-  }, [])
+  }, [settleFit])
 
-  // Load + poll candles for the active coin/interval.
+  // Load + poll candles for the active source/interval.
   React.useEffect(() => {
-    if (!coin || !seriesRef.current) return
+    if (!source || !seriesRef.current) return
+    const controller = new AbortController()
     let cancelled = false
     let first = true
+    setState("loading")
 
     const load = async () => {
       try {
-        const candles = await fetchHlCandles(coin, interval)
+        const { candles, stats } = await loadCandles(source, interval, controller.signal)
         if (cancelled || !seriesRef.current) return
-        setEmpty(candles.length === 0)
+        onStatsRef.current?.(stats)
+        if (candles.length === 0) {
+          // Only claim "no data" on the FIRST answer. A later empty response
+          // is an upstream wobble, and blanking a chart the user is reading
+          // is worse than leaving the last bars up.
+          if (first) {
+            seriesRef.current.setData([])
+            volumeRef.current?.setData([])
+            setState("empty")
+          }
+          return
+        }
+        // Sized from the data, not the source: the same series can be BTC or a
+        // token nine decimals below a cent.
+        seriesRef.current.applyOptions({
+          priceFormat: {
+            type: "price",
+            ...priceFormatFor(candles[candles.length - 1].close),
+          },
+        })
         seriesRef.current.setData(
           candles.map((c) => ({
             time: c.time as UTCTimestamp,
@@ -103,43 +233,65 @@ export function CandleChart({ coin, className }: { coin: string | null; classNam
           candles.map((c) => ({
             time: c.time as UTCTimestamp,
             value: c.volume,
-            color: c.close >= c.open ? "rgba(16, 185, 129, 0.35)" : "rgba(239, 68, 68, 0.35)",
+            color:
+              c.close >= c.open ? "rgba(16, 185, 129, 0.35)" : "rgba(239, 68, 68, 0.35)",
           })),
         )
+        setState("ready")
         if (first) {
-          chartRef.current?.timeScale().fitContent()
           first = false
+          fitOwedRef.current = true
+          settleFit()
         }
       } catch {
-        // transient HL hiccup — keep the last data on screen
+        // Transient — keep whatever is already drawn.
+        if (first) setState("empty")
       }
     }
 
-    load()
-    const id = setInterval(load, POLL_MS)
+    void load()
+    const id = setInterval(() => void load(), POLL_MS)
     return () => {
       cancelled = true
+      controller.abort()
       clearInterval(id)
     }
-  }, [coin, interval])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceKey, interval, settleFit])
 
   return (
-    <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`}>
+    <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`}>
       <div className="flex items-center gap-0.5 px-2 pt-2">
         {INTERVALS.map((i) => (
           <button
             key={i}
             onClick={() => setIntervalKey(i)}
+            data-vivid-target={`chart-interval-${i}`}
+            data-vivid-label={`Show the ${i} candle interval`}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-              interval === i ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+              interval === i
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
             }`}
           >
             {i}
           </button>
         ))}
-        {empty && <span className="ml-2 text-xs text-muted-foreground">No candle data for this market.</span>}
       </div>
       <div ref={containerRef} className="min-h-0 flex-1" />
+
+      {state !== "ready" && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          {state === "loading" ? (
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          ) : (
+            <p className="max-w-xs px-6 text-center text-xs leading-relaxed text-muted-foreground">
+              No price history for this token yet — it isn&apos;t in an indexed
+              pool. You can still trade it.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

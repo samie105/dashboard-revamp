@@ -46,6 +46,7 @@ import {
   buildSpotOrderPlanFromTokenAmount,
   sizesLikeUsd,
   spentTokenSymbol,
+  baseTokenOf,
 } from "@/lib/crypto-backend/spot-order"
 import {
   signHyperliquidIntent,
@@ -64,7 +65,7 @@ import {
   type HlOrderBook,
   type Hl24hStats,
 } from "@/lib/hl-public"
-import { CandleChart } from "@/components/trade/candle-chart"
+import { CandleChart, type ChartSource, type ChartStats } from "@/components/trade/candle-chart"
 import { OrderBook } from "@/components/trade/order-book"
 import { PositionsPanel } from "@/components/trade/positions-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
@@ -462,6 +463,29 @@ export function TradeClient() {
     setAmountUnit("usd")
   }, [selection, market])
 
+  /**
+   * Where this market's candles come from. Perps stay on Hyperliquid, which
+   * is authoritative for its own venue; spot charts the base token by contract
+   * on the row's chain, which is the only key that identifies it.
+   */
+  const chartSource = React.useMemo<ChartSource | null>(() => {
+    if (!current) return null
+    if (market === "futures") return { kind: "hyperliquid", coin: current.symbol }
+    if (!usingModern) return { kind: "hyperliquid", coin: (current as { coinName: string }).coinName }
+    const networkId = "networkId" in current ? current.networkId : undefined
+    const token = baseTokenOf(current as never)
+    return networkId && token ? { kind: "dex", networkId, token } : null
+  }, [current, market, usingModern])
+
+  /* The market strip's 24h figures. Hyperliquid rows fill these from its own
+     stats endpoint; spot rows had nothing behind them and read "—" forever,
+     so they now take the pool's own 24h numbers, reported by the same request
+     that draws the chart. */
+  const [dexStats, setDexStats] = React.useState<ChartStats | null>(null)
+  React.useEffect(() => {
+    setDexStats(null)
+  }, [selection])
+
   // Order book — futures use the bare symbol; spot uses the coinName.
   const bookCoin = React.useMemo(() => {
     if (!current || (usingModern && market === "spot")) return null
@@ -514,7 +538,10 @@ export function TradeClient() {
     }
   }, [bookCoin])
 
-  const price = book?.midPrice ?? current?.price ?? 0
+  /* Spot has no order book, so the pool's own last price — refreshed with the
+     chart — is the freshest figure available; the registry's `price` is a
+     periodic snapshot and lags it. */
+  const price = book?.midPrice ?? dexStats?.price ?? current?.price ?? 0
   const amt = parseFloat(amountUsd) || 0
 
   // TP/SL sanity — triggers are validated against the expected entry price
@@ -1031,7 +1058,15 @@ export function TradeClient() {
         ? (openPosition?.notionalUsd ?? 0)
         : (balances?.perpsWithdrawableUsdc ?? 0) * leverage
 
-  const changeUp = (stats?.changePct ?? 0) >= 0
+  /* One set of 24h figures from whichever source knows this market. High and
+     low stay null on a DEX row — the pool reports change and volume but not a
+     range, and inventing one from the visible window would label whatever the
+     chart happens to show "24h". */
+  const changePct24h = stats?.changePct ?? dexStats?.changePct24h ?? null
+  const volume24h = stats?.quoteVolume ?? dexStats?.volume24h ?? null
+  const high24h = stats?.high ?? null
+  const low24h = stats?.low ?? null
+  const changeUp = (changePct24h ?? 0) >= 0
 
   /* ── Pair picker dropdown ─────────────────────────────────────────────── */
   // Same MarketPicker as the rail, in its compact shape: on the narrow
@@ -1832,19 +1867,17 @@ export function TradeClient() {
           <span
             className={`shrink-0 text-sm font-semibold tabular-nums ${changeUp ? "text-credit" : "text-debit"}`}
           >
-            {stats
-              ? `${changeUp ? "+" : ""}${stats.changePct.toFixed(2)}%`
+            {changePct24h !== null
+              ? `${changeUp ? "+" : ""}${changePct24h.toFixed(2)}%`
               : "—"}
           </span>
-          <Stat
-            label="24h High"
-            value={stats ? `$${fmtPx(stats.high)}` : "—"}
-          />
-          <Stat label="24h Low" value={stats ? `$${fmtPx(stats.low)}` : "—"} />
-          <Stat
-            label="24h Volume"
-            value={stats ? fmtCompact(stats.quoteVolume) : "—"}
-          />
+          {/* A figure we don't have is left out, not printed as an em-dash in
+              a column that never fills. */}
+          {high24h !== null && <Stat label="24h High" value={`$${fmtPx(high24h)}`} />}
+          {low24h !== null && <Stat label="24h Low" value={`$${fmtPx(low24h)}`} />}
+          {volume24h !== null && (
+            <Stat label="24h Volume" value={fmtCompact(volume24h)} />
+          )}
         </div>
 
         {/* Balances + money doors */}
@@ -1951,16 +1984,14 @@ export function TradeClient() {
                   Try again
                 </button>
               </div>
-            ) : !bookCoin ? (
+            ) : !chartSource ? (
               <div className="flex h-full items-center justify-center">
                 <p className="max-w-sm px-6 text-center text-xs leading-relaxed text-muted-foreground">
-                  {usingModern && market === "spot"
-                    ? "Spot discovery uses Worldstreet’s broader spot market feed. The trading account here handles perpetual futures only."
-                    : "Select a market to load its chart."}
+                  Select a market to load its chart.
                 </p>
               </div>
             ) : (
-              <CandleChart coin={bookCoin} />
+              <CandleChart source={chartSource} onStats={setDexStats} />
             )}
           </div>
           <PositionsPanel
