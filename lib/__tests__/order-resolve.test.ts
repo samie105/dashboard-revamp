@@ -15,6 +15,7 @@ function market(over: Partial<RegistryRow> & { symbol: string; address: string }
     quote: "USDC",
     price: 0,
     quoteAddress: USDC,
+    icon: null,
     baseDecimals: 6,
     quoteDecimals: 6,
     ...over,

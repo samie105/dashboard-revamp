@@ -80,6 +80,8 @@ function shortAddress(address: string | null): string {
 export type ResolvedOrder = {
   order: SpotOrder
   symbol: string
+  /** The market's icon, where the registry carries one. */
+  icon: string | null
   side: "buy" | "sell" | null
   /** Amount received, at the received token's own stated precision. */
   size: number | null
@@ -107,20 +109,21 @@ export function resolveOrder(order: SpotOrder, registry: SpotRegistry): Resolved
   const side: "buy" | "sell" | null = bought ? "buy" : sold ? "sell" : null
 
   const symbol = market?.symbol ?? shortAddress(order.buyToken)
+  const icon = market?.icon ?? null
   // Precision as the REGISTRY states it. A guessed exponent misstates an order
   // by a factor of a billion, so an unstated one leaves the cell blank.
   const decimals = bought ? market?.baseDecimals : market?.quoteDecimals
   const unit = (bought ? market?.symbol : market?.quote) ?? ""
 
   if (!market || decimals === undefined || !order.amount) {
-    return { order, symbol, side, size: null, unit, valueUsd: null }
+    return { order, symbol, icon, side, size: null, unit, valueUsd: null }
   }
 
   const size = Number(formatCryptoAmount(order.amount, decimals, 9))
   // A sell's proceeds are already dollars — every quote we trade against is a
   // dollar stablecoin. A buy's are priced from the live registry.
   const valueUsd = bought ? (market.price > 0 ? size * market.price : null) : size
-  return { order, symbol, side, size, unit, valueUsd }
+  return { order, symbol, icon, side, size, unit, valueUsd }
 }
 
 function sizeText(row: ResolvedOrder): string {
@@ -153,7 +156,7 @@ function OrderDetailModal({ row, onClose }: { row: ResolvedOrder | null; onClose
         {row && order && (
           <>
             <ResponsiveModalHeader className="items-center gap-2 pt-2 text-center">
-              <CoinAvatar symbol={row.symbol} size="lg" />
+              <CoinAvatar symbol={row.symbol} src={row.icon} size="lg" />
               <ResponsiveModalTitle className="text-[17px] font-semibold">
                 {row.side === "sell" ? "Sold" : "Bought"} {row.symbol}
               </ResponsiveModalTitle>
@@ -268,8 +271,17 @@ export function OrdersPanel({ className }: { className?: string }) {
                     </td>
                     <td className={TD}>
                       <span className="flex min-w-0 items-center gap-1.5">
-                        <CoinAvatar symbol={row.symbol} size="sm" />
-                        <span className="truncate font-semibold">{row.symbol}</span>
+                        <CoinAvatar symbol={row.symbol} src={row.icon} size="sm" />
+                        <span
+                          className="truncate font-semibold"
+                          // A token outside the registry keeps its address as
+                          // its name; the full one is worth having on hover.
+                          title={row.icon === null && row.side === null && row.order.buyToken
+                            ? row.order.buyToken
+                            : undefined}
+                        >
+                          {row.symbol}
+                        </span>
                         {/* Below lg the side rides with the market instead of
                             taking a column of its own. */}
                         {row.side && (

@@ -28,6 +28,8 @@ export type RegistryRow = {
   price: number
   /** The base token's address on its chain, where the registry states one. */
   address: string | null
+  /** The market's own icon, so an order row shows the token, not initials. */
+  icon: string | null
   /** The quote token's address — the other side of a sell. */
   quoteAddress: string | null
   /* Precision as the REGISTRY states it. Undefined means the backend didn't
@@ -84,6 +86,7 @@ export function useSpotRegistry(enabled = true): SpotRegistry {
               quote: (m.quote ?? "USDC").toUpperCase(),
               price: m.price ?? 0,
               address: m.buyToken ?? m.outputMint ?? null,
+              icon: m.icon ?? null,
               quoteAddress: m.sellToken ?? m.inputMint ?? null,
               ...(typeof m.baseDecimals === "number" ? { baseDecimals: m.baseDecimals } : {}),
               ...(typeof m.quoteDecimals === "number" ? { quoteDecimals: m.quoteDecimals } : {}),
