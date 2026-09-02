@@ -21,9 +21,43 @@
  */
 
 import { NextResponse } from "next/server"
-import { normalizeOhlcv, pickBestPool, stats24hFrom, num, type Candle } from "@/lib/chart-ohlcv"
+import {
+  normalizeOhlcv,
+  pickBestPool,
+  stats24hFrom,
+  bucketPrices,
+  INTERVAL_SECONDS,
+  num,
+  type Candle,
+} from "@/lib/chart-ohlcv"
 
 const GECKO = "https://api.geckoterminal.com/api/v2"
+const COINGECKO = "https://api.coingecko.com/api/v3"
+
+/**
+ * How many days of samples to ask CoinGecko for, per interval.
+ *
+ * Its free tier picks the sample spacing from the window: one day gives
+ * 5-minutely points, up to ninety gives hourly, beyond that daily. These are
+ * the smallest windows whose samples can still fill the requested bar — ask
+ * for 90 days to draw 5-minute candles and you get one point per hour and a
+ * chart of flat steps.
+ *
+ * `1m` is absent on purpose: the finest sample available is five minutes, and
+ * no window makes a one-minute bar out of it. The response says so rather than
+ * drawing something that looks like minute data.
+ */
+const COINGECKO_DAYS: Record<string, number> = {
+  "5m": 1,
+  "15m": 1,
+  "1h": 90,
+  "4h": 90,
+  "1d": 365,
+}
+
+/** Every interval the pool source can serve; it returns true OHLC per bar. */
+const ALL_INTERVALS = ["1m", "5m", "15m", "1h", "4h", "1d"]
+const COINGECKO_INTERVALS = Object.keys(COINGECKO_DAYS)
 
 /** Our network ids → GeckoTerminal's own chain slugs. */
 const CHAIN_SLUG: Record<string, string> = {
@@ -49,9 +83,22 @@ const TIMEFRAME: Record<string, { timeframe: string; aggregate: number }> = {
 
 type CacheEntry<T> = { value: T; expires: number }
 const poolCache = new Map<string, CacheEntry<string | null>>()
-const candleCache = new Map<string, CacheEntry<{ candles: Candle[]; stats: Stats | null }>>()
+const candleCache = new Map<string, CacheEntry<Payload>>()
 
 type Stats = { price: number | null; changePct24h: number | null; volume24h: number | null }
+type Payload = {
+  candles: Candle[]
+  stats: Stats | null
+  /** Which upstream answered — the chart says so, and it changes what bars mean. */
+  source: "geckoterminal" | "coingecko" | null
+  /** Intervals this token can actually be drawn at, given its source. */
+  intervals: string[]
+}
+
+/* One upstream round-trip per key, however many viewers ask at once. Without
+   this, a market everyone opens at the same moment sends one request per tab
+   and earns a rate limit for all of them. */
+const inflight = new Map<string, Promise<Payload>>()
 
 function cached<T>(store: Map<string, CacheEntry<T>>, key: string): T | undefined {
   const hit = store.get(key)
@@ -90,17 +137,55 @@ async function findPool(slug: string, token: string, signal: AbortSignal): Promi
     { headers: { accept: "application/json" }, signal },
   )
   if (!response.ok) {
-    // Cache the miss briefly too: an unlisted token would otherwise re-ask on
-    // every poll, for every viewer, forever.
-    put(poolCache, key, null, 60_000)
+    // Cache the miss for a while: most of the catalogue has no pool, and
+    // without this every poll from every viewer re-asks — which is how a
+    // shared rate limit gets spent on questions already answered.
+    put(poolCache, key, null, 10 * 60_000)
     return null
   }
   const body = (await response.json()) as {
     data?: { id?: string; attributes?: { address?: string; reserve_in_usd?: string } }[]
   }
   const pool = pickBestPool(body.data)
-  put(poolCache, key, pool, pool ? 60 * 60_000 : 60_000)
+  put(poolCache, key, pool, pool ? 60 * 60_000 : 10 * 60_000)
   return pool
+}
+
+/**
+ * The fallback source: CoinGecko, by the coin id the market registry already
+ * stores as `chartSymbol`.
+ *
+ * This is not a second opinion, it is the ONLY source for most of the
+ * catalogue. The registry admits a token when CoinGecko has a chart for it —
+ * that is what `chartAvailable` tests — so a staked, wrapped or bridged token
+ * has a price here and no DEX pool anywhere. Charting only pools left those
+ * markets blank while quoting a price beside them, which is the contradiction
+ * this repairs.
+ */
+async function fromCoingecko(
+  coinId: string,
+  interval: string,
+  signal: AbortSignal,
+): Promise<Payload | null> {
+  const days = COINGECKO_DAYS[interval] ?? COINGECKO_DAYS["1h"]
+  const url = new URL(`${COINGECKO}/coins/${encodeURIComponent(coinId)}/market_chart`)
+  url.searchParams.set("vs_currency", "usd")
+  url.searchParams.set("days", String(days))
+
+  const response = await fetch(url, { headers: { accept: "application/json" }, signal })
+  if (!response.ok) return null
+  const body = (await response.json()) as { prices?: [number, number][] }
+  const seconds = INTERVAL_SECONDS[interval] ?? INTERVAL_SECONDS["1h"]
+  const candles = bucketPrices(body.prices, seconds)
+  if (candles.length === 0) return null
+
+  return {
+    candles,
+    // Volume is not in a price series, so it is absent rather than invented.
+    stats: { ...stats24hFrom(candles), volume24h: null },
+    source: "coingecko",
+    intervals: COINGECKO_INTERVALS,
+  }
 }
 
 export async function GET(request: Request) {
@@ -108,78 +193,135 @@ export async function GET(request: Request) {
   const networkId = params.get("network") ?? ""
   const token = params.get("token") ?? ""
   const interval = params.get("interval") ?? "1h"
+  /** The registry's `chartSymbol` — a CoinGecko coin id, when it has one. */
+  const coinId = params.get("cg") ?? ""
 
   const slug = CHAIN_SLUG[networkId]
-  const timeframe = TIMEFRAME[interval]
-  if (!slug || !token || !timeframe) {
+  if ((!slug && !coinId) || (!token && !coinId) || !INTERVAL_SECONDS[interval]) {
     return NextResponse.json(
       { error: "Unsupported network, token or interval" },
       { status: 400 },
     )
   }
 
-  const key = `${slug}:${token.toLowerCase()}:${interval}`
+  const key = `${slug}:${token.toLowerCase()}:${coinId}:${interval}`
   const hit = cached(candleCache, key)
   if (hit) return NextResponse.json(hit)
 
-  // Intraday bars move; a daily bar does not. One TTL for both would either
-  // serve a stale 1m chart or hammer the upstream for a 1d one.
-  const ttl = timeframe.timeframe === "day" ? 5 * 60_000 : 30_000
-  const controller = AbortSignal.timeout(12_000)
+  const running = inflight.get(key)
+  if (running) return NextResponse.json(await running)
 
-  try {
-    const pool = await findPool(slug, token, controller)
-    if (!pool) {
-      const empty = { candles: [] as Candle[], stats: null }
-      put(candleCache, key, empty, 60_000)
-      return NextResponse.json(empty)
+  const work = resolveChart(slug, token, coinId, interval)
+    .then((payload) => {
+      // Intraday bars move; a daily bar does not. A source that answered with
+      // nothing is cached briefly too, so an unlisted token is not re-asked on
+      // every poll by every viewer.
+      const ttl =
+        payload.candles.length === 0
+          ? 5 * 60_000
+          : interval === "1d"
+            ? 5 * 60_000
+            : 45_000
+      put(candleCache, key, payload, ttl)
+      return payload
+    })
+    .finally(() => inflight.delete(key))
+
+  inflight.set(key, work)
+  return NextResponse.json(await work)
+}
+
+/**
+ * Pools first, CoinGecko second.
+ *
+ * A pool is the better answer where one exists: real per-bar OHLC, real
+ * volume, every interval. But most of the catalogue has no pool on the chain
+ * it is listed on, and for those the coin id is the only way to draw anything
+ * at all.
+ */
+async function resolveChart(
+  slug: string | undefined,
+  token: string,
+  coinId: string,
+  interval: string,
+): Promise<Payload> {
+  const empty: Payload = { candles: [], stats: null, source: null, intervals: ALL_INTERVALS }
+  const signal = AbortSignal.timeout(12_000)
+  const timeframe = TIMEFRAME[interval]
+
+  if (slug && token && timeframe) {
+    try {
+      const pooled = await fromPool(slug, token, interval, timeframe, signal)
+      if (pooled) return pooled
+    } catch {
+      // Fall through — an upstream wobble should reach for the other source,
+      // not blank a chart that has one.
     }
+  }
 
-    const url = new URL(`${GECKO}/networks/${slug}/pools/${pool}/ohlcv/${timeframe.timeframe}`)
-    url.searchParams.set("aggregate", String(timeframe.aggregate))
-    url.searchParams.set("limit", "1000")
-    url.searchParams.set("currency", "usd")
-    // Price OUR token, not the pool's base. In a TOKEN/SOL pool the base is
-    // the token, but in a USDC/TOKEN pool it is not, and charting the base
-    // blindly would draw the price upside down.
-    url.searchParams.set("token", token)
-
-    const [ohlcvResponse, poolResponse] = await Promise.all([
-      fetch(url, { headers: { accept: "application/json" }, signal: controller }),
-      fetch(`${GECKO}/networks/${slug}/pools/${pool}`, {
-        headers: { accept: "application/json" },
-        signal: controller,
-      }),
-    ])
-
-    if (!ohlcvResponse.ok) {
-      return NextResponse.json({ candles: [], stats: null })
+  if (coinId) {
+    try {
+      const listed = await fromCoingecko(coinId, interval, signal)
+      if (listed) return listed
+    } catch {
+      /* nothing left to try */
     }
+  }
 
-    const body = (await ohlcvResponse.json()) as {
-      data?: { attributes?: { ohlcv_list?: (number | string)[][] } }
+  // Nothing could draw this token. Say which intervals a source COULD have
+  // served so the chart does not disable every button on a transient miss.
+  return { ...empty, intervals: coinId ? COINGECKO_INTERVALS : ALL_INTERVALS }
+}
+
+/** The on-chain source: OHLCV from the deepest pool holding this token. */
+async function fromPool(
+  slug: string,
+  token: string,
+  interval: string,
+  timeframe: { timeframe: string; aggregate: number },
+  signal: AbortSignal,
+): Promise<Payload | null> {
+  const pool = await findPool(slug, token, signal)
+  if (!pool) return null
+
+  const url = new URL(`${GECKO}/networks/${slug}/pools/${pool}/ohlcv/${timeframe.timeframe}`)
+  url.searchParams.set("aggregate", String(timeframe.aggregate))
+  url.searchParams.set("limit", "1000")
+  url.searchParams.set("currency", "usd")
+  // Price OUR token, not the pool's base. In a TOKEN/SOL pool the base is the
+  // token, but in a USDC/TOKEN pool it is not, and charting the base blindly
+  // would draw the price upside down.
+  url.searchParams.set("token", token)
+
+  const [ohlcvResponse, poolResponse] = await Promise.all([
+    fetch(url, { headers: { accept: "application/json" }, signal }),
+    fetch(`${GECKO}/networks/${slug}/pools/${pool}`, {
+      headers: { accept: "application/json" },
+      signal,
+    }),
+  ])
+  if (!ohlcvResponse.ok) return null
+
+  const body = (await ohlcvResponse.json()) as {
+    data?: { attributes?: { ohlcv_list?: (number | string)[][] } }
+  }
+  const candles: Candle[] = normalizeOhlcv(body.data?.attributes?.ohlcv_list)
+  if (candles.length === 0) return null
+
+  // Price and change come from the series, which is priced in OUR token.
+  // Volume is a property of the pool and reads the same from either side.
+  let volume24h: number | null = null
+  if (poolResponse.ok) {
+    const poolBody = (await poolResponse.json()) as {
+      data?: { attributes?: { volume_usd?: Record<string, string> } }
     }
-    const candles: Candle[] = normalizeOhlcv(body.data?.attributes?.ohlcv_list)
+    volume24h = num(poolBody.data?.attributes?.volume_usd?.h24)
+  }
 
-    // Price and change come from the series, which is priced in OUR token.
-    // Volume is a property of the pool and is the same figure from either
-    // side, so that one can be read off the pool directly.
-    const derived = stats24hFrom(candles)
-    let volume24h: number | null = null
-    if (poolResponse.ok) {
-      const poolBody = (await poolResponse.json()) as {
-        data?: { attributes?: { volume_usd?: Record<string, string> } }
-      }
-      volume24h = num(poolBody.data?.attributes?.volume_usd?.h24)
-    }
-    const stats: Stats = { ...derived, volume24h }
-
-    const payload = { candles, stats }
-    if (candles.length > 0) put(candleCache, key, payload, ttl)
-    return NextResponse.json(payload)
-  } catch {
-    // A timeout or upstream wobble must not blank a chart that is already on
-    // screen: the client keeps its last data when this comes back empty.
-    return NextResponse.json({ candles: [], stats: null })
+  return {
+    candles,
+    stats: { ...stats24hFrom(candles), volume24h },
+    source: "geckoterminal",
+    intervals: ALL_INTERVALS,
   }
 }

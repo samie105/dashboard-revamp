@@ -116,3 +116,53 @@ export function stats24hFrom(candles: readonly Candle[]): {
   if (!base) return { price: last.close, changePct24h: null }
   return { price: last.close, changePct24h: ((last.close - base) / base) * 100 }
 }
+
+/** Bar length in seconds for each interval the chart offers. */
+export const INTERVAL_SECONDS: Record<string, number> = {
+  "1m": 60,
+  "5m": 5 * 60,
+  "15m": 15 * 60,
+  "1h": 60 * 60,
+  "4h": 4 * 60 * 60,
+  "1d": 24 * 60 * 60,
+}
+
+/**
+ * Price samples → candles, bucketed to an exact interval.
+ *
+ * The pool source serves real OHLC. The fallback source serves a PRICE SERIES
+ * — a sampled line, not trades — so bars are derived here: open is the first
+ * sample in the bucket, close the last, high and low the extremes of what was
+ * sampled. That is an honest summary of the samples and nothing more, which is
+ * why a chart drawn this way reports its source rather than passing itself off
+ * as tick data.
+ *
+ * Volume is not derivable from a price series and is left at zero rather than
+ * invented; the histogram simply doesn't draw.
+ */
+export function bucketPrices(
+  points: readonly (readonly [number, number])[] | undefined,
+  intervalSeconds: number,
+): Candle[] {
+  if (!points?.length || intervalSeconds <= 0) return []
+  const buckets = new Map<number, Candle>()
+
+  for (const point of points) {
+    const ms = Number(point?.[0])
+    const price = Number(point?.[1])
+    if (!Number.isFinite(ms) || !Number.isFinite(price)) continue
+    const seconds = Math.floor(ms / 1000)
+    const time = Math.floor(seconds / intervalSeconds) * intervalSeconds
+    const existing = buckets.get(time)
+    if (!existing) {
+      buckets.set(time, { time, open: price, high: price, low: price, close: price, volume: 0 })
+      continue
+    }
+    // Samples arrive in order, so the last one seen closes the bar.
+    existing.high = Math.max(existing.high, price)
+    existing.low = Math.min(existing.low, price)
+    existing.close = price
+  }
+
+  return [...buckets.values()].sort((a, b) => a.time - b.time)
+}

@@ -33,13 +33,21 @@ const POLL_MS = 15_000
 export type ChartSource =
   /** A perpetual contract — Hyperliquid is authoritative for its own venue. */
   | { kind: "hyperliquid"; coin: string }
-  /** A spot market, identified by the token's contract on its chain. */
-  | { kind: "dex"; networkId: string; token: string }
+  /** A spot market: its contract on its chain, plus the registry's CoinGecko
+   *  id, which is the only source for the many tokens with no pool. */
+  | { kind: "dex"; networkId: string; token: string; coingeckoId?: string | null }
 
 export type ChartStats = {
   price: number | null
   changePct24h: number | null
   volume24h: number | null
+}
+
+type ChartPayload = {
+  candles: Candle[]
+  stats: ChartStats | null
+  source: "geckoterminal" | "coingecko" | null
+  intervals?: string[]
 }
 
 type Candle = {
@@ -70,18 +78,19 @@ async function loadCandles(
   source: ChartSource,
   interval: HlCandleInterval,
   signal: AbortSignal,
-): Promise<{ candles: Candle[]; stats: ChartStats | null }> {
+): Promise<ChartPayload> {
   if (source.kind === "hyperliquid") {
     const candles = await fetchHlCandles(source.coin, interval)
-    return { candles, stats: null }
+    return { candles, stats: null, source: null }
   }
   const url = new URL("/api/charts/ohlcv", window.location.origin)
   url.searchParams.set("network", source.networkId)
   url.searchParams.set("token", source.token)
   url.searchParams.set("interval", interval)
+  if (source.coingeckoId) url.searchParams.set("cg", source.coingeckoId)
   const response = await fetch(url, { signal })
   if (!response.ok) throw new Error(`Chart source returned ${response.status}`)
-  return (await response.json()) as { candles: Candle[]; stats: ChartStats | null }
+  return (await response.json()) as ChartPayload
 }
 
 export function CandleChart({
@@ -100,6 +109,11 @@ export function CandleChart({
   const volumeRef = React.useRef<ISeriesApi<"Histogram"> | null>(null)
   const [interval, setIntervalKey] = React.useState<HlCandleInterval>("1h")
   const [state, setState] = React.useState<"loading" | "ready" | "empty">("loading")
+  /* Which intervals THIS token can be drawn at, and by whom. A token with no
+     pool is charted from a price series whose finest sample is five minutes,
+     so a 1m button there would be a control that returns nothing. */
+  const [available, setAvailable] = React.useState<string[]>(INTERVALS)
+  const [origin, setOrigin] = React.useState<"geckoterminal" | "coingecko" | null>(null)
   /* A fit that is owed but cannot be performed yet.
      The first candles routinely arrive while the pane still measures zero
      wide — `fitContent` against that computes a bar spacing for a chart of no
@@ -188,6 +202,14 @@ export function CandleChart({
     }
   }, [settleFit])
 
+  /* If the source cannot serve the selected interval, move to the nearest one
+     it can rather than leaving the pane empty under a highlighted button. */
+  React.useEffect(() => {
+    if (available.length > 0 && !available.includes(interval)) {
+      setIntervalKey(available.includes("1h") ? "1h" : (available[0] as HlCandleInterval))
+    }
+  }, [available, interval])
+
   // Load + poll candles for the active source/interval.
   React.useEffect(() => {
     if (!source || !seriesRef.current) return
@@ -195,12 +217,16 @@ export function CandleChart({
     let cancelled = false
     let first = true
     setState("loading")
+    setAvailable(INTERVALS)
 
     const load = async () => {
       try {
-        const { candles, stats } = await loadCandles(source, interval, controller.signal)
+        const payload = await loadCandles(source, interval, controller.signal)
+        const { candles, stats } = payload
         if (cancelled || !seriesRef.current) return
         onStatsRef.current?.(stats)
+        setOrigin(payload.source)
+        if (payload.intervals?.length) setAvailable(payload.intervals)
         if (candles.length === 0) {
           // Only claim "no data" on the FIRST answer. A later empty response
           // is an upstream wobble, and blanking a chart the user is reading
@@ -262,21 +288,35 @@ export function CandleChart({
   return (
     <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`}>
       <div className="flex items-center gap-0.5 px-2 pt-2">
-        {INTERVALS.map((i) => (
-          <button
-            key={i}
-            onClick={() => setIntervalKey(i)}
-            data-vivid-target={`chart-interval-${i}`}
-            data-vivid-label={`Show the ${i} candle interval`}
-            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-              interval === i
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-            }`}
-          >
-            {i}
-          </button>
-        ))}
+        {INTERVALS.map((i) => {
+          const usable = available.includes(i)
+          return (
+            <button
+              key={i}
+              onClick={() => setIntervalKey(i)}
+              disabled={!usable}
+              title={usable ? undefined : "Not available for this token's price source"}
+              data-vivid-target={`chart-interval-${i}`}
+              data-vivid-label={`Show the ${i} candle interval`}
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                interval === i
+                  ? "bg-accent text-foreground"
+                  : usable
+                    ? "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                    : "cursor-not-allowed text-subtle/40"
+              }`}
+            >
+              {i}
+            </button>
+          )
+        })}
+        {/* Say where the bars came from. A price series is not trade data, and
+            a chart that looks identical either way should admit which it is. */}
+        {origin === "coingecko" && (
+          <span className="ml-auto pr-2 text-[10px] font-medium text-subtle">
+            CoinGecko · price history
+          </span>
+        )}
       </div>
       <div ref={containerRef} className="min-h-0 flex-1" />
 

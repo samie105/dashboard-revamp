@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest"
-import { pickBestPool, normalizeOhlcv, stats24hFrom } from "@/lib/chart-ohlcv"
+import {
+  pickBestPool,
+  normalizeOhlcv,
+  stats24hFrom,
+  bucketPrices,
+  INTERVAL_SECONDS,
+} from "@/lib/chart-ohlcv"
 
 const HOUR = 3600
 
@@ -106,5 +112,60 @@ describe("stats24hFrom", () => {
 
   it("says nothing at all for an empty series", () => {
     expect(stats24hFrom([])).toEqual({ price: null, changePct24h: null })
+  })
+})
+
+describe("bucketPrices", () => {
+  /* The fallback source serves a sampled price line, not trades. These bars
+     are a summary of the samples — which is why the chart names the source. */
+  const at = (minutes: number, price: number): [number, number] => [minutes * 60_000, price]
+
+  it("opens on the first sample of a bar and closes on the last", () => {
+    const candles = bucketPrices(
+      [at(0, 10), at(1, 12), at(2, 8), at(3, 11)],
+      INTERVAL_SECONDS["1h"],
+    )
+    expect(candles).toHaveLength(1)
+    expect(candles[0]).toMatchObject({ open: 10, high: 12, low: 8, close: 11 })
+  })
+
+  it("splits samples into the interval actually asked for", () => {
+    const candles = bucketPrices(
+      [at(0, 1), at(4, 2), at(5, 3), at(9, 4), at(10, 5)],
+      INTERVAL_SECONDS["5m"],
+    )
+    expect(candles.map((c) => c.close)).toEqual([2, 4, 5])
+    expect(candles.map((c) => c.time)).toEqual([0, 300, 600])
+  })
+
+  it("aligns bars to the interval, not to the first sample", () => {
+    // A sample at 07:23 belongs to the 07:00 bar, not to a bar starting 07:23.
+    const candles = bucketPrices([at(443, 5)], INTERVAL_SECONDS["1h"])
+    expect(candles[0].time % INTERVAL_SECONDS["1h"]).toBe(0)
+  })
+
+  it("leaves volume at zero — a price series has none to report", () => {
+    const candles = bucketPrices([at(0, 1), at(1, 2)], INTERVAL_SECONDS["15m"])
+    expect(candles.every((c) => c.volume === 0)).toBe(true)
+  })
+
+  it("returns bars in ascending time even from unordered samples", () => {
+    const candles = bucketPrices(
+      [at(120, 3), at(0, 1), at(60, 2)],
+      INTERVAL_SECONDS["1h"],
+    )
+    expect(candles.map((c) => c.time)).toEqual([0, 3600, 7200])
+  })
+
+  it("drops unparseable samples instead of charting NaN", () => {
+    const points = [at(0, 1), [NaN, 5], [60_000, Number.NaN]] as [number, number][]
+    const candles = bucketPrices(points, INTERVAL_SECONDS["1h"])
+    expect(candles).toHaveLength(1)
+    expect(candles[0].close).toBe(1)
+  })
+
+  it("says nothing for no samples", () => {
+    expect(bucketPrices([], 3600)).toEqual([])
+    expect(bucketPrices(undefined, 3600)).toEqual([])
   })
 })

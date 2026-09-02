@@ -485,7 +485,14 @@ export function TradeClient() {
     if (!usingModern) return { kind: "hyperliquid", coin: (current as { coinName: string }).coinName }
     const networkId = "networkId" in current ? current.networkId : undefined
     const token = baseTokenOf(current as never)
-    return networkId && token ? { kind: "dex", networkId, token } : null
+    /* `chartSymbol` is the registry's CoinGecko id. It is what admitted the
+       token to the catalogue in the first place, and for the many tokens with
+       no pool on their own chain it is the only thing that can draw one. */
+    const coingeckoId =
+      "chartSymbol" in current && current.chartSymbol ? String(current.chartSymbol) : null
+    return networkId && (token || coingeckoId)
+      ? { kind: "dex", networkId, token: token ?? "", coingeckoId }
+      : null
   }, [current, market, usingModern])
 
   /* The market strip's 24h figures. Hyperliquid rows fill these from its own
