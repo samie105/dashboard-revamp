@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation"
 import { useVividOptional } from "@worldstreet/vivid-voice"
 import gsap from "gsap"
 import { cn } from "@/lib/utils"
+import { prefetchSpotMarkets } from "@/lib/spot-markets"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Activity01Icon,
@@ -195,7 +196,12 @@ function NavRow({
   const ext = isExternal(item.url)
 
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem
+      // The cursor arriving on Trade is the earliest reliable sign the spot
+      // registry is about to be needed; warming it here is the difference
+      // between the market rail opening full and opening as skeletons.
+      onPointerEnter={item.url === "/trade" ? prefetchSpotMarkets : undefined}
+    >
       <SidebarMenuButton
         tooltip={collapsed ? item.name : item.description || item.name}
         isActive={isActive}

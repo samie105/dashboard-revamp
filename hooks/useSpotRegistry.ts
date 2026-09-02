@@ -17,7 +17,8 @@
  */
 
 import * as React from "react"
-import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { loadSpotMarkets } from "@/lib/spot-markets"
 import { chainLabel } from "@/lib/spot-market-search"
 
 export type RegistryRow = {
@@ -73,8 +74,7 @@ export function useSpotRegistry(enabled = true): SpotRegistry {
     if (!enabled || started.current || !isCryptoBackendEnabled) return
     started.current = true
     setLoading(true)
-    cryptoBackendClient
-      .getModernSpotMarkets()
+    loadSpotMarkets()
       .then((result) =>
         setRows(
           result.markets

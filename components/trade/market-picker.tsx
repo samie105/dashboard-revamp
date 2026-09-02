@@ -35,6 +35,12 @@ import {
 } from "@/lib/spot-market-search"
 import { useMarketPrefs } from "@/hooks/useMarketPrefs"
 
+/* The registry is 9,000+ rows. Mounting them all is a visible freeze on every
+   keystroke and every chain chip, for a list nobody scrolls past the first
+   screen of — so rows arrive a page at a time, extended by scrolling to the
+   end or by asking. */
+const PAGE_SIZE = 60
+
 function fmtPx(p: number) {
   return p.toLocaleString(undefined, { maximumFractionDigits: p < 1 ? 6 : 2 })
 }
@@ -138,7 +144,9 @@ export function MarketPicker({
 }) {
   const [search, setSearch] = React.useState("")
   const [chain, setChain] = React.useState<string>(ALL_CHAINS)
+  const [limit, setLimit] = React.useState(PAGE_SIZE)
   const { favorites, recents, toggleFavorite } = useMarketPrefs()
+  const listRef = React.useRef<HTMLDivElement>(null)
 
   const index = React.useMemo(() => buildSpotIndex(list), [list])
   const chains = React.useMemo(() => chainOptionsFor(list), [list])
@@ -153,6 +161,35 @@ export function MarketPicker({
     () => searchSpotMarkets(index, { query: search, chain, favorites }),
     [index, search, chain, favorites],
   )
+
+  // A new query or chain is a new list; showing page four of the old one is
+  // both wrong and a scroll position nobody asked for.
+  React.useEffect(() => {
+    setLimit(PAGE_SIZE)
+    listRef.current?.scrollTo({ top: 0 })
+  }, [search, chain])
+
+  const shown = React.useMemo(() => results.slice(0, limit), [results, limit])
+  const more = results.length - shown.length
+
+  /* Extend when the end of the list comes into view. The sentinel sits inside
+     the scroller, so this is the scroll position doing the asking rather than
+     a scroll handler firing on every pixel. */
+  const sentinelRef = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    const node = sentinelRef.current
+    if (!node || more <= 0) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setLimit((current) => current + PAGE_SIZE)
+        }
+      },
+      { root: listRef.current, rootMargin: "200px" },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [more])
 
   /* Recents are their own short section rather than more rows floated to the
      top: a pair you traded an hour ago is a different claim from a pair you
@@ -192,7 +229,7 @@ export function MarketPicker({
       <div className="shrink-0 px-3 pb-2 pt-3">
         {isRail && (
           <Eyebrow className="text-[10px]">
-            Markets{list.length > 0 && ` · ${results.length} of ${list.length}`}
+            Markets{list.length > 0 && ` · ${results.length.toLocaleString()} of ${list.length.toLocaleString()}`}
           </Eyebrow>
         )}
         <div className={cn("relative", isRail && "mt-2")}>
@@ -239,6 +276,7 @@ export function MarketPicker({
       </div>
 
       <div
+        ref={listRef}
         className={cn(
           "slim-scroll min-h-0 overflow-y-auto pb-2",
           isRail ? "flex-1" : "max-h-72",
@@ -276,7 +314,7 @@ export function MarketPicker({
               </>
             )}
             {!querying && pinnedCount > 0 && <SectionLabel>Pinned</SectionLabel>}
-            {results.map((m, i) => (
+            {shown.map((m, i) => (
               <React.Fragment key={marketRowKey(m)}>
                 {/* The heading appears once, where the pinned run ends. */}
                 {!querying && pinnedCount > 0 && i === pinnedCount && (
@@ -285,6 +323,23 @@ export function MarketPicker({
                 <MarketRow {...rowProps(m)} />
               </React.Fragment>
             ))}
+
+            {/* The end of the page. Scrolling here extends the list; the
+                button is the same action for anyone who cannot, or whose
+                browser withholds IntersectionObserver. */}
+            {more > 0 && (
+              <div ref={sentinelRef} className="px-3 py-3">
+                <button
+                  type="button"
+                  onClick={() => setLimit((current) => current + PAGE_SIZE)}
+                  data-vivid-target="markets-load-more"
+                  data-vivid-label="Load more markets"
+                  className="w-full rounded-lg bg-surface-sunken py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  Load {Math.min(more, PAGE_SIZE)} more · {more.toLocaleString()} left
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

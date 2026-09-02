@@ -10,6 +10,7 @@ import { IncomingCallProvider } from "@/components/community/incoming-call-provi
 import { MoneyFlowProvider } from "@/components/flows/money-flow-modal"
 import { SilkBackdrop } from "@/components/ui/silk-backdrop"
 import { LiquidGlassPointer } from "@/components/liquid-glass"
+import { prefetchSpotMarkets } from "@/lib/spot-markets"
 
 /** Routes that render full-bleed (no sidebar / top-nav / navbar). */
 const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
@@ -19,6 +20,22 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
   const isFullBleed = FULL_BLEED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
+
+  /* Warm the spot registry once the app has finished its own work. It is the
+     slowest thing /trade waits on — 9,000+ rows — and fetching it only when
+     that screen mounts is what makes the market rail open as skeletons. Idle
+     time is free, the cache is shared, and a failure here is silent because
+     nobody asked for it yet. */
+  React.useEffect(() => {
+    if (isAuthRoute) return
+    const idle = window.requestIdleCallback
+    if (typeof idle === "function") {
+      const handle = idle(() => prefetchSpotMarkets(), { timeout: 4000 })
+      return () => window.cancelIdleCallback?.(handle)
+    }
+    const timer = window.setTimeout(prefetchSpotMarkets, 1500)
+    return () => window.clearTimeout(timer)
+  }, [isAuthRoute])
 
 
   // Scroll-adaptive chrome: content moving beneath the nav pills firms

@@ -72,6 +72,7 @@ import { OrdersPanel } from "@/components/trade/orders-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
 import { MarketPicker } from "@/components/trade/market-picker"
 import { noteRecentMarket } from "@/hooks/useMarketPrefs"
+import { loadSpotMarkets } from "@/lib/spot-markets"
 import { nativeTokenFor } from "@/lib/native-token"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import {
@@ -143,6 +144,38 @@ type FuturesReview = {
   reduceOnly: boolean
   takeProfit: number | null
   stopLoss: number | null
+}
+
+/**
+ * Where the workspace opens when the URL doesn't say.
+ *
+ * `list[0]` is whatever the registry sorted first — on 9,000+ spot rows that
+ * is an arbitrary long-tail token, and landing there makes the whole screen
+ * look broken: a chart nobody indexes, a price nobody recognises. Spot opens
+ * on SOL/USDC on Solana, the deepest market we route; futures on BTC, its own
+ * venue's benchmark. The preference is by symbol AND chain, because the same
+ * ticker exists many times over.
+ */
+function defaultMarketOf(
+  list: readonly (HlSpotMarket | HlFuturesMarket)[],
+  market: Market,
+): HlSpotMarket | HlFuturesMarket | undefined {
+  if (market === "futures") return list.find((m) => m.symbol.toUpperCase() === "BTC")
+  const preferred: readonly [string, string | null][] = [
+    ["SOL", "solana-mainnet-beta"],
+    ["SOLANA", "solana-mainnet-beta"],
+    ["BTC", null],
+    ["ETH", null],
+  ]
+  for (const [symbol, networkId] of preferred) {
+    const hit = list.find(
+      (m) =>
+        m.symbol.toUpperCase() === symbol &&
+        (!networkId || ("networkId" in m && m.networkId === networkId)),
+    )
+    if (hit) return hit
+  }
+  return undefined
 }
 
 function fmtCompact(n: number) {
@@ -319,8 +352,7 @@ export function TradeClient() {
       // Spec §8: the registry IS the catalogue. Every field the order builder
       // needs — quote asset, token addresses, mints — is carried through
       // verbatim; nothing downstream may re-derive them from the symbol.
-      cryptoBackendClient
-        .getModernSpotMarkets()
+      loadSpotMarkets()
         .then((result) =>
           setMarkets({
             // Spot settles as an on-chain swap, so the only real floor is what
@@ -403,10 +435,10 @@ export function TradeClient() {
       (wanted
         ? list.find((m) => m.symbol.toUpperCase() === wanted)
         : undefined) ??
-      list.find((m) => m.symbol === "BTC") ??
+      defaultMarketOf(list, market) ??
       list[0]
     setSelection(marketRowKey(chosen))
-  }, [list, urlSymbol, urlRowId])
+  }, [list, urlSymbol, urlRowId, market])
 
   const current = React.useMemo(
     () => list.find((m) => marketRowKey(m) === selection),

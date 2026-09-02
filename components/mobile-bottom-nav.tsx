@@ -21,6 +21,7 @@ import {
   EyeIcon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons"
+import { prefetchSpotMarkets } from "@/lib/spot-markets"
 import {
   Sheet,
   SheetTrigger,
@@ -81,6 +82,12 @@ const beat = (inDelay: number, outDelay: number) =>
     "--ws-out-delay": `${outDelay}ms`,
   }) as React.CSSProperties
 
+/** Reaching for Trade is the best warning we get that the registry is about
+ *  to be needed. Touch fires before the navigation commits. */
+const warmForHref = (href: string) => {
+  if (href === "/trade") prefetchSpotMarkets()
+}
+
 function isActivePath(pathname: string, href: string) {
   if (href === "/") return pathname === "/" || pathname === "/dashboard"
   return pathname === href || pathname.startsWith(`${href}/`)
@@ -98,6 +105,8 @@ export function MobileBottomNav() {
       <Link
         key={item.label}
         href={item.href}
+        onPointerEnter={() => warmForHref(item.href)}
+        onTouchStart={() => warmForHref(item.href)}
         className={cn(
           "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-full px-1 py-1.5 transition-all active:scale-95 motion-reduce:active:scale-100",
           active
