@@ -9,10 +9,13 @@ import {
   CreditCardIcon,
   CoinsSwapIcon,
   Clock01Icon,
+  DollarCircleIcon,
   EyeIcon,
+  HelpCircleIcon,
   Wallet01Icon,
   Chart01Icon,
   ChartLineData01Icon,
+  ArrowRight01Icon,
   ArrowUpRight01Icon,
   MoreHorizontalIcon,
   Tick02Icon,
@@ -40,6 +43,8 @@ import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { fetchPrices } from "@/lib/crypto-api"
 import { useCashBalance } from "@/hooks/useCashBalance"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
+import { openWelcomeGuide } from "@/components/welcome-guide"
+import { FUTURES_CLOSED } from "@/lib/venues"
 
 function truncAddr(addr: string) {
   if (!addr || addr.length < 14) return addr
@@ -166,17 +171,18 @@ function Sparkline({ series, tone }: { series: number[]; tone: "up" | "down" | "
   )
 }
 
-// The accounts under the Total — always on screen as cards (no tab
-// switching), each linking to the surface where that money actually lives.
-// Cash gets no card (a USD balance draws a dead-flat line); it stays inside
-// the Total and is called out in the hero's sub-label instead.
-// Futures has no card while the venue is unavailable: a tile is a door, and
-// this one would open onto a screen that cannot trade. Its balance still
-// counts toward the Total and still feeds the 30-day history below — the
-// money is real, only the destination isn't ready.
+/* The Total's breakdown — every account that is IN the figure above it.
+   It used to be two cards, "Main / On-chain balance" and "Spot / Spot
+   trading": three pieces of jargon, and a pair that left out the money making
+   up the difference. The screen said $14,688 over cards adding to $9,273, and
+   a newcomer had no way to find the rest. Cash was held back because a dollar
+   balance draws a dead-flat sparkline — a chart's problem, solved here by
+   letting a row exist without one.
+   Each label says what the money is FOR, not which system holds it. */
 const ACCOUNTS = [
-  { key: "main",    label: "Main",    icon: Wallet01Icon, sub: "On-chain balance", href: "/portfolio" },
-  { key: "spot",    label: "Spot",    icon: Chart01Icon,  sub: "Spot trading",     href: "/trade" },
+  { key: "cash", label: "Cash", icon: DollarCircleIcon, sub: "Dollars ready to spend", href: "/fund" },
+  { key: "main", label: "Crypto wallet", icon: Wallet01Icon, sub: "Coins only you can move", href: "/wallet/modern" },
+  { key: "spot", label: "Trading", icon: Chart01Icon, sub: "Ready to buy and sell", href: "/trade" },
 ] as const
 
 export function WalletCard({ coins, prices, error }: WalletCardProps) {
@@ -317,27 +323,20 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     return calculateDailyPnL(h, livePrices, coins)
   }, [spotV2Positions, livePrices, coins])
 
-  // Futures: the 24h mark-price move on each open position, signed (shorts
-  // profit when price falls). Funding and intraday opens aren't served, so
-  // this is the price-move component — real data, honestly incomplete.
-  const futuresPnL = React.useMemo(() => {
-    let pnl = 0
-    for (const p of hlPositions) {
-      const coin = coins.find((c) => c.symbol === p.symbol)
-      const change = coin?.change24h ?? 0
-      if (!change || !p.markPrice) continue
-      const prevPrice = p.markPrice / (1 + change / 100)
-      pnl += p.size * (p.markPrice - prevPrice)
-    }
-    return pnl
-  }, [hlPositions, coins])
+  /* Futures' 24h P&L used to be summed in here. It went with the balance
+     below: the venue is closed, so counting its movement in "today" put a
+     number on the hero that nothing on any screen accounts for. */
+  const dailyPnL = mainPnL + spotPnL
 
-  // The stats tile covers every account; the Main card's chip is Main-only.
-  const dailyPnL = mainPnL + spotPnL + futuresPnL
+  /* Futures is excluded while the venue is closed, exactly as /portfolio
+     excludes it. Both pages read one constant now: they were quietly
+     disagreeing about the same user's net worth, and the dashboard was the
+     one counting money you could not open a screen to see. */
+  const totalBalance =
+    cashBalance + onChainTotal + spotBalance + (FUTURES_CLOSED ? 0 : futuresBalance)
 
-  const totalBalance = onChainTotal + spotBalance + futuresBalance + cashBalance
-
-  const accountBalances: Record<"main" | "spot" | "futures", number> = {
+  const accountBalances: Record<"cash" | "main" | "spot" | "futures", number> = {
+    cash: cashBalance,
     main: onChainTotal,
     spot: spotBalance,
     futures: futuresBalance,
@@ -465,13 +464,27 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
             <div data-onboarding="dash-balance" className="flex w-fit flex-col gap-1">
               <div className="flex items-center gap-3">
-                <Eyebrow>Est. Total Value</Eyebrow>
+                <Eyebrow>Total balance</Eyebrow>
                 <button
                   onClick={toggleHidden}
                   className={`transition-colors ${hidden ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"}`}
                   aria-label={hidden ? "Show balances" : "Hide balances"}
                 >
                   <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
+                </button>
+                {/* The guide, reachable. It used to appear unbidden exactly
+                    once, which meant most people met it while busy with
+                    something else and could never get it back. Here it sits
+                    beside the number they came to the page not understanding. */}
+                <button
+                  type="button"
+                  onClick={openWelcomeGuide}
+                  data-vivid-target="open-welcome-guide"
+                  data-vivid-label="Open the guide to Worldstreet"
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-card/70 px-2.5 text-[11px] font-semibold text-muted-foreground ring-1 ring-border/40 transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <HugeiconsIcon icon={HelpCircleIcon} className="h-3.5 w-3.5" />
+                  How this works
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -483,9 +496,12 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                 />
                 {dailyPnL !== 0 && !hidden && <DeltaChip value={dailyPnL} prefix="$" suffix="" />}
               </div>
-              <span className="text-[13px] text-muted-foreground">
-                All accounts
-                {cashBalance > 0 && ` · incl. ${hidden ? "••••" : formatUSD(cashBalance)} cash`}
+              {/* Says what the number IS, and points at the answer. It used
+                  to read "All accounts · incl. $1,250.75 cash" — a meta string
+                  naming one part of a sum whose other parts were nowhere on
+                  screen, which is the confusion rather than the cure. */}
+              <span className="text-[12.5px] text-muted-foreground">
+                Everything below, added up
               </span>
             </div>
 
@@ -505,12 +521,23 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             </div>
           </div>
 
-          {/* Account cards — the Total's breakdown, every figure on screen at
-              once instead of hidden behind tabs. Each card is a door to the
-              surface where that money actually lives. */}
+          {/* The breakdown, as a ledger rather than a row of cards.
+
+              Cards were the problem on a phone: each one stacked to roughly
+              150px of mostly-empty space, so two accounts filled the screen
+              and a third would never have fitted — which is part of why cash
+              and futures were left out of a sum they belong to. A ledger fits
+              all three above the fold, puts every label beside its figure,
+              and lets a row exist without a chart. The gold gradient ring went
+              with them: gold means brand, primary action or active state, and
+              three identical gold-ringed tiles meant none of those.
+
+              One layout at every width. The sparkline is the only thing that
+              waits for room — it appears at md, where there is space for it
+              between the label and the figure. */}
           <div
             data-onboarding="dash-balance-cards"
-            className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
+            className="ws-card-glass divide-y divide-border/25 overflow-hidden rounded-2xl bg-card/70 ring-1 ring-border/30"
           >
             {ACCOUNTS.map((a) => {
               const series = sparkSeries[a.key]
@@ -525,57 +552,63 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   : cardChange > 0
                     ? "up"
                     : "down"
+              /* Cash is a dollar balance and an empty account has no history:
+                 both draw a dead-flat line with a pulsing dot on the end, which
+                 reads as a stray artifact rather than as "nothing happened".
+                 A row is allowed to have no chart. */
+              const flat =
+                !series || series.length < 2 || Math.max(...series) === Math.min(...series)
+              const showSpark = a.key !== "cash" && !flat
+              const href =
+                a.key === "main" && walletMode !== "modern" ? "/wallet" : a.href
               return (
                 <Link
                   key={a.key}
-                  href={a.href}
+                  href={href}
                   data-vivid-target={`balance-view-${a.key}`}
                   data-vivid-label={`Open the ${a.label} account`}
-                  className="ws-card-glass group relative flex min-w-0 flex-col gap-2 rounded-2xl bg-card/70 p-3.5 pb-3 sm:gap-3 sm:p-4 sm:pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0"
+                  className="group flex items-center gap-3 px-3.5 py-3.5 transition-colors hover:bg-accent/40 active:bg-accent/60 sm:px-4"
                 >
-                  {/* Gradient stroke — brand gold dissolving diagonally to
-                      nothing. Masked ring (padding-box XOR) instead of a
-                      border-image so the translucent fill keeps showing the
-                      silk through the card. */}
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-2xl p-px opacity-80 transition-opacity group-hover:opacity-100"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, color-mix(in oklab, var(--primary) 55%, transparent), color-mix(in oklab, var(--primary) 14%, transparent) 38%, transparent 68%)",
-                      WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-                      WebkitMaskComposite: "xor",
-                      mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-                      maskComposite: "exclude",
-                    }}
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.05]">
-                      <HugeiconsIcon icon={a.icon} className="h-4 w-4 text-muted-foreground" />
-                    </span>
-                    <Eyebrow>{a.label}</Eyebrow>
-                    <span className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3.5 w-3.5" />
-                    </span>
-                  </div>
-                  <span className="text-[22px] font-semibold leading-none tabular-nums tracking-tight">
-                    {hidden ? "••••" : formatUSD(accountBalances[a.key])}
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.06] transition-colors group-hover:bg-primary/[0.12]">
+                    <HugeiconsIcon
+                      icon={a.icon}
+                      className="h-[18px] w-[18px] text-muted-foreground transition-colors group-hover:text-primary"
+                    />
                   </span>
-                  {series && series.length > 1 ? (
-                    <Sparkline series={series} tone={tone} />
-                  ) : (
-                    <Skel className="h-8 w-full rounded-md sm:h-12" />
-                  )}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">{a.sub}</span>
+
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-[13.5px] font-semibold leading-none">{a.label}</span>
+                    <span className="truncate text-[11.5px] leading-none text-muted-foreground">
+                      {a.sub}
+                    </span>
+                  </span>
+
+                  {showSpark ? (
+                    <span className="hidden w-28 shrink-0 md:block">
+                      <Sparkline series={series} tone={tone} />
+                    </span>
+                  ) : null}
+
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="text-[15px] font-semibold leading-none tabular-nums tracking-tight">
+                      {hidden ? "••••" : formatUSD(accountBalances[a.key])}
+                    </span>
                     {cardChange !== null && tone !== "flat" && !hidden ? (
-                      <ChangeText value={cardChange} className="text-[11.5px]" />
+                      <ChangeText value={cardChange} className="text-[11px] leading-none" />
                     ) : (
-                      <span className="text-[11.5px] font-medium tabular-nums text-muted-foreground/50">
-                        {hidden ? "••" : "30d"}
+                      /* The period label belongs to the sparkline, and the
+                         sparkline waits for md. On a phone it was a "30d"
+                         under a figure with nothing to compare it to. */
+                      <span className="hidden text-[11px] leading-none text-muted-foreground/50 md:inline">
+                        {showSpark && !hidden ? "30d" : ""}
                       </span>
                     )}
-                  </div>
+                  </span>
+
+                  <HugeiconsIcon
+                    icon={ArrowRight01Icon}
+                    className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-foreground"
+                  />
                 </Link>
               )
             })}

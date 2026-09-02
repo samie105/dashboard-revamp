@@ -73,6 +73,7 @@ const coinToPair = (c: Coin): SpotV2Pair => ({
 })
 import { useRouter } from "next/navigation"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
+import { FUTURES_CLOSED } from "@/lib/venues"
 
 // ── Onboarding steps ─────────────────────────────────────────────────────
 
@@ -197,19 +198,9 @@ const WALLET_VIEWS = [
 
 type WalletView = (typeof WALLET_VIEWS)[number]["key"]
 
-/* ── Futures gate ────────────────────────────────────────────────────────
-   Perpetual futures are not live yet. The tab stays visible AND pressable: a
-   disabled tab has no way to explain itself on a touchscreen, where `title`
-   never fires, so pressing it is how the reader finds out. What it opens is
-   the one "not open yet" panel instead of the futures body.
-
-   The futures sections below — Open Positions and Futures Contracts — are
-   left exactly as they were and are simply not reached. Typed `boolean` on
-   purpose so TypeScript keeps type-checking both arms.
-
-   TO RE-OPEN: set this to false, then delete it and the `futuresClosed` /
-   `FUTURES_CLOSED` blocks that reference it. */
-const FUTURES_CLOSED: boolean = true
+/* Futures is closed. The switch moved to lib/venues.ts: the dashboard
+   computes the same total and the two were disagreeing about one users net
+   worth. Everything below that reads `FUTURES_CLOSED` is unchanged. */
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

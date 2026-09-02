@@ -1,13 +1,20 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   ArrowDownLeft01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
-  ArrowUpRight01Icon,
-  Settings02Icon,
+  ChartCandlestickIcon,
+  Chart01Icon,
+  ChartLineData01Icon,
+  CoinsSwapIcon,
+  CreditCardIcon,
+  DashboardSquare01Icon,
+  DollarCircleIcon,
+  Menu01Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons"
 
@@ -21,7 +28,6 @@ import {
 import { illustrations, type IllustrationKey } from "@/components/ui/system"
 import { useAuth } from "@/components/auth-provider"
 import { useProfile } from "@/components/profile-provider"
-import { useUiMode } from "@/components/ui-mode-provider"
 import { useMigrationPopupOwnsScreen } from "@/components/crypto/MigrationNotice"
 import { markOnboardingComplete } from "@/lib/profile-actions"
 import {
@@ -32,90 +38,116 @@ import {
   type SeenSnapshot,
 } from "@/lib/welcome-guide"
 
+/** A line in a card's list. Rows are how this guide organises information —
+ *  a newcomer scans a labelled list; they do not read a paragraph. */
+type GuideRow = {
+  icon: typeof Wallet01Icon
+  title: string
+  body: string
+  /** Rows that are places you can go say so, and go there. */
+  href?: string
+}
+
 type GuideCard = {
-  /** Either an icon in a gold well, or a house illustration — never both.
-   *  The cards that came in from the promo rail keep the art they shipped
-   *  with; the ones teaching a control keep the icon that names it. */
-  icon?: typeof Wallet01Icon
+  /** A house illustration, or nothing — the list is the card's substance. */
   art?: IllustrationKey
   title: string
-  /** A function where the text has to know what it is looking at. */
-  body: string | ((simple: boolean) => string)
-  /** An optional way to act on the card, offered under Next. */
-  action?: { label: string; href: string }
+  /** One short line under the title. Sets the list up; never repeats it. */
+  body?: string
+  rows?: GuideRow[]
 }
 
 /**
- * Worldstreet introducing itself, once, to the person who just arrived.
+ * Worldstreet explaining itself, once, to the person who just arrived.
+ *
+ * Four cards answering the four questions a newcomer actually has, in the
+ * order they have them: what is this, what am I looking at on the screen in
+ * front of me, what can I do, and where do I find it. Each answer is a
+ * LABELLED LIST rather than a paragraph — the complaint this guide exists to
+ * fix is "I don't understand what is going on", and prose is what people skip.
  *
  * Copy follows the house plain-language rule: no "self-custody", no "keys",
- * no "gas", no "network" as a noun the reader is expected to already own. It
- * describes outcomes, and it never implies Worldstreet can open the wallet.
- * The cards lifted wholesale from the promo rail keep the marketing copy they
- * shipped with, "six chains" included — moving a card is not licence to
- * rewrite it.
- *
- * Seven cards, in the order a newcomer actually meets the problem: what is
- * this, how do I get my first coin, the two things people come here to do
- * with it, moving money in and out, and finally why this screen might look
- * simpler than a friend's.
+ * no "gas", no "on-chain", no "network" as a noun the reader is expected to
+ * already own. It describes outcomes, and it never implies Worldstreet can
+ * open the wallet. The one exception is the trading row's "six chains", the
+ * shipped marketing line it arrived with when the promo rail was folded in.
  */
 const CARDS: GuideCard[] = [
   {
     art: "welcome",
     title: "Welcome to Worldstreet",
     body:
-      "Your money and your crypto sit here together, valued in dollars. The wallet is yours alone — only you can open it, not even Worldstreet can.",
+      "Your money and your crypto in one place. Here is what is on your screen, and where everything lives.",
   },
-  /* The three cards below WERE the dashboard's promo rail: an autoplaying
-     carousel below the markets grid, each card carrying its own dismiss X.
-     That put the whole of a newcomer's "what do I actually do here" behind a
-     thing that moves on its own and can be closed by accident, on a stretch
-     of page they have to scroll to reach. They belong in the guide that
-     already has the person's attention, in the order someone starting from
-     zero needs them. Deleting the rail is the other half of this — a card
-     cannot be in two places and still be "the" invitation. */
   {
+    /* The card this guide was rebuilt for. The dashboard shows one big total
+       over a breakdown, and a newcomer has no idea what the parts are or why
+       there is more than one. Naming the three, and saying they add up to the
+       figure at the top, is the single most useful thing this guide says. */
     art: "cryptoBuy",
-    title: "Buy your first crypto",
-    body:
-      "Don't hold any yet? Your Dollar Account can buy some. Turn dollars into USDT on Solana, Ethereum or Tron, and it lands in your wallet.",
-    action: { label: "Buy crypto", href: "/buy" },
+    title: "Your money sits in three places",
+    body: "Add them together and you get the total at the top of your screen.",
+    rows: [
+      {
+        icon: DollarCircleIcon,
+        title: "Cash",
+        body: "Dollars you can spend here or send to your bank.",
+      },
+      {
+        icon: Wallet01Icon,
+        title: "Crypto wallet",
+        body: "Coins only you can move — not even Worldstreet can.",
+      },
+      {
+        icon: Chart01Icon,
+        title: "Trading",
+        body: "What you have moved onto the market to buy and sell with.",
+      },
+    ],
   },
   {
     art: "cryptoTrade",
-    title: "Trade across six chains",
-    body: "Thousands of tokens on live markets, priced and routed for you.",
-    action: { label: "Open trading", href: "/trade" },
+    title: "What you can do",
+    body: "Four things, and you can start with any of them.",
+    rows: [
+      {
+        icon: CreditCardIcon,
+        title: "Buy your first crypto",
+        body: "Turn dollars into USDT on Solana, Ethereum or Tron.",
+        href: "/buy",
+      },
+      {
+        icon: ChartLineData01Icon,
+        title: "Trade across six chains",
+        body: "Thousands of tokens on live markets, priced and routed for you.",
+        href: "/trade",
+      },
+      {
+        icon: CoinsSwapIcon,
+        title: "Swap in one move",
+        body: "Convert cash and tokens at live rates, any pair to any pair.",
+        href: "/swap",
+      },
+      {
+        icon: ArrowDownLeft01Icon,
+        title: "Add and send coins",
+        body: "Get an address to receive, or send what you hold anywhere.",
+        href: "/wallet/modern",
+      },
+    ],
   },
   {
-    art: "cryptoSwap",
-    title: "Swap in one move",
-    body: "Convert cash and tokens at live rates, any pair to any pair.",
-    action: { label: "Swap", href: "/swap" },
-  },
-  {
-    icon: ArrowDownLeft01Icon,
-    title: "Adding money",
-    body:
-      "Press Deposit. Pick what you're adding, and you'll get an address to send it to. It shows up in your wallet once it arrives.",
-  },
-  {
-    icon: ArrowUpRight01Icon,
-    title: "Sending money",
-    body:
-      "Press Send, choose what you're sending and where it's going. You'll see exactly what leaves before anything moves.",
-  },
-  {
-    icon: Settings02Icon,
-    title: "Simple or Pro",
-    // The one card whose text has to know what it is looking at: telling a
-    // Pro user they are in Simple would be the first thing this guide got
-    // wrong, on the card whose whole job is teaching the control.
-    body: (simple: boolean) =>
-      simple
-        ? "You're in Simple, which shows the essentials. Pro adds the full breakdown for every place your money sits. Switch at the top of your wallet whenever you like."
-        : "You're in Pro, which shows the full breakdown for every place your money sits. Simple trims it back to the essentials. Switch at the top of your wallet whenever you like.",
+    title: "Where to find things",
+    /* Deliberately not "the bar at the bottom of your screen": on a laptop it
+       is a sidebar. The icons are the same in both, so they do the teaching. */
+    body: "Five places, with the same icons everywhere.",
+    rows: [
+      { icon: DashboardSquare01Icon, title: "Home", body: "Your balance and what moved today.", href: "/" },
+      { icon: ChartCandlestickIcon, title: "Trade", body: "Markets, charts and your orders.", href: "/trade" },
+      { icon: Chart01Icon, title: "Portfolio", body: "Everything you own, in one list.", href: "/portfolio" },
+      { icon: Wallet01Icon, title: "Wallet", body: "Your coins, addresses and security.", href: "/wallet/modern" },
+      { icon: Menu01Icon, title: "Apps", body: "The Worldstreet mark opens the rest: Shop, Academy, Social." },
+    ],
   },
 ]
 
@@ -187,6 +219,38 @@ const welcomeSeenStore = (() => {
 })()
 
 /**
+ * "Open the guide" as an app-wide request.
+ *
+ * A guide that only ever appears unbidden, once, is one most people meet
+ * while they are busy with something else and then never see again — which is
+ * how this one came to be invisible. Anything that can spot a confused user
+ * should be able to offer it: the dashboard's "How this works", the wallet
+ * header's help button. A counter, so repeated presses each re-open it.
+ */
+const openRequests = (() => {
+  let count = 0
+  const listeners = new Set<() => void>()
+  return {
+    request() {
+      count += 1
+      for (const listener of listeners) listener()
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    get: () => count,
+    getServerSnapshot: () => 0,
+  }
+})()
+
+export function openWelcomeGuide() {
+  openRequests.request()
+}
+
+/**
  * Whether this PAGE LOAD has already granted the guide its showing, and
  * whether that showing is over. Module-level rather than component state on
  * purpose.
@@ -215,15 +279,13 @@ export function WelcomeGuide({
    *  landed on top of it. Only the wallet page has one; everywhere else this
    *  stays false. */
   ceremonyVisible?: boolean
-  /** Incremented by the page's help button to re-open the guide on demand.
-   *  A counter rather than a boolean so repeated presses each re-open it
-   *  without the caller having to reset anything. */
+  /** Incremented by a caller that also renders the guide. Anything else can
+   *  call `openWelcomeGuide()` instead. */
   openSignal?: number
   onOpenChange?: (open: boolean) => void
 }) {
   const { user } = useAuth()
   const { profile } = useProfile()
-  const { isSimple } = useUiMode()
   /* The other first-run modal. It is mounted by LayoutShell, so it can land
      on top of this guide on ANY page — asking the caller to pass it down
      would mean every future mount point remembering to. */
@@ -244,11 +306,11 @@ export function WelcomeGuide({
     ? profile.onboardingCompleted?.includes(WELCOME_GUIDE_KEY) ?? false
     : "unknown"
 
-  /* Eligibility is the guide’s own business now rather than a prop. It is
-     mounted on more than one page (the dashboard people land on, and the
-     wallet, which also owns the help button that re-opens it), and a rule
-     each caller restates is a rule that drifts. Signed in is the whole of
-     it — the cards describe the product, not one backend. */
+  /* Eligibility is the guide's own business rather than a prop. It is mounted
+     on more than one page (the dashboard people land on, and the wallet,
+     which also owns a help button), and a rule each caller restates is a rule
+     that drifts. Signed in is the whole of it — the cards describe the
+     product, not one backend. */
   const show = welcomeGuideSurfaces({
     eligible: Boolean(user?.userId),
     blockedByModal: ceremonyVisible || migrationOwnsScreen,
@@ -282,20 +344,30 @@ export function WelcomeGuide({
     }
   }, [show, markSeen])
 
-  // The header's help button. Deliberately does not touch the seen store:
-  // asking to see it again is not the same as never having seen it.
-  const firstSignal = React.useRef(openSignal)
+  // Asked for on purpose — by the prop, or by anything anywhere calling
+  // `openWelcomeGuide()`. Deliberately does not touch the seen store: asking
+  // to see it again is not the same as never having seen it.
+  const requested = React.useSyncExternalStore(
+    openRequests.subscribe,
+    openRequests.get,
+    openRequests.getServerSnapshot,
+  )
+  const demand = (openSignal ?? 0) + requested
+  // Seeded from the first render, so mounting into a session where the guide
+  // has already been asked for once does not count as a fresh request.
+  const lastDemand = React.useRef(demand)
   React.useEffect(() => {
-    if (openSignal === undefined || openSignal === firstSignal.current) return
+    if (demand === lastDemand.current) return
+    lastDemand.current = demand
     setCard(0)
     setOpen(true)
-  }, [openSignal])
+  }, [demand])
 
   const change = React.useCallback(
     (next: boolean) => {
       // Closing retires the automatic showing for the rest of this page load.
-      // The help button re-opens it by setting `open` directly, which is why
-      // it does not have to unwind this.
+      // An explicit request re-opens it by setting `open` directly, which is
+      // why it does not have to unwind this.
       if (!next) showing = "closed"
       setOpen(next)
       onOpenChange?.(next)
@@ -307,46 +379,82 @@ export function WelcomeGuide({
 
   const current = CARDS[card]
   const isLast = card === CARDS.length - 1
-  const Icon = current.icon
-  const body = typeof current.body === "function" ? current.body(isSimple) : current.body
 
   return (
     <ResponsiveModal open={open} onOpenChange={change}>
-      <ResponsiveModalContent className="sm:max-w-sm">
-        <div className="flex flex-col gap-5">
+      <ResponsiveModalContent className="sm:max-w-[26rem]">
+        <div className="flex flex-col gap-4">
           {/* The dialog's real title IS the heading on screen — a separate
               sr-only copy beside a visible <h2> made a screen reader announce
               every card's name twice. */}
-          <ResponsiveModalHeader className="flex flex-col items-center gap-3 space-y-0 text-center">
-            {/* One fixed-height slot for both treatments. The art is 76px and
-                the icon well 48px, so without it the title and body jumped up
-                and down as you paged between a moved promo card and a card
-                teaching a control. */}
-            <span className="flex h-[76px] items-center justify-center">
-              {current.art ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={illustrations[current.art]}
-                  alt=""
-                  className="h-[76px] w-[76px] object-contain"
-                />
-              ) : Icon ? (
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
-                  <HugeiconsIcon icon={Icon} className="h-6 w-6" />
-                </span>
-              ) : null}
-            </span>
+          <ResponsiveModalHeader className="flex flex-col items-center gap-2.5 space-y-0 text-center">
+            {current.art && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={illustrations[current.art]}
+                alt=""
+                className="h-[88px] w-[88px] object-contain"
+              />
+            )}
             {/* Keyed so each card's text settles in rather than swapping
                 under the reader mid-sentence. */}
-            <div key={current.title} className="ws-card-face-in flex flex-col gap-2">
-              <ResponsiveModalTitle className="font-display text-[17px] font-semibold">
+            <div key={current.title} className="ws-card-face-in flex flex-col gap-1.5">
+              <ResponsiveModalTitle className="font-display text-[18px] font-semibold tracking-[-0.2px]">
                 {current.title}
               </ResponsiveModalTitle>
-              <ResponsiveModalDescription className="text-[13px] leading-relaxed">
-                {body}
-              </ResponsiveModalDescription>
+              {current.body && (
+                <ResponsiveModalDescription className="text-[12.5px] leading-relaxed">
+                  {current.body}
+                </ResponsiveModalDescription>
+              )}
             </div>
           </ResponsiveModalHeader>
+
+          {/* The list. LEFT-aligned inside a centred card, because a label and
+              its explanation are scanned down a column — centring them is what
+              turns a list back into prose. */}
+          {current.rows && (
+            <div
+              key={`${current.title}-rows`}
+              className="ws-card-face-in flex flex-col gap-0.5 rounded-xl bg-surface-sunken p-1.5"
+            >
+              {current.rows.map((row) => {
+                const inner = (
+                  <>
+                    <span className="mt-px flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-primary/[0.12] text-primary">
+                      <HugeiconsIcon icon={row.icon} className="h-4 w-4" />
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-1 text-left">
+                      <span className="text-[12.5px] font-semibold leading-none">{row.title}</span>
+                      <span className="text-[11.5px] leading-[15px] text-muted-foreground">
+                        {row.body}
+                      </span>
+                    </span>
+                    {row.href && (
+                      <HugeiconsIcon
+                        icon={ArrowRight01Icon}
+                        className="mt-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50"
+                      />
+                    )}
+                  </>
+                )
+                return row.href ? (
+                  <Link
+                    key={row.title}
+                    href={row.href}
+                    onClick={() => change(false)}
+                    className="flex min-h-11 items-start gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <span key={row.title} className="flex items-start gap-2.5 px-2 py-2">
+                    {inner}
+                  </span>
+                )
+              })}
+            </div>
+          )}
 
           {/* Where you are. Dots, not a progress bar: four cards is a length
               the reader can hold, and a bar would imply work to get through. */}
@@ -361,29 +469,15 @@ export function WelcomeGuide({
             ))}
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1">
             <button
               type="button"
               onClick={() => (isLast ? change(false) : setCard((value) => value + 1))}
-              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-[13px] font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+              className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-[13.5px] font-bold text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              {isLast ? "Start using my wallet" : "Next"}
+              {isLast ? "Start using Worldstreet" : "Next"}
               {!isLast && <HugeiconsIcon icon={ArrowRight01Icon} className="h-4 w-4" />}
             </button>
-
-            {/* A card that can be acted on says so, under Next rather than in
-                place of it — leaving here is a choice, not the only way
-                forward. Safe to leave: the guide marks itself seen when it
-                opens, so walking out mid-way does not earn a second showing. */}
-            {current.action && (
-              <a
-                href={current.action.href}
-                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-surface-sunken px-5 text-[13px] font-semibold transition-colors hover:bg-accent"
-              >
-                {current.action.label}
-                <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5" />
-              </a>
-            )}
 
             <div className="flex items-center justify-between">
               <button
@@ -408,7 +502,7 @@ export function WelcomeGuide({
           </div>
 
           <p className="text-center text-[11px] text-muted-foreground/60">
-            You can open this again from the help button on your wallet.
+            Reopen this any time from How this works, on Home.
           </p>
         </div>
       </ResponsiveModalContent>
