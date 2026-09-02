@@ -844,25 +844,45 @@ export function StatusScreen({
 
       {notice && <InlineNotice className="w-full text-left">{notice}</InlineNotice>}
 
+      {/* The transaction hash — the receipt.
+          This was an 11px pill showing ten characters, an ellipsis and eight
+          more. It is the one artifact proving the transfer happened and the
+          only thing worth pasting into an explorer or handing to support, and
+          it was the smallest text on the screen, truncated past usefulness.
+          It is stated in full now, selectable, wrapped rather than clipped,
+          with copying as a real button instead of a word. */}
       {txHash && (
-        <button
-          onClick={() => {
-            navigator.clipboard.writeText(txHash)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1500)
-          }}
-          className="ws-microswap inline-flex max-w-full items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent"
-          title="Copy transaction hash"
-        >
-          <span className="truncate">{txHash.slice(0, 10)}…{txHash.slice(-8)}</span>
-          <span className={cn("shrink-0 text-[10px] font-sans font-semibold", copied ? "text-credit" : "text-subtle")}>
-            {copied ? "Copied" : "Copy"}
-          </span>
-        </button>
+        <div className="w-full rounded-2xl bg-surface-sunken/80 p-3 text-left ring-1 ring-border/40">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-subtle">
+              Transaction hash
+            </span>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(txHash)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              }}
+              className={cn(
+                "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors",
+                copied
+                  ? "bg-credit-chip text-credit"
+                  : "bg-foreground/[0.08] text-foreground hover:bg-foreground/[0.14]",
+              )}
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          {/* `select-all` so one tap or click takes the whole hash — half a
+              hash is worse than none. */}
+          <p className="select-all break-all font-mono text-[12.5px] leading-relaxed text-foreground/90">
+            {txHash}
+          </p>
+        </div>
       )}
 
-      {/* The reference, wherever the flow has got to. Copyable, because the
-          one thing a worried user wants to do with it is paste it to support. */}
+      {/* The reference. Quieter than the hash — it identifies our record of
+          the transfer, not the transfer itself. */}
       {reference && state !== "success" && (
         <button
           onClick={() => {
@@ -870,12 +890,12 @@ export function StatusScreen({
             setRefCopied(true)
             setTimeout(() => setRefCopied(false), 1500)
           }}
-          className="ws-microswap inline-flex max-w-full items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent"
+          className="ws-microswap inline-flex max-w-full items-center gap-1.5 text-[11px] text-subtle transition-colors hover:text-muted-foreground"
           title="Copy reference"
         >
-          <span className="shrink-0 text-subtle">Ref</span>
+          <span className="shrink-0">Ref</span>
           <span className="truncate font-mono">{reference}</span>
-          <span className={cn("shrink-0 font-sans font-semibold", refCopied ? "text-credit" : "text-subtle")}>
+          <span className={cn("shrink-0 font-semibold", refCopied ? "text-credit" : "text-subtle")}>
             {refCopied ? "Copied" : "Copy"}
           </span>
         </button>
@@ -887,25 +907,29 @@ export function StatusScreen({
         </p>
       )}
 
+      {/* The end of a money flow, so the actions are sized like the decision
+          they are: 52px, not the 11-unit chrome height. On a phone this is
+          also the touch target, and "Back to wallet" was a 44px sliver under a
+          full-height card. */}
       {(primary || secondary) && (
-        <div className="flex w-full flex-col gap-2 pt-1 sm:flex-row-reverse">
+        <div className="flex w-full flex-col gap-2.5 pt-2 sm:flex-row-reverse">
           {primary &&
             (primary.href ? (
-              <Link href={primary.href} className="flex h-11 flex-1 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90">
+              <Link href={primary.href} className="flex h-[52px] flex-1 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-primary-foreground transition-colors hover:bg-primary/90">
                 {primary.label}
               </Link>
             ) : (
-              <button onClick={primary.onClick} className="flex h-11 flex-1 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90">
+              <button onClick={primary.onClick} className="flex h-[52px] flex-1 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-primary-foreground transition-colors hover:bg-primary/90">
                 {primary.label}
               </button>
             ))}
           {secondary &&
             (secondary.href ? (
-              <Link href={secondary.href} className="flex h-11 flex-1 items-center justify-center rounded-full bg-surface-sunken text-sm font-semibold text-foreground transition-colors hover:bg-accent">
+              <Link href={secondary.href} className="flex h-[52px] flex-1 items-center justify-center rounded-full bg-surface-sunken text-[15px] font-semibold text-foreground ring-1 ring-border/40 transition-colors hover:bg-accent">
                 {secondary.label}
               </Link>
             ) : (
-              <button onClick={secondary.onClick} className="flex h-11 flex-1 items-center justify-center rounded-full bg-surface-sunken text-sm font-semibold text-foreground transition-colors hover:bg-accent">
+              <button onClick={secondary.onClick} className="flex h-[52px] flex-1 items-center justify-center rounded-full bg-surface-sunken text-[15px] font-semibold text-foreground ring-1 ring-border/40 transition-colors hover:bg-accent">
                 {secondary.label}
               </button>
             ))}
