@@ -60,7 +60,7 @@ export function ModernReceiveModal({ open, onOpenChange, asset = null }: {
             Choose the network first — funds sent on the wrong network can be lost.
           </ResponsiveModalDescription>
         </ResponsiveModalHeader>
-        <div className="max-h-[70dvh] overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto sm:max-h-[70dvh]">
           <ReceivePanel
             asset={asset}
             addresses={addresses}

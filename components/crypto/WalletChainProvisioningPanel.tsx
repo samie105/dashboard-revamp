@@ -114,7 +114,7 @@ export function WalletChainProvisioningPanel({
               type="button"
               onClick={() => void addChainsToWallet()}
               disabled={busy || !passphrase || !recoverySecret}
-              className="self-start rounded-full bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center self-start rounded-full bg-primary px-5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {busy ? "Adding networks…" : "Add these networks"}
             </button>

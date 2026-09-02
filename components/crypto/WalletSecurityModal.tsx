@@ -190,7 +190,7 @@ export function WalletSecurityModal({
                   type="button"
                   onClick={() => setView("menu")}
                   aria-label="Back to wallet security"
-                  className="-ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="-ml-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <HugeiconsIcon icon={ArrowLeft01Icon} className="h-4 w-4" />
                 </button>
@@ -207,7 +207,7 @@ export function WalletSecurityModal({
 
         {/* The panes are tall — the modal scrolls rather than growing past
             the viewport on a laptop. */}
-        <div className="max-h-[min(70vh,640px)] overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto sm:max-h-[min(70dvh,640px)]">
           {onMenu ? (
             <div className="flex flex-col">
               {entries.map((entry) => (

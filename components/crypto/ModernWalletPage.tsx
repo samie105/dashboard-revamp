@@ -756,12 +756,12 @@ export function ModernWalletPage() {
                     </button>
                   </div>
                   {heroLoading ? (
-                    <Skel className="my-1.5 h-[clamp(2.4rem,5vw,3.4rem)] w-[clamp(12rem,24vw,18rem)] rounded-lg" />
+                    <Skel className="my-1.5 h-[clamp(1.75rem,7.5vw,2.4rem)] w-[clamp(12rem,24vw,18rem)] rounded-lg sm:h-[clamp(2.4rem,5vw,3.4rem)]" />
                   ) : (
                     <Balance
                       value={activeCard.value !== undefined ? usd(activeCard.value) : "—"}
                       hidden={hidden}
-                      className="text-[clamp(2.4rem,5vw,3.4rem)] text-white"
+                      className="text-[clamp(1.75rem,7.5vw,2.4rem)] text-white sm:text-[clamp(2.4rem,5vw,3.4rem)]"
                     />
                   )}
                   {/* The move comes first — it's the thing you look for after
@@ -810,7 +810,16 @@ export function ModernWalletPage() {
                       className="h-4 w-4 shrink-0 opacity-70"
                     />
                   </button>
-                  <span className={`shrink-0 text-[9px] font-semibold uppercase tracking-[0.16em] ${isTotalCard ? "text-primary/90" : "text-white/45"}`}>
+                  {/* The networks label was shrink-0 and untruncated, so the
+                      whole squeeze landed on the address beside it — the one
+                      thing people come to this card to copy. A two-network
+                      family ate ~178px of 288px and left the address at about
+                      eleven characters. It gives first now, and the full list
+                      stays available on hover. */}
+                  <span
+                    title={isTotalCard ? undefined : activeCard.networksLabel}
+                    className={`min-w-0 max-w-[42%] truncate text-right text-[9px] font-semibold uppercase tracking-[0.16em] ${isTotalCard ? "text-primary/90" : "text-white/45"}`}
+                  >
                     {isTotalCard ? "Only yours" : activeCard.networksLabel}
                   </span>
                 </div>
@@ -868,7 +877,7 @@ export function ModernWalletPage() {
               <button
                 type="button"
                 onClick={() => setUnlockOpen(true)}
-                className="shrink-0 rounded-full bg-surface-sunken px-3.5 py-2 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:px-2.5 sm:py-1 sm:text-xs"
+                className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-surface-sunken px-4 text-[13px] font-semibold sm:min-h-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:px-2.5 sm:py-1 sm:text-xs"
               >
                 Locked
               </button>

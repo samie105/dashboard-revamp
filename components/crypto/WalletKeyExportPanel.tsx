@@ -209,7 +209,7 @@ export function WalletKeyExportPanel({
                     type="button"
                     onClick={() => setConfirmAccount(account)}
                     disabled={busyAccountId !== null}
-                    className="shrink-0 rounded-full bg-surface-sunken px-3.5 py-1.5 text-[12px] font-semibold transition-colors hover:bg-accent disabled:opacity-50"
+                    className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-surface-sunken px-4 text-[12px] font-semibold transition-colors hover:bg-accent disabled:opacity-50"
                   >
                     {busyAccountId === account.id ? "Revealing…" : "Reveal key"}
                   </button>

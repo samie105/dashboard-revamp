@@ -232,7 +232,7 @@ function RecoverySecretPanel({ secret, onDone }: { secret: string; onDone: () =>
               anchor.click()
               URL.revokeObjectURL(url)
             }}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <HugeiconsIcon icon={Download01Icon} className="h-3.5 w-3.5" />
             Download

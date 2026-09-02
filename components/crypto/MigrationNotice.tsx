@@ -175,7 +175,7 @@ function MigrationBanner({ onConfirm, onDismiss }: {
         <div className="flex flex-wrap items-center gap-3">
           <Link
             href="/wallet/modern"
-            className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-4 py-2 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/10"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-primary/40 px-4 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/10"
           >
             Move my funds
           </Link>
@@ -216,7 +216,7 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
         <div className="mt-1 flex items-center gap-3">
           <Link
             href="/wallet/modern"
-            className="text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
+            className="inline-flex min-h-9 items-center text-[11px] font-semibold text-primary transition-colors hover:text-primary/80"
           >
             Move my funds
           </Link>
@@ -233,7 +233,7 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss migration notice"
-        className="shrink-0 self-start p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted/50"
+        className="shrink-0 self-start rounded p-2.5 opacity-100 transition-opacity hover:bg-muted/50 focus-visible:opacity-100 sm:p-1 sm:opacity-0 sm:group-hover:opacity-100"
       >
         <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3 text-muted-foreground/50" />
       </button>

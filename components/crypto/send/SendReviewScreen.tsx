@@ -117,7 +117,7 @@ export function SendReviewScreen({
       <button
         type="button"
         onClick={onEdit}
-        className="mx-auto text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        className="mx-auto inline-flex min-h-11 items-center px-4 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
       >
         Edit transfer
       </button>

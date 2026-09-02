@@ -91,12 +91,12 @@ export function SendModal({
           type="button"
           onClick={close}
           aria-label="Close"
-          className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="absolute right-2 top-2 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
         </button>
         {open ? (
-          <div className="max-h-[min(78vh,720px)] overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto sm:max-h-[min(78dvh,720px)]">
             <SendFlow onClose={close} onInFlightChange={reportInFlight} />
           </div>
         ) : null}

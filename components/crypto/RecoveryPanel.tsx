@@ -91,7 +91,7 @@ export function RecoveryPanel({
             type="button"
             onClick={() => void beginRecovery()}
             disabled={busy}
-            className="self-start rounded-full bg-surface-sunken px-4 py-2 text-[13px] font-semibold transition-colors hover:bg-accent disabled:opacity-50"
+            className="inline-flex min-h-11 items-center self-start rounded-full bg-surface-sunken px-5 text-[13px] font-semibold transition-colors hover:bg-accent disabled:opacity-50"
           >
             {busy ? "Starting…" : "Start recovery"}
           </button>
@@ -115,7 +115,7 @@ export function RecoveryPanel({
               type="button"
               onClick={() => void completeRecovery()}
               disabled={busy || !recoverySecret}
-              className="self-start rounded-full bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center self-start rounded-full bg-primary px-5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {busy ? "Completing…" : "Complete recovery"}
             </button>

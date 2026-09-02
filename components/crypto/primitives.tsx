@@ -50,8 +50,9 @@ export function SectionMessage({ error, success, onAction }: {
     const described = describeCryptoError(error)
     return (
       <InlineNotice tone="error">
-        <span className="font-semibold">{described.title}.</span> {described.message}
-        {described.requestId ? <span className="ml-1 font-mono text-[10.5px] opacity-70">({described.requestId})</span> : null}
+        <span className="font-semibold">{described.title}.</span>{" "}
+        <span className="break-words">{described.message}</span>
+        {described.requestId ? <span className="ml-1 break-all font-mono text-[10.5px] opacity-70">({described.requestId})</span> : null}
         {onAction && described.action !== "none" ? (
           <button type="button" onClick={() => onAction(described.action)} className="ml-2 font-semibold underline underline-offset-2">
             {described.action === "retry" ? "Try again"
@@ -88,7 +89,7 @@ export function KeyReveal({ label, value, network }: { label: string; value: str
       </div>
       <code
         aria-hidden={!revealed}
-        className={`block max-h-32 select-all break-all rounded-lg bg-card/60 p-2 font-mono text-xs transition-[filter] ${revealed ? "" : "select-none blur-sm"}`}
+        className={`block max-h-32 select-all overflow-auto break-all rounded-lg bg-card/60 p-2 font-mono text-xs transition-[filter] ${revealed ? "" : "select-none blur-sm"}`}
       >
         {value}
       </code>

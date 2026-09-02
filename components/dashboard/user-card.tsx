@@ -457,7 +457,12 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <Balance value={formatUSD(totalBalance)} hidden={hidden} mask={MASK} />
+                <Balance
+                  value={formatUSD(totalBalance)}
+                  hidden={hidden}
+                  mask={MASK}
+                  className="text-[clamp(1.9rem,8.5vw,2.75rem)] sm:text-[clamp(2.75rem,5.5vw,4.5rem)]"
+                />
                 {dailyPnL !== 0 && !hidden && <DeltaChip value={dailyPnL} prefix="$" suffix="" />}
               </div>
               <span className="text-[13px] text-muted-foreground">
