@@ -29,6 +29,8 @@ import { useAuth } from "@/components/auth-provider"
 import { useWalletMode } from "@/components/wallet-mode-provider"
 import { Segmented } from "@/components/ui/system"
 import { MigrationNotice } from "@/components/crypto/MigrationNotice"
+import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
+import { SendModal as ModernSendModal } from "@/components/crypto/SendModal"
 import { getPrices } from "@/lib/actions"
 import {
   getSpotBalances,
@@ -94,6 +96,14 @@ export function NavbarActions() {
   const { profile } = useProfile()
   const { startCall } = useGlobalCall()
   const { openFlow } = useMoneyFlow()
+  /* The wallet section's own money doors. These used to open the cash flow —
+     "buy" and "sell" against the DOLLAR account — from a panel sitting under
+     a wallet-mode switch, showing a balance denominated in the wallet's own
+     tokens. Depositing into a self-custodial wallet means being shown its
+     address, not being sold currency. */
+  const [receiveOpen, setReceiveOpen] = useState(false)
+  const [sendOpen, setSendOpen] = useState(false)
+  const modernWalletMode = walletMode === "modern"
   const isMobile = useIsMobile()
 
   /* ── Wallet data ── */
@@ -372,7 +382,11 @@ export function NavbarActions() {
                         closes first so it isn't left hanging underneath. */}
                     <button
                       type="button"
-                      onClick={() => { setSection(null); openFlow("buy") }}
+                      onClick={() => {
+                        setSection(null)
+                        if (modernWalletMode) setReceiveOpen(true)
+                        else openFlow("buy")
+                      }}
                       className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90 transition-colors"
                     >
                       <HugeiconsIcon icon={Exchange01Icon} className="h-3.5 w-3.5 text-white [&_path]:stroke-current [&_path]:fill-none [&_path]:opacity-100" />
@@ -380,7 +394,11 @@ export function NavbarActions() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setSection(null); openFlow("sell") }}
+                      onClick={() => {
+                        setSection(null)
+                        if (modernWalletMode) setSendOpen(true)
+                        else openFlow("sell")
+                      }}
                       className="flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
                     >
                       Withdraw
@@ -627,6 +645,12 @@ export function NavbarActions() {
           </div>
         </div>
       )}
+
+      {/* The modern wallet's own money doors, mounted at the navbar so the
+          popover can close before they open. Deposit shows the wallet's
+          addresses; withdraw sends from it. Neither touches the cash account. */}
+      <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} />
+      <ModernSendModal open={sendOpen} onOpenChange={setSendOpen} />
     </div>
   )
 }
