@@ -104,6 +104,25 @@ describe("migrationNoticeSurfaces", () => {
     ).toEqual({ popup: false, notification: false })
   })
 
+/* The popup's only action is a link to /wallet/modern, so on that page it
+     is an announcement with nothing to announce — and it was landing on top
+     of the setup ceremony there. Deferred, never spent: the notification
+     entry still carries the message, and `popupSeen` stays untouched, so the
+     popup still owes this user a showing somewhere it means something. */
+  it("holds the popup back on the page it links to, keeping the notification", () => {
+    expect(migrationNoticeSurfaces({ ...eligible, onDestination: true })).toEqual({
+      popup: false,
+      notification: true,
+    })
+  })
+
+  it("announces again once they are off the destination page", () => {
+    expect(migrationNoticeSurfaces({ ...eligible, onDestination: false })).toEqual({
+      popup: true,
+      notification: true,
+    })
+  })
+
   // A modern-only user, or one whose legacy lookup is inconclusive, gets
   // neither surface — resolution state is irrelevant.
   it("shows nothing to an ineligible user", () => {

@@ -678,6 +678,15 @@ export function ModernWalletPage() {
   // they can neither use nor recreate.
   const setupIncomplete =
     hasWallet && packageQuery.error instanceof CryptoBackendError && packageQuery.error.status === 404
+  /* Whether the ceremony owns this page is not yet knowable while either of
+     the queries behind it is in flight: the wallet lookup decides whether
+     there is one to make, and the package lookup is what reveals an
+     interrupted setup. `setupCeremony` reads false during both — not because
+     the ceremony is staying away, but because it has not been asked yet.
+     The welcome guide waits on this rather than on `setupCeremony` alone.
+     Without it the guide opened into the gap and the ceremony landed on top
+     of it a moment later, which is the stack it is written to avoid. */
+  const ceremonyUndecided = walletLoading || packageQuery.isLoading
   // Prices are part of the hero figure, so the total waits for them too —
   // otherwise it prints an under-counted number and then jumps. Nothing to
   // value means nothing to wait for.
@@ -736,7 +745,10 @@ export function ModernWalletPage() {
           button, and because the ceremony is the one thing that has to
           hold it back: two modals at once is what `ceremonyVisible`
           guards. */}
-      <WelcomeGuide ceremonyVisible={setupCeremony} openSignal={helpSignal} />
+      <WelcomeGuide
+        ceremonyVisible={setupCeremony || ceremonyUndecided}
+        openSignal={helpSignal}
+      />
 
       {/* Two invariants live on this one line — read both before editing it.
           (1) FIXED POSITION, MOUNTED UNCONDITIONALLY: this component owns the

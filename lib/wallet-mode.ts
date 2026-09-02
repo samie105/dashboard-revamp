@@ -79,7 +79,17 @@ export function migrationNoticeSurfaces(input: {
   resolved: boolean
   /** The one-time popup has already had its showing. */
   popupSeen: boolean
+  /** They are already looking at the page the popup's only action links to.
+   *  An announcement that says "go here" has nothing to say to someone
+   *  standing there, and on that page it lands on top of the wallet setup
+   *  ceremony — the one modal that page exists to run. The showing is
+   *  DEFERRED, not spent: `popupSeen` stays false, so the announcement is
+   *  still owed the next time they are somewhere it means something. */
+  onDestination?: boolean
 }): { popup: boolean; notification: boolean } {
   if (!input.eligible || input.resolved) return { popup: false, notification: false }
-  return { popup: !input.popupSeen, notification: true }
+  // The notification entry is unaffected: it is a place the message lives,
+  // not something put in front of the reader, so it belongs on the
+  // destination page as much as anywhere else.
+  return { popup: !input.popupSeen && !input.onDestination, notification: true }
 }

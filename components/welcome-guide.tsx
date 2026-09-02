@@ -210,8 +210,10 @@ export function WelcomeGuide({
   openSignal,
   onOpenChange,
 }: {
-  /** The wallet setup ceremony currently owns the page. Only the wallet page
-   *  has one; everywhere else this stays false. */
+  /** The wallet setup ceremony owns the page — or has not decided yet,
+   *  which counts the same: a guide that opens into the gap gets a ceremony
+   *  landed on top of it. Only the wallet page has one; everywhere else this
+   *  stays false. */
   ceremonyVisible?: boolean
   /** Incremented by the page's help button to re-open the guide on demand.
    *  A counter rather than a boolean so repeated presses each re-open it
