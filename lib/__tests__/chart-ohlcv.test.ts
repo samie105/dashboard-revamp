@@ -5,6 +5,7 @@ import {
   stats24hFrom,
   bucketPrices,
   INTERVAL_SECONDS,
+  normalizeBirdeye,
 } from "@/lib/chart-ohlcv"
 
 const HOUR = 3600
@@ -167,5 +168,53 @@ describe("bucketPrices", () => {
   it("says nothing for no samples", () => {
     expect(bucketPrices([], 3600)).toEqual([])
     expect(bucketPrices(undefined, 3600)).toEqual([])
+  })
+})
+
+describe("normalizeBirdeye", () => {
+  /* Shaped from a live response: real OHLC per bar, with `vUsd` alongside the
+     token-denominated `v`. */
+  const bar = (over: Record<string, unknown> = {}) => ({
+    unixTime: 1788174000,
+    address: "So11111111111111111111111111111111111111112",
+    o: 103.63,
+    h: 104.31,
+    l: 102.86,
+    c: 103.54,
+    v: 2921511.52,
+    vUsd: 303059348.82,
+    type: "1H",
+    ...over,
+  })
+
+  it("maps the venue's single-letter fields onto candles", () => {
+    expect(normalizeBirdeye([bar()])[0]).toEqual({
+      time: 1788174000,
+      open: 103.63,
+      high: 104.31,
+      low: 102.86,
+      close: 103.54,
+      volume: 303059348.82,
+    })
+  })
+
+  it("prefers dollar volume, and falls back to the token amount", () => {
+    // Some chains return no `vUsd` at all — Ethereum did, in testing.
+    expect(normalizeBirdeye([bar({ vUsd: undefined })])[0].volume).toBe(2921511.52)
+    expect(normalizeBirdeye([bar({ vUsd: undefined, v: undefined })])[0].volume).toBe(0)
+  })
+
+  it("sorts ascending and drops duplicate timestamps", () => {
+    const rows = [bar({ unixTime: 300 }), bar({ unixTime: 100 }), bar({ unixTime: 100 })]
+    expect(normalizeBirdeye(rows).map((c) => c.time)).toEqual([100, 300])
+  })
+
+  it("drops bars that cannot be read rather than charting NaN", () => {
+    expect(normalizeBirdeye([bar({ c: "n/a" }), bar({ unixTime: 200 })])).toHaveLength(1)
+  })
+
+  it("says nothing for an absent list", () => {
+    expect(normalizeBirdeye(undefined)).toEqual([])
+    expect(normalizeBirdeye([])).toEqual([])
   })
 })

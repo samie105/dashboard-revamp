@@ -25,6 +25,7 @@ import {
   normalizeOhlcv,
   pickBestPool,
   stats24hFrom,
+  normalizeBirdeye,
   bucketPrices,
   INTERVAL_SECONDS,
   num,
@@ -33,6 +34,44 @@ import {
 
 const GECKO = "https://api.geckoterminal.com/api/v2"
 const COINGECKO = "https://api.coingecko.com/api/v3"
+const BIRDEYE = "https://public-api.birdeye.so"
+
+/**
+ * Birdeye's key.
+ *
+ * The literal is a free TEST key, checked in deliberately so the source works
+ * out of the box in development — it is rate-limited to roughly a request a
+ * second and will 429 constantly under real traffic, which the fallback chain
+ * below handles by moving on. Set `BIRDEYE_API_KEY` in the environment for
+ * anything else. It is read server-side only and never reaches the browser.
+ */
+const BIRDEYE_KEY = process.env.BIRDEYE_API_KEY || "f5e71b082a7144608c022ff344717498"
+
+/**
+ * Our network ids → Birdeye's `x-chain` header.
+ *
+ * Birdeye is not Solana-only: the same address-keyed OHLCV endpoint serves
+ * every chain we route, which is why it can be the primary source rather than
+ * a Solana special case.
+ */
+const BIRDEYE_CHAIN: Record<string, string> = {
+  "solana-mainnet-beta": "solana",
+  "ethereum-mainnet": "ethereum",
+  "arbitrum-one": "arbitrum",
+}
+
+/** Our interval keys → Birdeye's `type`. It serves all six, 1m included. */
+const BIRDEYE_TYPE: Record<string, string> = {
+  "1m": "1m",
+  "5m": "5m",
+  "15m": "15m",
+  "1h": "1H",
+  "4h": "4H",
+  "1d": "1D",
+}
+
+/** Bars to ask for. Enough to fill the pane and pan back through. */
+const BIRDEYE_BARS = 1000
 
 /**
  * How many days of samples to ask CoinGecko for, per interval.
@@ -90,7 +129,7 @@ type Payload = {
   candles: Candle[]
   stats: Stats | null
   /** Which upstream answered — the chart says so, and it changes what bars mean. */
-  source: "geckoterminal" | "coingecko" | null
+  source: "birdeye" | "geckoterminal" | "coingecko" | null
   /** Intervals this token can actually be drawn at, given its source. */
   intervals: string[]
 }
@@ -152,7 +191,65 @@ async function findPool(slug: string, token: string, signal: AbortSignal): Promi
 }
 
 /**
- * The fallback source: CoinGecko, by the coin id the market registry already
+ * The primary source: Birdeye, address-keyed OHLCV on every chain we route.
+ *
+ * Real per-bar open/high/low/close with volume, at every interval the ticket
+ * offers — including 1m, which the price-series fallback cannot reach because
+ * its finest sample is five minutes. When this answers, the chart draws
+ * candles and needs no caveat.
+ */
+async function fromBirdeye(
+  networkId: string,
+  token: string,
+  interval: string,
+  signal: AbortSignal,
+): Promise<Payload | null> {
+  const chain = BIRDEYE_CHAIN[networkId]
+  const type = BIRDEYE_TYPE[interval]
+  const seconds = INTERVAL_SECONDS[interval]
+  if (!chain || !type || !seconds || !BIRDEYE_KEY) return null
+
+  const to = Math.floor(Date.now() / 1000)
+  const url = new URL(`${BIRDEYE}/defi/ohlcv`)
+  url.searchParams.set("address", token)
+  url.searchParams.set("type", type)
+  url.searchParams.set("time_from", String(to - seconds * BIRDEYE_BARS))
+  url.searchParams.set("time_to", String(to))
+
+  const response = await fetch(url, {
+    headers: { accept: "application/json", "X-API-KEY": BIRDEYE_KEY, "x-chain": chain },
+    signal,
+  })
+  // A 429 here is routine on the free key. Returning null moves to the next
+  // source rather than failing the request.
+  if (!response.ok) return null
+
+  const body = (await response.json()) as {
+    success?: boolean
+    data?: { items?: Record<string, unknown>[] }
+  }
+  if (body.success === false) return null
+
+  const candles = normalizeBirdeye(body.data?.items)
+  if (candles.length === 0) return null
+
+  const derived = stats24hFrom(candles)
+  // Volume over the last 24h of bars — the series states it, so no second call.
+  const cutoff = candles[candles.length - 1].time - 24 * 60 * 60
+  const volume24h = candles
+    .filter((c) => c.time >= cutoff)
+    .reduce((sum, c) => sum + c.volume, 0)
+
+  return {
+    candles,
+    stats: { ...derived, volume24h: volume24h > 0 ? volume24h : null },
+    source: "birdeye",
+    intervals: ALL_INTERVALS,
+  }
+}
+
+/**
+ * The last source: CoinGecko, by the coin id the market registry already
  * stores as `chartSymbol`.
  *
  * This is not a second opinion, it is the ONLY source for most of the
@@ -211,7 +308,7 @@ export async function GET(request: Request) {
   const running = inflight.get(key)
   if (running) return NextResponse.json(await running)
 
-  const work = resolveChart(slug, token, coinId, interval)
+  const work = resolveChart(networkId, slug, token, coinId, interval)
     .then((payload) => {
       // Intraday bars move; a daily bar does not. A source that answered with
       // nothing is cached briefly too, so an unlisted token is not re-asked on
@@ -232,14 +329,16 @@ export async function GET(request: Request) {
 }
 
 /**
- * Pools first, CoinGecko second.
+ * Birdeye, then pools, then CoinGecko.
  *
- * A pool is the better answer where one exists: real per-bar OHLC, real
- * volume, every interval. But most of the catalogue has no pool on the chain
- * it is listed on, and for those the coin id is the only way to draw anything
- * at all.
+ * The first two both serve real per-bar OHLC with volume; Birdeye is tried
+ * first because it is address-keyed on every chain we route and serves every
+ * interval, where a pool has to exist and be the deepest one. CoinGecko is
+ * last and different in kind — a sampled price line, which is why the chart
+ * labels it and drops the intervals it cannot support.
  */
 async function resolveChart(
+  networkId: string,
   slug: string | undefined,
   token: string,
   coinId: string,
@@ -248,6 +347,16 @@ async function resolveChart(
   const empty: Payload = { candles: [], stats: null, source: null, intervals: ALL_INTERVALS }
   const signal = AbortSignal.timeout(12_000)
   const timeframe = TIMEFRAME[interval]
+
+  if (networkId && token) {
+    try {
+      const priced = await fromBirdeye(networkId, token, interval, signal)
+      if (priced) return priced
+    } catch {
+      // Rate limited or unreachable — the next source is not a worse answer,
+      // just a different one.
+    }
+  }
 
   if (slug && token && timeframe) {
     try {

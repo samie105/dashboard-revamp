@@ -47,7 +47,7 @@ export type ChartStats = {
 type ChartPayload = {
   candles: Candle[]
   stats: ChartStats | null
-  source: "geckoterminal" | "coingecko" | null
+  source: "birdeye" | "geckoterminal" | "coingecko" | null
   intervals?: string[]
 }
 
@@ -120,7 +120,7 @@ export function CandleChart({
      pool is charted from a price series whose finest sample is five minutes,
      so a 1m button there would be a control that returns nothing. */
   const [available, setAvailable] = React.useState<string[]>(INTERVALS)
-  const [origin, setOrigin] = React.useState<"geckoterminal" | "coingecko" | null>(null)
+  const [origin, setOrigin] = React.useState<ChartPayload["source"]>(null)
   /* A fit that is owed but cannot be performed yet.
      The first candles routinely arrive while the pane still measures zero
      wide — `fitContent` against that computes a bar spacing for a chart of no

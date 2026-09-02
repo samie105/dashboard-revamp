@@ -166,3 +166,39 @@ export function bucketPrices(
 
   return [...buckets.values()].sort((a, b) => a.time - b.time)
 }
+
+/**
+ * Birdeye's `defi/ohlcv` items → candles.
+ *
+ * Real per-bar OHLC with volume, keyed by token address, on every chain we
+ * route — so this is the source that lets the chart stop apologising: true
+ * candles at every interval including 1m, where the price-series fallback
+ * cannot go below five minutes.
+ *
+ * `vUsd` is the dollar volume and is the one worth plotting; some chains
+ * return only the token-denominated `v`, and a bar with neither reports zero
+ * rather than a guess.
+ */
+export function normalizeBirdeye(
+  items: readonly Record<string, unknown>[] | undefined,
+): Candle[] {
+  return (items ?? [])
+    .map((item) => ({
+      time: Number(item.unixTime),
+      open: Number(item.o),
+      high: Number(item.h),
+      low: Number(item.l),
+      close: Number(item.c),
+      volume: Number(item.vUsd ?? item.v) || 0,
+    }))
+    .filter(
+      (c) =>
+        Number.isFinite(c.time) &&
+        Number.isFinite(c.open) &&
+        Number.isFinite(c.high) &&
+        Number.isFinite(c.low) &&
+        Number.isFinite(c.close),
+    )
+    .sort((a, b) => a.time - b.time)
+    .filter((c, i, all) => i === 0 || c.time !== all[i - 1].time)
+}
