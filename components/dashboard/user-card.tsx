@@ -6,17 +6,14 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Copy01Icon,
   Exchange01Icon,
-  CreditCardIcon,
   CoinsSwapIcon,
-  Clock01Icon,
   EyeIcon,
-  Wallet01Icon,
-  Chart01Icon,
   ChartLineData01Icon,
   ArrowUpRight01Icon,
+  ArrowDownLeft01Icon,
   MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons"
-import { Balance, ChangeText, DeltaChip, Eyebrow, Skel } from "@/components/ui/system"
+import { Balance, ChangeText, DeltaChip, Eyebrow } from "@/components/ui/system"
 import {
   ResponsiveModal,
   ResponsiveModalContent,
@@ -173,10 +170,6 @@ function Sparkline({ series, tone }: { series: number[]; tone: "up" | "down" | "
 // this one would open onto a screen that cannot trade. Its balance still
 // counts toward the Total and still feeds the 30-day history below — the
 // money is real, only the destination isn't ready.
-const ACCOUNTS = [
-  { key: "main",    label: "Main",    icon: Wallet01Icon, sub: "On-chain balance", href: "/assets" },
-  { key: "spot",    label: "Spot",    icon: Chart01Icon,  sub: "Spot trading",     href: "/trade" },
-] as const
 
 export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const { user, isLoaded } = useAuth()
@@ -230,7 +223,6 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     load()
     const id = setInterval(load, 30_000)
     return () => { cancelled = true; clearInterval(id) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Dollar Account (worldstreet-wallet) — the Cash card. USD only; NGN is a
@@ -336,12 +328,6 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
 
   const totalBalance = onChainTotal + spotBalance + futuresBalance + cashBalance
 
-  const accountBalances: Record<"main" | "spot" | "futures", number> = {
-    main: onChainTotal,
-    spot: spotBalance,
-    futures: futuresBalance,
-  }
-
   // ── 30-day value history per account (holdings × real price series) ──
   const accountSpecs: AccountSpec[] = React.useMemo(() => {
     const mainHoldings: Record<string, number> = {}
@@ -365,6 +351,32 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   }, [onChainBalances, spotV2Positions, hlPositions, onChainTotal, spotBalance, futuresBalance, cashBalance])
 
   const { sparkSeries, changes: periodChanges } = useAccountHistory(accountSpecs)
+
+  /* One curve for the whole portfolio, replacing the per-account cards.
+     The accounts were shown as two tiles with a sparkline each — a lot of
+     furniture for a breakdown most people read once. The total's own shape is
+     the thing worth seeing, so the per-account series are summed into it.
+     Accounts report different history lengths, so the sum runs to the SHORTEST:
+     padding a missing account with zeros would draw a cliff on the day its
+     history begins. */
+  const totalSeries = React.useMemo(() => {
+    const series = Object.values(sparkSeries).filter(
+      (s): s is number[] => Array.isArray(s) && s.length > 1,
+    )
+    if (series.length === 0) return null
+    const length = Math.min(...series.map((s) => s.length))
+    return Array.from({ length }, (_, i) =>
+      series.reduce((sum, s) => sum + s[s.length - length + i], 0),
+    )
+  }, [sparkSeries])
+
+  const totalTone: "up" | "down" | "flat" = React.useMemo(() => {
+    if (!totalSeries || totalSeries.length < 2) return "flat"
+    const first = totalSeries[0]
+    const last = totalSeries[totalSeries.length - 1]
+    if (Math.abs(first) < 1e-9 || Math.abs(last - first) / Math.abs(first) < 0.00005) return "flat"
+    return last > first ? "up" : "down"
+  }, [totalSeries])
 
   const PERIODS = [
     { label: "Today", value: periodChanges.today },
@@ -401,7 +413,12 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   // No chain selected ("All networks") → no address chip.
   const activeChain = selectedWallet ? WALLETS.find((w) => w.key === selectedWallet) : undefined
 
-  /* Deposit opens in place — funding a self-custodial wallet is being shown
+  /* Deposit and Withdraw are ONE pair and now look like it: the same arrow,
+     mirrored — in and out of the wallet. They used to be an exchange glyph and
+     a credit card, two unrelated pictures for two halves of one idea, and
+     neither of them said "direction".
+
+     Deposit opens in place — funding a self-custodial wallet is being shown
      its address, which is a modal's worth of content and no reason to leave
      the page. Withdraw goes to /wallet/modern: sending needs a balance to
      pick from, a chain, a destination and an unlock, and that is a screen.
@@ -419,12 +436,10 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   }
 
   const PRIMARY_ACTIONS: DashAction[] = [
+    { label: "Deposit", onClick: () => setReceiveOpen(true), icon: ArrowDownLeft01Icon, vivid: "open-deposit", vividLabel: "Show the wallet's deposit addresses" },
     walletMode === "modern"
-      ? { label: "Deposit", onClick: () => setReceiveOpen(true), icon: Exchange01Icon, vivid: "open-deposit", vividLabel: "Show the wallet's deposit addresses" }
-      : { label: "Deposit", onClick: () => openFlow("buy"), icon: Exchange01Icon, vivid: "open-deposit", vividLabel: "Open the deposit modal" },
-    walletMode === "modern"
-      ? { label: "Withdraw", href: "/wallet/modern", icon: CreditCardIcon, vivid: "open-withdraw", vividLabel: "Go to the wallet to send funds" }
-      : { label: "Withdraw", onClick: () => openFlow("sell"), icon: CreditCardIcon, vivid: "open-withdraw", vividLabel: "Open the withdraw modal" },
+      ? { label: "Withdraw", href: "/wallet/modern", icon: ArrowUpRight01Icon, vivid: "open-withdraw", vividLabel: "Go to the wallet to send funds" }
+      : { label: "Withdraw", onClick: () => openFlow("sell"), icon: ArrowUpRight01Icon, vivid: "open-withdraw", vividLabel: "Open the withdraw modal" },
   ]
 
   const MORE_ACTIONS: DashAction[] = [
@@ -504,81 +519,14 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             </div>
           </div>
 
-          {/* Account cards — the Total's breakdown, every figure on screen at
-              once instead of hidden behind tabs. Each card is a door to the
-              surface where that money actually lives. */}
-          <div
-            data-onboarding="dash-balance-cards"
-            className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
-          >
-            {ACCOUNTS.map((a) => {
-              const series = sparkSeries[a.key]
-              const first = series?.[0] ?? 0
-              const cardChange =
-                series && Math.abs(first) > 1e-9
-                  ? ((series[series.length - 1] - first) / Math.abs(first)) * 100
-                  : null
-              const tone: "up" | "down" | "flat" =
-                cardChange === null || Math.abs(cardChange) < 0.005
-                  ? "flat"
-                  : cardChange > 0
-                    ? "up"
-                    : "down"
-              return (
-                <Link
-                  key={a.key}
-                  href={a.href}
-                  data-vivid-target={`balance-view-${a.key}`}
-                  data-vivid-label={`Open the ${a.label} account`}
-                  className="ws-card-glass group relative flex min-w-0 flex-col gap-2 rounded-2xl bg-card/70 p-3.5 pb-3 sm:gap-3 sm:p-4 sm:pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0"
-                >
-                  {/* Gradient stroke — brand gold dissolving diagonally to
-                      nothing. Masked ring (padding-box XOR) instead of a
-                      border-image so the translucent fill keeps showing the
-                      silk through the card. */}
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-2xl p-px opacity-80 transition-opacity group-hover:opacity-100"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, color-mix(in oklab, var(--primary) 55%, transparent), color-mix(in oklab, var(--primary) 14%, transparent) 38%, transparent 68%)",
-                      WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-                      WebkitMaskComposite: "xor",
-                      mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-                      maskComposite: "exclude",
-                    }}
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.05]">
-                      <HugeiconsIcon icon={a.icon} className="h-4 w-4 text-muted-foreground" />
-                    </span>
-                    <Eyebrow>{a.label}</Eyebrow>
-                    <span className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3.5 w-3.5" />
-                    </span>
-                  </div>
-                  <span className="text-[22px] font-semibold leading-none tabular-nums tracking-tight">
-                    {hidden ? "••••" : formatUSD(accountBalances[a.key])}
-                  </span>
-                  {series && series.length > 1 ? (
-                    <Sparkline series={series} tone={tone} />
-                  ) : (
-                    <Skel className="h-8 w-full rounded-md sm:h-12" />
-                  )}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">{a.sub}</span>
-                    {cardChange !== null && tone !== "flat" && !hidden ? (
-                      <ChangeText value={cardChange} className="text-[11.5px]" />
-                    ) : (
-                      <span className="text-[11.5px] font-medium tabular-nums text-muted-foreground/50">
-                        {hidden ? "••" : "30d"}
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
+          {/* The portfolio's own 30-day shape. One curve where two account
+              cards used to be: the same information the tiles carried between
+              them, at the size the number beside it deserves. */}
+          {totalSeries && !hidden && (
+            <div className="h-14 w-full sm:h-16">
+              <Sparkline series={totalSeries} tone={totalTone} />
+            </div>
+          )}
 
           {/* Action rail — two verbs and an overflow, no sideways scroll. */}
           <div data-onboarding="dash-actions" className="flex items-stretch gap-2">
@@ -615,44 +563,85 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             </button>
           </div>
 
-          {/* Network footer — the receive surface, demoted under the actions:
-              one compact value-carrying chip per chain (mobile grammar), tap
-              to surface that chain's address, tap again to put it away. */}
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+          {/* Where the money actually sits.
+              This was a single scrolling row of pills, each carrying a chain
+              name and a value in 12px grey — six chains competing for one line,
+              so nothing was legible and the differences between them were
+              invisible. It is a grid now: every chain on screen at once, its
+              value at a size worth reading, and a share bar making the split
+              obvious without arithmetic. Selecting one opens its address in
+              place rather than appending a chip to the end of the row. */}
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {WALLETS.map((w) => {
               const active = w.key === selectedWallet
+              const value = chainTotals[w.key] ?? 0
+              // Share of the on-chain total, which is what these chips add up
+              // to — not of the portfolio, which includes accounts they don't.
+              const share = onChainTotal > 0 ? (value / onChainTotal) * 100 : 0
               return (
                 <button
                   key={w.key}
                   onClick={() => setSelectedWallet(active ? null : w.key)}
-                  className={`flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-2.5 transition-colors ${
-                    active ? "bg-accent" : "hover:bg-accent/50"
+                  data-vivid-target={`dash-chain-${w.key}`}
+                  data-vivid-label={`Show the ${w.label} address and balance`}
+                  aria-pressed={active}
+                  className={`ws-card-glass flex flex-col gap-2 rounded-xl px-3 py-2.5 text-left ring-1 transition-all ${
+                    active
+                      ? "bg-accent/70 ring-primary/30"
+                      : "bg-card/50 ring-border/40 hover:bg-accent/50"
                   }`}
                 >
-                  <img src={w.icon} alt="" className="h-5 w-5 rounded-full" />
-                  <span className={`text-[12.5px] font-medium ${active ? "" : "text-muted-foreground"}`}>{w.label}</span>
-                  <span className="text-[12px] tabular-nums text-muted-foreground/70">
-                    {hidden ? "••••" : formatUSD(chainTotals[w.key] ?? 0)}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <img src={w.icon} alt="" className="h-5 w-5 shrink-0 rounded-full" />
+                    <span className="truncate text-[12.5px] font-medium">{w.label}</span>
+                  </span>
+                  <span className="text-[15px] font-semibold leading-none tabular-nums">
+                    {hidden ? "••••" : formatUSD(value)}
+                  </span>
+                  {/* A chain holding nothing gets an empty track rather than a
+                      bar of zero width pretending to be a measurement. */}
+                  <span
+                    aria-hidden
+                    className="h-1 w-full overflow-hidden rounded-full bg-foreground/[0.06]"
+                  >
+                    {share > 0 && (
+                      <span
+                        className="block h-full rounded-full bg-primary/70"
+                        style={{ width: `${Math.max(share, 3)}%` }}
+                      />
+                    )}
                   </span>
                 </button>
               )
             })}
-            {activeChain && activeChain.addr && (
-              <button
-                onClick={() => handleCopy(activeChain.addr, activeChain.key)}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-card/60 px-3 py-2 font-mono text-[12px] text-muted-foreground transition-colors hover:bg-accent"
-              >
-                {truncAddr(activeChain.addr)}
-                <HugeiconsIcon
-                  icon={Copy01Icon}
-                  className={`h-3.5 w-3.5 shrink-0 ${isCopied === activeChain.key ? "text-credit" : "text-muted-foreground/50"}`}
-                />
-              </button>
-            )}
-            <span className="ml-auto hidden shrink-0 pl-4 text-[12px] text-muted-foreground lg:block">
-              {activeAssetCount} assets · {NETWORKS.length} networks
-            </span>
           </div>
+
+          {/* The selected chain's address, in its own row so it is readable
+              rather than squeezed onto the end of a scroller. */}
+          {activeChain && activeChain.addr && (
+            <button
+              onClick={() => handleCopy(activeChain.addr, activeChain.key)}
+              className="ws-card-glass flex items-center gap-2 self-start rounded-xl bg-card/60 px-3 py-2 ring-1 ring-border/40 transition-colors hover:bg-accent"
+            >
+              <img src={activeChain.icon} alt="" className="h-4 w-4 shrink-0 rounded-full" />
+              <span className="font-mono text-[12px] text-muted-foreground">
+                {truncAddr(activeChain.addr)}
+              </span>
+              <HugeiconsIcon
+                icon={Copy01Icon}
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  isCopied === activeChain.key ? "text-credit" : "text-muted-foreground/50"
+                }`}
+              />
+              <span className="text-[11px] font-medium text-muted-foreground/70">
+                {isCopied === activeChain.key ? "Copied" : "Copy"}
+              </span>
+            </button>
+          )}
+
+          <span className="text-[12px] text-muted-foreground">
+            {activeAssetCount} assets · {NETWORKS.length} networks
+          </span>
         </div>
       </div>
 
