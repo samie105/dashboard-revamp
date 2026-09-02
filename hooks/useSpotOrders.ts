@@ -11,15 +11,18 @@
  *
  * The backend's `/transactions` records are the ledger: one row per broadcast,
  * with the network, the hash and the settlement status the reconciler keeps
- * up to date from the chain. What they do NOT carry is the trade — the record
- * stores only `assetSummary.asset`, so the amount, the direction and the
- * router live on the INTENT. Hence the hydration below: the list comes from
- * the ledger in one request, and each row's terms are read from its intent,
- * cached forever because a terminal intent never changes again.
+ * up to date from the chain — and now `summary`, the intent's own
+ * `normalizedSummary`, carrying the amount, the two tokens and the router.
+ *
+ * That last field is why this is one request. The record used to store only
+ * `assetSummary.asset`, so describing a trade meant fetching its intent, and
+ * a page of history meant a request per row. The backend denormalises the
+ * summary at broadcast now, and fills it in from the intent for older rows in
+ * a single query, so the client just reads it.
  */
 
 import * as React from "react"
-import { useQueries, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/components/auth-provider"
 import {
   cryptoBackendClient,
@@ -30,9 +33,6 @@ import type { CryptoTransactionRecord } from "@/lib/crypto-backend"
 
 /** Intents whose action means "a spot trade", as the backend names them. */
 const SWAP_ACTIONS = new Set(["spot-swap", "jupiter-swap"])
-
-/** How many recent ledger rows to read terms for. */
-const HYDRATE_LIMIT = 25
 
 export type SpotOrder = {
   id: string
@@ -67,41 +67,18 @@ export function useSpotOrders(enabled = true) {
     queryFn: ({ signal }) => cryptoBackendClient.listTransactions(50, signal),
     enabled: active,
     staleTime: 15_000,
+    // A submitted order settles in seconds; the reconciler writes the outcome
+    // to the ledger, so polling it is how "Filling" becomes "Filled".
     refetchInterval: 20_000,
-  })
-
-  /* Only the most recent rows are hydrated. The ledger holds transfers and
-     deposits too, and there is no way to tell a swap from a transfer without
-     reading the intent — so this reads a bounded window rather than issuing a
-     request per row of an unbounded history. */
-  const candidates = React.useMemo(
-    () => (ledger.data ?? []).slice(0, HYDRATE_LIMIT),
-    [ledger.data],
-  )
-
-  const intents = useQueries({
-    queries: candidates.map((record) => ({
-      queryKey: cryptoQueryKeys.intent(userId, String(record.intentId ?? record.id)),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        cryptoBackendClient.getIntent(String(record.intentId ?? record.id), signal),
-      enabled: active && Boolean(record.intentId),
-      // An intent is immutable once written; only its status moves, and the
-      // ledger row already carries that.
-      staleTime: Number.POSITIVE_INFINITY,
-      gcTime: 30 * 60_000,
-      retry: false,
-    })),
   })
 
   const orders = React.useMemo<SpotOrder[]>(() => {
     const out: SpotOrder[] = []
-    candidates.forEach((record: CryptoTransactionRecord, i) => {
-      const intent = intents[i]?.data as Record<string, unknown> | undefined
-      if (!intent) return
-      const summary = asRecord(intent.normalizedSummary)
-      const payload = asRecord(intent.intentPayload)
-      const action = str(summary.action) ?? str(payload.type)
-      if (!action || !SWAP_ACTIONS.has(action)) return
+    for (const record of (ledger.data ?? []) as CryptoTransactionRecord[]) {
+      const summary = asRecord(record.summary)
+      const action = str(summary.action)
+      // The ledger holds transfers and deposits too; the action names a trade.
+      if (!action || !SWAP_ACTIONS.has(action)) continue
       out.push({
         id: record.id,
         // The ledger's status, not the intent's: the reconciler writes it from
@@ -110,23 +87,18 @@ export function useSpotOrders(enabled = true) {
         networkId: String(record.networkId ?? ""),
         txHash: String(record.txHash ?? ""),
         createdAt: str(record.submittedAt) ?? str(record.createdAt),
-        sellToken: str(summary.sellToken) ?? str(payload.sellToken) ?? str(payload.inputMint),
-        buyToken: str(summary.buyToken) ?? str(payload.buyToken) ?? str(payload.outputMint),
+        sellToken: str(summary.sellToken),
+        buyToken: str(summary.buyToken) ?? str(asRecord(summary.asset).identifier),
         amount: str(summary.amount),
-        router: str(summary.router) ?? str(payload.router),
+        router: str(summary.router),
       })
-    })
+    }
     return out
-  }, [candidates, intents])
-
-  // Hydration is progressive: rows appear as their intents land, so the panel
-  // is never blocked on the slowest of twenty-five requests.
-  const hydrating = intents.some((query) => query.isLoading)
+  }, [ledger.data])
 
   return {
     orders,
     loading: ledger.isLoading,
-    hydrating,
     error: ledger.error,
     refetch: ledger.refetch,
   }

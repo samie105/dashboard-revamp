@@ -155,7 +155,7 @@ function shortAddress(address: string | null): string {
 }
 
 export function OrdersPanel({ className }: { className?: string }) {
-  const { orders, loading, hydrating } = useSpotOrders()
+  const { orders, loading } = useSpotOrders()
   const registry = useSpotRegistry()
 
   const marketFor = React.useCallback(
@@ -173,9 +173,6 @@ export function OrdersPanel({ className }: { className?: string }) {
         <span className="rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
           {orders.length}
         </span>
-        {hydrating && (
-          <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        )}
       </div>
 
       <div className="slim-scroll min-h-0 flex-1 overflow-auto">
@@ -185,9 +182,8 @@ export function OrdersPanel({ className }: { className?: string }) {
           </div>
         ) : orders.length === 0 ? (
           <p className="px-3 py-8 text-center text-[11.5px] text-muted-foreground">
-            {hydrating
-              ? "Looking for your orders…"
-              : "No spot orders yet — the ones you place appear here with their on-chain status."}
+            No spot orders yet — the ones you place appear here with their
+            on-chain status.
           </p>
         ) : (
           <table className="w-full border-collapse">

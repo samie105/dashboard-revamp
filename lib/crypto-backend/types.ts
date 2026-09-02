@@ -109,6 +109,14 @@ export interface CryptoTransactionRecord {
   fromAddress?: string
   toAddress?: string
   assetSummary?: CryptoAssetReference
+  /**
+   * The intent's `normalizedSummary`, denormalised onto the record at
+   * broadcast: action, amount, the two tokens, the router. Older records are
+   * filled in from their intent by the backend on read, so this is present
+   * for anything that was a real intent — but it stays optional, because a
+   * client must not assume a field a deployed backend may predate.
+   */
+  summary?: Record<string, unknown>
   createdAt?: string
   submittedAt?: string
   confirmedAt?: string
