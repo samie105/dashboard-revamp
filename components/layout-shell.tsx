@@ -11,6 +11,7 @@ import { MoneyFlowProvider } from "@/components/flows/money-flow-modal"
 import { SilkBackdrop } from "@/components/ui/silk-backdrop"
 import { LiquidGlassPointer } from "@/components/liquid-glass"
 import { prefetchSpotMarkets } from "@/lib/spot-markets"
+import { MigrationNoticePopup } from "@/components/crypto/MigrationNotice"
 
 /** Routes that render full-bleed (no sidebar / top-nav / navbar). */
 const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
@@ -115,6 +116,11 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
             </SidebarProvider>
           </div>
           <MobileBottomNav />
+          {/* Spec §2 — the legacy-wallet migration message, shown once per
+              user as an announcement. It lives on afterwards in the navbar's
+              notification centre (MigrationNotice variant="notification"),
+              which is reachable on mobile and desktop alike. */}
+          <MigrationNoticePopup />
         </div>
       </MoneyFlowProvider>
     </IncomingCallProvider>

@@ -2,15 +2,27 @@
 
 /**
  * Spec §2: nudges confirmed legacy-wallet owners to move their funds to the
- * new self-custodial embedded wallet. Two surfaces, one predicate:
- *  - "banner" — first thing in the dashboard's main column.
+ * new self-custodial embedded wallet.
+ *
+ * Two surfaces, and they answer to DIFFERENT state:
+ *  - "popup" — a one-time introduction, mounted app-wide by LayoutShell. It
+ *    is announcement, not chrome: it appears once per user and never again,
+ *    whatever they do with it. Closing it is not a decision, so closing it
+ *    must not retire the message.
  *  - "notification" — pinned above fetched notifications in the navbar's
- *    grouped dropdown.
+ *    grouped dropdown, on mobile and desktop alike. This is where the
+ *    message LIVES after the popup has had its one showing, so it persists
+ *    until the user actually resolves it ("I've already moved them", or an
+ *    explicit dismiss from the row itself).
+ *
+ * The dashboard banner is gone. A persistent slab at the top of the main
+ * column restated a message the user had already read, and on a phone it
+ * cost half the first screen — see the popup + notification pair above.
  *
  * Never shown to modern-only (new) users or while the legacy-wallet lookup
  * is inconclusive — `shouldShowMigrationNotice` (lib/wallet-mode.ts) owns
  * that rule as a pure, unit-tested predicate. This file only wires it to
- * live wallet state, the feature flags, and localStorage dismissal.
+ * live wallet state, the feature flags, and localStorage.
  */
 
 import * as React from "react"
@@ -20,8 +32,14 @@ import { Wallet01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { useAuth } from "@/components/auth-provider"
 import { useWallet } from "@/components/wallet-provider"
 import { isCryptoBackendEnabled, isLegacyPrivyEnabled } from "@/lib/crypto-backend"
-import { shouldShowMigrationNotice } from "@/lib/wallet-mode"
-import { IconAction } from "@/components/ui/system"
+import { migrationNoticeSurfaces, shouldShowMigrationNotice } from "@/lib/wallet-mode"
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalDescription,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from "@/components/ui/responsive-modal"
 
 // Plain-language rewrite of the spec §2 copy (owner's call, 2026-08-29):
 // the verbatim spec text ("self-custodial", "embedded wallet", "signing
@@ -42,9 +60,17 @@ type DismissalValue = "dismissed" | "confirmed" | null
 type DismissalSnapshot = DismissalValue | "unknown"
 
 const DISMISSAL_PREFIX = "ws:migration-dismissed:"
+/** Separate from dismissal on purpose: "you have been shown this once" and
+ *  "you have dealt with this" are different facts. Sharing one key made
+ *  closing the popup silently retire the notification-centre entry too. */
+const POPUP_SEEN_PREFIX = "ws:migration-popup-seen:"
 
 function dismissalKey(userId: string | undefined) {
   return `${DISMISSAL_PREFIX}${userId ?? "anonymous"}`
+}
+
+function popupSeenKey(userId: string | undefined) {
+  return `${POPUP_SEEN_PREFIX}${userId ?? "anonymous"}`
 }
 
 function parseDismissal(raw: string | null): DismissalValue {
@@ -79,7 +105,7 @@ const migrationDismissalStore = (() => {
         notify()
         return
       }
-      if (!event.key.startsWith(DISMISSAL_PREFIX)) return
+      if (!event.key.startsWith(DISMISSAL_PREFIX) && !event.key.startsWith(POPUP_SEEN_PREFIX)) return
       cache.set(event.key, parseDismissal(event.newValue))
       notify()
     })
@@ -105,6 +131,7 @@ const migrationDismissalStore = (() => {
     getServerSnapshot(): DismissalSnapshot {
       return "unknown"
     },
+    /** Also used to mark the popup seen (value "dismissed" on its own key). */
     dismiss(key: string, value: "dismissed" | "confirmed") {
       cache.set(key, value)
       try {
@@ -117,8 +144,8 @@ const migrationDismissalStore = (() => {
 
 /** Reads this user's dismissal through the shared store, kept in sync
  *  across every mounted instance and every open tab. */
-function useMigrationDismissal(userId: string | undefined) {
-  const key = dismissalKey(userId)
+function useMigrationDismissal(userId: string | undefined, keyOverride?: string) {
+  const key = keyOverride ?? dismissalKey(userId)
   const getSnapshot = React.useCallback(
     () => migrationDismissalStore.getSnapshot(key),
     [key],
@@ -135,60 +162,82 @@ function useMigrationDismissal(userId: string | undefined) {
   return { snapshot, dismiss }
 }
 
-/** Shared visibility + dismissal wiring for both variants. The pure
- *  predicate stays in lib/wallet-mode.ts; this hook feeds it live state. */
-function useMigrationNoticeVisible() {
+/** Shared wiring. The pure predicate stays in lib/wallet-mode.ts; this hook
+ *  feeds it live state and reports the two facts separately:
+ *   · `eligible`  — this user should hear the message at all.
+ *   · `resolved`  — they have dealt with it, so the notification entry retires.
+ *   · `popupSeen` — the one-time introduction has already run. */
+function useMigrationNoticeState() {
   const { user } = useAuth()
   const { legacyWalletExists } = useWallet()
   const { snapshot, dismiss } = useMigrationDismissal(user?.userId)
+  const { snapshot: seenSnapshot, dismiss: markSeen } = useMigrationDismissal(
+    // A distinct key, read through the same store so every mounted instance
+    // and every open tab agree on it.
+    undefined,
+    popupSeenKey(user?.userId),
+  )
 
-  const visible =
-    snapshot !== "unknown" &&
+  const known = snapshot !== "unknown" && seenSnapshot !== "unknown"
+  const eligible =
+    known &&
     shouldShowMigrationNotice({
       modernEnabled: isCryptoBackendEnabled,
       legacyEnabled: isLegacyPrivyEnabled,
       legacyWalletExists,
-      dismissed: snapshot !== null,
+      // Eligibility asks "does this user have a legacy wallet to move?", not
+      // "have they closed something" — resolution is applied per surface.
+      dismissed: false,
     })
 
-  return { visible, dismiss }
+  return {
+    eligible,
+    resolved: snapshot !== null && snapshot !== "unknown",
+    popupSeen: seenSnapshot !== null && seenSnapshot !== "unknown",
+    dismiss,
+    markSeen: React.useCallback(() => markSeen("dismissed"), [markSeen]),
+  }
 }
 
-function DismissIcon({ className }: { className?: string }) {
-  return <HugeiconsIcon icon={Cancel01Icon} className={className} />
-}
-
-function MigrationBanner({ onConfirm, onDismiss }: {
+function MigrationPopupBody({ onConfirm, onClose }: {
   onConfirm: () => void
-  onDismiss: () => void
+  onClose: () => void
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl bg-surface-sunken/70 px-4 py-3.5 ring-1 ring-border/25">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
-        <HugeiconsIcon icon={Wallet01Icon} className="h-4 w-4" />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-        <p className="text-[13px] leading-relaxed text-muted-foreground">
-          <span className="font-semibold text-foreground">{MIGRATION_LEAD}</span>
-          {MIGRATION_REST}
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/wallet/modern"
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-primary/40 px-4 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/10"
-          >
-            Move my funds
-          </Link>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-          >
-            I&rsquo;ve already moved them
-          </button>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
+          <HugeiconsIcon icon={Wallet01Icon} className="h-6 w-6" />
+        </span>
+        <ResponsiveModalTitle className="font-display text-[17px] font-semibold">
+          {MIGRATION_LEAD}
+        </ResponsiveModalTitle>
+        <ResponsiveModalDescription className="text-[13px] leading-relaxed">
+          {MIGRATION_REST.trim()}
+        </ResponsiveModalDescription>
       </div>
-      <IconAction icon={DismissIcon} label="Dismiss" onClick={onDismiss} />
+      <div className="flex flex-col gap-2">
+        <Link
+          href="/wallet/modern"
+          onClick={onClose}
+          className="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-5 text-[13px] font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          Move my funds
+        </Link>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="inline-flex min-h-11 items-center justify-center rounded-full px-5 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        >
+          I&rsquo;ve already moved them
+        </button>
+      </div>
+      {/* No "remind me later". The popup only ever runs once; the message
+          then lives in the notification centre, which is where the user can
+          come back to it on their own terms. */}
+      <p className="text-center text-[11px] text-muted-foreground/60">
+        You can find this again under notifications.
+      </p>
     </div>
   )
 }
@@ -241,16 +290,53 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
   )
 }
 
-export function MigrationNotice({ variant }: { variant: "banner" | "notification" }) {
-  const { visible, dismiss } = useMigrationNoticeVisible()
-  if (!visible) return null
+/**
+ * The one-time introduction. Mounted once, app-wide, by LayoutShell.
+ *
+ * `markSeen` fires when the popup is first shown, not when it is closed: a
+ * user who reloads mid-read has already had their showing, and a popup that
+ * can reappear because it was never formally closed is exactly the thing
+ * this is meant not to be.
+ */
+export function MigrationNoticePopup() {
+  const { eligible, resolved, popupSeen, dismiss, markSeen } = useMigrationNoticeState()
+  const show = migrationNoticeSurfaces({ eligible, resolved, popupSeen }).popup
+  const [open, setOpen] = React.useState(false)
 
-  const onConfirm = () => dismiss("confirmed")
-  const onDismiss = () => dismiss("dismissed")
+  React.useEffect(() => {
+    if (!show) return
+    setOpen(true)
+    markSeen()
+  }, [show, markSeen])
 
-  return variant === "banner" ? (
-    <MigrationBanner onConfirm={onConfirm} onDismiss={onDismiss} />
-  ) : (
-    <MigrationNotificationRow onConfirm={onConfirm} onDismiss={onDismiss} />
+  if (!show && !open) return null
+
+  return (
+    <ResponsiveModal open={open} onOpenChange={setOpen}>
+      <ResponsiveModalContent className="sm:max-w-sm">
+        <ResponsiveModalHeader className="sr-only">
+          <ResponsiveModalTitle>{MIGRATION_LEAD}</ResponsiveModalTitle>
+        </ResponsiveModalHeader>
+        <MigrationPopupBody
+          onClose={() => setOpen(false)}
+          onConfirm={() => { dismiss("confirmed"); setOpen(false) }}
+        />
+      </ResponsiveModalContent>
+    </ResponsiveModal>
+  )
+}
+
+/** The notification-centre entry — mobile and desktop alike. Outlives the
+ *  popup and retires only when the user resolves it. */
+export function MigrationNotice({ variant }: { variant: "notification" }) {
+  const { eligible, resolved, popupSeen, dismiss } = useMigrationNoticeState()
+  if (variant !== "notification") return null
+  if (!migrationNoticeSurfaces({ eligible, resolved, popupSeen }).notification) return null
+
+  return (
+    <MigrationNotificationRow
+      onConfirm={() => dismiss("confirmed")}
+      onDismiss={() => dismiss("dismissed")}
+    />
   )
 }

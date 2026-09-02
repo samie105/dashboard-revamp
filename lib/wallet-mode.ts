@@ -56,3 +56,30 @@ export function shouldShowMigrationNotice(input: {
     !input.dismissed
   )
 }
+
+/**
+ * Spec §2 surfaces. The migration message has two of them and they answer to
+ * different state, which is the whole point:
+ *
+ *  - The POPUP is an announcement. It runs once per user and never again —
+ *    `popupSeen` is set the moment it is shown, not when it is closed, so a
+ *    reload mid-read does not earn a second showing.
+ *  - The NOTIFICATION-centre entry is where the message lives afterwards, on
+ *    mobile and desktop alike. It outlives the popup and retires only when
+ *    the user actually resolves it ("I've already moved them", or dismissing
+ *    the row itself).
+ *
+ * Keeping this pure means the "exactly once" rule is testable without
+ * mounting React, and neither surface can drift from the other.
+ */
+export function migrationNoticeSurfaces(input: {
+  /** The base predicate — does this user have a legacy wallet to move? */
+  eligible: boolean
+  /** They have dealt with it; both surfaces retire. */
+  resolved: boolean
+  /** The one-time popup has already had its showing. */
+  popupSeen: boolean
+}): { popup: boolean; notification: boolean } {
+  if (!input.eligible || input.resolved) return { popup: false, notification: false }
+  return { popup: !input.popupSeen, notification: true }
+}

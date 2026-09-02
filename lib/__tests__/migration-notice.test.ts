@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { shouldShowMigrationNotice } from "@/lib/wallet-mode"
+import { migrationNoticeSurfaces, shouldShowMigrationNotice } from "@/lib/wallet-mode"
 
 describe("shouldShowMigrationNotice", () => {
   // Spec §2: legacy-wallet owners get nudged to migrate once both wallet
@@ -71,5 +71,44 @@ describe("shouldShowMigrationNotice", () => {
         dismissed: false,
       }),
     ).toBe(false)
+  })
+})
+
+describe("migrationNoticeSurfaces", () => {
+  const eligible = { eligible: true, resolved: false, popupSeen: false }
+
+  // The popup is an announcement: a user who has never seen it gets it, and
+  // the notification-centre entry is pinned from the same moment.
+  it("shows the popup and the notification entry to a fresh eligible user", () => {
+    expect(migrationNoticeSurfaces(eligible)).toEqual({ popup: true, notification: true })
+  })
+
+  // The whole point of the split: once shown, the popup never runs again, but
+  // the message does NOT disappear — it lives on in the notification centre,
+  // on mobile and desktop alike.
+  it("retires the popup after one showing while keeping the notification entry", () => {
+    expect(migrationNoticeSurfaces({ ...eligible, popupSeen: true })).toEqual({
+      popup: false,
+      notification: true,
+    })
+  })
+
+  // Resolving is the only thing that retires BOTH surfaces.
+  it("retires both surfaces once the user resolves it", () => {
+    expect(migrationNoticeSurfaces({ ...eligible, resolved: true })).toEqual({
+      popup: false,
+      notification: false,
+    })
+    expect(
+      migrationNoticeSurfaces({ eligible: true, resolved: true, popupSeen: true }),
+    ).toEqual({ popup: false, notification: false })
+  })
+
+  // A modern-only user, or one whose legacy lookup is inconclusive, gets
+  // neither surface — resolution state is irrelevant.
+  it("shows nothing to an ineligible user", () => {
+    expect(
+      migrationNoticeSurfaces({ eligible: false, resolved: false, popupSeen: false }),
+    ).toEqual({ popup: false, notification: false })
   })
 })
