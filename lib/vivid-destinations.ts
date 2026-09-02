@@ -71,12 +71,15 @@ export const DESTINATIONS: Destination[] = [
       "The exchange workspace on the SPOT tab — chart, order book, markets rail and the buy/sell ticket. Go here to actually place a spot order.",
   },
   {
+    // Futures is NOT open yet. The destination stays listed so the assistant
+    // can answer "can I trade futures?" truthfully instead of hallucinating a
+    // route, but its description now tells it not to send anyone there.
     id: "trade_futures",
-    label: "Futures trading",
-    url: "/trade?market=futures",
+    label: "Futures trading (not open yet)",
+    url: "/trade",
     external: false,
     description:
-      "The exchange workspace on the FUTURES tab — leverage up to the contract max, TP/SL, positions with liquidation and margin. Go here to long or short.",
+      "Perpetual futures are NOT available on the platform yet. Do not navigate here to place a futures order and do not promise leverage, shorting, TP/SL or margin. If the user asks for futures, say plainly that it is not open yet and offer spot trading instead.",
   },
   {
     id: "swap",

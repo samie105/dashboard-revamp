@@ -23,7 +23,7 @@ const DASHBOARD_STEPS: OnboardingStep[] = [
     target: '[data-onboarding="dash-balance-cards"]',
     title: "Your Balances",
     description:
-      "Your total, with the Main, Spot, and Futures breakdown always in view below it. Tap a card to open that account. Balances update in real-time.",
+      "Your total, with the Main and Spot breakdown always in view below it. Tap a card to open that account. Balances update in real-time.",
     placement: "bottom",
   },
   {
@@ -51,7 +51,7 @@ const DASHBOARD_STEPS: OnboardingStep[] = [
     target: '[data-onboarding="dash-trades"]',
     title: "Recent Trades",
     description:
-      "Your latest spot and futures fills, right next to the swap desk so you can act on them.",
+      "Your latest spot fills, right next to the swap desk so you can act on them.",
     placement: "top",
   },
 ]

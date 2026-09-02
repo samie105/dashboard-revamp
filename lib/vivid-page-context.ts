@@ -26,7 +26,7 @@ export const PAGE_CONTEXT: Record<string, PageInfo> = {
   "/": {
     name: "Dashboard home",
     summary:
-      "The signed-in crypto dashboard. A balance hero with four views — Total, Main (on-chain), Spot and Futures — a per-chain strip (Ethereum, Arbitrum, Solana, Sui, TON, Tron) with per-chain values and copyable addresses, " +
+      "The signed-in crypto dashboard. A balance hero with the Total plus Main (on-chain) and Spot cards — futures is not open yet — a per-chain strip (Ethereum, Arbitrum, Solana, Sui, TON, Tron) with per-chain values and copyable addresses, " +
       "action pills (Deposit, Withdraw, Swap, Trade, History), a P&L / assets / networks stat row, promo cards, then My Holdings and a watchlist with market movers.",
     actions:
       "Switch balance view, copy a wallet address, open Deposit or Withdraw (modal), go to Swap/Trade/History, star coins on the watchlist.",
@@ -57,10 +57,10 @@ export const PAGE_CONTEXT: Record<string, PageInfo> = {
     name: "Trading workspace",
     summary:
       "The full exchange screen. Left: the markets rail (searchable pair list). Center: candle chart with volume, and under it Positions / Open orders. Right: the live order book and the order ticket. " +
-      "The top bar has the Spot/Futures toggle, the pair with its live price and 24h stats, Fund and Withdraw (they open as modals over the workspace), and the theme toggle. " +
-      "On the Futures tab the ticket adds leverage, take profit and stop loss. On mobile the ticket opens as a bottom sheet from the Long/Short bar.",
+      "The top bar has the pair with its live price and 24h stats, Fund and Withdraw (they open as modals over the workspace), and the theme toggle. " +
+      "There is a Futures tab, but futures is NOT open yet — selecting it only shows a notice. On mobile the ticket opens as a bottom sheet.",
     actions:
-      "Switch Spot/Futures, pick a pair, read the book (clicking a level sets the limit price), fill the ticket (side, market/limit, amount, leverage, TP/SL), place an order, close a position, cancel an order, fund or withdraw the trading account.",
+      "Pick a pair, read the chart, fill the spot ticket (side, amount), place an order, fund or withdraw the trading account. Futures is not open yet, so leverage, shorting and TP/SL are unavailable.",
   },
   "/swap": {
     name: "Swap",
@@ -80,8 +80,8 @@ export const PAGE_CONTEXT: Record<string, PageInfo> = {
   },
   "/fund": {
     name: "Fund trading account",
-    summary: "Move USDC from the Dollar Account into the Hyperliquid trading account, into Spot or Futures.",
-    actions: "Pick Spot or Futures, enter an amount, start the transfer, watch the staged progress.",
+    summary: "Move USDC from the Dollar Account into the Hyperliquid trading account. Spot only — futures is not open yet.",
+    actions: "Enter an amount, start the transfer, watch the staged progress. Futures cannot be chosen as a destination yet.",
   },
   "/trading-withdraw": {
     name: "Withdraw trading balance",

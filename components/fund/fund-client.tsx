@@ -553,7 +553,16 @@ export function FundClient({
 
   const venueOptions = [
     { key: "spot" as const, label: "Spot", sub: hl ? `$${hl.spot.toFixed(2)}` : undefined },
-    { key: "perps" as const, label: "Futures", sub: hl ? `$${hl.perps.toFixed(2)}` : undefined },
+    {
+      key: "perps" as const,
+      label: "Futures",
+      sub: hl ? `$${hl.perps.toFixed(2)}` : undefined,
+      // Not a destination while the venue is closed. Withdrawing FROM a
+      // futures balance stays available — that is the direction someone with
+      // money already parked there actually needs.
+      disabled: isFund,
+      disabledReason: isFund ? "Futures is not open yet" : undefined,
+    },
   ]
 
   /* Dead-end screens render the same in both presentations. */

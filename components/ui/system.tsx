@@ -146,6 +146,13 @@ export type SegmentedOption<T extends string> = {
   key: T
   label: string
   icon?: React.ComponentType<{ className?: string }>
+  /** The tab leads somewhere that is not open yet. It stays VISIBLE — the
+   *  feature is coming and people have already found it — but it cannot be
+   *  selected, and it says why on hover. Removing it instead would hide a
+   *  roadmap; leaving it live would let a click do nothing. */
+  disabled?: boolean
+  /** Tooltip/`title` text for a disabled option. */
+  disabledReason?: string
 }
 
 export function Segmented<T extends string>({
@@ -251,28 +258,38 @@ export function Segmented<T extends string>({
       {options.map((opt) => {
         const active = value === opt.key
         const Icon = opt.icon
+        const off = opt.disabled === true
         return (
           <button
             key={opt.key}
             type="button"
             data-seg-key={opt.key}
             aria-pressed={active}
-            {...(vividPrefix
+            disabled={off}
+            title={off ? opt.disabledReason : undefined}
+            {...(vividPrefix && !off
               ? { "data-vivid-target": `${vividPrefix}-${opt.key}`, "data-vivid-label": `${opt.label} tab` }
               : {})}
-            onClick={() => onChange(opt.key)}
+            onClick={() => { if (!off) onChange(opt.key) }}
             className={cn(
               "relative z-10 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-              "active:scale-[0.96] motion-reduce:active:scale-100",
               md ? "px-3.5 py-2 text-[13px]" : "px-2.5 py-1 text-xs",
               grow && "flex-1 justify-center",
-              active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+              off
+                // Legible enough to read as a real destination, plainly not
+                // pressable. No hover lift, no press squish — the control
+                // must not pretend to respond.
+                ? "cursor-not-allowed text-muted-foreground/45"
+                : cn(
+                    "active:scale-[0.96] motion-reduce:active:scale-100",
+                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                  ),
               // Before the first client measure (SSR, fonts still loading) the
               // active button paints its own fill so selection never vanishes.
-              !thumb && active && "bg-card shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent",
+              !thumb && active && !off && "bg-card shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent",
             )}
           >
-            {Icon && <Icon className={cn(md ? "h-4 w-4" : "h-3.5 w-3.5", active && "text-primary")} />}
+            {Icon && <Icon className={cn(md ? "h-4 w-4" : "h-3.5 w-3.5", active && !off && "text-primary")} />}
             {opt.label}
           </button>
         )

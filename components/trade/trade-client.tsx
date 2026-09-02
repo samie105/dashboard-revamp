@@ -86,6 +86,7 @@ import {
   DetailPanel,
   InlineNotice,
 } from "@/components/ui/flow"
+import { ComingSoon } from "@/components/ui/coming-soon"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
 import { ModernFundingPanel } from "./modern-funding-panel"
@@ -94,8 +95,29 @@ type Market = "spot" | "futures"
 type Side = "buy" | "sell"
 type OrderType = "market" | "limit"
 
+/**
+ * FUTURES GATE — perpetual futures are not open on the platform yet.
+ *
+ * Everything futures below is left standing and compiling; it is switched off
+ * at four points, each marked `FUTURES GATE`, so bringing the venue back is a
+ * matter of flipping this flag and deleting those blocks:
+ *   1. `setMarketTab()` — a press on the Futures tab raises the notice instead
+ *      of navigating, so the answer is the same on a phone as under a mouse.
+ *   2. `gatedMarket()` — `?market=futures` deep links resolve to spot, so no
+ *      futures branch (chart source, book, ticket, positions) can ever run.
+ *   3. The top-bar balance readout — the Futures figure is withheld here.
+ *   4. The notice strip itself, under the top bar.
+ * Typed `boolean` rather than left as the `false` literal so the guards below
+ * read as switches, not as dead code a linter should strip.
+ */
+const FUTURES_LIVE: boolean = false
+
 const MARKET_TABS: readonly SegmentedOption<Market>[] = [
   { key: "spot", label: "Spot" },
+  // The Futures tab stays visible AND selectable on purpose. A `disabled` tab
+  // answers only a hovering mouse — its `title` never fires on a touchscreen,
+  // which is most of this audience — so the press is let through and
+  // `setMarketTab` answers it with the notice instead of a dead control.
   { key: "futures", label: "Futures" },
 ]
 const ORDER_TYPES: readonly SegmentedOption<OrderType>[] = [
@@ -178,6 +200,25 @@ function defaultMarketOf(
   return undefined
 }
 
+/**
+ * FUTURES GATE (2/4): which venue the URL is allowed to open.
+ *
+ * `?market=futures` links exist all over the app (nav, the markets rail, the
+ * trade selector, shared links), and a disabled tab does nothing about a deep
+ * link. While futures is closed this collapses every such arrival onto spot,
+ * which is what makes the gate safe rather than cosmetic: `market` is the one
+ * value the chart source, order book, ticket, positions drawer and mobile
+ * action bar all branch on, so none of them can reach a futures path.
+ *
+ * The declared return type is deliberately `Market`, not the `"spot"` literal
+ * it currently produces — otherwise TypeScript narrows every `market ===
+ * "futures"` comparison in this file into a "no overlap" error and the futures
+ * code we are preserving stops compiling.
+ */
+function gatedMarket(requested: string | null): Market {
+  return FUTURES_LIVE && requested === "futures" ? "futures" : "spot"
+}
+
 function fmtCompact(n: number) {
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
   if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
@@ -199,7 +240,17 @@ export function TradeClient() {
     staleTime: 3 * 60_000,
   })
 
-  const market: Market = params.get("market") === "futures" ? "futures" : "spot"
+  const market: Market = gatedMarket(params.get("market"))
+  /* FUTURES GATE: whether the futures notice is up. Two things raise it — a
+     press on the Futures tab (the path nearly everyone takes) and an arrival
+     on a stale `?market=futures` link (the safety net) — and the dismiss
+     button lowers it. The link case is read ONCE, in an initialiser, never
+     from the live params: the URL-sync effect below rewrites the address bar
+     to the market actually on screen (spot), so re-reading the param a tick
+     later would say "no" and the explanation would flash and vanish. */
+  const [futuresNotice, setFuturesNotice] = React.useState(
+    () => !FUTURES_LIVE && params.get("market") === "futures",
+  )
   const urlSymbol = params.get("symbol") ?? params.get("pair") ?? ""
   // The registry id rides in the URL beside the symbol: a symbol alone can name
   // two different rows (WETH on arbitrum-one and on ethereum-mainnet), and a
@@ -726,6 +777,18 @@ export function TradeClient() {
   // perps list (and vice versa), so the selection effect picks that market's
   // default and the sync effect below writes it back to the URL.
   function setMarketTab(m: Market) {
+    // FUTURES GATE (1/4): futures is not open, so the press is ANSWERED rather
+    // than followed. Nothing navigates: the URL never gains `market=futures`,
+    // `gatedMarket` never sees it, and the spot workspace under the notice
+    // keeps its pair, chart and half-filled ticket exactly as they were. The
+    // Segmented's `value` stays `market` — always "spot" while gated — so the
+    // thumb never comes to rest on a tab whose content isn't on screen.
+    if (!FUTURES_LIVE && m === "futures") {
+      setFuturesNotice(true)
+      return
+    }
+    // Pressing Spot is the plain way back out of the notice.
+    setFuturesNotice(false)
     router.replace(`/trade?market=${m}`)
   }
 
@@ -1962,11 +2025,22 @@ export function TradeClient() {
               <span className="font-semibold text-foreground">
                 ${balances.spotUsdc.toFixed(2)}
               </span>
-              <span className="mx-1 text-subtle">·</span>
-              Futures{" "}
-              <span className="font-semibold text-foreground">
-                ${balances.perpsWithdrawableUsdc.toFixed(2)}
-              </span>
+              {/* FUTURES GATE (3/4): this readout is venue-scoped — it names
+                  the margin sitting on the perps venue, an inch from a Futures
+                  tab that can't be clicked. Printing it would advertise a
+                  place to put money that has no way in or out from this
+                  screen. The money itself is not hidden: the same figure is
+                  still shown by the funding panel beside this, by the fund
+                  screen and by the wallet, all of which can still move it. */}
+              {FUTURES_LIVE && (
+                <>
+                  <span className="mx-1 text-subtle">·</span>
+                  Futures{" "}
+                  <span className="font-semibold text-foreground">
+                    ${balances.perpsWithdrawableUsdc.toFixed(2)}
+                  </span>
+                </>
+              )}
             </span>
           )}
           {/* Funding is a detour from trading, not a destination — it opens
@@ -2004,6 +2078,42 @@ export function TradeClient() {
           )}
         </div>
       </div>
+
+      {/* FUTURES GATE (4/4): the answer to "I pressed Futures — what happened".
+          It stands in for the futures workspace — same place, full width, at
+          every breakpoint — and says the venue isn't open yet. The spot
+          workspace underneath stays fully live, which is why `ComingSoon` is
+          used bare here instead of wrapped around anything: blurring and
+          inert-ing the content below would take spot down with it. A live
+          region, so pressing the tab is announced and not merely drawn.
+          Delete this block when futures opens. */}
+      {futuresNotice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="relative shrink-0 border-b border-border/30 bg-surface-sunken/60"
+        >
+          <ComingSoon compact />
+          <button
+            type="button"
+            onClick={() => setFuturesNotice(false)}
+            aria-label="Dismiss"
+            className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Workspace body */}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">

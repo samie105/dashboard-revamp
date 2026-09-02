@@ -26,6 +26,8 @@ import { useAuth } from "@/components/auth-provider"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
 import { useSpotRegistry, tradeHref, type RegistryRow } from "@/hooks/useSpotRegistry"
 import { chainLabel, ALL_CHAINS } from "@/lib/spot-market-search"
+/* Futures is not live yet - the shared "not open" treatment. */
+import { ComingSoon, FUTURES_SOON_TITLE, SoonBadge } from "@/components/ui/coming-soon"
 
 /* The "7D Chart" column used to be Math.sin() noise seeded from the coin's
    own symbol — deterministic, so it looked stable and trustworthy, and
@@ -76,15 +78,21 @@ function TradeButton({ rows }: { rows: RegistryRow[] | undefined }) {
   )
 }
 
+/* GATE - futures is not open yet, so this cell must not carry a live route to a
+   ticket nothing can fill. It keeps its column and reads as a destination that
+   is coming, rather than vanishing and silently narrowing the table.
+   TO RE-OPEN: restore the <Link href={`/trade?market=futures&symbol=${symbol}`}>
+   with its hover classes and the ArrowUpRight01Icon. */
 function FuturesTradeButton({ symbol }: { symbol: string }) {
   return (
-    <Link
-      href={`/trade?market=futures&symbol=${symbol}`}
-      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    <span
+      title={FUTURES_SOON_TITLE}
+      aria-label={`${symbol} - ${FUTURES_SOON_TITLE}`}
+      className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-semibold text-muted-foreground/45"
     >
       Trade
-      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-    </Link>
+      <SoonBadge />
+    </span>
   )
 }
 
@@ -162,9 +170,14 @@ function RankedFuturesRow({ market, rank }: { market: FuturesMarket; rank: numbe
   const isUp = market.change24h >= 0
   const imgSrc = market.image || getCoinImage(market.baseAsset)
   return (
-    <Link
-      href={`/trade?market=futures&symbol=${market.symbol}`}
-      className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-accent/40"
+    /* GATE - futures is not open yet. The row stays fully readable as a price,
+       but it is no longer a link, and the hover lift goes with it so it doesn't
+       offer a click it won't honour. TO RE-OPEN: swap this <div> back to
+       <Link href={`/trade?market=futures&symbol=${market.symbol}`}> and restore
+       "transition-colors hover:bg-accent/40". */
+    <div
+      title={FUTURES_SOON_TITLE}
+      className="group flex items-center gap-3 rounded-xl px-3 py-2.5"
     >
       <span className="w-5 text-center text-[11px] font-semibold text-muted-foreground">
         {rank}
@@ -196,7 +209,7 @@ function RankedFuturesRow({ market, rank }: { market: FuturesMarket; rank: numbe
           {Math.abs(market.change24h).toFixed(2)}%
         </span>
       </div>
-    </Link>
+    </div>
   )
 }
 
@@ -204,6 +217,21 @@ function RankedFuturesRow({ market, rank }: { market: FuturesMarket; rank: numbe
 
 const MARKET_TABS = ["Total", "Main", "Spot", "Futures"] as const
 type Tab = (typeof MARKET_TABS)[number]
+
+/* ── Futures gate ────────────────────────────────────────────────────────
+   Perpetual futures are not live yet. The tab stays visible AND pressable: a
+   disabled tab has no way to explain itself on a touchscreen, where `title`
+   never fires, so pressing it is how the reader finds out. What it opens is
+   the one "not open yet" panel instead of the futures body.
+
+   Everything futures below — the stat tiles, the positions table, the
+   contracts table, the gainers/movers rails and every `isFutures` branch —
+   is left exactly as it was and is simply not reached. Typed `boolean` on
+   purpose so TypeScript keeps type-checking both arms.
+
+   TO RE-OPEN: set this to false, then delete it and the `futuresClosed`
+   blocks that reference it. */
+const FUTURES_CLOSED: boolean = true
 
 type SortKey = "marketCap" | "price" | "change24h" | "volume24h"
 
@@ -283,13 +311,18 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
   const [futuresLoading, setFuturesLoading] = React.useState(false)
   const hasFetchedFutures = React.useRef(false)
   React.useEffect(() => {
-    if (tab !== "Futures" || hasFetchedFutures.current) return
+    // GATE - no request for a venue that isn't open. Drop `FUTURES_CLOSED ||`.
+    if (FUTURES_CLOSED || tab !== "Futures" || hasFetchedFutures.current) return
     hasFetchedFutures.current = true
     setFuturesLoading(true)
     getFuturesMarkets().then((res) => { if (res.success) setFuturesMarkets(res.markets) }).catch(() => {}).finally(() => setFuturesLoading(false))
   }, [tab])
 
   const isFutures = tab === "Futures"
+  /* GATE - futures is selectable but closed: the body below is replaced by the
+     "not open" panel while the header and tab bar stay live so the reader can
+     switch straight back. `isFutures` itself is untouched. */
+  const futuresClosed = isFutures && FUTURES_CLOSED
 
   // ── Spot-mode memos ─────────────────────────────────────────────────────
 
@@ -422,7 +455,11 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
         <PageHeader
           title="Markets"
           subtitle={
-            isFutures
+            /* GATE - "· 0 contracts" would read as an empty venue rather than
+               an unopened one. TO RE-OPEN: delete this first arm. */
+            futuresClosed
+              ? "Perpetual futures"
+              : isFutures
               ? `Perpetual futures · ${futuresMarkets.length} contracts`
               : tab === "Spot"
               ? `Worldstreet spot markets · ${spotMarkets.length} assets`
@@ -433,6 +470,9 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
         />
         <div className="-mx-1 overflow-x-auto px-1 scrollbar-none">
           <Segmented
+            /* Every tab is selectable, futures included - see FUTURES_CLOSED.
+               A greyed-out tab is a dead end on touch; a live one that answers
+               the question is not. */
             options={MARKET_TABS.map((t) => ({ key: t, label: t }))}
             value={tab}
             onChange={setTab}
@@ -440,6 +480,19 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
         </div>
       </div>
 
+      {/* GATE - futures is not open yet: this panel stands in for the entire
+          body (stats, positions, tables, rails). The header and tab bar above
+          are deliberately outside it, so the reader can leave. */}
+      {futuresClosed && (
+        <div className="rounded-2xl bg-card">
+          <ComingSoon />
+        </div>
+      )}
+
+      {/* GATE - the real body, unchanged, behind one condition.
+          TO RE-OPEN: delete this line and its `</>)}` at the end of the file. */}
+      {!futuresClosed && (
+      <>
       {/* Global stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {isFutures ? (
@@ -956,6 +1009,8 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
           </section>
         )}
       </div>
+      </>
+      )}
     </div>
   )
 }

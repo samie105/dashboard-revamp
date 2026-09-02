@@ -26,6 +26,8 @@ type MegaMenuItem = {
   href: string
   icon: typeof Activity01Icon
   tag?: string
+  /** Listed, but not open yet — rendered as a plain row, not a link. */
+  soon?: boolean
 }
 
 type NavItem = {
@@ -56,10 +58,14 @@ const navItems: NavItem[] = [
           icon: Exchange01Icon,
         },
         {
+          // Futures is not open yet — listed so the roadmap stays visible,
+          // tagged so nobody expects it to work.
           name: "Futures",
-          description: "Perpetual futures trading",
+          description: "Not open yet",
           href: "/trade?market=futures",
           icon: ChartLineData02Icon,
+          tag: "Soon",
+          soon: true,
         },
         {
           name: "Swap",
@@ -117,7 +123,16 @@ export function TopNav() {
                             <div className="flex items-center gap-1.5">
                               <span className="text-sm font-medium text-foreground">{subItem.name}</span>
                               {subItem.tag && (
-                                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-primary">
+                                <span
+                                  className={cn(
+                                    "rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none",
+                                    // Gold means active/primary here; "Soon" is
+                                    // the opposite, so it stays neutral.
+                                    subItem.soon
+                                      ? "bg-foreground/[0.08] text-muted-foreground"
+                                      : "bg-primary/10 text-primary",
+                                  )}
+                                >
                                   {subItem.tag}
                                 </span>
                               )}

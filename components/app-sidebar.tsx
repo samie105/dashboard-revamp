@@ -55,6 +55,10 @@ interface NavItem {
   url: string
   icon: typeof Activity01Icon
   badge?: string
+  /** The destination is not open yet: the row stays listed and readable but
+   *  is not a link, because a nav item that navigates to a dead venue is
+   *  worse than one that plainly says "not yet". */
+  soon?: boolean
 }
 
 interface NavGroup {
@@ -92,7 +96,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: "Markets", description: "Full market screener", url: "/trading/markets", icon: BarChartIcon },
       { name: "Spot Trading", description: "Multi-chain DEX trading", url: "/trade", icon: Exchange01Icon },
-      { name: "Futures", description: "Perpetual contracts", url: "/trade?market=futures", icon: Chart01Icon },
+      { name: "Futures", description: "Perpetual contracts", url: "/trade?market=futures", icon: Chart01Icon, badge: "Soon", soon: true },
       { name: "Swap", description: "One-tap conversion", url: "/swap", icon: RepeatIcon },
     ],
   },
@@ -206,7 +210,9 @@ function NavRow({
         tooltip={collapsed ? item.name : item.description || item.name}
         isActive={isActive}
         render={
-          ext ? (
+          item.soon ? (
+            <span aria-disabled title="Futures is not open yet" />
+          ) : ext ? (
             <a href={item.url} target="_blank" rel="noopener noreferrer" />
           ) : (
             <Link href={item.url} />
@@ -253,7 +259,16 @@ function NavRow({
               />
             )}
             {item.badge && (
-              <span className="rounded-md bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary">
+              <span
+                className={cn(
+                  "rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-none",
+                  // A "Soon" marker must not wear gold: gold means active or
+                  // primary in this system, and this is the opposite.
+                  item.soon
+                    ? "bg-foreground/[0.08] text-muted-foreground"
+                    : "bg-primary/12 text-primary",
+                )}
+              >
                 {item.badge}
               </span>
             )}

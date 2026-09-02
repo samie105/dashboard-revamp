@@ -73,24 +73,35 @@ export function OptionRows<T extends string>({
   onChange,
   disabled,
 }: {
-  options: { key: T; label: string; sub?: React.ReactNode; icon?: string }[]
+  options: {
+    key: T
+    label: string
+    sub?: React.ReactNode
+    icon?: string
+    /** This one choice is unavailable while the rest stay pickable. */
+    disabled?: boolean
+    disabledReason?: string
+  }[]
   value: T
   onChange: (k: T) => void
+  /** Disables every row (e.g. a request is in flight). */
   disabled?: boolean
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       {options.map((o) => {
         const active = o.key === value
+        const off = disabled || o.disabled === true
         return (
           <button
             key={o.key}
             type="button"
-            disabled={disabled}
+            disabled={off}
+            title={o.disabled ? o.disabledReason : undefined}
             /* preventDefault on mousedown keeps focus on the amount input,
                so picking a network never interrupts typing. */
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onChange(o.key)}
+            onClick={() => { if (!off) onChange(o.key) }}
             className={cn(
               "flex items-center gap-3 rounded-xl px-3.5 py-3 text-left transition-all active:scale-[0.99] motion-reduce:active:scale-100",
               "disabled:pointer-events-none disabled:opacity-40",
@@ -104,7 +115,11 @@ export function OptionRows<T extends string>({
             {o.icon && <img src={o.icon} alt="" className="h-6 w-6 shrink-0 rounded-full" />}
             <span className="flex min-w-0 flex-1 flex-col leading-tight">
               <span className={cn("text-[13.5px] font-semibold", !active && "text-foreground/85")}>{o.label}</span>
-              {o.sub && <span className="mt-0.5 truncate text-[11.5px] tabular-nums text-muted-foreground">{o.sub}</span>}
+              {o.disabled && o.disabledReason ? (
+                <span className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{o.disabledReason}</span>
+              ) : (
+                o.sub && <span className="mt-0.5 truncate text-[11.5px] tabular-nums text-muted-foreground">{o.sub}</span>
+              )}
             </span>
             {active ? (
               /* Gold = active state; pops in when the choice lands. */

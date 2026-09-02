@@ -58,6 +58,8 @@ import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { fetchPrices, type Coin } from "@/lib/crypto-api"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
 import { ReceiveModal, type ReceivableAsset } from "@/components/assets/receive-modal"
+/* Futures is not live yet - the shared "not open" treatment. */
+import { ComingSoon, FUTURES_SOON_TITLE, SoonBadge } from "@/components/ui/coming-soon"
 
 // Market rows for the Spot tab — the service's price feed plus the display
 // fields the old spotv2 pair registry carried.
@@ -179,6 +181,20 @@ const WALLET_VIEWS = [
 ] as const
 
 type WalletView = (typeof WALLET_VIEWS)[number]["key"]
+
+/* ── Futures gate ────────────────────────────────────────────────────────
+   Perpetual futures are not live yet. The tab stays visible AND pressable: a
+   disabled tab has no way to explain itself on a touchscreen, where `title`
+   never fires, so pressing it is how the reader finds out. What it opens is
+   the one "not open yet" panel instead of the futures body.
+
+   The futures sections below — Open Positions and Futures Contracts — are
+   left exactly as they were and are simply not reached. Typed `boolean` on
+   purpose so TypeScript keeps type-checking both arms.
+
+   TO RE-OPEN: set this to false, then delete it and the `futuresClosed` /
+   `FUTURES_CLOSED` blocks that reference it. */
+const FUTURES_CLOSED: boolean = true
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -634,7 +650,8 @@ export default function AssetsClient() {
 
   // Load futures markets when Futures tab is active
   React.useEffect(() => {
-    if (activeView !== "futures" || futuresMarketsLoaded) return
+    // GATE - no request for a venue that isn't open. Drop `FUTURES_CLOSED ||`.
+    if (FUTURES_CLOSED || activeView !== "futures" || futuresMarketsLoaded) return
     let cancelled = false
     setFuturesMarketsLoading(true)
     getFuturesMarkets().then((data) => {
@@ -856,6 +873,11 @@ export default function AssetsClient() {
         ? hlPositionsLoading
         : (balancesLoading && onChainBalances.length === 0) || !pricesLoaded
 
+  /* GATE - futures is selectable but closed: the wallet card shows the "not
+     open" panel instead of positions and contracts, and the hero stops
+     quoting a perps figure. The tab bar stays live so the reader can leave. */
+  const futuresClosed = activeView === "futures" && FUTURES_CLOSED
+
   const fundedChains = React.useMemo(
     () => new Set(fundedTokens.map((t) => t.chain)).size,
     [fundedTokens],
@@ -949,6 +971,9 @@ export default function AssetsClient() {
 
         <div className="-mx-1 max-w-full overflow-x-auto px-1 scrollbar-none">
           <Segmented
+            /* Every view is selectable, futures included - see FUTURES_CLOSED.
+               A greyed-out tab is a dead end on touch; a live one that answers
+               the question is not. */
             options={WALLET_VIEWS.map((v) => ({ key: v.key, label: v.label }))}
             value={activeView}
             onChange={setActiveView}
@@ -958,7 +983,13 @@ export default function AssetsClient() {
         {/* Balance hero */}
         <div className="flex w-fit flex-col gap-1">
           <Eyebrow>Est. Total Value</Eyebrow>
-          {heroLoading ? (
+          {futuresClosed ? (
+            /* GATE - a real perps balance here would say the venue works, and
+               a skeleton would say it is about to. The house "unknown" dash
+               says neither. `displayedBalance`'s `case "futures"` is untouched.
+               TO RE-OPEN: delete this first arm. */
+            <Balance value={UNKNOWN} className="text-[clamp(2rem,4vw,3rem)]" />
+          ) : heroLoading ? (
             /* The word "Loading…" set in the balance's 3rem display face was
                louder than most of the figures it stood in for, and it changed
                width the instant the real number landed. A block the size of
@@ -973,7 +1004,11 @@ export default function AssetsClient() {
           {/* The old line read "On-chain wallet · On-chain $13,266.76" — the
               same word twice and a figure identical to the one above it. */}
           <span className="text-[13px] text-muted-foreground">
-            {WALLET_VIEWS.find((v) => v.key === activeView)?.sub}
+            {/* GATE - the stored sub is "Perpetual positions", which implies
+                positions exist. TO RE-OPEN: delete this first arm. */}
+            {futuresClosed
+              ? "Perpetual futures · not open yet"
+              : WALLET_VIEWS.find((v) => v.key === activeView)?.sub}
             {activeView === "main" && !heroLoading && fundedTokens.length > 0 && (
               <>{` · ${fundedTokens.length} ${fundedTokens.length === 1 ? "asset" : "assets"} across ${fundedChains} chains`}</>
             )}
@@ -1416,8 +1451,20 @@ export default function AssetsClient() {
           </>
         )}
 
+        {/* ═══ FUTURES TAB: the venue is not open yet ═══ */}
+        {/* GATE - this single panel replaces BOTH futures sections below
+            (Open Positions and Futures Contracts). One message rather than
+            two stacked ones, and no blurred live money behind it: there is
+            nothing here to preview yet, only something to announce.
+            TO RE-OPEN: delete this block. */}
+        {futuresClosed && <ComingSoon compact />}
+
         {/* ═══ FUTURES TAB: Open Positions ═══ */}
-        {activeView === "futures" && (
+        {/* GATE - futures is not open yet, so the panel above stands in for
+            this section. `&& !FUTURES_CLOSED` is the ONLY change here;
+            everything inside is verbatim and still type-checked.
+            TO RE-OPEN: delete `&& !FUTURES_CLOSED`. */}
+        {activeView === "futures" && !FUTURES_CLOSED && (
           <div className="flex flex-col">
             <div className="flex items-center justify-between p-4 pb-2">
               <div className="flex items-center gap-2">
@@ -1429,13 +1476,18 @@ export default function AssetsClient() {
                   </span>
                 )}
               </div>
-              <a
-                href="/trade?market=futures"
-                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              {/* GATE - futures is not open yet, so this must not route into a
+                  closed venue. It also loses its gold: primary is an
+                  invitation, and this is the opposite of one. TO RE-OPEN:
+                  restore the <a href="/trade?market=futures"> with
+                  "text-primary hover:underline" and the ArrowUpRight01Icon. */}
+              <span
+                title={FUTURES_SOON_TITLE}
+                className="inline-flex cursor-not-allowed items-center gap-1.5 text-xs font-medium text-muted-foreground/45"
               >
                 Trade Futures
-                <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
-              </a>
+                <SoonBadge />
+              </span>
             </div>
 
             {hlPositionsLoading ? (
@@ -1528,7 +1580,11 @@ export default function AssetsClient() {
         )}
 
         {/* ═══ Futures Markets (below positions, Futures tab only) ═══ */}
-        {activeView === "futures" && (
+        {/* GATE - futures is not open yet, so the panel above stands in for
+            this section. `&& !FUTURES_CLOSED` is the ONLY change here;
+            everything inside is verbatim and still type-checked.
+            TO RE-OPEN: delete `&& !FUTURES_CLOSED`. */}
+        {activeView === "futures" && !FUTURES_CLOSED && (
           <>
             <div className="mx-4 h-px bg-border/30" />
             <div className="flex items-center justify-between p-4 pb-2">
@@ -1602,9 +1658,13 @@ export default function AssetsClient() {
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <button onClick={() => router.push(`/trade?market=futures&symbol=${m.baseAsset}`)}
-                              className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-semibold text-muted-foreground ring-1 ring-border transition-colors hover:bg-primary hover:text-primary-foreground hover:ring-primary">
-                              Trade <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+                            {/* GATE - futures is not open yet: no route into a
+                                closed venue. TO RE-OPEN: restore
+                                onClick={() => router.push(`/trade?market=futures&symbol=${m.baseAsset}`)},
+                                the hover classes and the ArrowUpRight01Icon. */}
+                            <button type="button" disabled title={FUTURES_SOON_TITLE}
+                              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold text-muted-foreground/45 ring-1 ring-border/50">
+                              Trade <SoonBadge />
                             </button>
                           </td>
                         </tr>

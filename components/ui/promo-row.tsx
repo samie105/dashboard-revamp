@@ -38,8 +38,8 @@ export type PromoCard = {
 export const PROMO_CARDS: PromoCard[] = [
   {
     key: "crypto-trade",
-    hero: "Trade spot & futures",
-    tagline: "Market and limit orders on live books, with perps and leverage.",
+    hero: "Trade across six chains",
+    tagline: "Thousands of tokens on live markets, priced and routed for you.",
     art: "cryptoTrade",
     href: "/trade",
     cta: "Open trading",
