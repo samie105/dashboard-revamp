@@ -2330,7 +2330,15 @@ export function TradeClient() {
       {/* Top bar — the app's chrome only: a way out, the venue switch, and
           the money doors. The market itself lives in the header over the
           chart, where the price sits beside the thing it describes. */}
-      <div className="flex items-center gap-3 px-3 py-2 sm:gap-4 lg:px-4 lg:py-2.5">
+      {/* It WRAPS below lg. Four control groups — back, venue, Simple/Pro and
+          the money doors — measure 485px at a 360px phone, so the last one
+          was pushed off the right edge and clipped: on a wallet-less account
+          that was "Set up wallet", the primary action on the screen, and with
+          a wallet it is the three funding doors, which are wider still. The
+          money cluster keeps `ml-auto`, so when it does drop to a second row
+          it lands right-aligned rather than adrift. Single row from lg up,
+          where it has always fitted. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:gap-x-4 lg:flex-nowrap lg:px-4 lg:py-2.5">
         {/* This route has no sidebar or navbar, so it carries its own way
             out — a back control, not just a clickable logo. */}
         <div className="flex shrink-0 items-center gap-1.5">
@@ -2356,7 +2364,10 @@ export function TradeClient() {
           value={market}
           onChange={setMarketTab}
           options={MARKET_TABS}
-          className="shrink-0"
+          /* Trimmed side padding on phones, as on the portfolio's view tabs:
+             it buys ~25px, which is the difference between this row wrapping
+             and not on the commonest widths. */
+          className="shrink-0 [&_button]:px-2.5 sm:[&_button]:px-3.5"
           vividPrefix="market-tab"
         />
 

@@ -42,15 +42,13 @@ function ResponsiveModalClose({ ...props }: DialogPrimitive.Close.Props) {
   )
 }
 
-/* ─── Content (Dialog on desktop, Bottom Sheet on mobile) ─── */
+/* ─── Content — one centred card at every width ─── */
 function ResponsiveModalContent({
   className,
   children,
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & { showCloseButton?: boolean }) {
-  const isDesktop = React.useContext(DesktopContext)
-
   return (
     <DialogPrimitive.Portal>
       {/* Overlay / backdrop — the app-wide frost */}
@@ -66,61 +64,64 @@ function ResponsiveModalContent({
           // the heavy frost — the page stays visible as material behind the
           // surface instead of disappearing behind a solid card.
           "ws-glass ws-glass-edge outline-none text-sm z-50 fixed shadow-2xl ring-1 ring-foreground/10",
-          isDesktop
-            ? "ws-modal-in data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[0.97] data-closed:duration-200 grid max-w-[calc(100%-2rem)] gap-4 rounded-2xl p-4 sm:max-w-sm top-1/2 left-1/2 w-full -translate-x-1/2 -translate-y-1/2"
-            : // max-h + scroll is load-bearing, not polish: the sheet is
-              // anchored to bottom-0, so content taller than the viewport grows
-              // UPWARD past the top of the screen and becomes unreachable —
-              // the title and the primary action are the first things lost.
-              // 92dvh + overscroll-contain is the recipe the trade ticket sheet
-              // already uses (trade-client.tsx).
-              "ws-sheet-in data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom-10 data-closed:duration-200 flex max-h-[92dvh] flex-col gap-4 overflow-y-auto overscroll-contain inset-x-0 bottom-0 rounded-t-3xl p-4",
+          /* ONE SHAPE AT EVERY WIDTH: a card centred in the viewport with a
+             1rem gutter around it, rounded on all four corners.
+
+             Below 640px this used to be a bottom sheet — `inset-x-0 bottom-0
+             rounded-t-3xl` — which is the documented house pattern
+             (design-system 05: "Modal → bottom sheet under 640"). Owner call
+             on 2026-09-02, looking at the passphrase dialog: glued to both
+             edges and pinned to the floor, it read as a panel that had fallen
+             off the layout rather than a dialog addressed to you. Centred with
+             room around it is the shape now; the design-system note is the one
+             that is out of date.
+
+             `max-w-[calc(100%-2rem)]` is what supplies the side gutter on a
+             phone, and `sm:max-w-sm` caps it on anything larger.
+
+             max-h + scroll stays load-bearing rather than polish: content
+             taller than the screen has to scroll INSIDE the card, or the
+             title and the primary action end up off both ends of it. */
+          "ws-modal-in data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[0.97] data-closed:duration-200",
+          "top-1/2 left-1/2 w-full -translate-x-1/2 -translate-y-1/2",
+          "max-w-[calc(100%-2rem)] sm:max-w-sm",
+          "flex max-h-[calc(100dvh-2rem)] flex-col gap-4 overflow-y-auto overscroll-contain rounded-2xl p-4",
           className
         )}
         {...props}
       >
-        {/* Mobile drag handle. Sticky, and it carries the close button: the
-            sheet is now a scroll container, so an absolutely-positioned X
-            would scroll out of reach on exactly the tall content that made
-            scrolling necessary. `shrink-0` keeps the handle from being
-            squeezed to nothing by a tall child. */}
-        {!isDesktop && (
-          <div className="sticky top-0 z-20 -mt-1 flex shrink-0 items-center justify-center pt-1 pb-1">
-            <div className="h-1 w-10 rounded-full bg-muted-foreground/20" />
-            {showCloseButton && (
-              <DialogPrimitive.Close
-                data-slot="responsive-modal-close"
-                render={
-                  <Button
-                    variant="ghost"
-                    className="absolute top-0 right-0 size-11"
-                    size="icon"
-                  />
-                }
-              >
-                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-                <span className="sr-only">Close</span>
-              </DialogPrimitive.Close>
-            )}
-          </div>
-        )}
-
+        {/* The drag handle went with the sheet — a grabber on a centred card
+            advertises a gesture that does nothing.
+            The close button stays STICKY rather than absolute: the card is a
+            scroll container, and an absolutely-positioned X scrolls out of
+            reach on exactly the tall content that made scrolling necessary.
+            It sits in the flow at the top-right, in a row of its own, so it
+            can never land on top of a title either. Zero height plus a
+            negative margin keeps that row from pushing the content down. */}
         {children}
 
-        {showCloseButton && isDesktop && (
-          <DialogPrimitive.Close
-            data-slot="responsive-modal-close"
-            render={
-              <Button
-                variant="ghost"
-                className="absolute top-2 right-2"
-                size="icon"
-              />
-            }
-          >
-            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
+        {/* LAST in the DOM, FIRST on screen (`order-first`). Base UI focuses
+            the first tabbable element when a dialog opens; with the close
+            button written above the content it took that focus and opened
+            every modal with a ring around its X. Ordering it visually instead
+            leaves the focus where it has always landed — on the content —
+            while the button still sits at the top-right. */}
+        {showCloseButton && (
+          <div className="sticky top-0 z-20 order-first -mt-1 flex h-0 shrink-0 justify-end">
+            <DialogPrimitive.Close
+              data-slot="responsive-modal-close"
+              render={
+                <Button
+                  variant="ghost"
+                  className="-mr-1 size-11 sm:size-9"
+                  size="icon"
+                />
+              }
+            >
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          </div>
         )}
       </DialogPrimitive.Popup>
     </DialogPrimitive.Portal>
