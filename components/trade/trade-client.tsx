@@ -1142,7 +1142,11 @@ export function TradeClient() {
         className="fixed inset-0 z-40 cursor-default"
         onClick={() => setPickerOpen(false)}
       />
-      <div className="absolute top-full left-0 z-50 mt-2 w-[340px] rounded-2xl bg-card pb-1 shadow-2xl ring-1 ring-border/40">
+      {/* The trigger sits ~56px in (back button + gap), so a fixed 340px
+          panel anchored at left-0 ends at 396px and is CLIPPED by the root's
+          overflow-hidden — on the only pair-switcher phones get, since the
+          rail is xl-only. Below sm it spans the viewport instead. */}
+      <div className="fixed inset-x-3 top-14 z-50 rounded-2xl bg-card pb-1 shadow-2xl ring-1 ring-border/40 sm:absolute sm:inset-x-auto sm:top-full sm:left-0 sm:mt-2 sm:w-[340px]">
         <MarketPicker
           list={list}
           selected={selection}
@@ -1415,7 +1419,7 @@ export function TradeClient() {
                     ? "Buy side"
                     : "Sell side"
               }
-              className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${
+              className={`rounded-xl py-3 text-sm font-bold transition-colors ${
                 side === s
                   ? s === "buy"
                     ? "bg-credit text-white"
@@ -1620,7 +1624,7 @@ export function TradeClient() {
                         ),
                   )
                 }}
-                className="rounded-lg bg-surface-sunken py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+                className="flex min-h-11 items-center justify-center rounded-lg bg-surface-sunken py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none lg:min-h-0 lg:py-1.5 lg:text-[11px]"
               >
                 {pct === 1 ? "Max" : `${pct * 100}%`}
               </button>
@@ -1667,7 +1671,7 @@ export function TradeClient() {
               data-vivid-target="trade-leverage"
               data-vivid-label={`Leverage slider, 1 to ${maxLev}. Fill with a whole number.`}
               aria-label={`Leverage multiplier, 1 to ${maxLev}`}
-              className="mt-1 w-full accent-[var(--primary)]"
+              className="mt-1 h-11 w-full cursor-pointer accent-[var(--primary)] [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6"
             />
             <div className="flex justify-between text-[9px] text-subtle">
               <span>1×</span>
@@ -2095,7 +2099,7 @@ export function TradeClient() {
               <OrdersPanel className="min-h-0 flex-1" />
             ) : (
               <>
-                <div className="flex shrink-0 items-center border-b border-border/30 px-2 py-1.5">
+                <div className="scrollbar-none flex shrink-0 items-center overflow-x-auto border-b border-border/30 px-2 py-1.5">
                   <Segmented
                     size="sm"
                     value={mobilePane}

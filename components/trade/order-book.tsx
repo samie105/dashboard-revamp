@@ -62,8 +62,11 @@ function Row({
   )
 }
 
-/** Row height and the fixed chrome (header, labels, mid row, pressure bar). */
-const ROW_H = 18
+/** Row height and the fixed chrome (header, labels, mid row, pressure bar).
+    ROW_H must match the Row above: leading-4 (16) + py-[3px] twice = 22. It
+    read 18, which over-reported capacity by 22% and asked the pane for more
+    rows than it could ever show. */
+const ROW_H = 22
 const CHROME_H = 124
 
 export function OrderBook({
@@ -91,7 +94,7 @@ export function OrderBook({
     if (!el || typeof ResizeObserver === "undefined") return
     const measure = () => {
       const perSide = Math.floor((el.clientHeight - CHROME_H) / 2 / ROW_H)
-      setFit(Math.max(4, Math.min(depth, perSide)))
+      setFit(Math.max(2, Math.min(depth, perSide)))
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -128,16 +131,16 @@ export function OrderBook({
       data-vivid-label="The live order book — asks, mid price, bids"
       className={cn("flex min-h-0 flex-col overflow-hidden", className)}
     >
-      <div className="flex items-center justify-between px-3 pb-1 pt-3">
+      <div className="flex shrink-0 items-center justify-between px-3 pb-1 pt-3">
         <Eyebrow className="text-[10px]">Order book</Eyebrow>
         <span className="text-[10px] tabular-nums text-subtle">spread {fmtPrice(book.spread)}</span>
       </div>
-      <div className="grid grid-cols-[1fr_auto] gap-2 px-3 pb-1 text-[10px] uppercase tracking-wide text-subtle">
+      <div className="grid shrink-0 grid-cols-[1fr_auto] gap-2 px-3 pb-1 text-[10px] uppercase tracking-wide text-subtle">
         <span>Price</span>
         <span>Size</span>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col justify-end">
+      <div className="slim-scroll flex min-h-0 flex-1 flex-col justify-end overflow-y-auto">
         {asks.map((l) => (
           <Row key={`a${l.price}`} {...l} maxTotal={maxTotal} side="ask" onPick={onPickPrice} />
         ))}
@@ -146,7 +149,7 @@ export function OrderBook({
       {/* Mid — the row the whole pane hangs on. */}
       <button
         onClick={() => onPickPrice(book.midPrice)}
-        className="flex items-center justify-between border-y border-border/30 bg-surface-sunken/60 px-3 py-1.5 transition-colors hover:bg-accent/50"
+        className="flex shrink-0 items-center justify-between border-y border-border/30 bg-surface-sunken/60 px-3 py-1.5 transition-colors hover:bg-accent/50"
         title="Set limit price to mid"
       >
         <span
@@ -162,14 +165,14 @@ export function OrderBook({
         <span className="text-[10px] text-subtle">mid</span>
       </button>
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="slim-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
         {bids.map((l) => (
           <Row key={`b${l.price}`} {...l} maxTotal={maxTotal} side="bid" onPick={onPickPrice} />
         ))}
       </div>
 
       {/* Buy/sell pressure across the visible depth. */}
-      <div className="px-3 pb-3 pt-2">
+      <div className="shrink-0 px-3 pb-3 pt-2">
         <div className="flex items-center justify-between pb-1 text-[10px] tabular-nums">
           <span className="font-semibold text-credit">B {buyPct}%</span>
           <span className="font-semibold text-debit">{100 - buyPct}% S</span>

@@ -332,7 +332,7 @@ export function CandleChart({
 
   return (
     <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`}>
-      <div className="flex items-center gap-0.5 px-2 pt-2">
+      <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto px-2 pt-2">
         {INTERVALS.map((i) => {
           const usable = available.includes(i)
           return (
@@ -343,7 +343,7 @@ export function CandleChart({
               title={usable ? undefined : "Not available for this token's price source"}
               data-vivid-target={`chart-interval-${i}`}
               data-vivid-label={`Show the ${i} candle interval`}
-              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+              className={`shrink-0 rounded-md px-2.5 py-2 text-xs font-semibold transition-colors lg:py-1 ${
                 interval === i
                   ? "bg-accent text-foreground"
                   : usable
@@ -358,7 +358,7 @@ export function CandleChart({
         {/* Say where the bars came from. A price series is not trade data, and
             a chart that looks identical either way should admit which it is. */}
         {origin === "coingecko" && (
-          <span className="ml-auto pr-2 text-[10px] font-medium text-subtle">
+          <span className="ml-auto hidden shrink-0 pr-2 text-[10px] font-medium text-subtle sm:inline">
             CoinGecko · price history
           </span>
         )}

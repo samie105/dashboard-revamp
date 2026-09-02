@@ -28,6 +28,16 @@ function fmtPx(p: number) {
 
 const TH = "px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-subtle whitespace-nowrap"
 const TD = "px-3 py-2 text-[11.5px] tabular-nums whitespace-nowrap"
+/* The identity cell carries symbol + side + leverage and must wrap once the
+   columns collapse on a phone; every other cell stays nowrap. */
+const TD_WRAP = "px-3 py-2 text-[11.5px] tabular-nums"
+/* Columns that earn their place at 360px: what it is, how big, what it's
+   doing, and the control. The rest appear as the viewport allows — a
+   horizontal scrollbar hides the Close button two screen-widths to the
+   right, which is hiding information while pretending not to. */
+const COL_MD = "hidden md:table-cell"
+const COL_LG = "hidden lg:table-cell"
+const COL_XL = "hidden xl:table-cell"
 
 export function PositionsPanel({
   account,
@@ -82,15 +92,15 @@ export function PositionsPanel({
               No open positions — they appear here the moment an order fills.
             </p>
           ) : (
-            <table className="w-full min-w-[760px]">
+            <table className="w-full">
               <thead className="sticky top-0 bg-background">
                 <tr className="border-b border-border/20">
                   <th className={TH}>Contract</th>
                   <th className={TH}>Size</th>
-                  <th className={TH}>Entry</th>
-                  <th className={TH}>Mark</th>
-                  <th className={TH}>Liq.</th>
-                  <th className={TH}>Margin</th>
+                  <th className={cn(TH, COL_MD)}>Entry</th>
+                  <th className={cn(TH, COL_LG)}>Mark</th>
+                  <th className={cn(TH, COL_LG)}>Liq.</th>
+                  <th className={cn(TH, COL_XL)}>Margin</th>
                   <th className={TH}>PnL (ROE)</th>
                   <th className={cn(TH, "text-right")} />
                 </tr>
@@ -100,7 +110,7 @@ export function PositionsPanel({
                   const up = p.unrealizedPnl >= 0
                   return (
                     <tr key={p.symbol} className="border-b border-border/10 hover:bg-accent/30">
-                      <td className={TD}>
+                      <td className={TD_WRAP}>
                         <span className="inline-flex items-center gap-2 align-middle">
                           <CoinAvatar symbol={p.symbol} size="sm" />
                           <span className="font-bold">{p.symbol}</span>
@@ -117,12 +127,12 @@ export function PositionsPanel({
                       <td className={TD}>
                         {p.absSize} <span className="text-subtle">(${fmt(p.notionalUsd)})</span>
                       </td>
-                      <td className={TD}>${fmtPx(p.entryPrice)}</td>
-                      <td className={TD}>${fmtPx(p.markPrice)}</td>
-                      <td className={cn(TD, "text-warning")}>
+                      <td className={cn(TD, COL_MD)}>${fmtPx(p.entryPrice)}</td>
+                      <td className={cn(TD, COL_LG)}>${fmtPx(p.markPrice)}</td>
+                      <td className={cn(TD, COL_LG, "text-warning")}>
                         {p.liquidationPrice ? `$${fmtPx(p.liquidationPrice)}` : "—"}
                       </td>
-                      <td className={TD}>${fmt(p.marginUsed)}</td>
+                      <td className={cn(TD, COL_XL)}>${fmt(p.marginUsed)}</td>
                       <td className={cn(TD, "font-semibold", up ? "text-credit" : "text-debit")}>
                         {up ? "+" : ""}${fmt(p.unrealizedPnl)}{" "}
                         <span className="font-medium opacity-80">
@@ -154,21 +164,21 @@ export function PositionsPanel({
             No open orders — resting limit and trigger orders appear here.
           </p>
         ) : (
-          <table className="w-full min-w-[640px]">
+          <table className="w-full">
             <thead className="sticky top-0 bg-background">
               <tr className="border-b border-border/20">
                 <th className={TH}>Market</th>
                 <th className={TH}>Side</th>
-                <th className={TH}>Type</th>
+                <th className={cn(TH, COL_MD)}>Type</th>
                 <th className={TH}>Price</th>
-                <th className={TH}>Size</th>
+                <th className={cn(TH, COL_LG)}>Size</th>
                 <th className={cn(TH, "text-right")} />
               </tr>
             </thead>
             <tbody>
               {orders.map((o) => (
                 <tr key={o.oid} className="border-b border-border/10 hover:bg-accent/30">
-                  <td className={TD}>
+                  <td className={TD_WRAP}>
                     <span className="inline-flex items-center gap-2 align-middle">
                       <CoinAvatar symbol={o.symbol} size="sm" />
                       <span className="font-bold">{o.symbol}</span>
@@ -178,7 +188,7 @@ export function PositionsPanel({
                   <td className={cn(TD, "font-semibold", o.side === "buy" ? "text-credit" : "text-debit")}>
                     {o.side === "buy" ? "Buy" : "Sell"}
                   </td>
-                  <td className={TD}>
+                  <td className={cn(TD, COL_MD)}>
                     {o.orderType}
                     {o.reduceOnly && <span className="ml-1 text-[10px] text-subtle">RO</span>}
                   </td>
@@ -186,7 +196,7 @@ export function PositionsPanel({
                     ${fmtPx(o.isTrigger ? (o.triggerPrice ?? o.limitPrice) : o.limitPrice)}
                     {o.isTrigger && <span className="ml-1 text-[10px] text-subtle">trigger</span>}
                   </td>
-                  <td className={TD}>
+                  <td className={cn(TD, COL_LG)}>
                     {o.size}
                     {o.origSize !== o.size && <span className="text-subtle"> / {o.origSize}</span>}
                   </td>

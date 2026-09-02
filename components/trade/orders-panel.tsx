@@ -369,7 +369,7 @@ export function OrdersPanel({ className }: { className?: string }) {
                         aria-label={`Details for this ${row.symbol} order`}
                         data-vivid-target={`order-details-${row.order.id}`}
                         data-vivid-label={`Open the details for this ${row.symbol} order`}
-                        className="inline-flex items-center justify-center rounded-full p-1 text-subtle transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-full text-subtle transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         <HugeiconsIcon icon={InformationCircleIcon} className="h-4 w-4" />
                       </button>

@@ -110,10 +110,13 @@ function MarketRow({
         aria-pressed={pinned}
         onClick={() => onTogglePin(rowKey)}
         className={cn(
-          "shrink-0 rounded p-1 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+          // p-2.5 below lg: pinning is what makes a 9,000-row registry
+          // navigable, and it was a 22px target behind a hover that phones
+          // cannot perform.
+          "shrink-0 rounded p-2.5 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:p-1",
           pinned
             ? "text-primary"
-            : "text-subtle opacity-0 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100",
+            : "text-subtle opacity-100 hover:text-foreground focus-visible:opacity-100 lg:opacity-0 lg:group-hover:opacity-100",
         )}
       >
         <HugeiconsIcon
