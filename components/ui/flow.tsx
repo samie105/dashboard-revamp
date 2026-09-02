@@ -915,8 +915,19 @@ export function StatusScreen({
         <div className="flex w-full flex-col gap-2.5 pt-2 sm:flex-row-reverse">
           {primary &&
             (primary.href ? (
-              <Link href={primary.href} className="flex h-[52px] flex-1 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-primary-foreground transition-colors hover:bg-primary/90">
+              /* An href here leaves the app — an explorer, usually — so it
+                 says so. The pair also stops being two identical pills where
+                 only the colour differed. */
+              <Link
+                href={primary.href}
+                target={primary.href.startsWith("http") ? "_blank" : undefined}
+                rel={primary.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                className="flex h-[52px] flex-1 items-center justify-center gap-1.5 rounded-full bg-primary text-[15px] font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
                 {primary.label}
+                {primary.href.startsWith("http") && (
+                  <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
+                )}
               </Link>
             ) : (
               <button onClick={primary.onClick} className="flex h-[52px] flex-1 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-primary-foreground transition-colors hover:bg-primary/90">

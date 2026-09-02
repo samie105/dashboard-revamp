@@ -67,10 +67,15 @@ function MarketRow({
   return (
     <div
       className={cn(
-        "group flex items-center gap-1 pr-2 transition-colors",
+        "group relative flex items-center transition-colors",
         active ? "bg-accent" : "hover:bg-accent/50",
       )}
     >
+      {/* The active pair gets a rail marker. In a list of 9,000 rows, a
+          background tint alone is easy to lose. */}
+      {active && (
+        <span aria-hidden className="absolute inset-y-1 left-0 w-[3px] rounded-r-full bg-primary" />
+      )}
       <button
         role="option"
         aria-selected={active}
@@ -78,30 +83,36 @@ function MarketRow({
         data-vivid-target={`pick-pair-${rowKey}`}
         data-vivid-label={`Switch to the ${market.symbol} market${networkNote}`}
         onClick={() => onSelect(rowKey)}
-        className="flex min-w-0 flex-1 items-center justify-between gap-2 py-2.5 pl-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-3 pr-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
       >
-        <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <CoinAvatar
-            symbol={"coinName" in market ? market.coinName : market.symbol}
-            src={"icon" in market ? market.icon : undefined}
-            size="md"
-          />
-          <span className="truncate">{market.symbol}</span>
-          <span className="shrink-0 text-[10px] font-medium text-subtle">
-            {isFutures ? "PERP" : quoteOf(market)}
+        <CoinAvatar
+          symbol={"coinName" in market ? market.coinName : market.symbol}
+          src={"icon" in market ? market.icon : undefined}
+          size="md"
+        />
+        {/* The PAIR gets its own line and the width to be read.
+            Everything used to sit on one: avatar, symbol, quote, chain badge
+            and price, in a 260px rail — so the symbol truncated to a letter
+            and an ellipsis while the price took the space. The identity of the
+            market is the reason this list exists; the price is a detail about
+            it, and now reads like one. */}
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-none">
+          <span className="flex min-w-0 items-baseline gap-1">
+            <span className="truncate text-[13.5px] font-semibold">{market.symbol}</span>
+            <span className="shrink-0 text-[11px] font-medium text-subtle">
+              /{isFutures ? "PERP" : quoteOf(market)}
+            </span>
+            {isFutures && (
+              <span className="shrink-0 rounded bg-primary/[0.12] px-1 py-px text-[9px] font-bold text-primary">
+                {market.maxLeverage}×
+              </span>
+            )}
           </span>
-          {isFutures && (
-            <span className="shrink-0 rounded bg-primary/[0.12] px-1 py-0.5 text-[9px] font-bold text-primary">
-              {market.maxLeverage}×
-            </span>
-          )}
           {network && (
-            <span className="shrink-0 truncate rounded bg-surface-sunken px-1 py-0.5 text-[9px] font-medium text-subtle">
-              {network}
-            </span>
+            <span className="truncate text-[10.5px] text-subtle">{network}</span>
           )}
         </span>
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+        <span className="shrink-0 pl-1 text-right text-[12px] tabular-nums text-muted-foreground">
           ${fmtPx(market.price)}
         </span>
       </button>

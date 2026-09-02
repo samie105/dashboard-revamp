@@ -70,12 +70,10 @@ function MarketsTable() {
   const markets = React.useMemo(() => {
     const rows = [...registry.bySymbol.values()].flat()
     const query = search.trim().toLowerCase()
-    const matched = query
-      ? rows.filter((row) => row.symbol.toLowerCase().includes(query))
-      : rows
-    // Priced first — a market with no price is the least useful row on a card
-    // whose whole job is showing prices.
-    return matched.sort((a, b) => (b.price > 0 ? 1 : 0) - (a.price > 0 ? 1 : 0))
+    /* Registry order is kept, because it is now MEANINGFUL: the backend ranks
+       by the depth behind each market and excludes anything with no price. Any
+       sort here would throw that away and put the alphabet back. */
+    return query ? rows.filter((row) => row.symbol.toLowerCase().includes(query)) : rows
   }, [registry, search])
 
   React.useEffect(() => {
