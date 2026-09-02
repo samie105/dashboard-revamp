@@ -36,13 +36,31 @@ import {
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
 import { ActivityCard } from "@/components/dashboard/activity-card"
-import { WorldstreetTokenCard } from "@/components/dashboard/worldstreet-token-card"
+// TEMPORARILY OFF — see the parked block below.
+// import { WorldstreetTokenCard } from "@/components/dashboard/worldstreet-token-card"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
 import { getCoinImage, coinFallback } from "@/lib/coin-images"
+import { ComingSoon, FUTURES_SOON_TITLE, SoonBadge } from "@/components/ui/coming-soon"
 
 const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
 const USDC_IMAGE = "https://coin-images.coingecko.com/coins/images/6319/small/usdc.png"
+
+/* ── TEMPORARY: the futures venue is not open ───────────────────────────
+   Perpetual futures are not live on the platform yet. Every futures surface in
+   this file stays VISIBLE and stays PRESSABLE — the tabs are built, people have
+   already found them, and the feature is coming. Selecting one is how you find
+   out: its panel is the ComingSoon message instead of the futures UI, so a tap
+   explains itself where there is no hover to carry a tooltip. What the gate does
+   remove is every link into /trade?market=futures — a tab that explains itself
+   is not the same thing as a button into a venue that cannot take an order.
+   Flip this one constant to `true` when the venue opens; nothing else in this
+   file needs unwinding.
+
+   The `: boolean` annotation is load-bearing. Without it TS narrows the type to
+   the literal `false`, and every `tab === "Futures"` / `view === "positions"`
+   comparison below becomes a "comparison appears unintentional" error. */
+const FUTURES_OPEN: boolean = false
 
 /* ========== Trade Confirm Dialog (mobile) ========== */
 type TradeConfirmItem =
@@ -237,16 +255,32 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
       />
       <div className="px-4 pb-3">
         <Segmented
+          /* Futures is fully pressable — pressing it is how you learn the venue
+             is closed (see FUTURES_OPEN). It only reads quieter than the live tabs
+             while it is UNSELECTED; selected, it looks like any other tab, because
+             its panel is doing the explaining. Segmented styles its own options,
+             so the dimming lands on that one button via its `data-seg-key`.
+             MARKET_TABS itself is untouched: `MarketTab` is derived from it, so
+             narrowing the array would break every `tab === "Futures"` branch. */
           options={MARKET_TABS.map((t) => ({ key: t, label: t }))}
           value={tab}
           onChange={setTab}
-          className="self-start"
+          className={
+            FUTURES_OPEN || tab === "Futures"
+              ? "self-start"
+              : "self-start [&_[data-seg-key=Futures]]:opacity-60"
+          }
         />
       </div>
 
       {/* Table — Futures */}
       {tab === "Futures" ? (
-        futuresLoading ? (
+        // Closed venue: the tab answers for itself rather than showing a table
+        // nobody can trade from. Everything below is untouched — FUTURES_OPEN
+        // brings the real table straight back.
+        !FUTURES_OPEN ? (
+          <ComingSoon compact className="flex flex-1 flex-col justify-center" />
+        ) : futuresLoading ? (
           <SkeletonTable rows={5} cols={4} label="Loading contracts" />
         ) : filteredFutures.length === 0 ? (
           <EmptyState illustration="cryptoTrade" title="No contracts found" description="Try a different search term" />
@@ -305,13 +339,22 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
                         <ChangeText value={market.change24h} />
                       </td>
                       <td className="hidden sm:table-cell px-4 py-2.5 text-right">
-                        <a
-                          href={`/trade?market=futures&symbol=${market.symbol}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground ring-1 ring-border transition-colors hover:bg-primary hover:text-primary-foreground hover:ring-primary"
-                        >
-                          Trade
-                        </a>
+                        {/* The contract still lists, but while futures is
+                            closed nothing here navigates into a venue that
+                            cannot take an order. See FUTURES_OPEN. */}
+                        {FUTURES_OPEN ? (
+                          <a
+                            href={`/trade?market=futures&symbol=${market.symbol}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground ring-1 ring-border transition-colors hover:bg-primary hover:text-primary-foreground hover:ring-primary"
+                          >
+                            Trade
+                          </a>
+                        ) : (
+                          <span title={FUTURES_SOON_TITLE} onClick={(e) => e.stopPropagation()}>
+                            <SoonBadge />
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )
@@ -480,7 +523,9 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
     return `${Math.floor(diff / 86400_000)}d ago`
   }
 
-  const loading = tab === "spot" ? spotTradesLoading : futuresLoading
+  /* While futures is closed its panel is a static message, so it must never
+     wait on a feed that may never answer. FUTURES_OPEN. */
+  const loading = tab === "spot" ? spotTradesLoading : FUTURES_OPEN && futuresLoading
 
   return (
     <CardShell data-onboarding="dash-trades">
@@ -495,6 +540,9 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
             ] as const}
             value={tab}
             onChange={setTab}
+            // Pressable; just quieter than the live tab until it is selected.
+            // See FUTURES_OPEN.
+            className={FUTURES_OPEN || tab === "futures" ? undefined : "[&_[data-seg-key=futures]]:opacity-60"}
           />
         }
       />
@@ -551,12 +599,17 @@ function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
           </div>
         )
       ) : (
-        futuresFills.length === 0 ? (
+        // Closed venue — see FUTURES_OPEN. The fills list below stays intact.
+        !FUTURES_OPEN ? (
+          <ComingSoon compact className="flex flex-1 flex-col justify-center" />
+        ) : futuresFills.length === 0 ? (
           <EmptyState
             illustration="noTransactions"
             title="No futures trades yet"
             description="Your futures fills will appear here"
-            cta={{ label: "Trade Futures", href: "/trade?market=futures" }}
+            /* No CTA while futures is closed — a button into a venue that
+               cannot take an order is worse than no button. FUTURES_OPEN. */
+            cta={FUTURES_OPEN ? { label: "Trade Futures", href: "/trade?market=futures" } : undefined}
           />
         ) : (
           <div className="flex flex-1 flex-col divide-y divide-border/30">
@@ -725,7 +778,9 @@ function MyPositions() {
 
   const [view, setView] = React.useState<"positions" | "spot">("spot")
 
-  const loading = view === "positions" ? posLoading : spotLoading
+  /* The Futures view is selectable while the venue is closed — it just shows
+     the message instead of positions, so it must never wait on the feed. */
+  const loading = view === "positions" ? FUTURES_OPEN && posLoading : spotLoading
 
   // Footer facts — the card always accounts for itself at the bottom edge.
   const spotHoldingsTotal =
@@ -749,6 +804,9 @@ function MyPositions() {
             ] as const}
             value={view}
             onChange={setView}
+            // Pressable; just quieter than the live tab until it is selected.
+            // See FUTURES_OPEN.
+            className={FUTURES_OPEN || view === "positions" ? undefined : "[&_[data-seg-key=positions]]:opacity-60"}
           />
         }
         link={{ label: "View all", href: "/assets" }}
@@ -757,12 +815,16 @@ function MyPositions() {
       {loading ? (
         <SkeletonRows rows={4} label="Loading holdings" />
       ) : view === "positions" ? (
-        positions.length === 0 ? (
+        // Closed venue — see FUTURES_OPEN. The positions list below stays intact.
+        !FUTURES_OPEN ? (
+          <ComingSoon compact className="flex flex-1 flex-col justify-center" />
+        ) : positions.length === 0 ? (
           <EmptyState
             illustration="cryptoTrade"
             title="No open positions"
             description="Your futures positions will appear here"
-            cta={{ label: "Trade Futures", href: "/trade?market=futures" }}
+            /* No CTA while futures is closed. FUTURES_OPEN. */
+            cta={FUTURES_OPEN ? { label: "Trade Futures", href: "/trade?market=futures" } : undefined}
           />
         ) : (
           <div className="flex flex-1 flex-col divide-y divide-border/30">
@@ -894,7 +956,9 @@ function MyPositions() {
           </span>
         </div>
       )}
-      {!loading && view === "positions" && positions.length > 0 && (
+      {/* The futures P&L line is part of the futures panel: while the venue is
+          closed the card ends on the message, not on a total. FUTURES_OPEN. */}
+      {FUTURES_OPEN && !loading && view === "positions" && positions.length > 0 && (
         <div className="mt-auto flex items-center justify-between border-t border-border/30 px-4 py-2.5">
           <span className="text-xs text-muted-foreground">
             {positions.length} open {positions.length === 1 ? "position" : "positions"}
@@ -954,12 +1018,19 @@ export function DashboardGrid({ coins, initialTrades, prices, error }: Dashboard
         {/* Right column carries two cards: the user's stars, then the house
             token — the screener is tall enough to partner both. */}
         <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
-          <div className="rise min-w-0" style={cell(250)}>
+          {/* TEMPORARILY OFF (2026-09-02) — the house-token work is still in
+              progress, so the card and the MnaBanner that scrolls to it are
+              both parked. The Watchlist takes the whole column meanwhile.
+              Restore this block together with the <MnaBanner /> in
+              app/page.tsx; they only make sense as a pair. */}
+          <div className="rise min-w-0 flex-1 [&>div]:h-full" style={cell(250)}>
             <Watchlist coins={coins} error={error} />
           </div>
+          {/*
           <div className="rise min-w-0 flex-1 [&>div]:h-full" style={cell(320)}>
             <WorldstreetTokenCard />
           </div>
+          */}
         </div>
       </div>
 

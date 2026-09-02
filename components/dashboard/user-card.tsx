@@ -14,8 +14,15 @@ import {
   Chart01Icon,
   ChartLineData01Icon,
   ArrowUpRight01Icon,
+  MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons"
-import { ActionPill, Balance, ChangeText, DeltaChip, Eyebrow, Skel } from "@/components/ui/system"
+import { Balance, ChangeText, DeltaChip, Eyebrow, Skel } from "@/components/ui/system"
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from "@/components/ui/responsive-modal"
 import { NETWORKS, NETWORK_ICON } from "@/lib/networks"
 import { useAuth } from "@/components/auth-provider"
 import { useWallet } from "@/components/wallet-provider"
@@ -118,7 +125,7 @@ function Sparkline({ series, tone }: { series: number[]; tone: "up" | "down" | "
 
   return (
     <div className={`relative w-full ${color}`} aria-hidden>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-12 w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-8 w-full sm:h-12">
         <defs>
           <linearGradient id={`${id}-a`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="currentColor" stopOpacity="0.25" />
@@ -162,10 +169,13 @@ function Sparkline({ series, tone }: { series: number[]; tone: "up" | "down" | "
 // switching), each linking to the surface where that money actually lives.
 // Cash gets no card (a USD balance draws a dead-flat line); it stays inside
 // the Total and is called out in the hero's sub-label instead.
+// Futures has no card while the venue is unavailable: a tile is a door, and
+// this one would open onto a screen that cannot trade. Its balance still
+// counts toward the Total and still feeds the 30-day history below — the
+// money is real, only the destination isn't ready.
 const ACCOUNTS = [
-  { key: "main",    label: "Main",    icon: Wallet01Icon,        sub: "On-chain balance", href: "/assets" },
-  { key: "spot",    label: "Spot",    icon: Chart01Icon,         sub: "Spot trading",     href: "/trade" },
-  { key: "futures", label: "Futures", icon: ChartLineData01Icon, sub: "Futures wallet",   href: "/trade?market=futures" },
+  { key: "main",    label: "Main",    icon: Wallet01Icon, sub: "On-chain balance", href: "/assets" },
+  { key: "spot",    label: "Spot",    icon: Chart01Icon,  sub: "Spot trading",     href: "/trade" },
 ] as const
 
 export function WalletCard({ coins, prices, error }: WalletCardProps) {
@@ -181,6 +191,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
      mode. */
   const { mode: walletMode } = useWalletMode()
   const [receiveOpen, setReceiveOpen] = React.useState(false)
+  const [moreOpen, setMoreOpen] = React.useState(false)
   const balancesReady = walletMode === "modern" || walletsGenerated
   const { openFlow } = useMoneyFlow()
   const { balances: onChainBalances } = useWalletBalances()
@@ -325,7 +336,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
 
   const totalBalance = onChainTotal + spotBalance + futuresBalance + cashBalance
 
-  const accountBalances: Record<(typeof ACCOUNTS)[number]["key"], number> = {
+  const accountBalances: Record<"main" | "spot" | "futures", number> = {
     main: onChainTotal,
     spot: spotBalance,
     futures: futuresBalance,
@@ -396,23 +407,29 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
      pick from, a chain, a destination and an unlock, and that is a screen.
      Legacy mode keeps the cash flow, which is the right one for a wallet the
      user holds no keys to. */
-  const ACTIONS: {
+  type DashAction = {
     label: string
     icon: typeof Exchange01Icon
     href?: string
     onClick?: () => void
     vivid: string
     vividLabel: string
-  }[] = [
+    /** One line under the label in the overflow sheet. */
+    hint?: string
+  }
+
+  const PRIMARY_ACTIONS: DashAction[] = [
     walletMode === "modern"
       ? { label: "Deposit", onClick: () => setReceiveOpen(true), icon: Exchange01Icon, vivid: "open-deposit", vividLabel: "Show the wallet's deposit addresses" }
       : { label: "Deposit", onClick: () => openFlow("buy"), icon: Exchange01Icon, vivid: "open-deposit", vividLabel: "Open the deposit modal" },
     walletMode === "modern"
       ? { label: "Withdraw", href: "/wallet/modern", icon: CreditCardIcon, vivid: "open-withdraw", vividLabel: "Go to the wallet to send funds" }
       : { label: "Withdraw", onClick: () => openFlow("sell"), icon: CreditCardIcon, vivid: "open-withdraw", vividLabel: "Open the withdraw modal" },
-    { label: "Swap",     href: "/swap",                   icon: CoinsSwapIcon,      vivid: "go-swap",       vividLabel: "Go to the swap page" },
-    { label: "Trade",    href: "/trade",                  icon: ChartLineData01Icon, vivid: "go-trade",     vividLabel: "Go to the trading workspace" },
-    { label: "History",  href: "/transactions",           icon: Clock01Icon,        vivid: "go-history",    vividLabel: "Go to transaction history" },
+  ]
+
+  const MORE_ACTIONS: DashAction[] = [
+    { label: "Swap",  href: "/swap",  icon: CoinsSwapIcon,       vivid: "go-swap",  vividLabel: "Go to the swap page",           hint: "Trade one coin for another" },
+    { label: "Trade", href: "/trade", icon: ChartLineData01Icon, vivid: "go-trade", vividLabel: "Go to the trading workspace",   hint: "Buy and sell on the market" },
   ]
 
   return (
@@ -461,7 +478,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   value={formatUSD(totalBalance)}
                   hidden={hidden}
                   mask={MASK}
-                  className="text-[clamp(1.9rem,8.5vw,2.75rem)] sm:text-[clamp(2.75rem,5.5vw,4.5rem)]"
+                  className="text-[clamp(2.5rem,11.5vw,3.5rem)] sm:text-[clamp(2.75rem,5.5vw,4.5rem)]"
                 />
                 {dailyPnL !== 0 && !hidden && <DeltaChip value={dailyPnL} prefix="$" suffix="" />}
               </div>
@@ -492,7 +509,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               surface where that money actually lives. */}
           <div
             data-onboarding="dash-balance-cards"
-            className="flex gap-2.5 overflow-x-auto scrollbar-none sm:grid sm:grid-cols-3 sm:overflow-visible"
+            className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
           >
             {ACCOUNTS.map((a) => {
               const series = sparkSeries[a.key]
@@ -513,7 +530,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   href={a.href}
                   data-vivid-target={`balance-view-${a.key}`}
                   data-vivid-label={`Open the ${a.label} account`}
-                  className="ws-card-glass group relative flex min-w-[200px] flex-1 shrink-0 flex-col gap-3 rounded-2xl bg-card/70 p-4 pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0 sm:min-w-0"
+                  className="ws-card-glass group relative flex min-w-0 flex-col gap-2 rounded-2xl bg-card/70 p-3.5 pb-3 sm:gap-3 sm:p-4 sm:pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0"
                 >
                   {/* Gradient stroke — brand gold dissolving diagonally to
                       nothing. Masked ring (padding-box XOR) instead of a
@@ -546,7 +563,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   {series && series.length > 1 ? (
                     <Sparkline series={series} tone={tone} />
                   ) : (
-                    <Skel className="h-12 w-full rounded-md" />
+                    <Skel className="h-8 w-full rounded-md sm:h-12" />
                   )}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-muted-foreground">{a.sub}</span>
@@ -563,19 +580,39 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             })}
           </div>
 
-          {/* Action rail */}
-          <div data-onboarding="dash-actions" className="flex items-center gap-2 overflow-x-auto scrollbar-none">
-            {ACTIONS.map((a) => (
-              <ActionPill
-                key={a.label}
-                href={a.href}
-                onClick={a.onClick}
-                label={a.label}
-                icon={({ className }) => <HugeiconsIcon icon={a.icon} className={className} />}
-                data-vivid-target={a.vivid}
-                data-vivid-label={a.vividLabel}
-              />
-            ))}
+          {/* Action rail — two verbs and an overflow, no sideways scroll. */}
+          <div data-onboarding="dash-actions" className="flex items-stretch gap-2">
+            {PRIMARY_ACTIONS.map((a) => {
+              const inner = (
+                <>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/[0.14]">
+                    <HugeiconsIcon icon={a.icon} className="h-[18px] w-[18px] text-primary" />
+                  </span>
+                  <span className="text-[15px] font-bold">{a.label}</span>
+                </>
+              )
+              const cls =
+                "ws-card-glass flex min-h-14 flex-1 items-center justify-center gap-2.5 rounded-2xl bg-card/60 px-3 ring-1 ring-border/40 transition-all hover:bg-accent/70 active:scale-[0.97] motion-reduce:active:scale-100 sm:flex-none sm:px-5"
+              return a.href ? (
+                <Link key={a.label} href={a.href} className={cls} data-vivid-target={a.vivid} data-vivid-label={a.vividLabel}>
+                  {inner}
+                </Link>
+              ) : (
+                <button key={a.label} type="button" onClick={a.onClick} className={cls} data-vivid-target={a.vivid} data-vivid-label={a.vividLabel}>
+                  {inner}
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              onClick={() => setMoreOpen(true)}
+              aria-label="More actions"
+              data-vivid-target="dash-more-actions"
+              data-vivid-label="Open the rest of the dashboard actions"
+              className="ws-card-glass flex min-h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-card/60 ring-1 ring-border/40 transition-all hover:bg-accent/70 active:scale-[0.97] motion-reduce:active:scale-100"
+            >
+              <HugeiconsIcon icon={MoreHorizontalIcon} className="h-5 w-5 text-muted-foreground" />
+            </button>
           </div>
 
           {/* Network footer — the receive surface, demoted under the actions:
@@ -618,6 +655,36 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
           </div>
         </div>
       </div>
+
+      {/* The overflow — bottom sheet on a phone, dialog on a desktop. */}
+      <ResponsiveModal open={moreOpen} onOpenChange={setMoreOpen}>
+        <ResponsiveModalContent className="sm:max-w-sm">
+          <ResponsiveModalHeader>
+            <ResponsiveModalTitle>More actions</ResponsiveModalTitle>
+          </ResponsiveModalHeader>
+          <div className="flex flex-col gap-1.5">
+            {MORE_ACTIONS.map((a) => (
+              <Link
+                key={a.label}
+                href={a.href ?? "#"}
+                onClick={() => setMoreOpen(false)}
+                data-vivid-target={a.vivid}
+                data-vivid-label={a.vividLabel}
+                className="flex min-h-14 items-center gap-3 rounded-2xl bg-surface-sunken/70 px-3.5 ring-1 ring-border/25 transition-colors hover:bg-accent/60"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/[0.12]">
+                  <HugeiconsIcon icon={a.icon} className="h-5 w-5 text-primary" />
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-[14px] font-semibold">{a.label}</span>
+                  {a.hint && <span className="truncate text-[12px] text-muted-foreground">{a.hint}</span>}
+                </span>
+                <HugeiconsIcon icon={ArrowUpRight01Icon} className="ml-auto h-4 w-4 shrink-0 text-muted-foreground/60" />
+              </Link>
+            ))}
+          </div>
+        </ResponsiveModalContent>
+      </ResponsiveModal>
 
       {/* Deposit's own surface — the wallet's addresses, per chain. */}
       <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} />
