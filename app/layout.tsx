@@ -36,6 +36,7 @@ import { AuthProvider } from "@/components/auth-provider"
 import { AuthGate } from "@/components/auth-gate"
 import { WalletProvider } from "@/components/wallet-provider"
 import { WalletModeProvider } from "@/components/wallet-mode-provider"
+import { UiModeProvider } from "@/components/ui-mode-provider"
 import { CryptoQueryProvider } from "@/components/crypto/query-provider"
 import { CryptoProvider } from "@/components/crypto/CryptoProvider"
 
@@ -96,6 +97,11 @@ export default function RootLayout({
                     <AuthGate>
                       <WalletProvider>
                       <WalletModeProvider>
+                      {/* Simple/Pro sits inside AuthProvider (it keys the
+                          preference by user) and outside LayoutShell, because
+                          /trade is full-bleed and renders outside the shell's
+                          sidebar branch but still reads the mode. */}
+                      <UiModeProvider>
 
                       <TooltipProvider>
                         <VividVoiceProvider>
@@ -103,6 +109,7 @@ export default function RootLayout({
                         </VividVoiceProvider>
                       </TooltipProvider>
 
+                      </UiModeProvider>
                       </WalletModeProvider>
                       </WalletProvider>
                     </AuthGate>

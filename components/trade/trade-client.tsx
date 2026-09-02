@@ -68,6 +68,8 @@ import {
   orderCopy,
 } from "@/components/trade/order-placed-modal"
 import { useAuth } from "@/components/auth-provider"
+import { useUiMode } from "@/components/ui-mode-provider"
+import { ModeSwitch } from "@/components/ui/mode-switch"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import {
   useCryptoBalances,
@@ -249,6 +251,7 @@ export function TradeClient() {
   const params = useSearchParams()
   const router = useRouter()
   const { openFlow } = useMoneyFlow()
+  const { trade: tradeView } = useUiMode()
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const modernWallet = useCryptoWalletState()
@@ -832,7 +835,13 @@ export function TradeClient() {
      stablecoin — so "USD | USDC" offered two names for one unit. The switch
      belongs on the side where the units genuinely differ: a sell, which spends
      the base token. */
-  const unitSwitchable = Boolean(spentSymbol && !sizesLikeUsd(spentSymbol))
+  /* Simple mode sizes every order in dollars. "Do you want to sell 0.031 ETH
+     or $95 of ETH" is a question about units, not about the trade, and the
+     percentage buttons underneath already answer it a better way. Pro keeps
+     the switch. Note this also forces `inTokenUnit` false, so the whole
+     token-sizing branch — placeholder, estimate line, max rounding — follows
+     without needing its own guard. */
+  const unitSwitchable = Boolean(spentSymbol && !sizesLikeUsd(spentSymbol)) && tradeView.unitSwitch
   const inTokenUnit = amountUnit === "token" && unitSwitchable
 
   /**
@@ -2351,6 +2360,15 @@ export function TradeClient() {
           vividPrefix="market-tab"
         />
 
+        {/* Simple / Pro. Same control and same place in the reading order as
+           on the wallet: beside the screen's own identity, not buried in a
+           settings menu.
+           The rest of what this branch put here — the pair picker, the price
+           and the 24h cluster — is gone from the top bar rather than dropped:
+           it moved into MarketHeader, over the chart, where the price sits
+           beside the thing it describes. The mode switch is the only part of
+           that block that is chrome. */}
+        <ModeSwitch className="shrink-0" />
         {/* Balances + money doors */}
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           {balances && (
@@ -2472,6 +2490,7 @@ export function TradeClient() {
             high24h={high24h}
             low24h={low24h}
             beat={beat}
+            showMarketStats={tradeView.marketStats}
             pickerOpen={pickerOpen}
             onTogglePicker={() => setPickerOpen((v) => !v)}
             picker={picker}

@@ -136,6 +136,11 @@ export function MarketHeader({
   low24h,
   /** Bumped every time a price poll lands — the heartbeat's only trigger. */
   beat,
+  /** Simple mode hides the reference row (see `TradeView.marketStats`): the
+   *  price and its 24h move answer "is it up or down", which is the question
+   *  a first-time buyer is asking. The rest answers questions they have not
+   *  asked yet. */
+  showMarketStats = true,
   pickerOpen,
   onTogglePicker,
   picker,
@@ -156,6 +161,7 @@ export function MarketHeader({
   high24h: number | null
   low24h: number | null
   beat: number
+  showMarketStats?: boolean
   pickerOpen: boolean
   onTogglePicker: () => void
   picker: React.ReactNode
@@ -177,10 +183,11 @@ export function MarketHeader({
   const hasRange =
     high24h !== null && low24h !== null && high24h > low24h && price > 0
   const stats =
-    volume24h !== null ||
-    hasRange ||
-    typeof changePct1h === "number" ||
-    typeof changePct7d === "number"
+    showMarketStats &&
+    (volume24h !== null ||
+      hasRange ||
+      typeof changePct1h === "number" ||
+      typeof changePct7d === "number")
 
   return (
     <header
