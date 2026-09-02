@@ -3,6 +3,10 @@ import {
   buildSpotOrderPlanFromTokenAmount,
   buildSpotOrderPlan,
   SLIPPAGE_PERCENTAGE,
+  SLIPPAGE_MAX,
+  SLIPPAGE_MIN,
+  normalizeSlippage,
+  spotOrderTokens,
   spotOrderProblem,
   spentTokenSymbol,
   tokenDecimalsFor,
@@ -302,5 +306,60 @@ describe("tokenDecimalsFor", () => {
   it("returns undefined for anything it has not been told", () => {
     expect(tokenDecimalsFor("arbitrum-one", "0x0000000000000000000000000000000000000dead")).toBeUndefined()
     expect(tokenDecimalsFor("base-mainnet", ARB_USDC)).toBeUndefined()
+  })
+})
+
+/* The tolerance used to be a constant nothing could reach. It is a ticket
+   setting now, which makes it a money path: whatever the screen sends has to
+   arrive on the intent, and anything outside the band has to be pulled back
+   into it BEFORE it can reach the backend — a typed "50" must never become a
+   50% tolerance. */
+describe("price-protection tolerance", () => {
+  it("defaults to the house figure when the caller says nothing", () => {
+    const usd = buildSpotOrderPlan(wethRow, "buy", 100, 2500)
+    const token = buildSpotOrderPlanFromTokenAmount(solRow, "buy", "10")
+    expect(usd.kind === "evm" && usd.input.slippagePercentage).toBe(SLIPPAGE_PERCENTAGE)
+    expect(token.kind === "lifi" && token.input.slippagePercentage).toBe(SLIPPAGE_PERCENTAGE)
+  })
+
+  it("carries the caller's figure through to both venues", () => {
+    const evm = buildSpotOrderPlan(wethRow, "buy", 100, 2500, 0.005)
+    const lifi = buildSpotOrderPlan(solRow, "buy", 100, 200, 0.02)
+    const byToken = buildSpotOrderPlanFromTokenAmount(solRow, "buy", "10", 0.005)
+    expect(evm.kind === "evm" && evm.input.slippagePercentage).toBe(0.005)
+    expect(lifi.kind === "lifi" && lifi.input.slippagePercentage).toBe(0.02)
+    expect(byToken.kind === "lifi" && byToken.input.slippagePercentage).toBe(0.005)
+  })
+
+  it("clamps anything outside the band rather than sending it", () => {
+    const tooWide = buildSpotOrderPlan(wethRow, "buy", 100, 2500, 0.5)
+    const tooTight = buildSpotOrderPlan(wethRow, "buy", 100, 2500, 0.00001)
+    const negative = buildSpotOrderPlan(wethRow, "buy", 100, 2500, -1)
+    expect(tooWide.kind === "evm" && tooWide.input.slippagePercentage).toBe(SLIPPAGE_MAX)
+    expect(tooTight.kind === "evm" && tooTight.input.slippagePercentage).toBe(SLIPPAGE_MIN)
+    expect(negative.kind === "evm" && negative.input.slippagePercentage).toBe(SLIPPAGE_MIN)
+  })
+
+  /* A value that isn't a finite number is unreadable, not merely out of range,
+     so it falls back to the house figure rather than being clamped to the
+     widest one — "we couldn't read this" must never resolve to the most
+     permissive setting on a money path. */
+  it("falls back to the default for a figure that is not a number", () => {
+    expect(normalizeSlippage(Number.NaN)).toBe(SLIPPAGE_PERCENTAGE)
+    expect(normalizeSlippage(Number.POSITIVE_INFINITY)).toBe(SLIPPAGE_PERCENTAGE)
+    expect(normalizeSlippage(undefined)).toBe(SLIPPAGE_PERCENTAGE)
+  })
+})
+
+describe("spotOrderTokens", () => {
+  it("names the token spent and the token received, flipping with the side", () => {
+    const buy = spotOrderTokens(wethRow, "buy")
+    const sell = spotOrderTokens(wethRow, "sell")
+    expect(buy).toEqual({ spend: ARB_USDC, receive: ARB_WETH, networkId: "arbitrum-one" })
+    expect(sell).toEqual({ spend: ARB_WETH, receive: ARB_USDC, networkId: "arbitrum-one" })
+  })
+
+  it("is null for a row that cannot be routed, rather than a guess", () => {
+    expect(spotOrderTokens({ symbol: "NOPE", venue: "kraken" }, "buy")).toBeNull()
   })
 })

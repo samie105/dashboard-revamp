@@ -809,7 +809,7 @@ function MyPositions() {
             className={FUTURES_OPEN || view === "positions" ? undefined : "[&_[data-seg-key=positions]]:opacity-60"}
           />
         }
-        link={{ label: "View all", href: "/assets" }}
+        link={{ label: "View all", href: "/portfolio" }}
       />
 
       {loading ? (
@@ -864,7 +864,7 @@ function MyPositions() {
               )
             })}
             {positions.length > 8 && (
-              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+              <a href="/portfolio" className="flex items-center justify-center py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
                 View all {positions.length} positions
               </a>
             )}
@@ -936,7 +936,7 @@ function MyPositions() {
               )
             })}
             {spotPositions.length > 8 && (
-              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+              <a href="/portfolio" className="flex items-center justify-center py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
                 View all {spotPositions.length} assets
               </a>
             )}

@@ -21,12 +21,15 @@ export function MarketsRail({
   selected,
   onSelect,
   className,
+  style,
 }: {
   list: readonly AnyMarket[]
   /** The selected row's identity — `marketRowKey`, never a bare symbol. */
   selected: string
   onSelect: (rowKey: string) => void
   className?: string
+  /** For the workspace's pane-entrance custom properties. */
+  style?: React.CSSProperties
 }) {
   return (
     <aside
@@ -34,6 +37,7 @@ export function MarketsRail({
       data-vivid-target="markets-rail"
       data-vivid-label="The market list rail — every tradable pair"
       className={cn("flex min-h-0 flex-col", className)}
+      style={style}
     >
       <MarketPicker
         list={list}

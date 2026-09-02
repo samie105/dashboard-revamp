@@ -18,7 +18,6 @@ import {
   RepeatIcon,
   Shield01Icon,
   Chart01Icon,
-  Coins01Icon,
   UserIcon,
   UserGroup02Icon,
   Wallet01Icon,
@@ -78,18 +77,10 @@ const NAV_GROUPS: NavGroup[] = [
       // Points at /wallet/modern, not /wallet: on the production branch
       // /wallet is still the legacy wallet, and this row means the new one.
       { name: "Wallet", description: "Your Worldstreet wallet", url: "/wallet/modern", icon: Wallet01Icon },
-      { name: "Portfolio", description: "Market activity", url: "/portfolio", icon: ChartCandlestickIcon },
-      // Coins, not the wallet glyph — Wallet owns that now, and two rows
-      // wearing the same icon is two rows nobody can tell apart at a glance.
-      { name: "Assets", description: "Holdings and prices", url: "/assets", icon: Coins01Icon },
+      // Assets merged into Portfolio: the two rows led to the same money in
+      // two shapes, so there is one row and one page. `/assets` redirects.
+      { name: "Portfolio", description: "Everything you own", url: "/portfolio", icon: ChartCandlestickIcon },
       { name: "Transactions", description: "History and receipts", url: "/transactions", icon: File01Icon },
-    ],
-  },
-  {
-    label: "Community",
-    icon: UserGroup02Icon,
-    items: [
-      { name: "Community", description: "Chat & connect", url: "/community", icon: UserGroup02Icon },
     ],
   },
   {

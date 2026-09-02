@@ -141,7 +141,7 @@ export function ActivityCard() {
           illustration="noTransactions"
           title="No activity yet"
           description="Deposits, withdrawals and swaps land here the moment they happen"
-          ctas={[{ label: "Make a deposit", href: "/assets" }]}
+          ctas={[{ label: "Make a deposit", href: "/portfolio" }]}
         />
       ) : (
         <div className="flex flex-col divide-y divide-border/20 px-1 pb-2">

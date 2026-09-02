@@ -61,6 +61,14 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
           <div className="flex h-dvh flex-col overflow-hidden">
             <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
           </div>
+          {/* Full-bleed drops the sidebar and the navbar, and it used to drop
+              the bottom bar with them — which on a phone left /trade and
+              /vivid with no way out but the browser's back gesture and the
+              one back arrow in the page's own header. The bar is the only
+              navigation a phone has here, so it stays. These routes own their
+              full height, so each reserves its own clearance for the floating
+              capsule (see the trade workspace's bottom padding). */}
+          <MobileBottomNav />
         </MoneyFlowProvider>
       </IncomingCallProvider>
     )

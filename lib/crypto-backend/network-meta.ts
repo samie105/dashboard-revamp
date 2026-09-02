@@ -31,3 +31,26 @@ export function explorerTxUrl(backendNetworkId: string, txHash: string, networks
   const meta = networkMetaFor(backendNetworkId, networks)
   return meta ? meta.txUrl(txHash) : null
 }
+
+/**
+ * The explorer page for a CONTRACT, not a transaction.
+ *
+ * The spot registry is 9,000+ long-tail tokens, most of which share a ticker
+ * with something else on another chain. The contract is the only thing that
+ * says which one you are about to buy, and a link to it is the only way a user
+ * can check. Same rule as `explorerTxUrl`: an unknown network renders no link
+ * rather than guessing a chain.
+ */
+export function explorerAddressUrl(
+  backendNetworkId: string,
+  address: string,
+  networks?: CryptoNetwork[],
+): string | null {
+  const meta = networkMetaFor(backendNetworkId, networks)
+  return meta ? meta.explorerUrl(address) : null
+}
+
+/** What to call that explorer in a link — "Etherscan", "Solscan". */
+export function explorerName(backendNetworkId: string, networks?: CryptoNetwork[]): string | null {
+  return networkMetaFor(backendNetworkId, networks)?.explorerName ?? null
+}

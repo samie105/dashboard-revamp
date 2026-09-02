@@ -174,7 +174,7 @@ function Sparkline({ series, tone }: { series: number[]; tone: "up" | "down" | "
 // counts toward the Total and still feeds the 30-day history below — the
 // money is real, only the destination isn't ready.
 const ACCOUNTS = [
-  { key: "main",    label: "Main",    icon: Wallet01Icon, sub: "On-chain balance", href: "/assets" },
+  { key: "main",    label: "Main",    icon: Wallet01Icon, sub: "On-chain balance", href: "/portfolio" },
   { key: "spot",    label: "Spot",    icon: Chart01Icon,  sub: "Spot trading",     href: "/trade" },
 ] as const
 

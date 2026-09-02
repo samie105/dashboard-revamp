@@ -567,7 +567,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
               {isFutures ? positions.length : spotHoldings.length}
             </span>
             <Link
-              href="/assets"
+              href="/portfolio"
               className="ml-auto text-xs font-medium text-primary hover:underline"
             >
               View all

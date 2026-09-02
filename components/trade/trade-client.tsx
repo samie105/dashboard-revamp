@@ -23,6 +23,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Dialog } from "@base-ui/react/dialog"
+import { cn } from "@/lib/utils"
 import {
   CryptoApiError,
   type HlMarkets,
@@ -47,7 +48,14 @@ import {
   sizesLikeUsd,
   spentTokenSymbol,
   baseTokenOf,
+  spotOrderTokens,
+  normalizeSlippage,
+  SLIPPAGE_PERCENTAGE,
 } from "@/lib/crypto-backend/spot-order"
+import {
+  explorerAddressUrl,
+  explorerName,
+} from "@/lib/crypto-backend/network-meta"
 import {
   signHyperliquidIntent,
   signEvmIntent,
@@ -55,29 +63,47 @@ import {
 } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
-import { OrderPlacedModal, orderCopy } from "@/components/trade/order-placed-modal"
+import {
+  OrderPlacedModal,
+  orderCopy,
+} from "@/components/trade/order-placed-modal"
 import { useAuth } from "@/components/auth-provider"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
-import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
+import {
+  useCryptoBalances,
+  formatCryptoAmount,
+} from "@/hooks/crypto/useCryptoBalances"
 import {
   fetchHlOrderBook,
   fetchHl24hStats,
   type HlOrderBook,
   type Hl24hStats,
 } from "@/lib/hl-public"
-import { CandleChart, type ChartSource, type ChartStats } from "@/components/trade/candle-chart"
+import {
+  CandleChart,
+  type ChartSource,
+  type ChartStats,
+} from "@/components/trade/candle-chart"
 import { OrderBook } from "@/components/trade/order-book"
 import { PositionsPanel } from "@/components/trade/positions-panel"
 import { OrdersPanel } from "@/components/trade/orders-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
 import { MarketPicker } from "@/components/trade/market-picker"
+import { MarketHeader, fmtPx } from "@/components/trade/market-header"
+import {
+  WalletStrip,
+  type WalletStripRow,
+} from "@/components/trade/wallet-strip"
+import { SlippageControl } from "@/components/trade/slippage-control"
+import { TokenIdentity } from "@/components/trade/token-identity"
 import { noteRecentMarket } from "@/hooks/useMarketPrefs"
 import { loadSpotMarkets } from "@/lib/spot-markets"
 import { nativeTokenFor } from "@/lib/native-token"
+import { chainLabel } from "@/lib/spot-market-search"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
+import { EmptyState, Skel } from "@/components/ui/system"
 import {
   BackAction,
-  Eyebrow,
   Segmented,
   type SegmentedOption,
 } from "@/components/ui/system"
@@ -86,7 +112,15 @@ import {
   DetailPanel,
   InlineNotice,
 } from "@/components/ui/flow"
-import { ComingSoon } from "@/components/ui/coming-soon"
+import { Toast } from "@/components/ui/toast"
+import { FUTURES_SOON_SHORT, FUTURES_SOON_TITLE } from "@/components/ui/coming-soon"
+import { HugeiconsIcon } from "@hugeicons/react"
+import {
+  Alert02Icon,
+  Cancel01Icon,
+  Clock01Icon,
+  Wallet01Icon,
+} from "@hugeicons/core-free-icons"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
 import { ModernFundingPanel } from "./modern-funding-panel"
@@ -124,20 +158,6 @@ const ORDER_TYPES: readonly SegmentedOption<OrderType>[] = [
   { key: "market", label: "Market" },
   { key: "limit", label: "Limit" },
 ]
-
-function fmtPx(p: number) {
-  return p.toLocaleString(undefined, { maximumFractionDigits: p < 1 ? 6 : 2 })
-}
-
-/** A labelled figure in the market strip — Eyebrow over a tabular value. */
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="hidden shrink-0 flex-col gap-0.5 md:flex">
-      <Eyebrow className="text-[10px] tracking-[0.1em]">{label}</Eyebrow>
-      <span className="text-[13px] font-medium tabular-nums">{value}</span>
-    </span>
-  )
-}
 
 /**
  * The quote asset a market is actually priced in — the registry names it per
@@ -180,9 +200,10 @@ type FuturesReview = {
  */
 function defaultMarketOf(
   list: readonly (HlSpotMarket | HlFuturesMarket)[],
-  market: Market,
+  market: Market
 ): HlSpotMarket | HlFuturesMarket | undefined {
-  if (market === "futures") return list.find((m) => m.symbol.toUpperCase() === "BTC")
+  if (market === "futures")
+    return list.find((m) => m.symbol.toUpperCase() === "BTC")
   const preferred: readonly [string, string | null][] = [
     ["SOL", "solana-mainnet-beta"],
     ["SOLANA", "solana-mainnet-beta"],
@@ -193,7 +214,7 @@ function defaultMarketOf(
     const hit = list.find(
       (m) =>
         m.symbol.toUpperCase() === symbol &&
-        (!networkId || ("networkId" in m && m.networkId === networkId)),
+        (!networkId || ("networkId" in m && m.networkId === networkId))
     )
     if (hit) return hit
   }
@@ -219,11 +240,9 @@ function gatedMarket(requested: string | null): Market {
   return FUTURES_LIVE && requested === "futures" ? "futures" : "spot"
 }
 
-function fmtCompact(n: number) {
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
-  return `$${n.toFixed(0)}`
+/** The order's dollar floor, as a person would write it. */
+function fmtMin(n: number) {
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export function TradeClient() {
@@ -240,6 +259,29 @@ export function TradeClient() {
     staleTime: 3 * 60_000,
   })
 
+  /**
+   * Whether there is a wallet to trade out of — and, when there isn't, whether
+   * we are still finding out.
+   *
+   * A user with no wallet used to meet this screen as a set of blanks: the top
+   * bar's money doors rendered `null`, the balance strip reported a confident
+   * "0" of each token, and the buy button accepted the press and answered with
+   * an error. Three different ways of not saying the one thing that was true —
+   * you don't have a wallet yet, and here is where you make one. Each of those
+   * three places now reads this.
+   *
+   * A disabled react-query is not "loading" (it never fetches), so the package
+   * query only counts toward the wait once a wallet exists to fetch one for.
+   */
+  const walletReady = Boolean(
+    user?.userId && modernWallet.data && modernPackage.data
+  )
+  const walletLoading =
+    modernWallet.isLoading ||
+    (Boolean(modernWallet.data) && modernPackage.isLoading)
+  /** Settled, and there is nothing to trade with. */
+  const needsWallet = isCryptoBackendEnabled && !walletReady && !walletLoading
+
   const market: Market = gatedMarket(params.get("market"))
   /* FUTURES GATE: whether the futures notice is up. Two things raise it — a
      press on the Futures tab (the path nearly everyone takes) and an arrival
@@ -248,8 +290,11 @@ export function TradeClient() {
      from the live params: the URL-sync effect below rewrites the address bar
      to the market actually on screen (spot), so re-reading the param a tick
      later would say "no" and the explanation would flash and vanish. */
+  /* Bumped on every press of the gated Futures tab, so the toast remounts
+     and its dismiss timer restarts rather than the press doing nothing. */
+  const [futuresNoticeSeq, setFuturesNoticeSeq] = React.useState(0)
   const [futuresNotice, setFuturesNotice] = React.useState(
-    () => !FUTURES_LIVE && params.get("market") === "futures",
+    () => !FUTURES_LIVE && params.get("market") === "futures"
   )
   const urlSymbol = params.get("symbol") ?? params.get("pair") ?? ""
   // The registry id rides in the URL beside the symbol: a symbol alone can name
@@ -275,6 +320,10 @@ export function TradeClient() {
      second form bolted under the workspace. It belongs here, on the one
      ticket, as a unit switch. */
   const [amountUnit, setAmountUnit] = React.useState<"usd" | "token">("usd")
+  /* How far from the quoted price this order may fill. It was a fixed constant
+     the user never saw; it is a setting now, and the plan builder clamps
+     whatever arrives here into its own band before anything is sent. */
+  const [slippage, setSlippage] = React.useState(SLIPPAGE_PERCENTAGE)
   /* The unlock DEK lives in memory only, so every page load starts locked.
      The swap screen answers that by unlocking and carrying on; the trade
      ticket used to throw instead, which read as "Order failed. Try again."
@@ -565,8 +614,13 @@ export function TradeClient() {
    */
   const chartSource = React.useMemo<ChartSource | null>(() => {
     if (!current) return null
-    if (market === "futures") return { kind: "hyperliquid", coin: current.symbol }
-    if (!usingModern) return { kind: "hyperliquid", coin: (current as { coinName: string }).coinName }
+    if (market === "futures")
+      return { kind: "hyperliquid", coin: current.symbol }
+    if (!usingModern)
+      return {
+        kind: "hyperliquid",
+        coin: (current as { coinName: string }).coinName,
+      }
     const networkId = "networkId" in current ? current.networkId : undefined
     const base = baseTokenOf(current as never)
     /* A native coin has no contract, so the registry may carry a router's
@@ -579,7 +633,9 @@ export function TradeClient() {
        token to the catalogue in the first place, and for the many tokens with
        no pool on their own chain it is the only thing that can draw one. */
     const coingeckoId =
-      "chartSymbol" in current && current.chartSymbol ? String(current.chartSymbol) : null
+      "chartSymbol" in current && current.chartSymbol
+        ? String(current.chartSymbol)
+        : null
     return networkId && (token || coingeckoId)
       ? { kind: "dex", networkId, token: token ?? "", coingeckoId }
       : null
@@ -589,10 +645,62 @@ export function TradeClient() {
      stats endpoint; spot rows had nothing behind them and read "—" forever,
      so they now take the pool's own 24h numbers, reported by the same request
      that draws the chart. */
+  /**
+   * Figures are held per market and only ever REPLACED by a real value.
+   *
+   * The 1h/7d changes and the day's range are derived from whichever candle
+   * series is loaded, and a series has to span a window to answer for it — a
+   * 1m chart holds about sixteen hours, so switching to it makes 24h and 7d
+   * unanswerable. Dropping them from the header on an interval press would
+   * make figures blink in and out of a toolbar that never moved, so a window
+   * that goes quiet keeps its last real answer. The facts don't depend on the
+   * interval; only our ability to compute them does. Reset on market change,
+   * where the figures genuinely stop applying.
+   */
   const [dexStats, setDexStats] = React.useState<ChartStats | null>(null)
+  /* The last pool price seen, for the spot tick direction. Futures reads its
+     direction off the book poll; spot has no book, so the chart poll is the
+     only feed that can say whether the price moved, and which way. */
+  const prevSpotPrice = React.useRef(0)
   React.useEffect(() => {
     setDexStats(null)
+    prevSpotPrice.current = 0
+    setLastTick(null)
   }, [selection])
+  /* Liveness. Bumped once per price poll that LANDS — the chart's own poll on
+     spot, the book poll on futures — and nothing else, so the header's
+     heartbeat can only beat when data actually arrived. */
+  const [beat, setBeat] = React.useState(0)
+  const handleChartStats = React.useCallback((s: ChartStats | null) => {
+    setDexStats((prev) => {
+      if (!s) return prev
+      if (!prev) return s
+      const keep = <K extends keyof ChartStats>(key: K) =>
+        (s[key] ?? prev[key] ?? null) as ChartStats[K]
+      return {
+        // The live figures always take the newest answer, null included: a
+        // price we can no longer read must not be shown as a price.
+        price: s.price,
+        volume24h: s.volume24h,
+        // The windowed ones hold their last real value.
+        changePct24h: keep("changePct24h"),
+        changePct1h: keep("changePct1h"),
+        changePct7d: keep("changePct7d"),
+        high24h: keep("high24h"),
+        low24h: keep("low24h"),
+      }
+    })
+    setBeat((b) => b + 1)
+    const next = s?.price ?? 0
+    if (
+      prevSpotPrice.current > 0 &&
+      next > 0 &&
+      next !== prevSpotPrice.current
+    ) {
+      setLastTick(next > prevSpotPrice.current ? "up" : "down")
+    }
+    if (next > 0) prevSpotPrice.current = next
+  }, [])
 
   /**
    * The coin whose order book and 24h stats to poll — futures only.
@@ -604,7 +712,7 @@ export function TradeClient() {
    */
   const bookCoin = React.useMemo(
     () => (current && market === "futures" ? current.symbol : null),
-    [current, market],
+    [current, market]
   )
 
   React.useEffect(() => {
@@ -622,6 +730,7 @@ export function TradeClient() {
           }
           prevMidRef.current = b.midPrice
           setBook(b)
+          setBeat((n) => n + 1)
         })
         .catch(() => {})
     load()
@@ -690,24 +799,34 @@ export function TradeClient() {
      account's USDC here, which on a modern spot row is always null: the money
      is in the self-custody wallet, on the row's own chain. So the one figure
      that answers "how much can I sell?" was never on screen. */
-  const { balances: modernBalances, isLoading: balancesLoading } = useCryptoBalances()
+  const { balances: modernBalances, isLoading: balancesLoading } =
+    useCryptoBalances()
   const spendable = React.useMemo(() => {
-    if (!(usingModern && market === "spot") || !current || !spentSymbol) return null
+    if (!(usingModern && market === "spot") || !current || !spentSymbol)
+      return null
     const networkId = "networkId" in current ? current.networkId : undefined
     if (!networkId) return null
     const rows = modernBalances.filter(
       (b) =>
         b.symbol.toUpperCase() === spentSymbol.toUpperCase() &&
-        b.networkId === networkId,
+        b.networkId === networkId
     )
     // A snapshot that hasn't arrived is not a zero balance. Say nothing until
     // it has: "avail 0.00" against a funded wallet is worse than no figure.
     if (rows.length === 0 && balancesLoading) return null
     return rows.reduce(
-      (sum, b) => sum + Number(formatCryptoAmount(b.amountBaseUnits, b.decimals, 12)),
-      0,
+      (sum, b) =>
+        sum + Number(formatCryptoAmount(b.amountBaseUnits, b.decimals, 12)),
+      0
     )
-  }, [modernBalances, balancesLoading, usingModern, market, current, spentSymbol])
+  }, [
+    modernBalances,
+    balancesLoading,
+    usingModern,
+    market,
+    current,
+    spentSymbol,
+  ])
 
   /* A buy spends the quote, and every quote we size against is a dollar
      stablecoin — so "USD | USDC" offered two names for one unit. The switch
@@ -725,10 +844,10 @@ export function TradeClient() {
     (amountText: string, usdAmount: number) => {
       if (!(usingModern && market === "spot" && current)) return null
       return inTokenUnit
-        ? buildSpotOrderPlanFromTokenAmount(current, side, amountText)
-        : buildSpotOrderPlan(current, side, usdAmount, price)
+        ? buildSpotOrderPlanFromTokenAmount(current, side, amountText, slippage)
+        : buildSpotOrderPlan(current, side, usdAmount, price, slippage)
     },
-    [usingModern, market, current, side, price, inTokenUnit]
+    [usingModern, market, current, side, price, inTokenUnit, slippage]
   )
 
   const spotPlan = React.useMemo(
@@ -773,6 +892,61 @@ export function TradeClient() {
     !pairUnavailable &&
     !reduceOnlyError
 
+  /* The CTA ARMS — one ring pulse — at the moment the ticket goes from
+     incomplete to sendable. A counter, so the pulse replays on every such
+     transition and never on a render that merely kept the button valid. */
+  const [armGen, setArmGen] = React.useState(0)
+  const wasSubmittable = React.useRef(false)
+  React.useEffect(() => {
+    if (canSubmit && !wasSubmittable.current) setArmGen((g) => g + 1)
+    wasSubmittable.current = canSubmit
+  }, [canSubmit])
+
+  /** The chain this row trades on, in words. */
+  const networkLabel =
+    current && "networkId" in current && current.networkId
+      ? chainLabel(current.networkId)
+      : null
+
+  /* What the wallet holds of BOTH sides of the pair on this chain. `null`
+     while the snapshot is loading — a skeleton, never a zero. Modern spot
+     only: the perps account keeps its own figures in the top bar. */
+  const walletRows = React.useMemo<WalletStripRow[]>(() => {
+    if (!(usingModern && market === "spot") || !current) return []
+    const networkId = "networkId" in current ? current.networkId : undefined
+    if (!networkId) return []
+    const quote = quoteOf(current)
+    const holding = (sym: string): number | null => {
+      const rows = modernBalances.filter(
+        (b) =>
+          b.symbol.toUpperCase() === sym.toUpperCase() &&
+          b.networkId === networkId
+      )
+      if (rows.length === 0 && balancesLoading) return null
+      return rows.reduce(
+        (sum, b) =>
+          sum + Number(formatCryptoAmount(b.amountBaseUnits, b.decimals, 12)),
+        0
+      )
+    }
+    const base = holding(current.symbol)
+    const quoteHeld = holding(quote)
+    return [
+      {
+        symbol: current.symbol,
+        icon: "icon" in current ? current.icon : null,
+        amount: base,
+        valueUsd: base !== null && price > 0 ? base * price : null,
+      },
+      {
+        symbol: quote,
+        icon: null,
+        amount: quoteHeld,
+        valueUsd: quoteHeld !== null && sizesLikeUsd(quote) ? quoteHeld : null,
+      },
+    ]
+  }, [usingModern, market, current, modernBalances, balancesLoading, price])
+
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's
   // default and the sync effect below writes it back to the URL.
@@ -785,6 +959,7 @@ export function TradeClient() {
     // thumb never comes to rest on a tab whose content isn't on screen.
     if (!FUTURES_LIVE && m === "futures") {
       setFuturesNotice(true)
+      setFuturesNoticeSeq((n) => n + 1)
       return
     }
     // Pressing Spot is the plain way back out of the notice.
@@ -942,9 +1117,7 @@ export function TradeClient() {
          did it precisely in the cases that never reach the network, where
          there is no request to inspect either. Same shape as the futures
          confirm handler below, which always did this correctly. */
-      setError(
-        e instanceof Error ? e.message : "Order failed. Try again."
-      )
+      setError(e instanceof Error ? e.message : "Order failed. Try again.")
     } finally {
       setSubmitting(false)
     }
@@ -1176,22 +1349,40 @@ export function TradeClient() {
         : (spendable ?? 0) *
           (spentSymbol && sizesLikeUsd(spentSymbol) ? 1 : price)
       : market === "spot"
-      ? side === "buy"
-        ? (balances?.spotUsdc ?? 0)
-        : 0
-      : modernFutures && reduceOnly
-        ? (openPosition?.notionalUsd ?? 0)
-        : (balances?.perpsWithdrawableUsdc ?? 0) * leverage
+        ? side === "buy"
+          ? (balances?.spotUsdc ?? 0)
+          : 0
+        : modernFutures && reduceOnly
+          ? (openPosition?.notionalUsd ?? 0)
+          : (balances?.perpsWithdrawableUsdc ?? 0) * leverage
 
-  /* One set of 24h figures from whichever source knows this market. High and
-     low stay null on a DEX row — the pool reports change and volume but not a
-     range, and inventing one from the visible window would label whatever the
-     chart happens to show "24h". */
+  /* One set of figures from whichever source knows this market.
+     The day's high and low used to be null on every DEX row: the pool reports
+     change and volume but no range, and reading one off "whatever the chart
+     happens to show" would have labelled an arbitrary window "24h". The chart
+     derives them properly now — from the bars whose timestamps actually fall
+     inside the window, and null when the loaded series doesn't reach back that
+     far — so the range is real on both venues. */
   const changePct24h = stats?.changePct ?? dexStats?.changePct24h ?? null
   const volume24h = stats?.quoteVolume ?? dexStats?.volume24h ?? null
-  const high24h = stats?.high ?? null
-  const low24h = stats?.low ?? null
-  const changeUp = (changePct24h ?? 0) >= 0
+  const high24h = stats?.high ?? dexStats?.high24h ?? null
+  const low24h = stats?.low ?? dexStats?.low24h ?? null
+  const changePct1h = dexStats?.changePct1h ?? null
+  const changePct7d = dexStats?.changePct7d ?? null
+
+  /* What the base token IS, on this chain: the contract the ticket names and
+     links to. Read through the order builder so the address shown is the one
+     an order would actually receive, never a field a component picked. */
+  const tokenIdentity = React.useMemo(() => {
+    if (!(usingModern && market === "spot") || !current) return null
+    const legs = spotOrderTokens(current, "buy")
+    if (!legs) return null
+    return {
+      address: legs.receive,
+      url: explorerAddressUrl(legs.networkId, legs.receive),
+      explorer: explorerName(legs.networkId),
+    }
+  }, [usingModern, market, current])
 
   /* ── Pair picker dropdown ─────────────────────────────────────────────── */
   // Same MarketPicker as the rail, in its compact shape: on the narrow
@@ -1205,11 +1396,10 @@ export function TradeClient() {
         className="fixed inset-0 z-40 cursor-default"
         onClick={() => setPickerOpen(false)}
       />
-      {/* The trigger sits ~56px in (back button + gap), so a fixed 340px
-          panel anchored at left-0 ends at 396px and is CLIPPED by the root's
-          overflow-hidden — on the only pair-switcher phones get, since the
-          rail is xl-only. Below sm it spans the viewport instead. */}
-      <div className="fixed inset-x-3 top-14 z-50 rounded-2xl bg-card pb-1 shadow-2xl ring-1 ring-border/40 sm:absolute sm:inset-x-auto sm:top-full sm:left-0 sm:mt-2 sm:w-[340px]">
+      {/* Anchored under the pair trigger in the market header on wide
+          screens; below sm it spans the viewport instead, since the header
+          sits under the top bar and a 360px panel would clip. */}
+      <div className="fixed inset-x-3 top-16 z-50 rounded-2xl bg-card pb-1 shadow-2xl ring-1 ring-border/40 sm:absolute sm:inset-x-auto sm:top-full sm:left-0 sm:mt-2 sm:w-[360px]">
         <MarketPicker
           list={list}
           selected={selection}
@@ -1232,10 +1422,12 @@ export function TradeClient() {
   // precisely when the position is close to being liquidated.
   const reviewFigures = readFuturesOrderFigures(futuresReview?.intent.summary)
   const reviewScreen = futuresReview && (
-    <div className="flex flex-col gap-3 p-3.5">
+    <div className="flex flex-col gap-4 p-4 lg:p-5">
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-semibold">Review your order</p>
-        <p className="text-xs leading-relaxed text-muted-foreground">
+        <p className="font-display text-[17px] font-semibold tracking-[-0.01em]">
+          Review your order
+        </p>
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
           Nothing has been sent yet. Confirming signs this order on this device
           and submits it.
         </p>
@@ -1322,11 +1514,13 @@ export function TradeClient() {
         data-vivid-guard=""
         aria-label={`Confirm and sign — ${futuresReview.side === "buy" ? "long" : "short"} ${futuresReview.symbol} for $${futuresReview.amountUsd}`}
         data-vivid-label={`Sign and submit the reviewed ${futuresReview.symbol} order. Moves real money.`}
-        className={`w-full rounded-full py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+        className={cn(
+          "relative flex h-12 w-full items-center justify-center rounded-full text-[15px] font-bold text-white transition-all active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:active:scale-100",
+          submitting && "ws-inflight",
           futuresReview.side === "buy"
             ? "bg-credit hover:bg-credit/90"
             : "bg-debit hover:bg-debit/90"
-        }`}
+        )}
       >
         {submitting ? "Signing…" : "Confirm & sign"}
       </button>
@@ -1338,7 +1532,7 @@ export function TradeClient() {
         disabled={submitting}
         data-vivid-target="trade-cancel-review"
         data-vivid-label="Go back to the ticket without placing this order"
-        className="w-full rounded-full bg-surface-sunken py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+        className="flex h-11 w-full items-center justify-center rounded-full bg-surface-sunken text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
       >
         Back to the ticket
       </button>
@@ -1351,25 +1545,129 @@ export function TradeClient() {
   // `refreshAccount` deliberately nulls on the spot tab). Gating the ticket on
   // that account would leave modern spot as a permanent loading skeleton.
   const needsTradingAccount = !(usingModern && market === "spot")
+  const sideLabel =
+    market === "futures"
+      ? side === "buy"
+        ? "Long"
+        : "Short"
+      : side === "buy"
+        ? "Buy"
+        : "Sell"
+  const qtyPlaces = szDecimals ?? 6
+  /* The CTA states its blocker, the way every money CTA in the app does
+     (`FlowCta`): a disabled button that only says "Buy SOL" leaves the user
+     guessing what it wants from them. Order of the ladder matters — the pair
+     being untradeable outranks anything typed into it. */
+  const ctaLabel = submitting
+    ? modernFutures
+      ? "Pricing…"
+      : "Placing…"
+    : pairUnavailable
+      ? "Pair unavailable"
+      : reduceOnlyError
+        ? "Nothing to reduce"
+        : !current
+          ? "Loading markets…"
+          : amt <= 0
+            ? "Enter an amount"
+            : !amountSufficient
+              ? `Minimum is ${fmtMin(minOrder)}`
+              : orderType === "limit" && !(parseFloat(limitPrice) > 0)
+                ? "Enter a limit price"
+                : tpslError
+                  ? "Check take profit and stop loss"
+                  : modernFutures
+                    ? "Review order"
+                    : `${sideLabel} ${symbol}`
+  /* The receipt: what this order turns into, in the user's terms. "Qty" is a
+     venue's word; "You'll get" is the question being asked.
+     A spot estimate is priced off the pool a moment ago and fills a moment
+     later, so the estimate alone is half the story — the floor under it is the
+     number the tolerance actually guarantees, and it is the one the user is
+     agreeing to. `strong` puts it below the hairline, as the total. */
+  const spotFloor = (estimate: number) =>
+    estimate * (1 - normalizeSlippage(slippage))
+  /** The guaranteed floor under the estimate, in the unit the user receives. */
+  const minimumReceived =
+    market === "spot" && amt > 0 && price > 0
+      ? inTokenUnit
+        ? `$${spotFloor(amt * price).toFixed(2)}`
+        : side === "buy"
+          ? `${spotFloor(amt / price).toFixed(qtyPlaces)} ${symbol}`
+          : `$${spotFloor(amt).toFixed(2)}`
+      : null
+  const receiptRows: { label: string; value: string; strong?: boolean }[] =
+    amt > 0 && price > 0 && current
+      ? [
+          { label: "Price", value: `$${fmtPx(price)}` },
+          ...(market === "futures"
+            ? [
+                {
+                  label: "Size",
+                  value: `≈ ${(amt / price).toFixed(qtyPlaces)} ${symbol}`,
+                },
+                ...(!(modernFutures && reduceOnly) && leverage > 1
+                  ? [
+                      {
+                        label: `Margin at ${leverage}×`,
+                        value: `≈ $${(amt / leverage).toFixed(2)}`,
+                      },
+                    ]
+                  : []),
+              ]
+            : inTokenUnit
+              ? [
+                  {
+                    label: "You'll get",
+                    value: `≈ $${(amt * price).toFixed(2)}`,
+                  },
+                ]
+              : side === "buy"
+                ? [
+                    {
+                      label: "You'll get",
+                      value: `≈ ${(amt / price).toFixed(qtyPlaces)} ${symbol}`,
+                    },
+                  ]
+                : [
+                    {
+                      label: "You'll sell",
+                      value: `≈ ${(amt / price).toFixed(qtyPlaces)} ${symbol}`,
+                    },
+                    { label: "You'll get", value: `≈ $${amt.toFixed(2)}` },
+                  ]),
+          ...(networkLabel && market === "spot"
+            ? [{ label: "Network", value: networkLabel }]
+            : []),
+          // Last, under the hairline: the figure the tolerance guarantees, and
+          // the one the press is actually agreeing to.
+          ...(minimumReceived
+            ? [{ label: "At least", value: minimumReceived, strong: true }]
+            : []),
+        ]
+      : []
+
+  const fieldClass =
+    "w-full rounded-xl bg-surface-sunken px-3.5 py-2.5 text-[14px] tabular-nums outline-none ring-1 ring-transparent transition-shadow placeholder:text-subtle focus:ring-foreground/[0.14]"
+
   const ticket =
-    needsTradingAccount && accountError ? (
+    /* No wallet, no ticket. The form used to render in full here and take the
+       press, then answer "Set up and unlock the modern wallet before trading"
+       as an error — the screen asking for an order it already knew it could
+       not place. It says so up front now, and hands over the way to fix it.
+       Placed first: for modern spot every branch below assumes a wallet. */
+    usingModern && needsWallet ? (
+      <EmptyState
+        illustration="noCrypto"
+        title="You'll need a wallet first"
+        description="Your Worldstreet wallet holds what you trade with. Only you can open it."
+        ctas={[{ label: "Set up your wallet", href: "/wallet/modern" }]}
+        className="py-12"
+      />
+    ) : needsTradingAccount && accountError ? (
       <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-warning"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v5" />
-            <path d="M12 16h.01" />
-          </svg>
+          <HugeiconsIcon icon={Alert02Icon} className="h-5 w-5 text-warning" />
         </span>
         <div>
           <p className="text-sm font-semibold">
@@ -1388,33 +1686,19 @@ export function TradeClient() {
         </button>
       </div>
     ) : needsTradingAccount && !account ? (
-      <div className="flex flex-col gap-3 p-3.5">
-        <div className="grid grid-cols-2 gap-1.5">
-          <div className="h-10 animate-pulse rounded-xl bg-surface-sunken" />
-          <div className="h-10 animate-pulse rounded-xl bg-surface-sunken" />
+      <div className="flex flex-col gap-4 p-4 lg:p-5">
+        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-surface-sunken p-1">
+          <Skel className="h-10 rounded-xl" />
+          <Skel className="h-10 rounded-xl" />
         </div>
-        <div className="h-7 w-32 animate-pulse rounded-full bg-surface-sunken" />
-        <div className="h-[52px] animate-pulse rounded-xl bg-surface-sunken" />
-        <div className="h-11 animate-pulse rounded-full bg-surface-sunken" />
+        <Skel className="h-3.5 w-24" />
+        <Skel className="h-16 rounded-2xl" />
+        <Skel className="h-12 rounded-full" />
       </div>
     ) : needsTradingAccount && !ready ? (
       <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.12]">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-primary"
-          >
-            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
-            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
-            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
-          </svg>
+          <HugeiconsIcon icon={Wallet01Icon} className="h-5 w-5 text-primary" />
         </span>
         <div>
           <p className="text-sm font-semibold">Trading account not set up</p>
@@ -1432,7 +1716,7 @@ export function TradeClient() {
     ) : reviewScreen ? (
       reviewScreen
     ) : (
-      <div className="flex flex-col gap-3.5 p-4">
+      <div className="flex flex-col gap-4 p-4 lg:p-5">
         {spotMarketsUnavailable && (
           <AnnouncementBanner
             tone="warning"
@@ -1455,12 +1739,21 @@ export function TradeClient() {
           />
         )}
 
-        {/* Side */}
-        <div className="grid grid-cols-2 gap-1.5">
+        {/* Side — a direction choice, so it wears the money colours. On a
+            sunken track like the Segmented, but this is the one control in
+            the app whose active fill is NOT neutral: the colour is the
+            meaning. */}
+        <div
+          role="group"
+          aria-label="Side"
+          className="grid grid-cols-2 gap-1 rounded-2xl bg-surface-sunken p-1"
+        >
           {(["buy", "sell"] as const).map((s) => (
             <button
               key={s}
+              type="button"
               onClick={() => setSide(s)}
+              aria-pressed={side === s}
               aria-label={
                 market === "futures"
                   ? s === "buy"
@@ -1482,13 +1775,14 @@ export function TradeClient() {
                     ? "Buy side"
                     : "Sell side"
               }
-              className={`rounded-xl py-3 text-sm font-bold transition-colors ${
+              className={cn(
+                "rounded-xl py-2.5 text-[13.5px] font-bold transition-all focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none active:scale-[0.97] motion-reduce:active:scale-100",
                 side === s
                   ? s === "buy"
-                    ? "bg-credit text-white"
-                    : "bg-debit text-white"
-                  : "bg-surface-sunken text-muted-foreground hover:bg-accent"
-              }`}
+                    ? "bg-credit text-white shadow-sm"
+                    : "bg-debit text-white shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
             >
               {market === "futures"
                 ? s === "buy"
@@ -1520,9 +1814,11 @@ export function TradeClient() {
         )}
 
         {orderType === "limit" && (
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-subtle">Limit price</span>
-            <div className="flex items-center rounded-xl bg-surface-sunken focus-within:ring-1 focus-within:ring-foreground/[0.12]">
+          <label className="flex flex-col gap-1.5">
+            <span className="px-1 text-[12px] font-semibold text-muted-foreground">
+              Limit price
+            </span>
+            <div className="flex items-center rounded-xl bg-surface-sunken ring-1 ring-transparent transition-shadow focus-within:ring-foreground/[0.14]">
               <input
                 value={limitPrice}
                 onChange={(e) =>
@@ -1533,63 +1829,97 @@ export function TradeClient() {
                 data-vivid-label="Limit price in USD"
                 aria-label="Limit price in USD"
                 placeholder={price ? fmtPx(price) : "…"}
-                className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
+                className="min-w-0 flex-1 bg-transparent px-3.5 py-2.5 text-[14px] tabular-nums outline-none placeholder:text-subtle"
               />
-              <span className="pr-3 text-xs text-subtle">USD</span>
+              <span className="pr-3.5 text-[11px] font-semibold text-subtle">
+                USD
+              </span>
             </div>
           </label>
         )}
 
-        <label className="flex flex-col gap-1">
-          <span className="flex items-center justify-between text-xs text-subtle">
-            <span>Amount</span>
+        {/* Amount — the hero figure of the ticket, in the AmountField
+            register: large, light, tabular, with the unit beside it. */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3 px-1 text-[12px]">
+            <span className="font-semibold text-muted-foreground">Amount</span>
             {/* The wallet's real holding of the token this side spends, on
-              this row's chain. Legacy spot keeps quoting the trading account's
-              USDC; modern spot has no such account and never did. */}
+                this row's chain. Tapping it means "all of it", in whichever
+                unit the field is currently in. */}
             {usingModern && market === "spot" ? (
-              spendable !== null && (
+              spendable !== null ? (
                 <button
                   type="button"
                   onClick={() => {
                     if (spendable <= 0) return
-                    // Tapping the balance means "all of it", in whichever unit
-                    // the field is currently in.
                     setAmountUsd(
                       String(
                         inTokenUnit
                           ? spendable
-                          : Number((spendable * (spentSymbol && sizesLikeUsd(spentSymbol) ? 1 : price)).toFixed(2)),
-                      ),
+                          : Number(
+                              (
+                                spendable *
+                                (spentSymbol && sizesLikeUsd(spentSymbol)
+                                  ? 1
+                                  : price)
+                              ).toFixed(2)
+                            )
+                      )
                     )
                   }}
                   data-vivid-target="trade-amount-balance"
                   data-vivid-label="Use the whole available balance"
-                  className="tabular-nums transition-colors hover:text-foreground"
+                  className="min-w-0 truncate text-muted-foreground tabular-nums transition-colors hover:text-foreground"
                 >
-                  avail {spendable.toLocaleString(undefined, { maximumFractionDigits: 6 })}{" "}
-                  {spentSymbol}
+                  Available{" "}
+                  <span className="font-semibold text-foreground">
+                    {spendable.toLocaleString(undefined, {
+                      maximumFractionDigits: 6,
+                    })}{" "}
+                    {spentSymbol}
+                  </span>
                 </button>
-              )
+              ) : balancesLoading ? (
+                <Skel className="h-3 w-24" />
+              ) : null
             ) : market === "spot" && side === "buy" && balances ? (
-              <span className="tabular-nums">
-                avail ${balances.spotUsdc.toFixed(2)}
+              <span className="text-muted-foreground tabular-nums">
+                Available{" "}
+                <span className="font-semibold text-foreground">
+                  ${balances.spotUsdc.toFixed(2)}
+                </span>
               </span>
             ) : null}
             {/* Reduce-only spends nothing, so the free balance is the wrong
-              ceiling to quote — the open position is. */}
+                ceiling to quote — the open position is. */}
             {modernFutures && reduceOnly ? (
               openPosition && (
-                <span className="tabular-nums">
-                  position ${openPosition.notionalUsd.toFixed(2)}
+                <span className="text-muted-foreground tabular-nums">
+                  Position{" "}
+                  <span className="font-semibold text-foreground">
+                    ${openPosition.notionalUsd.toFixed(2)}
+                  </span>
                 </span>
               )
             ) : market === "futures" && balances ? (
-              <span className="tabular-nums">
-                avail ${balances.perpsWithdrawableUsdc.toFixed(2)}
+              <span className="text-muted-foreground tabular-nums">
+                Available{" "}
+                <span className="font-semibold text-foreground">
+                  ${balances.perpsWithdrawableUsdc.toFixed(2)}
+                </span>
               </span>
             ) : null}
-          </span>
-          <div className="flex items-center rounded-xl bg-surface-sunken focus-within:ring-1 focus-within:ring-foreground/[0.12]">
+          </div>
+
+          <div className="flex items-center gap-2 rounded-2xl bg-surface-sunken px-4 py-3 ring-1 ring-transparent transition-shadow focus-within:ring-foreground/[0.14]">
+            {!inTokenUnit && (
+              <span
+                aria-hidden
+                className="font-display text-[22px] leading-none font-light text-muted-foreground/70"
+              >
+                $
+              </span>
+            )}
             <input
               value={amountUsd}
               onChange={(e) =>
@@ -1607,15 +1937,15 @@ export function TradeClient() {
                   ? `Order amount in ${spentSymbol}`
                   : "Order amount in USD"
               }
-              placeholder={inTokenUnit ? `0.00 ${spentSymbol}` : `Min ${minOrder}`}
-              className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none placeholder:text-subtle"
+              placeholder="0"
+              className="min-w-0 flex-1 bg-transparent font-display text-[28px] leading-none font-light tracking-[-0.02em] tabular-nums outline-none placeholder:text-muted-foreground/30"
             />
             {/* The unit switch. Where a spot row names the token being spent,
                 the ticket can size the order in it — which is what the second
                 "swap" form under the workspace used to exist for. Switching
                 clears the field: the same digits mean a different order. */}
             {unitSwitchable ? (
-              <div className="mr-1.5 flex shrink-0 items-center gap-0.5 rounded-lg bg-background/60 p-0.5">
+              <div className="flex shrink-0 items-center gap-0.5 rounded-full bg-background/60 p-0.5">
                 {(
                   [
                     ["usd", "USD"],
@@ -1633,11 +1963,12 @@ export function TradeClient() {
                     aria-pressed={amountUnit === unit}
                     data-vivid-target={`trade-amount-unit-${unit}`}
                     data-vivid-label={`Size this order in ${unitLabel}`}
-                    className={`rounded-md px-1.5 py-1 text-[10px] font-bold transition-colors ${
+                    className={cn(
+                      "rounded-full px-2 py-1 text-[10.5px] font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
                       amountUnit === unit
-                        ? "bg-surface-sunken text-foreground"
+                        ? "bg-accent text-foreground shadow-sm"
                         : "text-subtle hover:text-foreground"
-                    }`}
+                    )}
                   >
                     {unitLabel}
                   </button>
@@ -1646,62 +1977,68 @@ export function TradeClient() {
             ) : (
               // One unit, so name it rather than offering a choice between
               // two spellings of it.
-              <span className="pr-3 text-[11px] text-subtle">
+              <span className="shrink-0 rounded-full bg-background/60 px-2.5 py-1 text-[10.5px] font-bold tracking-[0.04em] text-muted-foreground">
                 {spentSymbol ?? "USD"}
               </span>
             )}
           </div>
-        </label>
 
-        {maxNotional > 0 && (
-          <div className="grid grid-cols-4 gap-1">
-            {[0.25, 0.5, 0.75, 1].map((pct) => (
-              <button
-                key={pct}
-                data-vivid-target={
-                  pct === 1
-                    ? "trade-amount-max"
-                    : `trade-amount-${pct * 100}pct`
-                }
-                data-vivid-label={
-                  pct === 1
-                    ? "Use the full available balance"
-                    : `Use ${pct * 100}% of the available balance`
-                }
-                aria-label={
-                  pct === 1
-                    ? "Use the full available balance as the amount"
-                    : `Use ${pct * 100} percent of the available balance as the amount`
-                }
-                onClick={() => {
-                  // Two decimals is a dollar's precision. A token amount
-                  // rounded to cents is a different order — and for anything
-                  // priced under a cent, rounds to nothing at all.
-                  const places = inTokenUnit ? 6 : 2
-                  const scale = 10 ** places
-                  setAmountUsd(
+          {maxNotional > 0 ? (
+            <div className="grid grid-cols-4 gap-1.5">
+              {[0.25, 0.5, 0.75, 1].map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  data-vivid-target={
                     pct === 1
-                      ? String(Math.floor(maxNotional * scale) / scale)
-                      : String(
-                          Math.floor(maxNotional * pct * scale) / scale,
-                        ),
-                  )
-                }}
-                className="flex min-h-11 items-center justify-center rounded-lg bg-surface-sunken py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none lg:min-h-0 lg:py-1.5 lg:text-[11px]"
-              >
-                {pct === 1 ? "Max" : `${pct * 100}%`}
-              </button>
-            ))}
-          </div>
-        )}
+                      ? "trade-amount-max"
+                      : `trade-amount-${pct * 100}pct`
+                  }
+                  data-vivid-label={
+                    pct === 1
+                      ? "Use the full available balance"
+                      : `Use ${pct * 100}% of the available balance`
+                  }
+                  aria-label={
+                    pct === 1
+                      ? "Use the full available balance as the amount"
+                      : `Use ${pct * 100} percent of the available balance as the amount`
+                  }
+                  onClick={() => {
+                    // Two decimals is a dollar's precision. A token amount
+                    // rounded to cents is a different order — and for anything
+                    // priced under a cent, rounds to nothing at all.
+                    const places = inTokenUnit ? 6 : 2
+                    const scale = 10 ** places
+                    setAmountUsd(
+                      pct === 1
+                        ? String(Math.floor(maxNotional * scale) / scale)
+                        : String(Math.floor(maxNotional * pct * scale) / scale)
+                    )
+                  }}
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-surface-sunken text-[12px] font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none active:scale-90 motion-reduce:active:scale-100 lg:min-h-0 lg:py-1.5"
+                >
+                  {pct === 1 ? "Max" : `${pct * 100}%`}
+                </button>
+              ))}
+            </div>
+          ) : (
+            !inTokenUnit &&
+            amt < minOrder && (
+              <p className="px-1 text-[11.5px] text-subtle">
+                Minimum order {fmtMin(minOrder)}
+              </p>
+            )
+          )}
+        </div>
 
         {/* Reduce-only (spec §9) — modern perps only. It changes what the rest
           of the ticket even means, so it sits above the controls it removes. */}
         {modernFutures && (
-          <label className="flex items-center justify-between gap-3 rounded-xl bg-surface-sunken px-3 py-2">
+          <label className="flex items-center justify-between gap-3 rounded-xl bg-surface-sunken px-3.5 py-2.5">
             <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="text-xs font-semibold">Reduce only</span>
-              <span className="text-[10px] leading-snug text-subtle">
+              <span className="text-[12.5px] font-semibold">Reduce only</span>
+              <span className="text-[11px] leading-snug text-subtle">
                 Shrinks an open position — never opens a new one.
               </span>
             </span>
@@ -1719,8 +2056,10 @@ export function TradeClient() {
 
         {market === "futures" && !(modernFutures && reduceOnly) && (
           <div>
-            <div className="flex justify-between text-xs text-subtle">
-              <span>Leverage</span>
+            <div className="flex justify-between px-1 text-[12px]">
+              <span className="font-semibold text-muted-foreground">
+                Leverage
+              </span>
               <span className="font-bold text-foreground tabular-nums">
                 {leverage}×
               </span>
@@ -1734,9 +2073,9 @@ export function TradeClient() {
               data-vivid-target="trade-leverage"
               data-vivid-label={`Leverage slider, 1 to ${maxLev}. Fill with a whole number.`}
               aria-label={`Leverage multiplier, 1 to ${maxLev}`}
-              className="mt-1 h-11 w-full cursor-pointer accent-[var(--primary)] [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6"
+              className="mt-1 h-11 w-full cursor-pointer accent-[var(--primary)] [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6"
             />
-            <div className="flex justify-between text-[9px] text-subtle">
+            <div className="flex justify-between px-1 text-[10px] text-subtle">
               <span>1×</span>
               <span>{maxLev}×</span>
             </div>
@@ -1744,7 +2083,7 @@ export function TradeClient() {
               There is no cross-margin control to hide — this contract simply
               has one margin mode, and the ticket says which. */}
             {onlyIsolated && (
-              <p className="mt-1.5 text-[10px] leading-snug text-subtle">
+              <p className="mt-1.5 px-1 text-[11px] leading-snug text-subtle">
                 Isolated margin only — the margin you commit here backs this
                 position alone.
               </p>
@@ -1753,9 +2092,11 @@ export function TradeClient() {
         )}
 
         {market === "futures" && !(modernFutures && reduceOnly) && (
-          <div className="grid grid-cols-2 gap-1.5">
-            <label className="flex flex-col gap-1">
-              <span className="text-xs text-subtle">Take profit</span>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1.5">
+              <span className="px-1 text-[12px] font-semibold text-muted-foreground">
+                Take profit
+              </span>
               <input
                 value={tpPrice}
                 onChange={(e) =>
@@ -1766,11 +2107,13 @@ export function TradeClient() {
                 data-vivid-label="Take profit trigger price (optional)"
                 aria-label="Take profit trigger price"
                 placeholder="Optional"
-                className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-credit/40"
+                className={cn(fieldClass, "focus:ring-credit/40")}
               />
             </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs text-subtle">Stop loss</span>
+            <label className="flex flex-col gap-1.5">
+              <span className="px-1 text-[12px] font-semibold text-muted-foreground">
+                Stop loss
+              </span>
               <input
                 value={slPrice}
                 onChange={(e) =>
@@ -1781,7 +2124,7 @@ export function TradeClient() {
                 data-vivid-label="Stop loss trigger price (optional)"
                 aria-label="Stop loss trigger price"
                 placeholder="Optional"
-                className="rounded-xl bg-surface-sunken px-3 py-2 text-sm tabular-nums outline-none placeholder:text-subtle focus:ring-1 focus:ring-debit/40"
+                className={cn(fieldClass, "focus:ring-debit/40")}
               />
             </label>
           </div>
@@ -1790,7 +2133,7 @@ export function TradeClient() {
         {tpslError && (
           <p
             role="alert"
-            className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed text-warning"
+            className="rounded-xl bg-warning-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning"
           >
             {tpslError}
           </p>
@@ -1799,39 +2142,32 @@ export function TradeClient() {
         {reduceOnlyError && (
           <p
             role="alert"
-            className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed text-warning"
+            className="rounded-xl bg-warning-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning"
           >
             {reduceOnlyError}
           </p>
         )}
 
-        {!inTokenUnit && amt > 0 && price > 0 && (
-          <div className="divide-y divide-border/15 rounded-xl bg-surface-sunken/70 px-3 text-xs tabular-nums">
-            <div className="flex justify-between py-1.5">
-              <span className="text-subtle">Qty</span>
-              {/* Amount IS the notional; leverage only sets the margin used. The
-                places shown are the contract's own `szDecimals` where the
-                backend stated it (spec §9) — the estimate should not promise
-                precision the venue will round away. */}
-              <span>
-                ≈ {(amt / price).toFixed(szDecimals ?? 6)} {symbol}
-              </span>
-            </div>
-            {market === "futures" &&
-              !(modernFutures && reduceOnly) &&
-              leverage > 1 && (
-                <div className="flex justify-between py-1.5">
-                  <span className="text-subtle">Margin at {leverage}×</span>
-                  <span>≈ ${(amt / leverage).toFixed(2)}</span>
-                </div>
-              )}
+        {/* How far the fill may drift from the price above. A spot swap is
+            quoted from a pool now and settles seconds later, so this is the
+            distance between the two — the ticket states it, and answers it. */}
+        {usingModern && market === "spot" && (
+          <SlippageControl value={slippage} onChange={setSlippage} />
+        )}
+
+        {/* The receipt — what this amount turns into. Mounted once when an
+            amount first exists, so it rises in rather than flickering per
+            keystroke. */}
+        {receiptRows.length > 0 && (
+          <div className="ws-microswap">
+            <DetailPanel rows={receiptRows} />
           </div>
         )}
 
         {error && (
           <p
             role="alert"
-            className="rounded-lg bg-debit-chip px-2.5 py-1.5 text-xs leading-relaxed text-debit"
+            className="rounded-xl bg-debit-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed text-debit"
           >
             {error}
           </p>
@@ -1839,7 +2175,7 @@ export function TradeClient() {
         {outcome?.success && (
           <p
             role="status"
-            className="rounded-lg bg-credit-chip px-2.5 py-1.5 text-xs leading-relaxed text-credit"
+            className="rounded-xl bg-credit-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed text-credit"
           >
             {outcome.resting
               ? "Limit order resting on the book."
@@ -1849,7 +2185,7 @@ export function TradeClient() {
         {outcome?.success && outcome.tpslWarning && (
           <p
             role="alert"
-            className="rounded-lg bg-warning-chip px-2.5 py-1.5 text-xs leading-relaxed font-semibold text-warning"
+            className="rounded-xl bg-warning-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed font-semibold text-warning"
           >
             ⚠ {outcome.tpslWarning} — your position is open without that
             protection.
@@ -1861,25 +2197,32 @@ export function TradeClient() {
           dismissed, so the two are never on screen together. Modern spot only:
           the legacy ticket must never show a Worldstreet-wallet order's
           status. */}
-        {usingModern && market === "spot" && spotIntentId && !orderModalOpen && (
-          <p
-            role="status"
-            aria-live="polite"
-            className={`rounded-lg px-2.5 py-1.5 text-xs leading-relaxed ${
-              spotIntentStatus === "confirmed"
-                ? "bg-credit-chip text-credit"
-                : spotIntentStatus === "failed" ||
-                    spotIntentStatus === "expired"
-                  ? "bg-debit-chip text-debit"
-                  : "bg-surface-sunken text-muted-foreground"
-            }`}
-          >
-            {orderCopy(spotIntentStatus, symbol).body}
-          </p>
-        )}
+        {usingModern &&
+          market === "spot" &&
+          spotIntentId &&
+          !orderModalOpen && (
+            <p
+              role="status"
+              aria-live="polite"
+              className={cn(
+                "rounded-xl px-3.5 py-2.5 text-[12.5px] leading-relaxed",
+                spotIntentStatus === "confirmed"
+                  ? "bg-credit-chip text-credit"
+                  : spotIntentStatus === "failed" ||
+                      spotIntentStatus === "expired"
+                    ? "bg-debit-chip text-debit"
+                    : "bg-surface-sunken text-muted-foreground"
+              )}
+            >
+              {orderCopy(spotIntentStatus, symbol).body}
+            </p>
+          )}
 
         {/* Modern perps: this press only BUILDS the order — the review screen's
-          confirm is the one that spends, and it is the one carrying the guard. */}
+          confirm is the one that spends, and it is the one carrying the guard.
+          Three motions, each caused by an event: the ring pulse when the
+          ticket first becomes sendable, the travelling band while the order
+          is in flight, the shadow that appears only while it is armed. */}
         <button
           onClick={submit}
           disabled={!canSubmit}
@@ -1895,35 +2238,93 @@ export function TradeClient() {
               ? `Build the order and open the review screen — ${side === "buy" ? "long" : "short"} ${symbol}. Nothing is sent until you confirm there.`
               : `Place the order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol} for the amount shown. Moves real money.`
           }
-          className={`min-h-12 w-full rounded-2xl text-[15px] font-bold text-white shadow-[0_10px_28px_-12px_rgb(0_0_0/0.6)] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={cn(
+            "relative flex h-12 w-full items-center justify-center rounded-full text-[15px] font-bold text-white transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-none active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:active:scale-100 motion-reduce:active:scale-100",
+            submitting && "ws-inflight",
             side === "buy"
-              ? "bg-credit hover:bg-credit/90"
-              : "bg-debit hover:bg-debit/90"
-          }`}
+              ? "bg-credit shadow-[0_10px_28px_-10px_color-mix(in_oklab,var(--credit)_60%,transparent)] hover:bg-credit/90 focus-visible:ring-credit/50"
+              : "bg-debit shadow-[0_10px_28px_-10px_color-mix(in_oklab,var(--debit)_60%,transparent)] hover:bg-debit/90 focus-visible:ring-debit/50"
+          )}
         >
-          {submitting
-            ? modernFutures
-              ? "Pricing…"
-              : "Placing…"
-            : pairUnavailable
-              ? "Pair unavailable"
-              : reduceOnlyError
-                ? "Nothing to reduce"
-                : modernFutures
-                  ? "Review order"
-                  : `${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
+          {canSubmit && armGen > 0 && (
+            <span
+              key={armGen}
+              aria-hidden
+              className={cn(
+                "ws-arm pointer-events-none absolute inset-0 rounded-full",
+                side === "buy" ? "text-credit" : "text-debit"
+              )}
+            />
+          )}
+          {submitting && (
+            <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          )}
+          {ctaLabel}
         </button>
+
+        {/* What the wallet holds of both sides of the pair — the answer to
+            "how much can I buy" and "how much can I sell", where the button
+            is. */}
+        {walletRows.length > 0 && (
+          <WalletStrip
+            network={networkLabel}
+            rows={walletRows}
+            className="mt-1"
+          />
+        )}
+
+        {/* Which token this actually is. A ticker is not an identity on a
+            9,000-row registry, so the contract and a link to it close the
+            ticket. */}
+        {tokenIdentity && (
+          <TokenIdentity
+            symbol={symbol}
+            icon={current && "icon" in current ? current.icon : null}
+            network={networkLabel}
+            address={tokenIdentity.address}
+            explorerUrl={tokenIdentity.url}
+            explorerName={tokenIdentity.explorer}
+          />
+        )}
       </div>
     )
 
   /* ── Workspace ────────────────────────────────────────────────────────── */
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-      {/* Top bar */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:gap-x-5 lg:px-4 lg:py-2.5 xl:flex-nowrap">
+    <div
+      /* Clearance for the app's floating tab bar, which this route now carries
+         on phones (it is full-bleed, so it has no sidebar and no navbar — the
+         bar was the only navigation left and it was missing). The capsule is
+         56px tall sitting 12px off the bottom, so 68px plus the device inset
+         puts the buy/sell bar exactly on top of it: no overlap, nothing
+         wasted. From `md` up the capsule is hidden and the padding goes. */
+      className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] md:pb-0"
+      /* The house atmosphere: one warm radial at the crown, the same ambient
+         brand glow the shell's rail carries, at the same strength. It is the
+         only large-area use of gold the system permits, it is decorative only,
+         and it is why this screen reads as Worldstreet rather than as a
+         generic dark exchange.
+         It is painted as this element's own background-image rather than as a
+         layer behind it. A `-z-10` child of a positioned parent that has no
+         stacking context of its own paints behind that parent's BACKGROUND
+         too, so an opaque `bg-background` swallows it completely — the glow
+         was there and invisible. A background-image composites over the
+         background-colour by definition, and in-flow content still paints
+         above both, which is exactly the stack this wants. */
+      style={{
+        backgroundImage:
+          "radial-gradient(120% 86% at 22% 0%, var(--sidebar-glow) 0%, transparent 64%)",
+        backgroundSize: "100% 460px",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
+      {/* Top bar — the app's chrome only: a way out, the venue switch, and
+          the money doors. The market itself lives in the header over the
+          chart, where the price sits beside the thing it describes. */}
+      <div className="flex items-center gap-3 px-3 py-2 sm:gap-4 lg:px-4 lg:py-2.5">
         {/* This route has no sidebar or navbar, so it carries its own way
             out — a back control, not just a clickable logo. */}
-        <div className="order-1 flex shrink-0 items-center gap-1.5 lg:order-none">
+        <div className="flex shrink-0 items-center gap-1.5">
           <BackAction to="/" className="mt-0" />
           <Link
             href="/"
@@ -1946,79 +2347,12 @@ export function TradeClient() {
           value={market}
           onChange={setMarketTab}
           options={MARKET_TABS}
-          className="order-4 shrink-0 lg:order-none"
+          className="shrink-0"
           vividPrefix="market-tab"
         />
 
-        <span className="order-4 hidden shrink-0 rounded-full border border-border/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase lg:order-none lg:inline-flex">
-          Modern wallet
-        </span>
-
-        {/* Pair — the rail owns switching on wide screens; this dropdown
-            covers every width below xl and still works above it. */}
-        <div className="relative order-2 shrink-0 lg:order-none">
-          <button
-            onClick={() => setPickerOpen((v) => !v)}
-            aria-haspopup="listbox"
-            aria-expanded={pickerOpen}
-            data-vivid-target="trade-pair-picker"
-            data-vivid-label="Open the pair picker dropdown"
-            className="flex items-center gap-1.5 rounded-xl bg-surface-sunken px-2.5 py-2 text-[15px] font-bold transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-3.5"
-          >
-            <CoinAvatar symbol={bookCoin ?? symbol} size="md" />
-            {symbol || "—"}
-            <span className="hidden text-[11px] font-semibold text-subtle sm:inline">
-              {market === "futures" ? "PERP" : `/${quoteOf(current)}`}
-            </span>
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-subtle"
-            >
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </button>
-          {picker}
-        </div>
-
-        {/* Price + 24h stats */}
-        <div className="scrollbar-none order-3 ml-auto flex min-w-0 items-center gap-3 overflow-x-auto sm:gap-5 lg:order-none lg:ml-0">
-          <span
-            aria-live="polite"
-            className={`shrink-0 font-display text-[22px] font-semibold tracking-[-0.01em] tabular-nums sm:text-2xl ${
-              lastTick === "up"
-                ? "text-credit"
-                : lastTick === "down"
-                  ? "text-debit"
-                  : ""
-            }`}
-          >
-            ${fmtPx(price)}
-          </span>
-          <span
-            className={`shrink-0 text-sm font-semibold tabular-nums ${changeUp ? "text-credit" : "text-debit"}`}
-          >
-            {changePct24h !== null
-              ? `${changeUp ? "+" : ""}${changePct24h.toFixed(2)}%`
-              : "—"}
-          </span>
-          {/* A figure we don't have is left out, not printed as an em-dash in
-              a column that never fills. */}
-          {high24h !== null && <Stat label="24h High" value={`$${fmtPx(high24h)}`} />}
-          {low24h !== null && <Stat label="24h Low" value={`$${fmtPx(low24h)}`} />}
-          {volume24h !== null && (
-            <Stat label="24h Volume" value={fmtCompact(volume24h)} />
-          )}
-        </div>
-
         {/* Balances + money doors */}
-        <div className="order-5 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 lg:order-none">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           {balances && (
             <span className="hidden text-xs text-muted-foreground tabular-nums 2xl:block">
               Spot{" "}
@@ -2049,13 +2383,34 @@ export function TradeClient() {
               renders its own Deposit / Transfer / Withdraw triggers, each
               opening a flow of its own, rather than one blended form. */}
           {usingModern ? (
-            user?.userId && modernWallet.data && modernPackage.data ? (
+            walletReady &&
+            user?.userId &&
+            modernWallet.data &&
+            modernPackage.data ? (
               <ModernFundingPanel
                 userId={user.userId}
                 wallet={modernWallet.data}
                 packageValue={modernPackage.data}
               />
-            ) : null
+            ) : walletLoading ? (
+              // The doors are coming; hold their shape rather than popping
+              // three buttons into the bar a second after it painted.
+              <Skel className="h-8 w-[188px] rounded-full" />
+            ) : (
+              /* No wallet yet. This corner held the money doors, and with
+                 nothing to open it simply went blank — the one moment the user
+                 most needed a way forward. Gold, because on this screen making
+                 a wallet IS the primary action. */
+              <Link
+                href="/wallet/modern"
+                data-vivid-target="trade-create-wallet"
+                data-vivid-label="Go to the wallet page to set up a wallet"
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[13px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+              >
+                <HugeiconsIcon icon={Wallet01Icon} className="h-4 w-4" />
+                Set up wallet
+              </Link>
+            )
           ) : (
             <>
               <button
@@ -2079,43 +2434,10 @@ export function TradeClient() {
         </div>
       </div>
 
-      {/* FUTURES GATE (4/4): the answer to "I pressed Futures — what happened".
-          It stands in for the futures workspace — same place, full width, at
-          every breakpoint — and says the venue isn't open yet. The spot
-          workspace underneath stays fully live, which is why `ComingSoon` is
-          used bare here instead of wrapped around anything: blurring and
-          inert-ing the content below would take spot down with it. A live
-          region, so pressing the tab is announced and not merely drawn.
-          Delete this block when futures opens. */}
-      {futuresNotice && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="relative shrink-0 border-b border-border/30 bg-surface-sunken/60"
-        >
-          <ComingSoon compact />
-          <button
-            type="button"
-            onClick={() => setFuturesNotice(false)}
-            aria-label="Dismiss"
-            className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {/* Workspace body */}
+      {/* Workspace body. The panes assemble in reading order — rail, chart,
+          orders, ticket — on the `ws-pane` entrance; the header above the
+          chart does not, so its picker's fixed layout on phones has no
+          transformed ancestor to trip over. */}
       <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pb-2 lg:flex-row lg:gap-2.5 lg:px-3 lg:pb-3">
         {/* Markets rail — the full list lives on the left so switching pairs
             is one click, not a menu dive. */}
@@ -2123,39 +2445,56 @@ export function TradeClient() {
           list={list}
           selected={selection}
           onSelect={setSelection}
-          className="hidden w-[272px] shrink-0 overflow-hidden rounded-2xl bg-card xl:flex"
+          className="ws-pane hidden w-[280px] shrink-0 overflow-hidden rounded-2xl bg-card xl:flex"
+          style={
+            {
+              "--ws-pane-x": "-10px",
+              "--ws-pane-delay": "40ms",
+            } as React.CSSProperties
+          }
         />
 
-        {/* Chart + bottom panel */}
+        {/* Market header + chart + bottom panel */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 lg:gap-2.5">
+          <MarketHeader
+            className="shrink-0 px-1 pt-1 lg:px-2"
+            symbol={symbol}
+            quote={market === "futures" ? "USDC" : quoteOf(current)}
+            icon={current && "icon" in current ? current.icon : null}
+            network={market === "futures" ? null : networkLabel}
+            venueLabel={market === "futures" ? "Perpetual" : "Spot"}
+            price={price}
+            lastTick={lastTick}
+            changePct={changePct24h}
+            changePct1h={changePct1h}
+            changePct7d={changePct7d}
+            volume24h={volume24h}
+            high24h={high24h}
+            low24h={low24h}
+            beat={beat}
+            pickerOpen={pickerOpen}
+            onTogglePicker={() => setPickerOpen((v) => !v)}
+            picker={picker}
+          />
+
           <div
             /* Taller on phones: the chart is the reason this screen exists, and
                260px of it under a market strip read as a strip of noise. Sized
                against the viewport so it scales with the device instead of
                being tuned to one handset, and capped so the panes below it
                stay reachable without a scroll. */
-            className="h-[min(46dvh,420px)] shrink-0 overflow-hidden rounded-2xl bg-card sm:h-[min(50dvh,460px)] lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1"
+            className="ws-pane h-[min(44dvh,420px)] shrink-0 overflow-hidden rounded-2xl bg-card sm:h-[min(50dvh,460px)] lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1"
+            style={{ "--ws-pane-delay": "0ms" } as React.CSSProperties}
             data-vivid-target="price-chart"
             data-vivid-label="The candlestick price chart"
           >
             {marketsError ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-warning"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 8v5" />
-                    <path d="M12 16h.01" />
-                  </svg>
+                  <HugeiconsIcon
+                    icon={Alert02Icon}
+                    className="h-5 w-5 text-warning"
+                  />
                 </span>
                 <div>
                   <p className="text-sm font-semibold">
@@ -2180,7 +2519,7 @@ export function TradeClient() {
                 </p>
               </div>
             ) : (
-              <CandleChart source={chartSource} onStats={setDexStats} />
+              <CandleChart source={chartSource} onStats={handleChartStats} />
             )}
           </div>
           {/* Spot has neither positions nor resting orders — a swap settles or
@@ -2188,14 +2527,18 @@ export function TradeClient() {
               there. One Orders table takes their place; futures keeps the
               drawer, where both concepts are real. */}
           {market === "spot" ? (
-            <OrdersPanel className="hidden h-[228px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex" />
+            <OrdersPanel
+              className="ws-pane hidden h-[224px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex"
+              style={{ "--ws-pane-delay": "90ms" } as React.CSSProperties}
+            />
           ) : (
             <PositionsPanel
               account={account}
               busyKey={busyKey}
               onClosePosition={handleClose}
               onCancelOrder={handleCancel}
-              className="hidden h-[228px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex"
+              className="ws-pane hidden h-[224px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex"
+              style={{ "--ws-pane-delay": "90ms" } as React.CSSProperties}
             />
           )}
 
@@ -2267,36 +2610,66 @@ export function TradeClient() {
 
         {/* Ticket rail — desktop keeps it always-on; below lg it becomes the
             bottom sheet the action bar opens, so the chart owns the screen. */}
-        <aside className="hidden shrink-0 overflow-hidden rounded-2xl bg-card lg:block lg:w-[300px] lg:overflow-y-auto xl:w-[328px]">
+        <aside
+          aria-label="Order ticket"
+          className="slim-scroll ws-pane hidden shrink-0 overflow-hidden rounded-2xl bg-card lg:block lg:w-[320px] lg:overflow-y-auto xl:w-[344px]"
+          style={
+            {
+              "--ws-pane-x": "10px",
+              "--ws-pane-delay": "140ms",
+            } as React.CSSProperties
+          }
+        >
           {ticket}
         </aside>
       </div>
 
       {/* Mobile action bar — the ticket is one tap away at all times, and the
           tap already says which side you meant. */}
-      <div className="safe-area-bottom flex shrink-0 items-center gap-2 border-t border-border/20 bg-background px-3 py-2.5 lg:hidden">
-        <button
-          onClick={() => {
-            setSide("buy")
-            setTicketOpen(true)
-          }}
-          data-vivid-target="trade-open-ticket-long"
-          data-vivid-label="Open the order ticket on the buy/long side"
-          className="min-h-12 flex-1 rounded-2xl bg-credit text-[15px] font-bold text-white transition-colors hover:bg-credit/90 focus-visible:ring-2 focus-visible:ring-credit/40 focus-visible:outline-none"
-        >
-          {market === "futures" ? "Long" : "Buy"}
-        </button>
-        <button
-          onClick={() => {
-            setSide("sell")
-            setTicketOpen(true)
-          }}
-          data-vivid-target="trade-open-ticket-short"
-          data-vivid-label="Open the order ticket on the sell/short side"
-          className="min-h-12 flex-1 rounded-2xl bg-debit text-[15px] font-bold text-white transition-colors hover:bg-debit/90 focus-visible:ring-2 focus-visible:ring-debit/40 focus-visible:outline-none"
-        >
-          {market === "futures" ? "Short" : "Sell"}
-        </button>
+      {/* No `safe-area-bottom` here any more: the workspace's own bottom
+          padding already clears the device inset AND the tab bar, so a second
+          inset inside this bar would only make it taller on a notched phone,
+          on the screen with the least room to give. */}
+      <div className="flex shrink-0 items-center gap-2 border-t border-border/20 bg-background px-3 py-2.5 lg:hidden">
+        {usingModern && needsWallet ? (
+          /* Two big money buttons over a wallet that doesn't exist are two
+             ways to reach the same dead end. One button, and it goes where
+             the user actually needs to be. */
+          <Link
+            href="/wallet/modern"
+            data-vivid-target="trade-create-wallet-mobile"
+            data-vivid-label="Go to the wallet page to set up a wallet"
+            className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-[15px] font-bold text-primary-foreground transition-all hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none active:scale-[0.985] motion-reduce:active:scale-100"
+          >
+            <HugeiconsIcon icon={Wallet01Icon} className="h-[18px] w-[18px]" />
+            Set up your wallet
+          </Link>
+        ) : (
+          <>
+            <button
+              onClick={() => {
+                setSide("buy")
+                setTicketOpen(true)
+              }}
+              data-vivid-target="trade-open-ticket-long"
+              data-vivid-label="Open the order ticket on the buy/long side"
+              className="min-h-12 flex-1 rounded-full bg-credit text-[15px] font-bold text-white transition-all hover:bg-credit/90 focus-visible:ring-2 focus-visible:ring-credit/40 focus-visible:outline-none active:scale-[0.985] motion-reduce:active:scale-100"
+            >
+              {market === "futures" ? "Long" : `Buy ${symbol}`}
+            </button>
+            <button
+              onClick={() => {
+                setSide("sell")
+                setTicketOpen(true)
+              }}
+              data-vivid-target="trade-open-ticket-short"
+              data-vivid-label="Open the order ticket on the sell/short side"
+              className="min-h-12 flex-1 rounded-full bg-debit text-[15px] font-bold text-white transition-all hover:bg-debit/90 focus-visible:ring-2 focus-visible:ring-debit/40 focus-visible:outline-none active:scale-[0.985] motion-reduce:active:scale-100"
+            >
+              {market === "futures" ? "Short" : `Sell ${symbol}`}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Ticket sheet (mobile) */}
@@ -2312,30 +2685,31 @@ export function TradeClient() {
               className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/[0.16]"
             />
             <div className="flex shrink-0 items-center justify-between px-4 pt-2">
-              <span className="flex items-center gap-2 text-sm font-bold">
-                <CoinAvatar symbol={bookCoin ?? symbol} size="sm" />
-                {symbol}
-                <span className="text-[11px] font-semibold text-subtle">
-                  {market === "futures" ? "PERP" : `/${quoteOf(current)}`}
+              <span className="flex items-center gap-2.5">
+                <CoinAvatar
+                  symbol={bookCoin ?? symbol}
+                  src={current && "icon" in current ? current.icon : undefined}
+                  size="lg"
+                />
+                <span className="flex flex-col leading-tight">
+                  <span className="font-display text-[15px] font-semibold">
+                    {symbol}
+                    <span className="ml-1 text-[12px] font-semibold text-muted-foreground">
+                      {market === "futures" ? "PERP" : `/${quoteOf(current)}`}
+                    </span>
+                  </span>
+                  <span className="text-[12px] text-muted-foreground tabular-nums">
+                    {price > 0 ? `$${fmtPx(price)}` : "—"}
+                  </span>
                 </span>
               </span>
               <button
                 type="button"
                 onClick={() => setTicketOpen(false)}
                 aria-label="Close"
-                className="-mr-1 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="-mr-1 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
+                <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -2359,6 +2733,28 @@ export function TradeClient() {
           quantity={placedOrder.quantity}
         />
       )}
+
+      {/* FUTURES GATE (4/4): the answer to "I pressed Futures — what
+          happened". It was a full-width panel wedged between the top bar and
+          the workspace, which pushed the chart, the ticket and the whole
+          screen down to say one sentence — a banner where an acknowledgement
+          was wanted. A toast says the same thing over the workspace and then
+          gets out of the way. Keyed on the press count so pressing the tab
+          again restarts the timer instead of doing nothing visible.
+          Delete this block when futures opens. */}
+      <Toast
+        key={futuresNoticeSeq}
+        open={futuresNotice}
+        onClose={() => setFuturesNotice(false)}
+        title={FUTURES_SOON_TITLE}
+        description={FUTURES_SOON_SHORT}
+        icon={Clock01Icon}
+        /* Below lg the workspace's own buy/sell bar owns the bottom of the
+           screen, and below md the app's tab bar sits under that. The toast
+           clears both rather than covering the one control this screen is
+           for. */
+        className="max-md:bottom-[calc(140px+env(safe-area-inset-bottom))] max-lg:md:bottom-[5.5rem]"
+      />
 
       {/* Unlock, then place the order the user already pressed — the same
           resume the swap screen does. */}

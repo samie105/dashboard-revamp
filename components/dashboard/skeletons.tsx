@@ -1,43 +1,57 @@
 import { Skeleton } from "@/components/ui/skeleton"
 
-/* ── Wallet Card Skeleton — mirrors the on-canvas hero composition ── */
+/* ── Wallet Card Skeleton — mirrors the on-canvas hero composition ──
+   A loading state is a promise about the shape of what's coming, so every
+   width here is fluid or capped. The previous version was drawn against a
+   desktop that no longer existed — an avatar and a 224px block in the
+   greeting row, five 112px pills, a three-column stat card — and on a 360px
+   phone those measured 508px, 592px and 336px against 328px of space. They
+   didn't wrap, they ran off the side, and the page's first impression was a
+   grid of blocks sliding under the right edge.
+
+   What it mirrors now: a one-line greeting, the balance hero, the two account
+   cards (stacked on a phone, side by side from `sm`), three action pills, and
+   the chain strip. */
 export function WalletCardSkeleton() {
   return (
     <div className="flex flex-col gap-4">
-      {/* Greeting row */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-9 w-9 rounded-full" />
-          <div className="flex flex-col gap-1.5">
-            <Skeleton className="h-3.5 w-44" />
-            <Skeleton className="h-3 w-56" />
-          </div>
-        </div>
-        <Skeleton className="h-7 w-56 rounded-lg" />
-      </div>
+      {/* Greeting — one line: "Good morning, Dev · Wednesday, Sep 2". */}
+      <Skeleton className="h-4 w-64 max-w-full" />
 
-      {/* Hero */}
+      {/* Hero — eyebrow, the figure, and what it covers. */}
       <div className="flex flex-col gap-2">
-        <Skeleton className="h-3 w-24" />
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-3 w-28" />
+        <Skeleton className="h-3 w-36 max-w-[60%]" />
+        <Skeleton className="h-11 w-[min(17rem,78%)]" />
+        <Skeleton className="h-3 w-56 max-w-full" />
       </div>
 
-      {/* Action rail */}
-      <div className="flex items-center gap-2">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-28 rounded-full" />
+      {/* Account cards. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="flex flex-col gap-3 rounded-2xl bg-card p-4">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-7 w-32 max-w-[70%]" />
+            <Skeleton className="h-8 w-full" />
+            <div className="flex items-center justify-between gap-3">
+              <Skeleton className="h-2.5 w-24 max-w-[50%]" />
+              <Skeleton className="h-2.5 w-10 shrink-0" />
+            </div>
+          </div>
         ))}
       </div>
 
-      {/* Stats card */}
-      <div className="grid grid-cols-3 divide-x divide-border/30 rounded-2xl bg-card">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-2 p-4">
-            <Skeleton className="h-2.5 w-16" />
-            <Skeleton className="h-5 w-14" />
-            <Skeleton className="h-2.5 w-20" />
-          </div>
+      {/* Action rail — two labelled pills and the overflow circle. They share
+          the row rather than each claiming a fixed 112px. */}
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-12 min-w-0 flex-1 rounded-full sm:max-w-40" />
+        <Skeleton className="h-12 min-w-0 flex-1 rounded-full sm:max-w-40" />
+        <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
+      </div>
+
+      {/* Chain strip — clipped, not overflowing: it scrolls when it's real. */}
+      <div className="flex gap-4 overflow-hidden">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-5 w-28 shrink-0" />
         ))}
       </div>
     </div>
@@ -47,33 +61,38 @@ export function WalletCardSkeleton() {
 /* ── Markets Table Skeleton ── */
 export function MarketsTableSkeleton() {
   return (
-    <div className="flex flex-col rounded-2xl bg-card">
+    // overflow-hidden: the filter chips are a scrolling row when they're real,
+    // so here they stop at the card's edge instead of running past the page's.
+    <div className="flex flex-col overflow-hidden rounded-2xl bg-card">
       <div className="flex flex-col gap-3 p-4">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-8 w-36 rounded-lg" />
+        <div className="flex items-center justify-between gap-3">
+          <Skeleton className="h-4 w-24 shrink-0" />
+          <Skeleton className="h-8 w-36 max-w-[45%] rounded-lg" />
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 overflow-hidden">
           {Array.from({ length: 7 }).map((_, i) => (
-            <Skeleton key={i} className="h-7 w-16 rounded-lg" />
+            <Skeleton key={i} className="h-7 w-16 shrink-0 rounded-lg" />
           ))}
         </div>
       </div>
       <div className="border-t border-border/30 px-4 py-2">
         <div className="grid grid-cols-4 gap-4 py-1">
-          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-3 w-20 max-w-full" />
           <Skeleton className="ml-auto h-3 w-12" />
-          <Skeleton className="ml-auto h-3 w-16" />
+          <Skeleton className="ml-auto h-3 w-16 max-w-full" />
           <Skeleton className="ml-auto h-3 w-10" />
         </div>
       </div>
+      {/* The name column takes the slack; the figures keep their size, and the
+          third one waits for a wider screen. Fixed widths across all five
+          measured 396px against a 328px phone. */}
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 border-t border-border/10 px-4 py-3">
-          <Skeleton className="h-5 w-5 rounded-full" />
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="ml-auto h-4 w-20" />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-7 w-14 rounded-lg" />
+          <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+          <Skeleton className="h-4 min-w-0 flex-1 sm:max-w-24" />
+          <Skeleton className="h-4 w-16 shrink-0 sm:w-20" />
+          <Skeleton className="hidden h-4 w-16 shrink-0 sm:block" />
+          <Skeleton className="h-7 w-14 shrink-0 rounded-lg" />
         </div>
       ))}
     </div>

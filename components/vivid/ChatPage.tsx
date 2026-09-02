@@ -82,7 +82,12 @@ export default function ChatPage() {
   )
 
   return (
-    <div className="flex h-full overflow-hidden bg-background">
+    /* Bottom padding on phones for the app's floating tab bar, which this
+       route carries now that full-bleed pages keep their navigation (the
+       capsule is 56px tall, 12px off the bottom). Without it the bar sits
+       squarely on the composer — the one control this screen is for. Gone
+       from `md` up, where the capsule is hidden. */
+    <div className="flex h-full overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] md:pb-0">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div

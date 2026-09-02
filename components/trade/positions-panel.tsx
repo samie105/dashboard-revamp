@@ -45,6 +45,7 @@ export function PositionsPanel({
   onClosePosition,
   onCancelOrder,
   className,
+  style,
   hideTabs = false,
   tab: controlledTab,
 }: {
@@ -53,6 +54,8 @@ export function PositionsPanel({
   onClosePosition: (symbol: string) => void
   onCancelOrder: (oid: number, symbol: string, market: "spot" | "futures") => void
   className?: string
+  /** For the workspace's pane-entrance custom properties. */
+  style?: React.CSSProperties
   /** The mobile pane supplies its own tab strip, so the panel drops its own
    *  rather than stacking two rows of tabs. */
   hideTabs?: boolean
@@ -68,6 +71,7 @@ export function PositionsPanel({
   return (
     <div
       className={cn("flex min-h-0 flex-col", className)}
+      style={style}
       data-vivid-target="positions-panel"
       data-vivid-label="Open positions and resting orders"
     >

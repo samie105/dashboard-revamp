@@ -66,6 +66,32 @@ export type SpotOrderPlan =
 export const SLIPPAGE_PERCENTAGE = 0.01
 
 /**
+ * The band the ticket may move that figure inside.
+ *
+ * The constant above was invisible: every spot order carried a 1% tolerance
+ * and no screen ever said so, which meant a fill up to a percent away from the
+ * price on screen was a surprise rather than a setting. It is shown now, and
+ * showing it only helps if it can be answered — a thin market needs more room,
+ * a deep one needs less. The band is what stops the answer being dangerous:
+ * below 0.1% almost nothing fills, and above 5% the tolerance is large enough
+ * to be the trade's biggest cost.
+ */
+export const SLIPPAGE_MIN = 0.001
+export const SLIPPAGE_MAX = 0.05
+/** Past this, the ticket warns rather than merely stating the figure. */
+export const SLIPPAGE_HIGH = 0.03
+
+/**
+ * A caller's slippage, clamped into the band — or the house default when it
+ * is absent or nonsense. Every path to the backend goes through this, so no
+ * typed value, however malformed, can reach an intent unbounded.
+ */
+export function normalizeSlippage(value?: number): number {
+  if (value === undefined || !Number.isFinite(value)) return SLIPPAGE_PERCENTAGE
+  return Math.min(SLIPPAGE_MAX, Math.max(SLIPPAGE_MIN, value))
+}
+
+/**
  * Until the registry carries decimals (backend request filed — see the plan's
  * Backend Asks), refuse pairs whose token precision we don't know.
  *
@@ -282,7 +308,11 @@ function resolveSpotLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): SpotLe
  *
  * Source and destination are the same chain: this is a spot trade, not a bridge.
  */
-function planFromLegs(legs: SpotLegs, sellAmountBaseUnits: string): SpotOrderPlan {
+function planFromLegs(
+  legs: SpotLegs,
+  sellAmountBaseUnits: string,
+  slippage: number = SLIPPAGE_PERCENTAGE,
+): SpotOrderPlan {
   if (legs.venue === "evm") {
     return {
       kind: "evm",
@@ -291,7 +321,7 @@ function planFromLegs(legs: SpotLegs, sellAmountBaseUnits: string): SpotOrderPla
         sellToken: legs.sellIdentifier,
         buyToken: legs.buyIdentifier,
         sellAmountBaseUnits,
-        slippagePercentage: SLIPPAGE_PERCENTAGE,
+        slippagePercentage: slippage,
         idempotencyKey: newIdempotencyKey(),
       },
     }
@@ -304,7 +334,7 @@ function planFromLegs(legs: SpotLegs, sellAmountBaseUnits: string): SpotOrderPla
       sellToken: legs.sellIdentifier,
       buyToken: legs.buyIdentifier,
       sellAmountBaseUnits,
-      slippagePercentage: SLIPPAGE_PERCENTAGE,
+      slippagePercentage: slippage,
       idempotencyKey: newIdempotencyKey(),
     },
   }
@@ -321,6 +351,8 @@ export function buildSpotOrderPlan(
   side: "buy" | "sell",
   amountUsd: number,
   price: number,
+  /** The ticket's tolerance. Absent or out of band → the house default. */
+  slippage?: number,
 ): SpotOrderPlan {
   const label = row.symbol ? row.symbol.toUpperCase() : "This market"
 
@@ -345,7 +377,7 @@ export function buildSpotOrderPlan(
   const sized = sizeInBaseUnits(side === "buy" ? amountUsd : amountUsd / price, legs.sellDecimals)
   if ("problem" in sized) return unavailable(sizingReason(sized.problem, legs.label))
 
-  return planFromLegs(legs, sized.units)
+  return planFromLegs(legs, sized.units, normalizeSlippage(slippage))
 }
 
 /**
@@ -402,6 +434,8 @@ export function buildSpotOrderPlanFromTokenAmount(
   row: ModernSpotMarketRow,
   side: "buy" | "sell",
   amountText: string,
+  /** The ticket's tolerance. Absent or out of band → the house default. */
+  slippage?: number,
 ): SpotOrderPlan {
   const legs = resolveSpotLegs(row, side)
   if ("reason" in legs) return unavailable(legs.reason)
@@ -412,7 +446,22 @@ export function buildSpotOrderPlanFromTokenAmount(
   }
   if (sellAmountBaseUnits === "0") return unavailable(`Enter a ${legs.spentSymbol} amount above zero.`)
 
-  return planFromLegs(legs, sellAmountBaseUnits)
+  return planFromLegs(legs, sellAmountBaseUnits, normalizeSlippage(slippage))
+}
+
+/**
+ * The token being SPENT and the token being RECEIVED, as addresses on the
+ * row's own chain. The registry states its identifiers in the buy direction,
+ * so which is which flips with the side — read here, once, for the same reason
+ * `baseTokenOf` exists.
+ */
+export function spotOrderTokens(
+  row: ModernSpotMarketRow,
+  side: "buy" | "sell",
+): { spend: string; receive: string; networkId: string } | null {
+  const legs = resolveSpotLegs(row, side)
+  if ("reason" in legs) return null
+  return { spend: legs.sellIdentifier, receive: legs.buyIdentifier, networkId: legs.networkId }
 }
 
 function venueReason(venue: string | undefined, label: string): string {

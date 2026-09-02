@@ -329,7 +329,7 @@ export function NavbarActions() {
                       // Futures is not open yet — the row stays so the balance
                       // still has a name, but it does not lead anywhere.
                       { label: "Futures Wallet", href: "", icon: Activity01Icon, soon: true },
-                      { label: "Funding", href: "/assets", icon: Wallet01Icon, soon: false },
+                      { label: "Funding", href: "/portfolio", icon: Wallet01Icon, soon: false },
                     ] as const).map(w =>
                       w.soon ? (
                         <span

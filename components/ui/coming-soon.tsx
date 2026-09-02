@@ -32,6 +32,10 @@ import { cn } from "@/lib/utils"
 export const FUTURES_SOON_TITLE = "Futures is not open yet"
 export const FUTURES_SOON_BODY =
   "Perpetual futures are still being finished. Everything else on your account works as normal, and we'll let you know here the moment futures opens."
+/** The same fact in one line, for a toast — where the full body would be four
+ *  lines of text over the thing the reader is trying to look at. */
+export const FUTURES_SOON_SHORT =
+  "Still being finished. We'll let you know the moment it opens."
 
 /**
  * Wraps a surface that exists but cannot be used yet.

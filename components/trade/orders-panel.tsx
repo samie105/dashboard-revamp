@@ -25,6 +25,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowUpRight01Icon, InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
+import { illustrations } from "@/components/ui/system"
 import {
   ResponsiveModal,
   ResponsiveModalContent,
@@ -40,8 +41,8 @@ import { formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
 import { nativeTokenFor } from "@/lib/native-token"
 
 const TH =
-  "px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-subtle whitespace-nowrap"
-const TD = "px-3 py-2 text-[11.5px] tabular-nums"
+  "px-4 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-subtle whitespace-nowrap"
+const TD = "px-4 py-2.5 text-[12px] tabular-nums"
 
 /** Ledger status → what to call it and how to colour it. */
 function statusOf(status: string): { label: string; className: string } {
@@ -245,7 +246,14 @@ function OrderDetailModal({ row, onClose }: { row: ResolvedOrder | null; onClose
 
 /* ── Panel ──────────────────────────────────────────────────────────────── */
 
-export function OrdersPanel({ className }: { className?: string }) {
+export function OrdersPanel({
+  className,
+  style,
+}: {
+  className?: string
+  /** For the workspace's pane-entrance custom properties. */
+  style?: React.CSSProperties
+}) {
   const { orders, loading } = useSpotOrders()
   const registry = useSpotRegistry()
   const [detail, setDetail] = React.useState<ResolvedOrder | null>(null)
@@ -256,27 +264,58 @@ export function OrdersPanel({ className }: { className?: string }) {
   )
 
   return (
-    <div className={cn("flex min-h-0 flex-col", className)}>
-      <div className="flex shrink-0 items-center gap-2 border-b border-border/30 px-3 py-2">
-        <h3 className="text-[12px] font-semibold">Orders</h3>
-        <span className="rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-          {rows.length}
-        </span>
+    <div
+      className={cn("flex min-h-0 flex-col", className)}
+      style={style}
+      data-vivid-target="orders-panel"
+      data-vivid-label="Your spot orders and their on-chain status"
+    >
+      {/* The card names itself inside, in the CardHeader register — a title
+          and, once there is something to count, the count. */}
+      <div className="flex shrink-0 items-center gap-2.5 px-4 py-3">
+        <h3 className="font-display text-[14px] font-semibold leading-tight tracking-[-0.01em]">
+          Your orders
+        </h3>
+        {rows.length > 0 && (
+          <span className="rounded-full bg-foreground/[0.07] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+            {rows.length}
+          </span>
+        )}
+        {!loading && rows.length > 0 && (
+          <span className="ml-auto text-[11.5px] text-subtle">Newest first</span>
+        )}
       </div>
 
       <div className="slim-scroll min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex h-full items-center justify-center py-8">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            {/* Neutral, never gold — a spinner is not a brand moment. */}
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground/70" />
           </div>
         ) : rows.length === 0 ? (
-          <p className="px-3 py-8 text-center text-[11.5px] text-muted-foreground">
-            No spot orders yet — the ones you place appear here with their
-            on-chain status.
-          </p>
+          // The empty state carries the trade illustration beside its copy
+          // rather than above it, so it fits the drawer's height instead of
+          // asking the chart to give up space for a picture.
+          <div className="flex h-full items-center justify-center gap-5 px-6 py-4">
+            {/* eslint-disable-next-line @next/next/no-img-element -- a local
+                illustration, same as EmptyState's; the optimizer adds nothing */}
+            <img
+              src={illustrations.cryptoTrade}
+              alt=""
+              loading="lazy"
+              className="h-20 w-20 shrink-0 object-contain"
+            />
+            <div className="flex max-w-xs flex-col gap-1">
+              <span className="text-[14px] font-semibold">No orders yet</span>
+              <span className="text-[12.5px] leading-relaxed text-muted-foreground">
+                Every order you place shows up here with what you received and
+                whether it went through.
+              </span>
+            </div>
+          </div>
         ) : (
           <table className="w-full border-collapse">
-            <thead className="sticky top-0 z-10 bg-background">
+            <thead className="sticky top-0 z-10 bg-card">
               <tr className="border-b border-border/30">
                 {/* Narrow screens carry only what identifies an order; the
                     rest is one tap away rather than one sideways scroll. */}

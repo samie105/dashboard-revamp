@@ -34,19 +34,23 @@ export const DESTINATIONS: Destination[] = [
     description:
       "The main dashboard — total balance hero with Total/Main/Spot/Futures views, per-chain wallet strip, Deposit/Withdraw/Swap/Trade/History actions, holdings, watchlist and market movers. The default 'home'.",
   },
+  /* Assets merged into Portfolio. Both ids are kept and point at the one
+     page: "take me to my assets" is still what people say, and an id that
+     stops resolving is a request Vivid can no longer answer. */
   {
     id: "portfolio",
     label: "Portfolio",
     url: "/portfolio",
     external: false,
-    description: "Portfolio breakdown — balances by account and chain, allocation, and performance.",
+    description:
+      "Everything the user owns — net worth, holdings on every chain, the trading account, and a receiving address per chain.",
   },
   {
     id: "assets",
     label: "Assets",
-    url: "/assets",
+    url: "/portfolio",
     external: false,
-    description: "Every asset the user holds — on-chain tokens and spot balances, with values and actions.",
+    description: "Every asset the user holds — the Holdings tab of the portfolio.",
   },
   {
     id: "transactions",
