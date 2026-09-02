@@ -1,26 +1,16 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
-  ArrowDown01Icon,
-  ArrowRight01Icon,
-  Clock01Icon,
-  ArrowUpRight01Icon,
   Search01Icon,
-  Exchange01Icon,
-  Cancel01Icon,
 } from "@hugeicons/core-free-icons"
-import type { CoinData, TradeResult, FuturesMarket } from "@/lib/actions"
-import { getFuturesMarkets } from "@/lib/actions"
-import { fetchPrices, type Coin } from "@/lib/crypto-api"
+import type { CoinData } from "@/lib/actions"
+import { getPrices } from "@/lib/actions"
 
 // Market rows for the Spot tab — the service's price feed with the display
 // fields the old spotv2 pair registry carried.
-type SpotV2Pair = Coin & { displaySymbol: string; chain: string; contractAddress: string | null }
-import { getSpotBalances, getSpotPositions, getTokenPrices, getSpotTradeHistory } from "@/lib/trade-adapter"
-import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { ErrorState } from "@/components/error-state"
 import {
   CardHeader,
@@ -28,23 +18,22 @@ import {
   ChangeText,
   EmptyState as SystemEmptyState,
   Eyebrow,
-  Segmented,
   SkeletonRows,
-  SkeletonTable,
   type IllustrationKey,
 } from "@/components/ui/system"
 import { fetchProfile } from "@/lib/profile-actions"
 import { SwapClient } from "@/components/swap/swap-client"
 import { ActivityCard } from "@/components/dashboard/activity-card"
+import { useLedgerRecords } from "@/hooks/useLedgerRecords"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
+import { useSpotRegistry, tradeHref } from "@/hooks/useSpotRegistry"
+import { describeLedgerRecord, type LedgerRow } from "@/lib/ledger-rows"
+import { explorerTxUrl } from "@/lib/crypto-backend/network-meta"
+import { chainLabel } from "@/lib/spot-market-search"
+import { CoinAvatar } from "@/components/ui/coin-avatar"
 // TEMPORARILY OFF — see the parked block below.
 // import { WorldstreetTokenCard } from "@/components/dashboard/worldstreet-token-card"
-import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
-import { useAuth } from "@/components/auth-provider"
-import { getCoinImage, coinFallback } from "@/lib/coin-images"
-import { ComingSoon, FUTURES_SOON_TITLE, SoonBadge } from "@/components/ui/coming-soon"
 
-const USDT_IMAGE = "https://coin-images.coingecko.com/coins/images/325/small/Tether.png"
-const USDC_IMAGE = "https://coin-images.coingecko.com/coins/images/6319/small/usdc.png"
 
 /* ── TEMPORARY: the futures venue is not open ───────────────────────────
    Perpetual futures are not live on the platform yet. Every futures surface in
@@ -60,189 +49,54 @@ const USDC_IMAGE = "https://coin-images.coingecko.com/coins/images/6319/small/us
    The `: boolean` annotation is load-bearing. Without it TS narrows the type to
    the literal `false`, and every `tab === "Futures"` / `view === "positions"`
    comparison below becomes a "comparison appears unintentional" error. */
-const FUTURES_OPEN: boolean = false
 
-/* ========== Trade Confirm Dialog (mobile) ========== */
-type TradeConfirmItem =
-  | { type: "spot";    symbol: string; name: string; image: string; price: number; change24h: number }
-  | { type: "futures"; symbol: string; name: string; image: string; price: number; change24h: number; leverage: number }
-
-function TradeConfirmDialog({
-  item,
-  onClose,
-}: {
-  item: TradeConfirmItem | null
-  onClose: () => void
-}) {
-  const router = useRouter()
-  if (!item) return null
-
-  const isFutures = item.type === "futures"
-  const isUp = item.change24h >= 0
-  const href = isFutures ? `/trade?market=futures&symbol=${item.symbol}` : `/trade?symbol=${item.symbol}`
-
-  function handleTrade() {
-    onClose()
-    router.push(href)
-  }
-
-  return (
-    // backdrop
-    <div
-      className="ws-backdrop-in fixed inset-0 z-[60] flex items-end justify-center bg-black/45 backdrop-blur-md sm:hidden"
-      onClick={onClose}
-    >
-      {/* sheet */}
-      <div
-        className="ws-sheet-in ws-glass ws-glass-edge relative w-full rounded-t-3xl px-6 pt-6 pb-28 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* coin header */}
-        <div className="mb-6 flex items-center gap-3">
-          {item.image ? (
-            <img
-              src={item.image}
-              alt={item.symbol}
-              className="h-12 w-12 rounded-full object-contain ring-2 ring-primary/30"
-              onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(item.symbol) }}
-            />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold bg-primary/10 text-primary">
-              {item.symbol.slice(0, 3)}
-            </div>
-          )}
-          <div className="flex flex-col">
-            <span className="text-base font-bold">
-              {item.symbol}{isFutures ? "-PERP" : "/USDC"}
-            </span>
-            <span className="text-xs text-muted-foreground">{item.name}</span>
-          </div>
-          <div className="ml-auto flex flex-col items-end">
-            <span className="text-base font-bold tabular-nums">
-              ${item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: item.price < 1 ? 4 : 2 })}
-            </span>
-            <span className={`text-xs font-medium tabular-nums ${
-              isUp ? "text-credit" : "text-debit"
-            }`}>
-              {isUp ? "+" : ""}{item.change24h.toFixed(2)}%
-            </span>
-          </div>
-        </div>
-
-        {/* type badge */}
-        <div className="mb-5 flex items-center gap-2">
-          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
-            {isFutures ? `Perpetual · up to ${(item as Extract<TradeConfirmItem, {type:"futures"}>).leverage}× leverage` : "Spot Market"}
-          </span>
-        </div>
-
-        {/* CTAs */}
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border/50 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent"
-          >
-            <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
-            Cancel
-          </button>
-          <button
-            onClick={handleTrade}
-            className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Trade {item.symbol}
-            <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-const MARKET_TABS = ["Spot", "Futures"] as const
-type MarketTab = (typeof MARKET_TABS)[number]
-
-function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
-  const [tab, setTab] = React.useState<MarketTab>("Spot")
+/**
+ * Markets — spot, and only spot.
+ *
+ * It carried Spot / Futures / Total tabs over a price FEED: rows with no
+ * chain, no token address and no route, whose "Trade" link was a symbol
+ * lookup that landed on whatever pair the workspace defaulted to. Futures is
+ * closed, so one of the three tabs could never do anything.
+ *
+ * This is the tradable registry instead — the same rows the trade workspace
+ * lists, already filtered to what can be routed — so every row here is a
+ * market you can actually open, on a named chain, by id rather than by symbol.
+ */
+function MarketsTable() {
   const [search, setSearch] = React.useState("")
-  const [visibleCount, setVisibleCount] = React.useState(5)
-  const [futuresMarkets, setFuturesMarkets] = React.useState<FuturesMarket[]>([])
-  const [futuresLoading, setFuturesLoading] = React.useState(false)
-  const hasFetchedFutures = React.useRef(false)
-  const [spotMarkets, setSpotMarkets] = React.useState<SpotV2Pair[]>([])
-  const [spotLoading, setSpotLoading] = React.useState(false)
-  const hasFetchedSpot = React.useRef(false)
-  const [tradeItem, setTradeItem] = React.useState<TradeConfirmItem | null>(null)
+  const [visibleCount, setVisibleCount] = React.useState(6)
+  const registry = useSpotRegistry()
 
-  // Fetch futures lazily when tab is selected
+  const markets = React.useMemo(() => {
+    const rows = [...registry.bySymbol.values()].flat()
+    const query = search.trim().toLowerCase()
+    const matched = query
+      ? rows.filter((row) => row.symbol.toLowerCase().includes(query))
+      : rows
+    // Priced first — a market with no price is the least useful row on a card
+    // whose whole job is showing prices.
+    return matched.sort((a, b) => (b.price > 0 ? 1 : 0) - (a.price > 0 ? 1 : 0))
+  }, [registry, search])
+
   React.useEffect(() => {
-    if (tab !== "Futures" || hasFetchedFutures.current) return
-    hasFetchedFutures.current = true
-    setFuturesLoading(true)
-    getFuturesMarkets()
-      .then((res) => {
-        if (res.success) setFuturesMarkets(res.markets)
-      })
-      .catch(() => {})
-      .finally(() => setFuturesLoading(false))
-  }, [tab])
+    setVisibleCount(6)
+  }, [search])
 
-  // Fetch spot markets lazily when Spot tab is selected
-  React.useEffect(() => {
-    if (tab !== "Spot" || hasFetchedSpot.current) return
-    hasFetchedSpot.current = true
-    setSpotLoading(true)
-    fetchPrices()
-      .then((res) => setSpotMarkets(res.coins.map((c) => ({
-        ...c,
-        displaySymbol: c.symbol.toUpperCase(),
-        chain: "",
-        contractAddress: null,
-      }))))
-      .catch(() => {})
-      .finally(() => setSpotLoading(false))
-  }, [tab])
-
-  const filtered = React.useMemo(() => {
-    let list = [...spotMarkets]
-    if (search) {
-      const q = search.toLowerCase()
-      list = list.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
-    }
-    list.sort((a, b) => b.marketCap - a.marketCap)
-    return list
-  }, [spotMarkets, search])
-
-  // Reset pagination when filters change
-  React.useEffect(() => {
-    setVisibleCount(5)
-  }, [tab, search])
-
-  const displayed = filtered.slice(0, visibleCount)
-  const hasMore = visibleCount < filtered.length
-
-  const filteredFutures = React.useMemo(() => {
-    let list = [...futuresMarkets]
-    if (search) {
-      const q = search.toLowerCase()
-      list = list.filter(
-        (m) => m.symbol.toLowerCase().includes(q) || m.baseAsset.toLowerCase().includes(q),
-      )
-    }
-    return list.sort((a, b) => b.openInterest - a.openInterest)
-  }, [futuresMarkets, search])
-
-  const displayedFutures = filteredFutures.slice(0, visibleCount)
-  const hasMoreFutures = visibleCount < filteredFutures.length
+  const shown = markets.slice(0, visibleCount)
+  const remaining = markets.length - shown.length
 
   return (
     <CardShell data-onboarding="dash-markets">
-      <TradeConfirmDialog item={tradeItem} onClose={() => setTradeItem(null)} />
       <CardHeader
         title="Markets"
         subtitle="Live prices"
         className="pb-2"
         right={
           <div className="relative shrink-0">
-            <HugeiconsIcon icon={Search01Icon} className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <HugeiconsIcon
+              icon={Search01Icon}
+              className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            />
             <input
               type="search"
               value={search}
@@ -253,393 +107,178 @@ function MarketsTable({ coins, error }: { coins: CoinData[]; error?: string }) {
           </div>
         }
       />
-      <div className="px-4 pb-3">
-        <Segmented
-          /* Futures is fully pressable — pressing it is how you learn the venue
-             is closed (see FUTURES_OPEN). It only reads quieter than the live tabs
-             while it is UNSELECTED; selected, it looks like any other tab, because
-             its panel is doing the explaining. Segmented styles its own options,
-             so the dimming lands on that one button via its `data-seg-key`.
-             MARKET_TABS itself is untouched: `MarketTab` is derived from it, so
-             narrowing the array would break every `tab === "Futures"` branch. */
-          options={MARKET_TABS.map((t) => ({ key: t, label: t }))}
-          value={tab}
-          onChange={setTab}
-          className={
-            FUTURES_OPEN || tab === "Futures"
-              ? "self-start"
-              : "self-start [&_[data-seg-key=Futures]]:opacity-60"
+
+      {registry.loading && markets.length === 0 ? (
+        <SkeletonRows rows={5} label="Loading markets" />
+      ) : markets.length === 0 ? (
+        <EmptyState
+          illustration="cryptoTrade"
+          title={search ? "No markets match" : "Markets unavailable"}
+          description={
+            search
+              ? "Try a different symbol."
+              : "The market list isn't loading right now — your balances are unaffected."
           }
         />
-      </div>
-
-      {/* Table — Futures */}
-      {tab === "Futures" ? (
-        // Closed venue: the tab answers for itself rather than showing a table
-        // nobody can trade from. Everything below is untouched — FUTURES_OPEN
-        // brings the real table straight back.
-        !FUTURES_OPEN ? (
-          <ComingSoon compact className="flex flex-1 flex-col justify-center" />
-        ) : futuresLoading ? (
-          <SkeletonTable rows={5} cols={4} label="Loading contracts" />
-        ) : filteredFutures.length === 0 ? (
-          <EmptyState illustration="cryptoTrade" title="No contracts found" description="Try a different search term" />
-        ) : (
-          <div className="flex-1 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-t border-border/30 text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
-                  <th className="px-3 sm:px-4 py-2 text-left font-medium">Contract</th>
-                  <th className="px-3 sm:px-4 py-2 text-right font-medium">Mark Price</th>
-                  <th className="px-3 sm:px-4 py-2 text-right font-medium">24h</th>
-                  <th className="hidden sm:table-cell px-4 py-2 text-right font-medium">Trade</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/20">
-                {displayedFutures.map((market) => {
-                  const isUp = market.change24h >= 0
-                  return (
-                    <tr
-                      key={market.symbol}
-                      className="cursor-pointer transition-colors hover:bg-accent/30 sm:cursor-default"
-                      onClick={() => setTradeItem({
-                        type: "futures",
-                        symbol: market.symbol,
-                        name: market.baseAsset,
-                        image: market.image || getCoinImage(market.baseAsset) || "",
-                        price: market.markPrice,
-                        change24h: market.change24h,
-                        leverage: market.maxLeverage,
-                      })}
-                    >
-                      <td className="px-3 sm:px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          {(market.image || getCoinImage(market.baseAsset)) ? (
-                            <img
-                              src={market.image || getCoinImage(market.baseAsset)}
-                              alt={market.baseAsset}
-                              className="h-5 w-5 shrink-0 rounded-full object-contain ring-1 ring-border/50"
-                              onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(market.baseAsset) }}
-                            />
-                          ) : (
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary ring-1 ring-border/50">
-                              {market.baseAsset.slice(0, 3)}
-                            </span>
-                          )}
-                          <div className="flex flex-col">
-                            <span className="font-medium leading-none">{market.symbol}</span>
-                            <span className="text-[10px] text-muted-foreground">Perp · {market.maxLeverage}×</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 sm:px-4 py-2.5 text-right font-semibold tabular-nums">
-                        ${market.markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: market.markPrice < 1 ? 4 : 2 })}
-                      </td>
-                      <td className="px-3 sm:px-4 py-2.5 text-right">
-                        <ChangeText value={market.change24h} />
-                      </td>
-                      <td className="hidden sm:table-cell px-4 py-2.5 text-right">
-                        {/* The contract still lists, but while futures is
-                            closed nothing here navigates into a venue that
-                            cannot take an order. See FUTURES_OPEN. */}
-                        {FUTURES_OPEN ? (
-                          <a
-                            href={`/trade?market=futures&symbol=${market.symbol}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground ring-1 ring-border transition-colors hover:bg-primary hover:text-primary-foreground hover:ring-primary"
-                          >
-                            Trade
-                          </a>
-                        ) : (
-                          <span title={FUTURES_SOON_TITLE} onClick={(e) => e.stopPropagation()}>
-                            <SoonBadge />
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-
-            {/* Load More (Futures) */}
-            {hasMoreFutures && (
-              <div className="flex justify-center p-3">
-                <button
-                  onClick={() => setVisibleCount((c) => c + 5)}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  Load More
-                  <HugeiconsIcon icon={ArrowDown01Icon} className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-        )
       ) : (
-        /* Table — Total / Main / Spot */
-        (tab === "Spot" && spotLoading) ? (
-          <SkeletonTable rows={5} cols={4} label="Loading markets" />
-        ) : error && filtered.length === 0 ? (
-          <ErrorState message={error} />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            illustration="cryptoTrade"
-            title="No results found"
-            description="Try a different search term or tab"
-          />
-        ) : (
-          <div className="flex-1 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-t border-border/30 text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
-                  <th className="px-3 sm:px-4 py-2 text-left font-medium">Pair</th>
-                  <th className="px-3 sm:px-4 py-2 text-right font-medium">Price</th>
-                  <th className="px-3 sm:px-4 py-2 text-right font-medium">24h</th>
-                  <th className="hidden sm:table-cell px-4 py-2 text-right font-medium">Trade</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/20">
-                {displayed.map((coin) => (
-                  <tr
-                    key={coin.symbol}
-                    className="cursor-pointer transition-colors hover:bg-accent/30 sm:cursor-default"
-                    onClick={() => setTradeItem({
-                      type: "spot",
-                      symbol: coin.symbol,
-                      name: coin.name,
-                      image: coin.image,
-                      price: coin.price,
-                      change24h: coin.change24h,
-                    })}
-                  >
-                    <td className="px-3 sm:px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center shrink-0">
-                          {coin.image ? (
-                            <img src={coin.image} alt="" className="h-5 w-5 rounded-full ring-1 ring-card" />
-                          ) : (
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary ring-1 ring-card">
-                              {coin.symbol.slice(0, 2)}
-                            </span>
-                          )}
-                          <img
-                            src={USDC_IMAGE}
-                            alt=""
-                            className="h-4 w-4 rounded-full ring-1 ring-card -ml-1.5"
-                          />
-                        </div>
-                        <span className="font-medium">{coin.displaySymbol}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 sm:px-4 py-2.5 text-right font-semibold tabular-nums">
-                      {coin.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: coin.price < 1 ? 4 : 2 })}
-                    </td>
-                    <td className="px-3 sm:px-4 py-2.5 text-right">
-                      <ChangeText value={coin.change24h} />
-                    </td>
-                    <td className="hidden sm:table-cell px-4 py-2.5 text-right">
-                      <a
-                        href={`/trade?symbol=${coin.symbol}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground ring-1 ring-border transition-colors hover:bg-primary hover:text-primary-foreground hover:ring-primary"
-                      >
-                        Trade
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Load More */}
-            {hasMore && (
-              <div className="flex justify-center p-3">
-                <button
-                  onClick={() => setVisibleCount((c) => c + 5)}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  Load More
-                  <HugeiconsIcon icon={ArrowDown01Icon} className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
+        <>
+          <div className="flex flex-1 flex-col divide-y divide-border/20 px-1">
+            {shown.map((market) => (
+              <Link
+                key={market.id}
+                href={tradeHref(market)}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-accent/40"
+              >
+                <CoinAvatar symbol={market.symbol} src={market.icon} size="sm" />
+                <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                  <span className="truncate text-[13.5px] font-medium">{market.symbol}</span>
+                  <span className="truncate text-[12px] text-muted-foreground">
+                    {chainLabel(market.networkId)} · {market.quote}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[13.5px] font-semibold tabular-nums">
+                  {market.price > 0
+                    ? `$${market.price.toLocaleString(undefined, {
+                        maximumFractionDigits: market.price < 1 ? 6 : 2,
+                      })}`
+                    : "—"}
+                </span>
+              </Link>
+            ))}
           </div>
-        )
+          {remaining > 0 && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((count) => count + 10)}
+              className="mx-3 mb-2 rounded-lg bg-surface-sunken py-2 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              Show more · {remaining.toLocaleString()} left
+            </button>
+          )}
+        </>
       )}
     </CardShell>
   )
 }
 
 /* ========== Recent Trades ========== */
-
-function RecentTrades({ coins, error }: { coins: CoinData[]; error?: string }) {
-  const { user } = useAuth()
-  const [tab, setTab] = React.useState<"spot" | "futures">("spot")
-
-  // SpotV2 trades
-  type SpotV2TradeItem = { id: string; pair: string; token: string; side: string; quantity: number; price: number; quoteAmount: number; realizedPnl: number; fee: number; createdAt: Date }
-  const [spotTrades, setSpotTrades] = React.useState<SpotV2TradeItem[]>([])
-  const [spotTradesLoading, setSpotTradesLoading] = React.useState(true)
-
-  // Futures fills
-  const [futuresFills, setFuturesFills] = React.useState<Array<{ coin: string; px: string; sz: string; side: "B" | "A"; time: number; closedPnl: string }>>([])
-  const [futuresLoading, setFuturesLoading] = React.useState(true)
-
-  // Fetch SpotV2 trades
-  React.useEffect(() => {
-    if (!user) { setSpotTradesLoading(false); return }
-    let cancelled = false
-    getSpotTradeHistory(10).then((trades) => {
-      if (!cancelled) setSpotTrades(trades as SpotV2TradeItem[])
-    }).catch(() => {}).finally(() => { if (!cancelled) setSpotTradesLoading(false) })
-    return () => { cancelled = true }
-  }, [user])
-
-  // Fill history isn't served by the crypto service (mobile has no fill log
-  // either) — the futures tab shows open positions instead of past fills.
-  React.useEffect(() => {
-    setFuturesFills([])
-    setFuturesLoading(false)
-  }, [user])
+/**
+ * The trades you have actually made — the same ledger the trade workspace's
+ * Orders table reads.
+ *
+ * It called `getSpotTradeHistory`, which asks `/api/transactions/unified` for
+ * `type=swap`. That endpoint does not exist on the crypto backend, so the card
+ * showed "No spot trades yet" to users with a page of fills. It also carried a
+ * Futures tab that could never have rows, because the venue serves no fill
+ * history — two tabs, one impossible, neither populated.
+ */
+function RecentTrades() {
+  const { records, loading } = useLedgerRecords()
+  const registry = useSpotRegistry()
+  const [now, setNow] = React.useState(() => Date.now())
 
   /* "2m ago" needs a now to measure against, and reading the clock during
      render makes the output non-idempotent — two renders in the same tick can
-     disagree, and React is allowed to do exactly that. The clock is state,
-     ticking once a minute, which is also the resolution these labels have: a
-     row that said "Just now" four minutes ago now says "4m ago" on its own,
-     which it never used to do without an unrelated re-render. */
-  const [now, setNow] = React.useState(() => Date.now())
+     disagree. The clock is state, ticking at the resolution these labels have. */
   React.useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(id)
   }, [])
 
-  function formatTime(ts: number | Date) {
-    const diff = now - (typeof ts === "number" ? ts : new Date(ts).getTime())
-    if (diff < 60_000) return "Just now"
-    if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
-    if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
-    return `${Math.floor(diff / 86400_000)}d ago`
-  }
+  const trades = React.useMemo(
+    () =>
+      records
+        .map((record) => describeLedgerRecord(record, registry))
+        .filter((row): row is LedgerRow => row !== null && row.kind === "trade")
+        .slice(0, 5),
+    [records, registry],
+  )
 
-  /* While futures is closed its panel is a static message, so it must never
-     wait on a feed that may never answer. FUTURES_OPEN. */
-  const loading = tab === "spot" ? spotTradesLoading : FUTURES_OPEN && futuresLoading
+  function since(iso: string | null) {
+    if (!iso) return ""
+    const diff = now - new Date(iso).getTime()
+    if (!Number.isFinite(diff)) return ""
+    if (diff < 60_000) return "Just now"
+    const min = Math.floor(diff / 60_000)
+    if (min < 60) return `${min}m ago`
+    const hrs = Math.floor(min / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
+  }
 
   return (
     <CardShell data-onboarding="dash-trades">
       <CardHeader
         title="Recent Trades"
         subtitle="Your latest fills"
-        right={
-          <Segmented
-            options={[
-              { key: "spot", label: "Spot" },
-              { key: "futures", label: "Futures" },
-            ] as const}
-            value={tab}
-            onChange={setTab}
-            // Pressable; just quieter than the live tab until it is selected.
-            // See FUTURES_OPEN.
-            className={FUTURES_OPEN || tab === "futures" ? undefined : "[&_[data-seg-key=futures]]:opacity-60"}
-          />
-        }
+        link={{ label: "View all", href: "/trade" }}
       />
-      {loading ? (
+      {loading && records.length === 0 ? (
         <SkeletonRows rows={4} label="Loading trades" />
-      ) : tab === "spot" ? (
-        spotTrades.length === 0 ? (
-          <EmptyState
-            illustration="noTransactions"
-            title="No spot trades yet"
-            description="Your SpotV2 trades will appear here"
-            cta={{ label: "Start trading", href: "/trade" }}
-          />
-        ) : (
-          <div className="flex flex-1 flex-col divide-y divide-border/30">
-            {spotTrades.map((trade) => {
-              const isBuy = trade.side === "buy" || trade.side === "incoming"
-              return (
-                <div key={trade.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/30">
-                  <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold ${isBuy ? "bg-credit-chip text-credit" : "bg-debit-chip text-debit"}`}>
-                    {isBuy ? "B" : "S"}
-                  </span>
-                  <div className="flex flex-1 flex-col">
-                    <span className="flex items-center gap-2 text-sm font-medium">
-                      <span className="flex items-center shrink-0">
-                        {getCoinImage(trade.token) ? (
-                          <img src={getCoinImage(trade.token)} alt="" className="h-4.5 w-4.5 rounded-full ring-1 ring-card" onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(trade.token) }} />
-                        ) : (
-                          <span className="inline-flex h-4.5 w-4.5 items-center justify-center rounded-full bg-primary/10 text-[8px] font-bold text-primary ring-1 ring-card">
-                            {trade.token.slice(0, 2)}
-                          </span>
-                        )}
-                        <img src={USDC_IMAGE} alt="" className="h-3.5 w-3.5 rounded-full ring-1 ring-card -ml-1.5" />
-                      </span>
-                      {trade.pair}
-                    </span>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {trade.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })} {trade.token}
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-sm font-semibold tabular-nums">
-                      {/* price isn't served for these rows — show the fiat value */}
-                      ${trade.quoteAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </span>
-                    <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-                      <HugeiconsIcon icon={Clock01Icon} className="h-3 w-3" />
-                      {formatTime(trade.createdAt)}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )
+      ) : trades.length === 0 ? (
+        <EmptyState
+          illustration="noTransactions"
+          title="No trades yet"
+          description="Buy or sell anything and it lands here."
+          cta={{ label: "Start trading", href: "/trade" }}
+        />
       ) : (
-        // Closed venue — see FUTURES_OPEN. The fills list below stays intact.
-        !FUTURES_OPEN ? (
-          <ComingSoon compact className="flex flex-1 flex-col justify-center" />
-        ) : futuresFills.length === 0 ? (
-          <EmptyState
-            illustration="noTransactions"
-            title="No futures trades yet"
-            description="Your futures fills will appear here"
-            /* No CTA while futures is closed — a button into a venue that
-               cannot take an order is worse than no button. FUTURES_OPEN. */
-            cta={FUTURES_OPEN ? { label: "Trade Futures", href: "/trade?market=futures" } : undefined}
-          />
-        ) : (
-          <div className="flex flex-1 flex-col divide-y divide-border/30">
-            {futuresFills.map((fill, i) => {
-              const isBuy = fill.side === "B"
-              return (
-                <div key={`${fill.coin}-${fill.time}-${i}`} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/30">
-                  <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold ${isBuy ? "bg-credit-chip text-credit" : "bg-debit-chip text-debit"}`}>
-                    {isBuy ? "B" : "S"}
+        <div className="flex flex-1 flex-col divide-y divide-border/20 px-1 pb-2">
+          {trades.map((trade) => {
+            const buy = trade.direction === "in"
+            const explorer = trade.txHash ? explorerTxUrl(trade.networkId, trade.txHash) : null
+            const body = (
+              <>
+                <CoinAvatar symbol={trade.symbol} src={trade.icon} size="sm" />
+                <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-[13.5px] font-medium">{trade.symbol}</span>
+                    <span
+                      className={`text-[10px] font-bold uppercase ${buy ? "text-credit" : "text-debit"}`}
+                    >
+                      {buy ? "Buy" : "Sell"}
+                    </span>
                   </span>
-                  <div className="flex flex-1 flex-col">
-                    <span className="text-sm font-medium">{fill.coin}-PERP</span>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {parseFloat(fill.sz).toLocaleString(undefined, { maximumFractionDigits: 4 })} {fill.coin}
+                  <span className="truncate text-[12px] text-muted-foreground">
+                    {chainLabel(trade.networkId)} · {since(trade.createdAt)}
+                  </span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end leading-tight">
+                  {trade.amountText && (
+                    <span className="text-[13.5px] font-semibold tabular-nums">
+                      {trade.amountText}
                     </span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-sm font-semibold tabular-nums">
-                      ${parseFloat(fill.px).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  )}
+                  {trade.valueUsd !== null && (
+                    <span className="text-[11.5px] tabular-nums text-muted-foreground">
+                      ${trade.valueUsd.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: trade.valueUsd < 1 ? 4 : 2,
+                      })}
                     </span>
-                    <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-                      <HugeiconsIcon icon={Clock01Icon} className="h-3 w-3" />
-                      {formatTime(fill.time)}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )
+                  )}
+                </span>
+              </>
+            )
+            const className =
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-accent/40"
+            return explorer ? (
+              <a
+                key={trade.id}
+                href={explorer}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={className}
+              >
+                {body}
+              </a>
+            ) : (
+              <div key={trade.id} className={className}>
+                {body}
+              </div>
+            )
+          })}
+        </div>
       )}
     </CardShell>
   )
@@ -735,60 +374,52 @@ function EmptyState({
 }
 
 /* ========== My Positions ========== */
+/**
+ * What you hold — the wallet's assets, which is what the subtitle always
+ * claimed and never showed.
+ *
+ * It read the Hyperliquid trading account through the spot ledger adapter, so
+ * a wallet full of tokens across three chains reported "No spot holdings".
+ * The card says "Everything you hold, across every chain"; this is that, from
+ * the same balance source the wallet page's assets section uses.
+ */
 function MyPositions() {
-  const { user } = useAuth()
-  const { positions, loading: posLoading } = useHyperliquidPositions()
-
-  // SpotV2 data
-  const [spotBalances, setSpotBalances] = React.useState<LedgerBalance[]>([])
-  const [spotPositions, setSpotPositions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
-  const [spotLoading, setSpotLoading] = React.useState(true)
+  const { balances, isLoading } = useWalletBalances()
+  const [prices, setPrices] = React.useState<Record<string, number>>({})
 
   React.useEffect(() => {
-    if (!user) { setSpotLoading(false); return }
     let cancelled = false
-
-    async function load() {
-      try {
-        const [balances, positions] = await Promise.all([
-          getSpotBalances(),
-          getSpotPositions(),
-        ])
-        // Get current prices for all position tokens
-        const tokens = positions.map((p) => p.token)
-        const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
-
-        if (cancelled) return
-        setSpotBalances(balances)
-        setSpotPositions(
-          positions.map((p) => ({
-            ...p,
-            currentPrice: priceMap.get(p.token) ?? 0,
-          })),
-        )
-      } catch {
-        // silently fail — empty state will show
-      } finally {
-        if (!cancelled) setSpotLoading(false)
-      }
+    const load = () =>
+      getPrices()
+        .then((result) => {
+          if (!cancelled) setPrices(result.prices)
+        })
+        .catch(() => {})
+    void load()
+    const id = setInterval(load, 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
     }
-    load()
-    return () => { cancelled = true }
-  }, [user])
+  }, [])
 
-  const [view, setView] = React.useState<"positions" | "spot">("spot")
+  const holdings = React.useMemo(() => {
+    const priced = balances
+      .filter((balance) => balance.balance > 0)
+      .map((balance) => {
+        const price =
+          prices[balance.symbol] ??
+          prices[balance.symbol.toUpperCase()] ??
+          (balance.symbol === "USDC" || balance.symbol === "USDT" ? 1 : 0)
+        return { ...balance, value: balance.balance * price }
+      })
+    // Biggest first: a holdings list read top-down should answer "what am I
+    // mostly holding?" before anything else.
+    return priced.sort((a, b) => b.value - a.value)
+  }, [balances, prices])
 
-  /* The Futures view is selectable while the venue is closed — it just shows
-     the message instead of positions, so it must never wait on the feed. */
-  const loading = view === "positions" ? FUTURES_OPEN && posLoading : spotLoading
-
-  // Footer facts — the card always accounts for itself at the bottom edge.
-  const spotHoldingsTotal =
-    spotBalances.reduce((s, b) => s + b.available + b.locked, 0) +
-    spotPositions.reduce((s, p) => s + p.quantity * p.currentPrice, 0)
-  const spotHoldingsCount =
-    spotBalances.filter((b) => b.available + b.locked > 0).length + spotPositions.length
-  const futuresPnlTotal = positions.reduce((s, p) => s + parseFloat(p.unrealizedPnl), 0)
+  const total = holdings.reduce((sum, holding) => sum + holding.value, 0)
+  const shown = holdings.slice(0, 5)
 
   return (
     <CardShell>
@@ -796,178 +427,60 @@ function MyPositions() {
         className="flex-wrap"
         title="My Holdings"
         subtitle="Everything you hold, across every chain"
-        right={
-          <Segmented
-            options={[
-              { key: "spot", label: "Spot" },
-              { key: "positions", label: "Futures" },
-            ] as const}
-            value={view}
-            onChange={setView}
-            // Pressable; just quieter than the live tab until it is selected.
-            // See FUTURES_OPEN.
-            className={FUTURES_OPEN || view === "positions" ? undefined : "[&_[data-seg-key=positions]]:opacity-60"}
-          />
-        }
         link={{ label: "View all", href: "/assets" }}
       />
 
-      {loading ? (
+      {isLoading && holdings.length === 0 ? (
         <SkeletonRows rows={4} label="Loading holdings" />
-      ) : view === "positions" ? (
-        // Closed venue — see FUTURES_OPEN. The positions list below stays intact.
-        !FUTURES_OPEN ? (
-          <ComingSoon compact className="flex flex-1 flex-col justify-center" />
-        ) : positions.length === 0 ? (
-          <EmptyState
-            illustration="cryptoTrade"
-            title="No open positions"
-            description="Your futures positions will appear here"
-            /* No CTA while futures is closed. FUTURES_OPEN. */
-            cta={FUTURES_OPEN ? { label: "Trade Futures", href: "/trade?market=futures" } : undefined}
-          />
-        ) : (
-          <div className="flex flex-1 flex-col divide-y divide-border/30">
-            {positions.slice(0, 8).map((pos) => {
-              const size = parseFloat(pos.szi)
-              const isLong = size > 0
-              const pnl = parseFloat(pos.unrealizedPnl)
-              const roe = parseFloat(pos.returnOnEquity) * 100
-              const isProfit = pnl >= 0
-              const lev = pos.leverage ? `${pos.leverage.value}×` : ""
-              return (
-                <div key={pos.coin} className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-accent/30">
-                  <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[9px] font-bold ${isLong ? "bg-credit-chip text-credit" : "bg-debit-chip text-debit"}`}>
-                    {isLong ? "L" : "S"}
-                  </span>
-                  {getCoinImage(pos.coin) ? (
-                    <img
-                      src={getCoinImage(pos.coin)}
-                      alt={pos.coin}
-                      className="h-5 w-5 shrink-0 rounded-full object-contain"
-                      onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(pos.coin) }}
-                    />
-                  ) : null}
-                  <div className="flex flex-1 flex-col">
-                    <span className="text-sm font-medium">{pos.coin}-PERP</span>
-                    <span className="text-xs text-muted-foreground">{lev} · {Math.abs(size).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className={`text-sm font-semibold tabular-nums ${isProfit ? "text-credit" : "text-debit"}`}>
-                      {isProfit ? "+" : ""}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                    <span className={`text-xs tabular-nums ${isProfit ? "text-credit/70" : "text-debit/70"}`}>
-                      {isProfit ? "+" : ""}{roe.toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-            {positions.length > 8 && (
-              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
-                View all {positions.length} positions
-              </a>
-            )}
-          </div>
-        )
+      ) : holdings.length === 0 ? (
+        <EmptyState
+          illustration="noCrypto"
+          title="Nothing here yet"
+          description="Deposit into your wallet and your assets appear here."
+          cta={{ label: "Go to wallet", href: "/wallet/modern" }}
+        />
       ) : (
-        spotBalances.length === 0 && spotPositions.length === 0 ? (
-          <EmptyState
-            illustration="noCrypto"
-            title="No spot holdings"
-            description="Your spot assets will appear here"
-            cta={{ label: "Trade Spot", href: "/trade" }}
-          />
-        ) : (
-          <div className="flex flex-1 flex-col divide-y divide-border/30">
-            {/* USDC balance row */}
-            {spotBalances.filter((b) => b.available + b.locked > 0).map((b) => (
-              <div key={b.token} className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-accent/30">
-                <img src={USDC_IMAGE} alt="USDC" className="h-5 w-5 shrink-0 rounded-full object-contain" />
-                <div className="flex flex-1 flex-col">
-                  <span className="text-sm font-medium">{b.token}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {b.locked > 0 ? `${b.available.toLocaleString(undefined, { maximumFractionDigits: 2 })} avail · ${b.locked.toLocaleString(undefined, { maximumFractionDigits: 2 })} locked` : `${(b.available + b.locked).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+        <>
+          <div className="flex flex-1 flex-col divide-y divide-border/20 px-1">
+            {shown.map((holding) => (
+              <div
+                key={`${holding.chain}-${holding.symbol}-${holding.contractAddress ?? "native"}`}
+                className="flex items-center gap-3 px-3 py-2.5"
+              >
+                <CoinAvatar symbol={holding.symbol} src={holding.logo} size="sm" />
+                <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                  <span className="truncate text-[13.5px] font-medium">{holding.symbol}</span>
+                  <span className="truncate text-[12px] text-muted-foreground">
+                    {holding.networkName ?? holding.chain}
                   </span>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-sm font-semibold tabular-nums">
-                    ${(b.available + b.locked).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="flex shrink-0 flex-col items-end leading-tight">
+                  <span className="text-[13.5px] font-semibold tabular-nums">
+                    {holding.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })}
                   </span>
-                </div>
+                  {/* A token with no price shows its amount and nothing else,
+                      rather than a confident $0.00 beside a real balance. */}
+                  {holding.value > 0 && (
+                    <span className="text-[11.5px] tabular-nums text-muted-foreground">
+                      ${holding.value.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  )}
+                </span>
               </div>
             ))}
-            {/* Token positions */}
-            {spotPositions.slice(0, 8).map((p) => {
-              const currentValue = p.quantity * p.currentPrice
-              const costBasis = p.quantity * p.avgEntryPrice
-              const pnl = currentValue - costBasis
-              const pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0
-              const isProfit = pnl >= 0
-              return (
-                <div key={p.token} className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-accent/30">
-                  {getCoinImage(p.token) ? (
-                    <img
-                      src={getCoinImage(p.token)}
-                      alt={p.token}
-                      className="h-5 w-5 shrink-0 rounded-full object-contain"
-                      onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(p.token) }}
-                    />
-                  ) : (
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">
-                      {p.token.slice(0, 2)}
-                    </div>
-                  )}
-                  <div className="flex flex-1 flex-col">
-                    <span className="text-sm font-medium">{p.token}</span>
-                    <span className="text-xs text-muted-foreground tabular-nums">{p.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-sm font-semibold tabular-nums">
-                      ${currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                    {pnl !== 0 && (
-                      <span className={`text-xs font-medium tabular-nums ${isProfit ? "text-credit" : "text-debit"}`}>
-                        {isProfit ? "+" : ""}{pnlPercent.toFixed(2)}%
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-            {spotPositions.length > 8 && (
-              <a href="/assets" className="flex items-center justify-center py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
-                View all {spotPositions.length} assets
-              </a>
-            )}
           </div>
-        )
-      )}
-
-      {/* Bottom line — the card sums itself, so its full height carries
-          information instead of trailing off into empty fill. */}
-      {!loading && view === "spot" && spotHoldingsCount > 0 && (
-        <div className="mt-auto flex items-center justify-between border-t border-border/30 px-4 py-2.5">
-          <span className="text-xs text-muted-foreground">
-            {spotHoldingsCount} {spotHoldingsCount === 1 ? "asset" : "assets"}
-          </span>
-          <span className="text-[13px] font-semibold tabular-nums">
-            ${spotHoldingsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-        </div>
-      )}
-      {/* The futures P&L line is part of the futures panel: while the venue is
-          closed the card ends on the message, not on a total. FUTURES_OPEN. */}
-      {FUTURES_OPEN && !loading && view === "positions" && positions.length > 0 && (
-        <div className="mt-auto flex items-center justify-between border-t border-border/30 px-4 py-2.5">
-          <span className="text-xs text-muted-foreground">
-            {positions.length} open {positions.length === 1 ? "position" : "positions"}
-          </span>
-          <span className={`text-[13px] font-semibold tabular-nums ${futuresPnlTotal >= 0 ? "text-credit" : "text-debit"}`}>
-            {futuresPnlTotal >= 0 ? "+" : "−"}$
-            {Math.abs(futuresPnlTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-        </div>
+          <div className="flex items-center justify-between border-t border-border/30 px-4 py-2.5">
+            <span className="text-[12px] text-muted-foreground">
+              {holdings.length} {holdings.length === 1 ? "asset" : "assets"}
+            </span>
+            <span className="text-[13px] font-semibold tabular-nums">
+              ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </>
       )}
     </CardShell>
   )
@@ -976,12 +489,11 @@ function MyPositions() {
 /* ========== Dashboard Grid ========== */
 interface DashboardGridProps {
   coins: CoinData[]
-  initialTrades: TradeResult[]
   prices: Record<string, number>
   error?: string
 }
 
-export function DashboardGrid({ coins, initialTrades, prices, error }: DashboardGridProps) {
+export function DashboardGrid({ coins, prices, error }: DashboardGridProps) {
   // Information architecture: three paired rows, ownership first.
   // Row 1 — your money in motion: activity beside everything you hold.
   // Row 2 — the market: the screener beside what you starred.
@@ -1013,7 +525,7 @@ export function DashboardGrid({ coins, initialTrades, prices, error }: Dashboard
 
       <div className="grid w-full gap-4 lg:grid-cols-5">
         <div className="rise min-w-0 lg:col-span-3" style={cell(180)}>
-          <MarketsTable coins={coins} error={error} />
+          <MarketsTable />
         </div>
         {/* Right column carries two cards: the user's stars, then the house
             token — the screener is tall enough to partner both. */}
@@ -1036,7 +548,7 @@ export function DashboardGrid({ coins, initialTrades, prices, error }: Dashboard
 
       <div className="grid w-full gap-4 lg:grid-cols-5">
         <div className="rise min-w-0 lg:col-span-3" style={cell(320)}>
-          <RecentTrades coins={coins} error={error} />
+          <RecentTrades />
         </div>
         {/* [&>div]:h-full — the compact swap card is shorter than the trades
             list; stretch its shell so the pair shares one bottom edge. */}
