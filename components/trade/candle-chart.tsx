@@ -21,6 +21,7 @@ import {
   createChart,
   CandlestickSeries,
   HistogramSeries,
+  AreaSeries,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
@@ -107,6 +108,12 @@ export function CandleChart({
   const chartRef = React.useRef<IChartApi | null>(null)
   const seriesRef = React.useRef<ISeriesApi<"Candlestick"> | null>(null)
   const volumeRef = React.useRef<ISeriesApi<"Histogram"> | null>(null)
+  /* A price series is not trade data and must not be drawn as candles.
+     CoinGecko samples hourly, so bucketing to a 1h bar gives ONE sample per
+     bar — open, high, low and close all the same number, which candlestick
+     rendering turns into a field of one-pixel dashes. It is a line; it gets
+     drawn as a line. */
+  const areaRef = React.useRef<ISeriesApi<"Area"> | null>(null)
   const [interval, setIntervalKey] = React.useState<HlCandleInterval>("1h")
   const [state, setState] = React.useState<"loading" | "ready" | "empty">("loading")
   /* Which intervals THIS token can be drawn at, and by whom. A token with no
@@ -123,12 +130,23 @@ export function CandleChart({
      has a width, and never paid twice — a user who has zoomed in is not
      yanked back by a later layout shift. */
   const fitOwedRef = React.useRef(false)
+  /* When the data landed. The pane can be laid out in stages — a grid column
+     settling, a sibling rail appearing — and a fit performed at the first
+     non-zero width can still be a fit to the wrong width. Re-fitting on any
+     resize for a moment afterwards rides that out; the window closes, so a
+     user who has zoomed in is never yanked back later. */
+  const settledAtRef = React.useRef(0)
 
   const settleFit = React.useCallback(() => {
-    if (!fitOwedRef.current) return
     if (!containerRef.current?.clientWidth) return
+    const owed = fitOwedRef.current
+    const settling = Date.now() - settledAtRef.current < 2500
+    if (!owed && !settling) return
     chartRef.current?.timeScale().fitContent()
-    fitOwedRef.current = false
+    if (owed) {
+      fitOwedRef.current = false
+      settledAtRef.current = Date.now()
+    }
   }, [])
 
   // The effect must not re-run because the parent rebuilt an equal object.
@@ -172,6 +190,14 @@ export function CandleChart({
       wickUpColor: "#10b981",
       wickDownColor: "#ef4444",
     })
+    const area = chart.addSeries(AreaSeries, {
+      lineColor: "#10b981",
+      lineWidth: 2,
+      topColor: "rgba(16, 185, 129, 0.22)",
+      bottomColor: "rgba(16, 185, 129, 0)",
+      priceLineVisible: true,
+      visible: false,
+    })
     // Volume rides an overlay scale pinned to the bottom fifth — the standard
     // exchange chart footprint.
     const volume = chart.addSeries(HistogramSeries, {
@@ -186,6 +212,7 @@ export function CandleChart({
     })
     chartRef.current = chart
     seriesRef.current = series
+    areaRef.current = area
     volumeRef.current = volume
 
     // The chart's own `autoSize` handles resizing; this observer exists only
@@ -198,6 +225,7 @@ export function CandleChart({
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      areaRef.current = null
       volumeRef.current = null
     }
   }, [settleFit])
@@ -233,6 +261,7 @@ export function CandleChart({
           // is worse than leaving the last bars up.
           if (first) {
             seriesRef.current.setData([])
+            areaRef.current?.setData([])
             volumeRef.current?.setData([])
             setState("empty")
           }
@@ -240,28 +269,44 @@ export function CandleChart({
         }
         // Sized from the data, not the source: the same series can be BTC or a
         // token nine decimals below a cent.
-        seriesRef.current.applyOptions({
-          priceFormat: {
-            type: "price",
-            ...priceFormatFor(candles[candles.length - 1].close),
-          },
-        })
-        seriesRef.current.setData(
-          candles.map((c) => ({
-            time: c.time as UTCTimestamp,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-          })),
-        )
+        const priceFormat = {
+          type: "price" as const,
+          ...priceFormatFor(candles[candles.length - 1].close),
+        }
+        // A sampled price line gets a line. Only a source that reports real
+        // per-bar OHLC earns candlesticks.
+        const asLine = payload.source === "coingecko"
+        seriesRef.current.applyOptions({ priceFormat, visible: !asLine })
+        areaRef.current?.applyOptions({ priceFormat, visible: asLine })
+
+        if (asLine) {
+          areaRef.current?.setData(
+            candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close })),
+          )
+          seriesRef.current.setData([])
+        } else {
+          seriesRef.current.setData(
+            candles.map((c) => ({
+              time: c.time as UTCTimestamp,
+              open: c.open,
+              high: c.high,
+              low: c.low,
+              close: c.close,
+            })),
+          )
+          areaRef.current?.setData([])
+        }
         volumeRef.current?.setData(
-          candles.map((c) => ({
-            time: c.time as UTCTimestamp,
-            value: c.volume,
-            color:
-              c.close >= c.open ? "rgba(16, 185, 129, 0.35)" : "rgba(239, 68, 68, 0.35)",
-          })),
+          // A price series carries no volume, so the histogram stays empty
+          // rather than drawing a flat row of nothing.
+          asLine
+            ? []
+            : candles.map((c) => ({
+                time: c.time as UTCTimestamp,
+                value: c.volume,
+                color:
+                  c.close >= c.open ? "rgba(16, 185, 129, 0.35)" : "rgba(239, 68, 68, 0.35)",
+              })),
         )
         setState("ready")
         if (first) {

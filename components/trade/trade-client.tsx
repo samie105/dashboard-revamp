@@ -72,6 +72,7 @@ import { OrdersPanel } from "@/components/trade/orders-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
 import { MarketPicker } from "@/components/trade/market-picker"
 import { noteRecentMarket } from "@/hooks/useMarketPrefs"
+import { nativeTokenFor } from "@/lib/native-token"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import {
   BackAction,
@@ -484,7 +485,13 @@ export function TradeClient() {
     if (market === "futures") return { kind: "hyperliquid", coin: current.symbol }
     if (!usingModern) return { kind: "hyperliquid", coin: (current as { coinName: string }).coinName }
     const networkId = "networkId" in current ? current.networkId : undefined
-    const token = baseTokenOf(current as never)
+    const base = baseTokenOf(current as never)
+    /* A native coin has no contract, so the registry may carry a router's
+       sentinel for it. Pools are held in the WRAPPED token, so chart that —
+       wSOL and SOL are the same price, and without the translation the
+       deepest pool on Solana looks like a token nobody indexes. */
+    const native = networkId && base ? nativeTokenFor(networkId, base) : null
+    const token = native?.wrapped ?? base
     /* `chartSymbol` is the registry's CoinGecko id. It is what admitted the
        token to the catalogue in the first place, and for the many tokens with
        no pool on their own chain it is the only thing that can draw one. */
