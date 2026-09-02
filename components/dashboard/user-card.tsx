@@ -15,6 +15,7 @@ import {
   ChartLineData01Icon,
   ArrowUpRight01Icon,
   MoreHorizontalIcon,
+  Tick02Icon,
 } from "@hugeicons/core-free-icons"
 import { Balance, ChangeText, DeltaChip, Eyebrow, Skel } from "@/components/ui/system"
 import {
@@ -615,43 +616,73 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             </button>
           </div>
 
-          {/* Network footer — the receive surface, demoted under the actions:
-              one compact value-carrying chip per chain (mobile grammar), tap
-              to surface that chain's address, tap again to put it away. */}
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-            {WALLETS.map((w) => {
-              const active = w.key === selectedWallet
-              return (
-                <button
-                  key={w.key}
-                  onClick={() => setSelectedWallet(active ? null : w.key)}
-                  className={`flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-2.5 transition-colors ${
-                    active ? "bg-accent" : "hover:bg-accent/50"
-                  }`}
-                >
-                  <img src={w.icon} alt="" className="h-5 w-5 rounded-full" />
-                  <span className={`text-[12.5px] font-medium ${active ? "" : "text-muted-foreground"}`}>{w.label}</span>
-                  <span className="text-[12px] tabular-nums text-muted-foreground/70">
-                    {hidden ? "••••" : formatUSD(chainTotals[w.key] ?? 0)}
-                  </span>
-                </button>
-              )
-            })}
-            {activeChain && activeChain.addr && (
-              <button
-                onClick={() => handleCopy(activeChain.addr, activeChain.key)}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-card/60 px-3 py-2 font-mono text-[12px] text-muted-foreground transition-colors hover:bg-accent"
-              >
-                {truncAddr(activeChain.addr)}
-                <HugeiconsIcon
-                  icon={Copy01Icon}
-                  className={`h-3.5 w-3.5 shrink-0 ${isCopied === activeChain.key ? "text-credit" : "text-muted-foreground/50"}`}
-                />
-              </button>
+          {/* Network footer — the receive surface, demoted under the actions.
+              One box per chain and all six on screen at once (three across
+              on a phone, six across on a desktop): nothing to swipe, nothing
+              hidden off the edge. Each box carries that chain's value; tap
+              one to surface its deposit address underneath, tap again to put
+              it away. Arbitrum reuses the Ethereum address, as the registry
+              says. */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <Eyebrow>Networks</Eyebrow>
+              <span className="hidden text-[12px] tabular-nums text-muted-foreground lg:block">
+                {activeAssetCount} assets · {NETWORKS.length} networks
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
+              {WALLETS.map((w) => {
+                const active = w.key === selectedWallet
+                const value = hidden ? "••••" : formatUSD(chainTotals[w.key] ?? 0)
+                return (
+                  <button
+                    key={w.key}
+                    type="button"
+                    onClick={() => setSelectedWallet(active ? null : w.key)}
+                    aria-pressed={active}
+                    aria-label={`${w.label}, ${hidden ? "balance hidden" : value}`}
+                    className={`ws-card-glass flex min-h-14 min-w-0 flex-col items-start justify-between gap-1.5 rounded-xl px-3 py-2.5 text-left ring-1 transition-all duration-150 active:scale-[0.97] motion-reduce:active:scale-100 ${
+                      active ? "bg-accent ring-border/70" : "bg-card/60 ring-border/40 hover:bg-accent/60"
+                    }`}
+                  >
+                    <span className="flex w-full min-w-0 items-center gap-1.5">
+                      <img src={w.icon} alt="" className="h-[18px] w-[18px] shrink-0 rounded-full" />
+                      <span className="truncate text-[12.5px] font-semibold leading-tight">{w.label}</span>
+                    </span>
+                    <span className={`text-[13px] leading-none tabular-nums ${active ? "text-foreground" : "text-muted-foreground"}`}>
+                      {value}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            {activeChain && (
+              <div className="ws-card-glass flex min-h-11 items-center gap-3 rounded-xl bg-card/60 px-3.5 py-2 ring-1 ring-border/40 animate-in fade-in-0 slide-in-from-top-1 motion-reduce:animate-none">
+                {activeChain.addr ? (
+                  <>
+                    <span className="shrink-0 text-[12px] text-muted-foreground">{activeChain.label} address</span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-[12px]" title={activeChain.addr}>
+                      <span className="md:hidden">{truncAddr(activeChain.addr)}</span>
+                      <span className="hidden md:inline">{activeChain.addr}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(activeChain.addr, activeChain.key)}
+                      className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold transition-colors ${
+                        isCopied === activeChain.key
+                          ? "bg-credit-chip text-credit"
+                          : "bg-foreground/[0.06] hover:bg-foreground/[0.1]"
+                      }`}
+                    >
+                      <HugeiconsIcon icon={isCopied === activeChain.key ? Tick02Icon : Copy01Icon} className="h-3.5 w-3.5" />
+                      {isCopied === activeChain.key ? "Copied" : "Copy"}
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[12px] text-muted-foreground">No {activeChain.label} address yet</span>
+                )}
+              </div>
             )}
-            <span className="ml-auto hidden shrink-0 pl-4 text-[12px] text-muted-foreground lg:block">
-              {activeAssetCount} assets · {NETWORKS.length} networks
-            </span>
           </div>
         </div>
       </div>
