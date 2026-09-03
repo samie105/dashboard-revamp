@@ -209,7 +209,7 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
   return (
     <>
       {variant === "modal" ? content : <FlowShell><PageHeader title={isDeposit ? "Deposit to Hyperliquid" : "Withdraw from Hyperliquid"} subtitle="Modern wallet only · Hyperliquid mainnet" back="/" className="mb-5" />{content}</FlowShell>}
-      <WalletUnlockDialog open={unlockOpen} onOpenChange={setUnlockOpen} onUnlocked={() => { const action = resume.current; resume.current = null; action?.() }} />
+      <WalletUnlockDialog action="hyperliquid-deposit" open={unlockOpen} onOpenChange={setUnlockOpen} onUnlocked={() => { const action = resume.current; resume.current = null; action?.() }} />
       {onDismiss && success && <button type="button" onClick={onDismiss} className="sr-only">Done</button>}
     </>
   )

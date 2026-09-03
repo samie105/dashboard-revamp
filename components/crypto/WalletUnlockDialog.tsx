@@ -29,12 +29,14 @@ import { useAuth } from "@/components/auth-provider"
 import { useCryptoContext } from "@/components/crypto/CryptoProvider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
 import { WalletUnlockError } from "@/lib/crypto-wallet/wallet-security"
+import { walletActionPolicy, type WalletAction } from "@/lib/crypto-wallet/action-policy"
 
-type UnlockTab = "passphrase" | "pin" | "recovery"
+type UnlockTab = "passphrase" | "pin" | "passkey" | "recovery"
 
 const UNLOCK_TABS: readonly SegmentedOption<UnlockTab>[] = [
   { key: "passphrase", label: "Passphrase" },
   { key: "pin", label: "PIN" },
+  { key: "passkey", label: "Passkey" },
   { key: "recovery", label: "Recovery secret" },
 ]
 
@@ -101,10 +103,11 @@ function SecretField({
   )
 }
 
-export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
+export function WalletUnlockDialog({ open, onOpenChange, onUnlocked, action }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onUnlocked?: () => void
+  action?: WalletAction
 }) {
   const { user } = useAuth()
   const { wallet, security } = useCryptoContext()
@@ -120,6 +123,8 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
   const packageValue = packageQuery.data
   const hasPassphrase = packageValue ? packageValue.envelopes.some((envelope) => (envelope as { purpose?: string }).purpose === "passphrase") : false
   const hasPin = packageValue ? packageValue.envelopes.some((envelope) => (envelope as { purpose?: string }).purpose === "pin") : false
+  const hasPasskey = packageValue ? packageValue.envelopes.some((envelope) => (envelope as { purpose?: string }).purpose === "passkey") : false
+  const policy = action ? walletActionPolicy(action) : undefined
 
   const [tab, setTab] = useState<UnlockTab>("passphrase")
   const [passphrase, setPassphrase] = useState("")
@@ -135,8 +140,8 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
   // Land on whichever tab this wallet can actually use — a passphrase-less
   // (recovery-only) wallet opens straight to Recovery secret.
   useEffect(() => {
-    if (open) setTab(hasPin ? "pin" : hasPassphrase ? "passphrase" : "recovery")
-  }, [open, hasPassphrase, hasPin])
+    if (open) setTab(policy?.requiresFreshUserVerification && hasPasskey ? "passkey" : hasPasskey ? "passkey" : hasPin ? "pin" : hasPassphrase ? "passphrase" : "recovery")
+  }, [open, hasPassphrase, hasPin, hasPasskey, policy?.requiresFreshUserVerification])
 
   function clearSecrets() {
     setPassphrase("")
@@ -201,6 +206,16 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
     } catch (cause) { setUnlockError(cause) } finally { setBusy(false) }
   }
 
+  async function unlockWithPasskey() {
+    if (busy) return
+    setBusy(true)
+    setUnlockError(null)
+    try {
+      await security.authenticatePasskey()
+      handleUnlocked()
+    } catch (cause) { setUnlockError(cause) } finally { setBusy(false) }
+  }
+
   async function configurePin() {
     if (!packageValue || busy) return
     if (!/^\d{6,12}$/.test(pin)) { setUnlockError(new Error("Use a 6 to 12 digit PIN")); return }
@@ -248,7 +263,7 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
           {/* Short enough not to wrap into the close button on a narrow
               screen, which is how the old copy ended up sitting under it. */}
           <ResponsiveModalDescription className="text-[13px] leading-relaxed">
-            Your passphrase never leaves this device.
+            {policy?.requiresFreshUserVerification ? "This sensitive action requires fresh device verification." : "Your passphrase never leaves this device."}
           </ResponsiveModalDescription>
         </ResponsiveModalHeader>
 
@@ -319,6 +334,17 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
                   {busy ? "Setting…" : "Set device PIN"}
                 </button>
               </div>
+            )
+          ) : tab === "passkey" ? (
+            hasPasskey ? (
+              <>
+                <p className="rounded-xl bg-surface-sunken/70 px-3.5 py-3 text-[13px] leading-relaxed text-muted-foreground">Use your device passkey, Face ID, Touch ID, Windows Hello, or security key to unlock this existing wallet.</p>
+                <button type="button" onClick={() => void unlockWithPasskey()} disabled={busy} className={CTA_CLASS}>
+                  {busy ? "Waiting for passkey…" : "Unlock with passkey"}
+                </button>
+              </>
+            ) : (
+              <p className="rounded-xl bg-surface-sunken/70 px-3.5 py-3 text-[13px] leading-relaxed text-muted-foreground">No passkey is enrolled for this wallet on the server yet. Register one from Security, then return here.</p>
             )
           ) : (
             <>

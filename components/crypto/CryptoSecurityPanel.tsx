@@ -20,6 +20,7 @@ import {
 import { CardHeader, CardShell, ListRow, Skel } from "@/components/ui/system"
 import { InlineNotice } from "@/components/ui/flow"
 import { SectionMessage } from "@/components/crypto/primitives"
+import { PasskeyButton } from "@/components/crypto/PasskeyButton"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -187,6 +188,17 @@ export function CryptoSecurityPanel({
       />
       <div className="flex flex-col gap-4 px-4 pb-4">
         <InlineNotice tone="warning">{RECOVERY_SECRET_NOTICE}</InlineNotice>
+
+        <div className="flex flex-col gap-2 border-b border-border/20 pb-3.5">
+          <span className="text-[12.5px] font-medium text-muted-foreground">Passkey and biometric unlock</span>
+          <p className="text-[12px] leading-relaxed text-muted-foreground">Add a device passkey to unlock this same wallet with Face ID, Touch ID, Windows Hello, or a security key. Your recovery path remains available.</p>
+          <PasskeyButton
+            mode="register"
+            walletId={walletId}
+            disabled={!recoverySecret}
+            onAction={() => security.replacePasskey(packageValue, recoverySecret)}
+          />
+        </div>
 
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-col gap-1.5">
