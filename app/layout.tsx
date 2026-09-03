@@ -47,7 +47,10 @@ const publicSans = Public_Sans({subsets:['latin'],variable:'--font-sans'})
 // Headlines and hero figures lead with it; body/labels stay Public Sans.
 // 300 is load-bearing: the design system's hero Balance is Poppins LIGHT —
 // without this weight the browser substitutes 600 and the figure turns bold.
-const poppins = Poppins({ subsets: ["latin"], weight: ["300", "600", "700", "800"], variable: "--font-display" })
+// 500 is load-bearing too: the dashboard total sits between the light hero
+// cut and Semibold, and without the real Medium the browser snaps 500 to one
+// of its neighbours or fakes it.
+const poppins = Poppins({ subsets: ["latin"], weight: ["300", "500", "600", "700", "800"], variable: "--font-display" })
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],

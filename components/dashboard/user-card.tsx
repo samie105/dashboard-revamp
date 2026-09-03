@@ -487,11 +487,17 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-3">
+                {/* font-medium overrides Balance own font-light. The house hero
+                   weight is Poppins Light 300 (design-system/02) and still is
+                   everywhere else; owner call on 2026-09-03 that the dashboard
+                   total specifically wants weight behind it — 600 read too
+                   heavy, so 500. Poppins Medium is loaded in app/layout.tsx
+                   FOR THIS: drop the weight there and 500 gets synthesised. */}
                 <Balance
                   value={formatUSD(totalBalance)}
                   hidden={hidden}
                   mask={MASK}
-                  className="text-[clamp(2.5rem,11.5vw,3.5rem)] sm:text-[clamp(2.75rem,5.5vw,4.5rem)]"
+                  className="font-medium text-[clamp(2.5rem,11.5vw,3.5rem)] sm:text-[clamp(2.75rem,5.5vw,4.5rem)]"
                 />
                 {dailyPnL !== 0 && !hidden && <DeltaChip value={dailyPnL} prefix="$" suffix="" />}
               </div>
