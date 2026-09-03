@@ -76,6 +76,8 @@ export function useWalletSecurity(walletId?: string) {
     return result
   }, [queryClient, userId, walletId])
 
+  const authorizeWithRecovery = useCallback((recoverySecret: string) => authorizeWalletWithRecoverySecret(recoverySecret), [])
+
   const setPassphraseWithRecovery = useCallback(async (packageValue: CryptoWalletPackageDocument, recoverySecret: string, passphrase: string) => {
     if (!walletId) throw new Error("A wallet ID is required to configure the wallet passphrase")
     const result = await setWalletPassphraseWithRecovery(userId, walletId, packageValue, recoverySecret, passphrase, () => authorizeWalletWithRecoverySecret(recoverySecret))
@@ -179,6 +181,7 @@ export function useWalletSecurity(walletId?: string) {
     unlockWithPassphrase,
     unlockWithPin,
     setPin,
+    authorizeWithRecovery,
     unlockWithRecoverySecret,
     setPassphraseWithRecovery,
     replacePasskey,

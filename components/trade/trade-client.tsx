@@ -74,6 +74,7 @@ import {
   signHyperliquidIntent,
   signEvmIntent,
   signSolanaIntent,
+  signHyperliquidAgentIntentWithWallet,
 } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
@@ -346,6 +347,13 @@ export function TradeClient() {
     enabled: isCryptoBackendEnabled && !!modernWallet.data,
     staleTime: 3 * 60_000,
   })
+  const hyperliquidAgents = useQuery({
+    queryKey: ["crypto", "hyperliquid-agents", user?.userId ?? "anonymous"],
+    queryFn: ({ signal }) => cryptoBackendClient.listHyperliquidAgents(signal),
+    enabled: isCryptoBackendEnabled && !!user?.userId && !!modernWallet.data,
+    staleTime: 30_000,
+  })
+  const activeHyperliquidAgent = hyperliquidAgents.data?.find((agent) => agent.status === "active")
 
   /**
    * Whether there is a wallet to trade out of — and, when there isn't, whether
@@ -1201,6 +1209,7 @@ export function TradeClient() {
         ...(!reduceOnly && tp > 0 ? { takeProfitPrice: tp } : {}),
         ...(!reduceOnly && sl > 0 ? { stopLossPrice: sl } : {}),
         idempotencyKey: crypto.randomUUID(),
+        ...(activeHyperliquidAgent ? { agentAddress: activeHyperliquidAgent.agentAddress } : {}),
       })
       setFuturesReview({
         intent,
@@ -1263,13 +1272,9 @@ export function TradeClient() {
         setUnlockOpen(true)
         return
       }
-      const signatures = await signHyperliquidIntent(
-        user.userId,
-        modernWallet.data.id,
-        packageValue,
-        evmAccount.id,
-        review.intent.steps
-      )
+      const signatures = activeHyperliquidAgent
+        ? await signHyperliquidAgentIntentWithWallet(user.userId, modernWallet.data.id, activeHyperliquidAgent, review.intent.steps)
+        : await signHyperliquidIntent(user.userId, modernWallet.data.id, packageValue, evmAccount.id, review.intent.steps)
       const submitted = await cryptoBackendClient.submitHyperliquidIntent(
         review.intent.id,
         signatures
@@ -1343,14 +1348,11 @@ export function TradeClient() {
         size: Math.abs(Number(position.size)),
         reduceOnly: true,
         idempotencyKey: crypto.randomUUID(),
+        ...(activeHyperliquidAgent ? { agentAddress: activeHyperliquidAgent.agentAddress } : {}),
       })
-      const signatures = await signHyperliquidIntent(
-        user.userId,
-        modernWallet.data.id,
-        modernPackage.data,
-        evmAccount.id,
-        intent.steps
-      )
+      const signatures = activeHyperliquidAgent
+        ? await signHyperliquidAgentIntentWithWallet(user.userId, modernWallet.data.id, activeHyperliquidAgent, intent.steps)
+        : await signHyperliquidIntent(user.userId, modernWallet.data.id, modernPackage.data, evmAccount.id, intent.steps)
       await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
       refreshAccount()
     } catch (e) {
@@ -1391,14 +1393,11 @@ export function TradeClient() {
         symbol: sym,
         oid,
         idempotencyKey: crypto.randomUUID(),
+        ...(activeHyperliquidAgent ? { agentAddress: activeHyperliquidAgent.agentAddress } : {}),
       })
-      const signatures = await signHyperliquidIntent(
-        user.userId,
-        modernWallet.data.id,
-        modernPackage.data,
-        evmAccount.id,
-        intent.steps
-      )
+      const signatures = activeHyperliquidAgent
+        ? await signHyperliquidAgentIntentWithWallet(user.userId, modernWallet.data.id, activeHyperliquidAgent, intent.steps)
+        : await signHyperliquidIntent(user.userId, modernWallet.data.id, modernPackage.data, evmAccount.id, intent.steps)
       await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
       refreshAccount()
     } catch (e) {

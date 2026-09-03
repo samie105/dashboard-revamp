@@ -7,9 +7,9 @@
  * of an `AlertDialog` confirm in front of each destructive action.
  */
 
-import { useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 
-import type { CryptoWalletPackage, CryptoWalletPackageDocument, Device } from "@/lib/crypto-backend"
+import { cryptoBackendClient, type CryptoWalletPackage, type CryptoWalletPackageDocument, type Device, type HyperliquidTradingAgent } from "@/lib/crypto-backend"
 import { useWalletSecurity } from "@/hooks/crypto/useWalletSecurity"
 import { useAuth } from "@/components/auth-provider"
 import {
@@ -21,6 +21,7 @@ import { CardHeader, CardShell, ListRow, Skel } from "@/components/ui/system"
 import { InlineNotice } from "@/components/ui/flow"
 import { SectionMessage } from "@/components/crypto/primitives"
 import { PasskeyButton } from "@/components/crypto/PasskeyButton"
+import { prepareHyperliquidAgent, approvePreparedHyperliquidAgent } from "@/lib/crypto-wallet/hyperliquid-agent"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -66,12 +67,19 @@ export function CryptoSecurityPanel({
   const [error, setError] = useState<unknown>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [tradingAgents, setTradingAgents] = useState<HyperliquidTradingAgent[]>([])
   const [confirmRotate, setConfirmRotate] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<Device | null>(null)
   const [pendingRestore, setPendingRestore] = useState<{ packageValue: CryptoWalletPackage; warnings: string[] } | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const recoverySecretId = useId()
   const passphraseId = useId()
+
+  useEffect(() => {
+    let cancelled = false
+    void cryptoBackendClient.listHyperliquidAgents().then((agents) => { if (!cancelled) setTradingAgents(agents) }).catch(() => { /* no agent is a valid initial state */ })
+    return () => { cancelled = true }
+  }, [])
 
   async function rotate() {
     if (busy || !recoverySecret) return
@@ -88,6 +96,36 @@ export function CryptoSecurityPanel({
     } finally {
       setBusy(false)
     }
+  }
+
+  async function setupTradingAgent() {
+    if (busy || !user?.userId || !recoverySecret) return
+    setBusy(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      const evmAccount = (packageValue.accounts as Array<{ accountId?: string; family?: string }>).find((account) => account.family === "evm")
+      if (!evmAccount?.accountId) throw new Error("Your wallet does not have an EVM account ready")
+      await security.unlockWithRecoverySecret(packageValue, recoverySecret)
+      const authorization = await security.authorizeWithRecovery(recoverySecret)
+      const prepared = await prepareHyperliquidAgent(user.userId, walletId, packageValue, authorization.walletAuthorizationToken)
+      await approvePreparedHyperliquidAgent(user.userId, walletId, packageValue, evmAccount.accountId, prepared.approval)
+      setSuccess(`Trading agent ${prepared.agent.agentAddress.slice(0, 6)}…${prepared.agent.agentAddress.slice(-4)} is approved for Hyperliquid mainnet trading.`)
+      setTradingAgents((current) => [...current.filter((agent) => agent.agentAddress !== prepared.agent.agentAddress), { ...prepared.agent, status: "active" }])
+      setRecoverySecret("")
+    } catch (cause) { setError(cause) } finally { setBusy(false) }
+  }
+
+  async function revokeTradingAgent(agent: HyperliquidTradingAgent) {
+    if (busy || !recoverySecret) return
+    setBusy(true); setError(null); setSuccess(null)
+    try {
+      const authorization = await security.authorizeWithRecovery(recoverySecret)
+      const revoked = await cryptoBackendClient.revokeHyperliquidAgent(agent.agentAddress, authorization.walletAuthorizationToken)
+      setTradingAgents((current) => current.map((item) => item.agentAddress === agent.agentAddress ? revoked : item))
+      setSuccess("Delegated Hyperliquid trading was revoked immediately.")
+      setRecoverySecret("")
+    } catch (cause) { setError(cause) } finally { setBusy(false) }
   }
 
   async function revoke(deviceId: string) {
@@ -198,6 +236,15 @@ export function CryptoSecurityPanel({
             disabled={!recoverySecret}
             onAction={() => security.replacePasskey(packageValue, recoverySecret)}
           />
+          <button type="button" onClick={() => void setupTradingAgent()} disabled={busy || !recoverySecret} className="inline-flex min-h-11 items-center self-start rounded-full bg-surface-sunken px-4 text-[12px] font-semibold transition-colors hover:bg-accent disabled:opacity-50">
+            {busy ? "Approving agent…" : "Enable delegated trading"}
+          </button>
+          {tradingAgents.filter((agent) => agent.status !== "revoked").map((agent) => (
+            <div key={agent.agentAddress} className="flex items-center justify-between gap-3 rounded-xl bg-surface-sunken/60 px-3 py-2 text-[12px]">
+              <span>{agent.agentName ?? "Hyperliquid trading agent"} · {agent.status}</span>
+              <button type="button" onClick={() => void revokeTradingAgent(agent)} disabled={busy || !recoverySecret} className="font-semibold text-destructive disabled:opacity-50">Revoke</button>
+            </div>
+          ))}
         </div>
 
         <div className="flex flex-col gap-2.5">
