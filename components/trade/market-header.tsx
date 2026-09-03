@@ -247,11 +247,22 @@ export function MarketHeader({
       <div className="flex min-w-0 flex-col gap-2 lg:items-end">
         <div className="scrollbar-none flex min-w-0 items-center gap-x-4 overflow-x-auto">
           <span className="flex shrink-0 items-end gap-2">
+            {/* font-medium, not the house hero weight.
+               Poppins Light 300 is the Balance register everywhere else
+               (design-system/02) and still is. The owner's call on 2026-09-03
+               was that the dashboard total wants weight behind it, and that
+               "it also applies to the text that is on the spot trading" —
+               which on this screen means THIS figure, the one the workspace
+               exists to show. Note the landing point: he asked for semi-bold
+               first, saw 600 and said it was "a bit too thick", so 500 is the
+               answer and not a step on the way to one. Poppins Medium is a
+               real loaded cut in app/layout.tsx; drop the weight there and the
+               browser synthesises it. */}
             <span
               key={flashGen}
               aria-live="polite"
               className={cn(
-                "-mx-1.5 rounded-lg px-1.5 font-display text-[clamp(30px,3.4vw,40px)] leading-none font-light tracking-[-0.02em] tabular-nums",
+                "-mx-1.5 rounded-lg px-1.5 font-display text-[clamp(30px,3.4vw,40px)] leading-none font-medium tracking-[-0.02em] tabular-nums",
                 flash === "up" && "ws-tick-up text-credit",
                 flash === "down" && "ws-tick-down text-debit"
               )}

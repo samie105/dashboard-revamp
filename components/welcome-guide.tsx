@@ -7,9 +7,11 @@ import {
   ArrowDownLeft01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  ArrowUpRight01Icon,
   ChartCandlestickIcon,
   Chart01Icon,
   ChartLineData01Icon,
+  Coins01Icon,
   CoinsSwapIcon,
   CreditCardIcon,
   DashboardSquare01Icon,
@@ -66,93 +68,168 @@ type GuideCard = {
 /**
  * Worldstreet explaining itself, once, to the person who just arrived.
  *
- * Four cards answering the four questions a newcomer actually has, in the
- * order they have them: what is this, what am I looking at on the screen in
- * front of me, what can I do, and where do I find it. Each answer is a
- * LABELLED LIST rather than a paragraph — the complaint this guide exists to
- * fix is "I don't understand what is going on", and prose is what people skip.
+ * Five cards, in the order a newcomer's questions actually arrive: what is
+ * this (and what is it NOT), what is that big number made of, what do I do
+ * first, how does money get in and out, and where do I find things. Each
+ * answer is a LABELLED LIST rather than a paragraph — the complaint this
+ * guide exists to fix is "I don't understand what is going on", and prose is
+ * what people skip.
+ *
+ * The opening card carries the boundary that costs us the most confused
+ * newcomers. This is the CRYPTO dashboard; cash lives in the Dollar Account,
+ * which is a different product with its own dashboard. Someone who reads this
+ * screen as "the main dashboard" arrives expecting to deposit cash into it,
+ * and every screen after that reads as broken. Said once, plainly, at the
+ * top, and stated as a boundary rather than an apology.
+ *
+ * The account names are the platform's own, not softened ones: the sidebar,
+ * the portfolio and the trade screens all say Holdings, Spot and Futures, so
+ * the guide says them too and only the sentences around them are plain.
+ * Futures is described as shut rather than dropped — the sidebar already
+ * badges it "Soon" (`FUTURES_CLOSED` in `lib/venues.ts`), and a reader who
+ * meets the word on another screen deserves to know why there is no card for
+ * it here.
+ *
+ * The third card exists because the dashboard is now progressive: a
+ * brand-new account has NO account cards at all (`lib/dashboard-cards.ts`),
+ * so a guide that described a populated screen would be describing one this
+ * reader cannot see. It sets that expectation and then says the one thing
+ * that makes the screen fill in.
  *
  * Copy follows the house plain-language rule: no "self-custody", no "keys",
  * no "gas", no "on-chain", no "network" as a noun the reader is expected to
  * already own. It describes outcomes, and it never implies Worldstreet can
- * open the wallet. The one exception is the trading row's "six chains", the
- * shipped marketing line it arrived with when the promo rail was folded in.
+ * open the wallet. The old "trade across six chains" marketing line went with
+ * this rewrite — it was the one row that asked the reader to already know
+ * what a chain was.
  */
 const CARDS: GuideCard[] = [
   {
+    /* The boundary card. Two rows rather than a paragraph because the two
+       halves are a PAIR — coins here, cash there — and a pair is something a
+       reader takes in at a glance and a sentence is something they skim. */
     mark: true,
     title: "Welcome to Worldstreet",
-    body:
-      "Your money and your crypto in one place. Here is what is on your screen, and where everything lives.",
-  },
-  {
-    /* The card this guide was rebuilt for. The dashboard shows one big total
-       over a breakdown, and a newcomer has no idea what the parts are or why
-       there is more than one. Naming the three, and saying they add up to the
-       figure at the top, is the single most useful thing this guide says. */
-    art: "cryptoBuy",
-    title: "Your money sits in three places",
-    body: "Add them together and you get the total at the top of your screen.",
+    body: "The crypto side of Worldstreet. Here is what lives here, and what does not.",
     rows: [
       {
+        icon: Coins01Icon,
+        title: "Coins live here",
+        body: "Buy them, hold them, trade them, send them.",
+      },
+      {
+        /* No link. The Dollar Account is a separate product on its own
+           domain, and sending someone off this dashboard in the first ten
+           seconds of the guide is not the point — knowing it exists is. */
         icon: DollarCircleIcon,
-        title: "Cash",
-        body: "Dollars you can spend here or send to your bank.",
-      },
-      {
-        icon: Wallet01Icon,
-        title: "Crypto wallet",
-        body: "Coins only you can move — not even Worldstreet can.",
-      },
-      {
-        icon: Chart01Icon,
-        title: "Trading",
-        body: "What you have moved onto the market to buy and sell with.",
+        title: "Cash lives in your Dollar Account",
+        body: "Dollars to spend or send to your bank, on its own dashboard.",
       },
     ],
   },
   {
-    art: "cryptoTrade",
-    title: "What you can do",
-    body: "Four things, and you can start with any of them.",
+    /* The card this guide was rebuilt for. Home shows one big total over a
+       breakdown, and a newcomer has no idea what the parts are or why there
+       is more than one. The fourth row is the important one: it answers
+       "where is my cash, then?" in the same list, at the same moment the
+       question occurs, instead of leaving the reader to conclude the total
+       has lost their money. */
+    art: "cryptoBuy",
+    title: "What your total is made of",
+    body: "Three accounts add up to it. Your cash is not one of them.",
     rows: [
       {
-        icon: CreditCardIcon,
-        title: "Buy your first crypto",
-        body: "Turn dollars into USDT on Solana, Ethereum or Tron.",
-        href: "/buy",
+        icon: Wallet01Icon,
+        title: "Holdings",
+        body: "Coins in your wallet. Only you can move them.",
+      },
+      {
+        icon: Chart01Icon,
+        title: "Spot",
+        body: "What you have moved onto the market to trade with.",
       },
       {
         icon: ChartLineData01Icon,
-        title: "Trade across six chains",
-        body: "Thousands of tokens on live markets, priced and routed for you.",
-        href: "/trade",
+        title: "Futures",
+        body: "Not open yet, so it has no card on your screen.",
       },
       {
-        icon: CoinsSwapIcon,
-        title: "Swap in one move",
-        body: "Convert cash and tokens at live rates, any pair to any pair.",
-        href: "/swap",
+        icon: DollarCircleIcon,
+        title: "Dollar Account",
+        body: "Your cash. Shown under the total, never inside it.",
+      },
+    ],
+  },
+  {
+    /* Two rows, and only two, because this is the card that has to produce an
+       action. The empty-state illustration is doing real work here: the
+       reader is looking at an empty dashboard while they read it. */
+    art: "noCrypto",
+    title: "Start by getting a coin",
+    body: "A new dashboard is empty on purpose. Cards appear as you use each account.",
+    rows: [
+      {
+        icon: CreditCardIcon,
+        title: "Buy your first coin",
+        body: "Pay from your Dollar Account.",
+        href: "/buy",
       },
       {
         icon: ArrowDownLeft01Icon,
-        title: "Add and send coins",
-        body: "Get an address to receive, or send what you hold anywhere.",
+        title: "Or bring in coins you own",
+        body: "Get your address and send them to it.",
         href: "/wallet/modern",
       },
     ],
   },
   {
-    title: "Where to find things",
-    /* Deliberately not "the bar at the bottom of your screen": on a laptop it
-       is a sidebar. The icons are the same in both, so they do the teaching. */
-    body: "Five places, with the same icons everywhere.",
+    /* Deposit and Withdraw open a chooser now, so the guide has to describe a
+       decision rather than a button. The first row is the owner-approved
+       sentence, kept as written apart from the capital letters the Dollar
+       Account carries everywhere else in the product. */
+    art: "cryptoSwap",
+    title: "Moving money around",
+    body: "Deposit asks where the money is coming from. Withdraw asks where it goes.",
     rows: [
-      { icon: DashboardSquare01Icon, title: "Home", body: "Your balance and what moved today.", href: "/" },
-      { icon: ChartCandlestickIcon, title: "Trade", body: "Markets, charts and your orders.", href: "/trade" },
+      {
+        icon: DollarCircleIcon,
+        title: "From your Dollar Account",
+        body: "Fund directly from your Dollar Account into your trading account.",
+      },
+      {
+        icon: Wallet01Icon,
+        title: "From coins you already own",
+        body: "Send them to your Worldstreet address.",
+        href: "/wallet/modern",
+      },
+      {
+        icon: ArrowUpRight01Icon,
+        title: "Taking money out",
+        body: "Back to your Dollar Account, or out to an address you choose.",
+      },
+      {
+        icon: CoinsSwapIcon,
+        title: "Swapping what you hold",
+        body: "Change one coin for another at live rates.",
+        href: "/swap",
+      },
+    ],
+  },
+  {
+    title: "Where everything lives",
+    /* Deliberately not "the bar at the bottom of your screen": on a laptop it
+       is a sidebar. The icons are the same in both, so they do the teaching —
+       which is also why this list mirrors the phone's bar exactly (Home,
+       Trade, Portfolio, Wallet, and the mark) rather than listing every
+       screen. Swap is not in that bar, so it earns its link on the card
+       before this one instead of being taught as a tab that isn't there. */
+    body: "The same icons on your phone and on your laptop.",
+    rows: [
+      { icon: DashboardSquare01Icon, title: "Home", body: "Your total, your accounts, today's moves.", href: "/" },
+      { icon: ChartCandlestickIcon, title: "Trade", body: "Prices, charts and your Spot orders.", href: "/trade" },
       { icon: Chart01Icon, title: "Portfolio", body: "Everything you own, in one list.", href: "/portfolio" },
-      { icon: Wallet01Icon, title: "Wallet", body: "Your coins, addresses and security.", href: "/wallet/modern" },
-      { icon: Menu01Icon, title: "Apps", body: "The Worldstreet mark opens the rest: Shop, Academy, Social." },
+      { icon: Wallet01Icon, title: "Wallet", body: "Your coins, your address, and sending out.", href: "/wallet/modern" },
+      { icon: Menu01Icon, title: "Apps", body: "The Worldstreet mark opens Shop, Academy and Social." },
     ],
   },
 ]
@@ -389,7 +466,12 @@ export function WelcomeGuide({
   return (
     <ResponsiveModal open={open} onOpenChange={change}>
       <ResponsiveModalContent className="sm:max-w-[26rem]">
-        <div className="flex flex-col gap-4">
+        {/* Tighter on a phone, roomier from `sm` up. This guide is read on a
+            phone first, the tallest card carries five rows, and the modal
+            scrolls internally — so every few pixels reclaimed between the
+            blocks is a card that fits whole instead of one whose primary
+            button starts below the fold. */}
+        <div className="flex flex-col gap-3 sm:gap-4">
           {/* The dialog's real title IS the heading on screen — a separate
               sr-only copy beside a visible <h2> made a screen reader announce
               every card's name twice. */}
@@ -399,13 +481,15 @@ export function WelcomeGuide({
                 illustrations on purpose — a logo carries at a size a drawing
                 does not. */}
             {(current.mark || current.art) && (
-              <span className="flex h-[88px] items-center justify-center">
+              <span className="flex h-[68px] items-center justify-center sm:h-[88px]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={current.mark ? BRAND_MARK : illustrations[current.art!]}
                   alt=""
                   className={
-                    current.mark ? "h-16 w-16 object-contain" : "h-[88px] w-[88px] object-contain"
+                    current.mark
+                      ? "h-14 w-14 object-contain sm:h-16 sm:w-16"
+                      : "h-[68px] w-[68px] object-contain sm:h-[88px] sm:w-[88px]"
                   }
                 />
               </span>
@@ -439,7 +523,12 @@ export function WelcomeGuide({
                       <HugeiconsIcon icon={row.icon} className="h-4 w-4" />
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col gap-1 text-left">
-                      <span className="text-[12.5px] font-semibold leading-none">{row.title}</span>
+                      {/* `leading-tight`, not `leading-none`. A label like
+                          "Cash lives in your Dollar Account" wraps to two
+                          lines in a phone-width column, and at 12.5px with no
+                          line height at all those two lines sit on top of one
+                          another. */}
+                      <span className="text-[12.5px] font-semibold leading-tight">{row.title}</span>
                       <span className="text-[11.5px] leading-[15px] text-muted-foreground">
                         {row.body}
                       </span>
@@ -457,12 +546,12 @@ export function WelcomeGuide({
                     key={row.title}
                     href={row.href}
                     onClick={() => change(false)}
-                    className="flex min-h-11 items-start gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
+                    className="flex min-h-11 items-start gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent active:bg-accent sm:py-2"
                   >
                     {inner}
                   </Link>
                 ) : (
-                  <span key={row.title} className="flex items-start gap-2.5 px-2 py-2">
+                  <span key={row.title} className="flex min-h-11 items-start gap-2.5 px-2 py-1.5 sm:py-2">
                     {inner}
                   </span>
                 )
@@ -470,8 +559,9 @@ export function WelcomeGuide({
             </div>
           )}
 
-          {/* Where you are. Dots, not a progress bar: four cards is a length
-              the reader can hold, and a bar would imply work to get through. */}
+          {/* Where you are. Dots, not a progress bar: five cards is still a
+              length the reader can hold, and a bar would imply work to get
+              through. */}
           <div className="flex items-center justify-center gap-1.5" aria-hidden>
             {CARDS.map((item, index) => (
               <span

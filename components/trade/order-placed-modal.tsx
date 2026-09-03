@@ -80,7 +80,11 @@ export function orderCopy(status: OrderStatus, symbol: string): { title: string;
 }
 
 const TONE_STYLES: Record<OrderTone, { chip: string; icon: typeof CheckmarkCircle02Icon }> = {
-  working: { chip: "bg-primary/[0.12] text-primary", icon: Clock01Icon },
+  /* Neutral while it is still moving. Emerald and red are reserved for the
+     outcome — money arrived, money didn't — and gold for brand, primary CTA
+     and active state. "Still going" is none of those, so it takes the raised
+     step of the stone ladder and lets the clock icon carry the meaning. */
+  working: { chip: "bg-foreground/[0.08] text-foreground", icon: Clock01Icon },
   done: { chip: "bg-credit-chip text-credit", icon: CheckmarkCircle02Icon },
   failed: { chip: "bg-debit-chip text-debit", icon: AlertCircleIcon },
 }

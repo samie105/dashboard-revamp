@@ -29,6 +29,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   AreaSeries,
+  LineSeries,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
@@ -39,6 +40,20 @@ import { fetchHlCandles, type HlCandleInterval } from "@/lib/hl-public"
 
 const INTERVALS: HlCandleInterval[] = ["1m", "5m", "15m", "1h", "4h", "1d"]
 const POLL_MS = 15_000
+
+/**
+ * The two moving averages the toolbar can lay over the bars.
+ *
+ * Fast and slow, the periods every exchange chart opens with. They are
+ * COMPUTED FROM THE BARS ALREADY ON SCREEN — no second request, no upstream
+ * indicator service — so an average can never claim to describe a window the
+ * loaded series does not cover: below `period` bars it simply draws nothing.
+ */
+const MA_FAST = 7
+const MA_SLOW = 25
+
+/** Where the bars came from, in the words the reader gets. */
+export type ChartOrigin = "birdeye" | "geckoterminal" | "coingecko" | null
 
 export type ChartSource =
   /** A perpetual contract — Hyperliquid is authoritative for its own venue. */
@@ -133,8 +148,30 @@ function deriveStats(candles: readonly Candle[], upstream: ChartStats | null): C
 type ChartPayload = {
   candles: Candle[]
   stats: ChartStats | null
-  source: "birdeye" | "geckoterminal" | "coingecko" | null
+  source: ChartOrigin
   intervals?: string[]
+}
+
+/**
+ * A simple moving average over the closes, as `lightweight-charts` wants it.
+ *
+ * Returns nothing at all when the series is shorter than the period. The
+ * alternative — averaging whatever bars happen to exist and calling it a
+ * 25-period line — is the quiet wrongness this file already refuses for the
+ * 24h/7d windows: a figure that looks like an answer and is not one.
+ */
+function sma(candles: readonly Candle[], period: number) {
+  if (candles.length < period) return []
+  const out: { time: UTCTimestamp; value: number }[] = []
+  let sum = 0
+  for (let i = 0; i < candles.length; i += 1) {
+    sum += candles[i].close
+    if (i >= period) sum -= candles[i - period].close
+    if (i >= period - 1) {
+      out.push({ time: candles[i].time as UTCTimestamp, value: sum / period })
+    }
+  }
+  return out
 }
 
 type Candle = {
@@ -227,17 +264,46 @@ function withAlpha(color: string, alpha: number) {
 export function CandleChart({
   source,
   onStats,
+  onSource,
+  toolbar = true,
   className,
 }: {
   source: ChartSource | null
   /** 24h figures from the chart's own source, for the market strip. */
   onStats?: (stats: ChartStats | null) => void
+  /** Which upstream drew these bars — the workspace states it beside the
+   *  other price sources in Pro. */
+  onSource?: (origin: ChartOrigin) => void
+  /**
+   * The workbench above the bars: the interval switch, the O/H/L/C readout and
+   * the moving-average toggle (`TradeView.chartToolbar`).
+   *
+   * Simple keeps the chart and drops all of it. The line is information — is
+   * this going up or down — and that question is answered without a single
+   * control. The toolbar is a workbench, and a workbench in front of someone
+   * buying their first $20 of a coin is furniture in a corridor. With it gone
+   * the interval stays on the hour, which is the window that reads as "today".
+   */
+  toolbar?: boolean
   className?: string
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<IChartApi | null>(null)
   const seriesRef = React.useRef<ISeriesApi<"Candlestick"> | null>(null)
   const volumeRef = React.useRef<ISeriesApi<"Histogram"> | null>(null)
+  /* The two moving averages, and the bars they are computed from. The bars are
+     held so toggling the overlay repaints from what is already loaded rather
+     than waiting out a poll — a control that takes fifteen seconds to answer
+     reads as broken. */
+  const maFastRef = React.useRef<ISeriesApi<"Line"> | null>(null)
+  const maSlowRef = React.useRef<ISeriesApi<"Line"> | null>(null)
+  const candlesRef = React.useRef<readonly Candle[]>([])
+  const [showMa, setShowMa] = React.useState(false)
+  /* Read inside the poll, which deliberately does not depend on this state —
+     restarting the request loop because someone toggled an overlay would
+     throw away the bars the overlay is drawn from. */
+  const showMaRef = React.useRef(showMa)
+  showMaRef.current = showMa
   /* A price series is not trade data and must not be drawn as candles.
      CoinGecko samples hourly, so bucketing to a 1h bar gives ONE sample per
      bar — open, high, low and close all the same number, which candlestick
@@ -293,9 +359,42 @@ export function CandleChart({
   // `onStats` is usually an inline arrow; holding it in a ref keeps it out of
   // the effect's deps so a parent re-render can't restart the poll.
   const onStatsRef = React.useRef(onStats)
+  const onSourceRef = React.useRef(onSource)
   React.useEffect(() => {
     onStatsRef.current = onStats
+    onSourceRef.current = onSource
   })
+
+  /**
+   * Paint (or clear) the moving averages from whatever bars are loaded.
+   *
+   * Neutral ink, deliberately: emerald and red mean money direction on every
+   * other surface in this app, and gold means brand or an active control. An
+   * indicator is neither, so it borrows the chart's own text colour at two
+   * weights — the slow line heavier than the fast one, which is the only
+   * distinction the eye needs when both are the same hue.
+   */
+  const paintMa = React.useCallback((on: boolean) => {
+    const fast = maFastRef.current
+    const slow = maSlowRef.current
+    if (!fast || !slow) return
+    const candles = candlesRef.current
+    fast.applyOptions({ visible: on })
+    slow.applyOptions({ visible: on })
+    fast.setData(on ? sma(candles, MA_FAST) : [])
+    slow.setData(on ? sma(candles, MA_SLOW) : [])
+  }, [])
+
+  React.useEffect(() => {
+    paintMa(showMa)
+  }, [showMa, paintMa])
+
+  /* Simple has no toolbar, so it has no way to turn an overlay back off. The
+     overlay is dropped with the controls rather than left stranded on the
+     bars of someone who cannot see why it is there. */
+  React.useEffect(() => {
+    if (!toolbar) setShowMa(false)
+  }, [toolbar])
 
   // Create the chart once, painted with the document's own tokens.
   React.useEffect(() => {
@@ -351,10 +450,31 @@ export function CandleChart({
       scaleMargins: { top: 0.84, bottom: 0 },
       visible: false,
     })
+    /* The averages ride the price scale, hidden until asked for. Created here
+       with the rest so the toggle is one `applyOptions` rather than a series
+       being added and removed under a live chart. */
+    const maFast = chart.addSeries(LineSeries, {
+      color: withAlpha(palette.text, 0.85),
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      visible: false,
+    })
+    const maSlow = chart.addSeries(LineSeries, {
+      color: withAlpha(palette.text, 0.45),
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      visible: false,
+    })
     chartRef.current = chart
     seriesRef.current = series
     areaRef.current = area
     volumeRef.current = volume
+    maFastRef.current = maFast
+    maSlowRef.current = maSlow
 
     // The readout follows the crosshair. Off the chart → back to the latest
     // bar, which the load effect keeps current.
@@ -398,6 +518,8 @@ export function CandleChart({
       seriesRef.current = null
       areaRef.current = null
       volumeRef.current = null
+      maFastRef.current = null
+      maSlowRef.current = null
     }
   }, [settleFit])
 
@@ -428,19 +550,23 @@ export function CandleChart({
         if (cancelled || !seriesRef.current) return
         onStatsRef.current?.(deriveStats(candles, stats))
         setOrigin(payload.source)
+        onSourceRef.current?.(payload.source)
         if (payload.intervals?.length) setAvailable(payload.intervals)
         if (candles.length === 0) {
           // Only claim "no data" on the FIRST answer. A later empty response
           // is an upstream wobble, and blanking a chart the user is reading
           // is worse than leaving the last bars up.
           if (first) {
+            candlesRef.current = []
             seriesRef.current.setData([])
             areaRef.current?.setData([])
             volumeRef.current?.setData([])
+            paintMa(false)
             setState("empty")
           }
           return
         }
+        candlesRef.current = candles
         // Sized from the data, not the source: the same series can be BTC or a
         // token nine decimals below a cent.
         const last = candles[candles.length - 1]
@@ -494,6 +620,9 @@ export function CandleChart({
                     : withAlpha(palette.debit, 0.35),
               })),
         )
+        // Repaint from the bars that just landed, so the overlay tracks the
+        // poll instead of freezing at whatever it was drawn from first.
+        paintMa(showMaRef.current)
         setState("ready")
         if (first) {
           first = false
@@ -514,7 +643,7 @@ export function CandleChart({
       clearInterval(id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceKey, interval, settleFit])
+  }, [sourceKey, interval, settleFit, paintMa])
 
   const intervalOptions = React.useMemo<SegmentedOption<HlCandleInterval>[]>(
     () =>
@@ -532,50 +661,83 @@ export function CandleChart({
   return (
     <div className={cn("relative flex h-full min-h-0 flex-col overflow-hidden", className)}>
       {/* Toolbar: intervals on the left, the readout beside them, source note
-          on the right. Wraps on narrow panes rather than clipping. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 px-3 pt-3 pb-1">
-        <Segmented
-          size="sm"
-          value={interval}
-          onChange={setIntervalKey}
-          options={intervalOptions}
-          vividPrefix="chart-interval"
-        />
+          on the right. Wraps on narrow panes rather than clipping.
+          Pro only — see the `toolbar` prop. */}
+      {toolbar && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 px-4 pt-3.5 pb-1">
+          <Segmented
+            size="sm"
+            value={interval}
+            onChange={setIntervalKey}
+            options={intervalOptions}
+            vividPrefix="chart-interval"
+          />
 
-        {readout && state === "ready" && (
-          <span
-            aria-live="off"
-            className="flex min-w-0 items-center gap-x-3 text-[11px] tabular-nums text-muted-foreground"
-          >
-            {readout.kind === "bar" ? (
-              <>
-                <Figure label="O" value={fmtReadout(readout.open)} />
-                <Figure label="H" value={fmtReadout(readout.high)} />
-                <Figure label="L" value={fmtReadout(readout.low)} />
-                <Figure
-                  label="C"
-                  value={fmtReadout(readout.close)}
-                  tone={readout.close >= readout.open ? "credit" : "debit"}
-                />
-                {readout.volume !== null && (
-                  <Figure label="Vol" value={fmtVolume(readout.volume)} className="hidden sm:inline-flex" />
-                )}
-              </>
-            ) : (
-              <Figure label="Price" value={fmtReadout(readout.value)} />
+          {/* Moving averages. Not a Segmented — this is a two-state switch on
+              an overlay, not a choice between views, and the one tab system is
+              for choices. Neutral when off, raised when on; never gold, which
+              on this screen is reserved for the brand and the primary CTA. */}
+          <button
+            type="button"
+            onClick={() => setShowMa((v) => !v)}
+            aria-pressed={showMa}
+            data-vivid-target="chart-moving-averages"
+            data-vivid-label="Show or hide the moving averages over the bars"
+            title={`Moving averages over ${MA_FAST} and ${MA_SLOW} bars`}
+            className={cn(
+              "inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[11px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
+              showMa
+                // The Segmented thumb's own fill, so an overlay that is ON reads
+                // as the same "raised" state as a selected tab.
+                ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent"
+                : "bg-surface-sunken text-muted-foreground hover:text-foreground",
             )}
-          </span>
-        )}
+          >
+            MA {MA_FAST}/{MA_SLOW}
+          </button>
 
-        {/* Say where the bars came from. A price series is not trade data, and
-            a chart that looks identical either way should admit which it is. */}
-        {origin === "coingecko" && (
-          <span className="ml-auto hidden shrink-0 text-[10.5px] font-medium text-subtle sm:inline">
-            Price history from CoinGecko
-          </span>
-        )}
-      </div>
-      <div ref={containerRef} className="min-h-0 flex-1" />
+          {readout && state === "ready" && (
+            /* Below sm the readout is withheld, and this is the deliberate
+               shape of Pro on a phone: the toolbar is already two controls wide
+               at 375px, a third element wraps it onto a second line, and every
+               line it takes comes out of a chart pane that is only 44dvh tall.
+               The readout is also the most redundant thing in the row there —
+               with no cursor to hover there is no bar to inspect, so it can only
+               repeat the latest close, which the header states in full above. */
+            <span
+              aria-live="off"
+              className="hidden min-w-0 items-center gap-x-3 text-[11px] tabular-nums text-muted-foreground sm:flex"
+            >
+              {readout.kind === "bar" ? (
+                <>
+                  <Figure label="O" value={fmtReadout(readout.open)} />
+                  <Figure label="H" value={fmtReadout(readout.high)} />
+                  <Figure label="L" value={fmtReadout(readout.low)} />
+                  <Figure
+                    label="C"
+                    value={fmtReadout(readout.close)}
+                    tone={readout.close >= readout.open ? "credit" : "debit"}
+                  />
+                  {readout.volume !== null && (
+                    <Figure label="Vol" value={fmtVolume(readout.volume)} className="hidden sm:inline-flex" />
+                  )}
+                </>
+              ) : (
+                <Figure label="Price" value={fmtReadout(readout.value)} />
+              )}
+            </span>
+          )}
+
+          {/* Say where the bars came from. A price series is not trade data, and
+              a chart that looks identical either way should admit which it is. */}
+          {origin === "coingecko" && (
+            <span className="ml-auto hidden shrink-0 text-[10.5px] font-medium text-subtle sm:inline">
+              Price history from CoinGecko
+            </span>
+          )}
+        </div>
+      )}
+      <div ref={containerRef} className={cn("min-h-0 flex-1", !toolbar && "pt-2")} />
 
       {state !== "ready" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

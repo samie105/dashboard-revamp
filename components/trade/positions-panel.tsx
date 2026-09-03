@@ -76,8 +76,10 @@ export function PositionsPanel({
       data-vivid-label="Open positions and resting orders"
     >
       {/* Tab strip — the house Segmented, so this reads like every other tab
-          set in the app rather than inventing an underline idiom. */}
-      <div className={cn("flex items-center border-b border-border/30 px-2 py-1.5", hideTabs && "hidden")}>
+          set in the app rather than inventing an underline idiom. Separated
+          from the table by fill and space, not a hairline, which is the same
+          treatment the orders pane and the mobile strip beside it now get. */}
+      <div className={cn("flex items-center px-3 pt-3 pb-2", hideTabs && "hidden")}>
         <Segmented
           size="sm"
           value={tab}
@@ -97,7 +99,7 @@ export function PositionsPanel({
             </p>
           ) : (
             <table className="w-full">
-              <thead className="sticky top-0 bg-background">
+              <thead className="sticky top-0 z-10 bg-card">
                 <tr className="border-b border-border/20">
                   <th className={TH}>Contract</th>
                   <th className={TH}>Size</th>
@@ -169,7 +171,7 @@ export function PositionsPanel({
           </p>
         ) : (
           <table className="w-full">
-            <thead className="sticky top-0 bg-background">
+            <thead className="sticky top-0 z-10 bg-card">
               <tr className="border-b border-border/20">
                 <th className={TH}>Market</th>
                 <th className={TH}>Side</th>

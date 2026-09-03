@@ -4,8 +4,6 @@ import {
   UI_MODE_STORAGE_PREFIX,
   parseUiMode,
   resolveUiMode,
-  simpleTradeView,
-  simpleWalletView,
   uiModeStorageKey,
 } from "@/lib/ui-mode"
 
@@ -42,50 +40,5 @@ describe("resolveUiMode", () => {
   it("honours a stored choice in both directions", () => {
     expect(resolveUiMode({ stored: "pro" })).toBe("pro")
     expect(resolveUiMode({ stored: "simple" })).toBe("simple")
-  })
-})
-
-describe("simpleWalletView", () => {
-  const pro = simpleWalletView("pro")
-  const simple = simpleWalletView("simple")
-
-  it("pro shows everything the page shows today", () => {
-    expect(pro).toEqual({
-      chainCards: true,
-      heroAddress: true,
-      heroNetworks: true,
-      heroStats: true,
-      shareColumn: true,
-      networkPerRow: true,
-      groupBySymbol: false,
-      advancedSecurity: true,
-    })
-  })
-
-  it("simple hides the chain metaphor, the counters and the raw address", () => {
-    expect(simple.chainCards).toBe(false)
-    expect(simple.heroAddress).toBe(false)
-    expect(simple.heroNetworks).toBe(false)
-    expect(simple.heroStats).toBe(false)
-  })
-
-  it("simple collapses the balance list to one row per asset", () => {
-    expect(simple.groupBySymbol).toBe(true)
-    expect(simple.networkPerRow).toBe(false)
-    expect(simple.shareColumn).toBe(false)
-  })
-
-  it("simple puts the advanced security rows behind a disclosure", () => {
-    expect(simple.advancedSecurity).toBe(false)
-  })
-})
-
-describe("simpleTradeView", () => {
-  it("pro leaves the workspace exactly as it is", () => {
-    expect(simpleTradeView("pro")).toEqual({ marketStats: true, unitSwitch: true })
-  })
-
-  it("simple drops the 24h stat cluster and forces a single amount unit", () => {
-    expect(simpleTradeView("simple")).toEqual({ marketStats: false, unitSwitch: false })
   })
 })

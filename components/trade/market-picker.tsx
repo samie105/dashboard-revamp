@@ -100,8 +100,12 @@ function MarketRow({
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="flex items-center gap-1.5">
             <span className="truncate text-[13.5px] font-semibold">{market.symbol}</span>
+            {/* Neutral, not gold: the leverage a contract offers is a fact
+               about the row, and gold on this screen means brand, primary CTA
+               or active state — the row's own selected indicator is already
+               spending it two elements away. */}
             {isFutures && (
-              <span className="shrink-0 rounded bg-primary/[0.12] px-1 py-0.5 text-[9px] font-bold text-primary">
+              <span className="shrink-0 rounded bg-foreground/[0.08] px-1 py-0.5 text-[9px] font-bold text-muted-foreground">
                 {market.maxLeverage}×
               </span>
             )}

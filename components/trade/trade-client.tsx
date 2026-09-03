@@ -11,10 +11,22 @@
  * selector deep-link into it.
  *
  * LAYOUT: a full-height exchange workspace (the route renders full-bleed, no
- * sidebar): top bar with pair + 24h stats, chart with the positions/orders
- * panel under it, order book and ticket as fixed right rails — panes separated
- * by hairlines, Binance-fashion, not floating cards. Below lg it becomes a
- * normal scrolling column: chart → ticket → book → positions.
+ * sidebar): a top bar of app chrome, then the market header, the chart and the
+ * orders pane in the middle column, with the markets rail and the order ticket
+ * as fixed side rails. Panes are CARDS separated by fill and the workspace gap
+ * — one padding scale (10px on a phone, 16px from lg) across every band —
+ * rather than by hairlines drawn between identical grounds. Below lg the rails
+ * fold: the rail goes entirely, and the ticket becomes a bottom sheet the
+ * buy/sell action bar opens, so the chart keeps the screen.
+ *
+ * SIMPLE vs PRO (`lib/trade-view.ts`, and the long note where it is read):
+ * Simple is the complete buy/sell story and nothing else — the pair, the price
+ * and its 24h move, the chart, a market ticket sized in dollars, the wallet,
+ * and the orders you have placed. Pro adds the markets rail, the chart's
+ * workbench, the reference figures, the unit switch and the order buckets. It
+ * is not a stripped Simple and a decorated Pro; they are two complete screens
+ * for two readers, and the switch has to MOVE things or it teaches people the
+ * control is broken.
  */
 
 import * as React from "react"
@@ -69,6 +81,7 @@ import {
 } from "@/components/trade/order-placed-modal"
 import { useAuth } from "@/components/auth-provider"
 import { useUiMode } from "@/components/ui-mode-provider"
+import { tradeView } from "@/lib/trade-view"
 import { ModeSwitch } from "@/components/ui/mode-switch"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import {
@@ -83,10 +96,12 @@ import {
 } from "@/lib/hl-public"
 import {
   CandleChart,
+  type ChartOrigin,
   type ChartSource,
   type ChartStats,
 } from "@/components/trade/candle-chart"
 import { OrderBook } from "@/components/trade/order-book"
+import { PriceSources } from "@/components/trade/price-sources"
 import { PositionsPanel } from "@/components/trade/positions-panel"
 import { OrdersPanel } from "@/components/trade/orders-panel"
 import { MarketsRail } from "@/components/trade/markets-rail"
@@ -251,7 +266,61 @@ export function TradeClient() {
   const params = useSearchParams()
   const router = useRouter()
   const { openFlow } = useMoneyFlow()
-  const { trade: tradeView } = useUiMode()
+  /**
+   * How much of this screen is on (`lib/trade-view.ts`).
+   *
+   * The descriptor used to ride on the mode provider, which every screen in
+   * the app depends on; it lives in its own module now so trade's flags can
+   * move without touching it. `pro` is read alongside it for the handful of
+   * STRUCTURAL differences the flag set does not name — the markets rail and
+   * the token identity panel — each marked at its use site.
+   *
+   * WHICH FLAGS THIS SCREEN CAN ACTUALLY HONOUR
+   *
+   * Five of the ten move something you can see:
+   *   marketStats   → the 1h/7d/volume/day-range row in `MarketHeader`
+   *   unitSwitch    → the USD ↔ token toggle inside the amount field
+   *   chartToolbar  → intervals, the O/H/L/C readout and the MA overlay
+   *   orderTabs     → the status buckets and the wider columns in `OrdersPanel`
+   *   priceSources  → the live-vs-market-list panel in the ticket
+   *
+   * The other five are DARK, and deliberately so. This venue is an AMM: a spot
+   * order here is a swap against a liquidity pool, routed through 0x or LI.FI
+   * out of the user's own wallet. The perpetuals venue that could answer them
+   * is gated shut (see FUTURES GATE), and even open it would be answering for
+   * a different market than the one on screen.
+   *
+   *   orderBook          — there are no resting bids and asks. A pool has a
+   *                        curve, not a ladder. `fetchHlOrderBook` is another
+   *                        venue's book for a similarly-named contract, and
+   *                        showing it here would be a lie with a spread on it.
+   *   timeAndSales       — no trade feed exists for these pools. The chart API
+   *                        serves OHLCV and nothing else.
+   *   advancedOrderTypes — nothing can rest, so nothing can be a limit or a
+   *                        stop. The Limit tab was removed from spot for
+   *                        exactly this: `buildSpotOrderPlan` never read a
+   *                        limit price, so the ticket demanded one and then
+   *                        placed a market swap anyway.
+   *   orderModifiers     — time in force and post-only are modifiers ON a
+   *                        resting order. With no resting order they modify
+   *                        nothing.
+   *   feeBreakdown       — there is no quote-before-intent call. The backend
+   *                        prices the swap when it BUILDS it, at submit; until
+   *                        a quote route exists there is no fee and no gas
+   *                        figure to break down, and the pool's last price is
+   *                        the only estimate available. What the ticket can
+   *                        honestly promise — the floor the price protection
+   *                        guarantees — is already on the receipt as "At
+   *                        least", in both modes.
+   *
+   * The rule these five follow is the one the rest of this file follows: a
+   * figure we cannot source is left off, never filled in. An invented number
+   * on a trading screen is worse than an absent one, because the absent one
+   * cannot be traded on.
+   */
+  const { mode } = useUiMode()
+  const view = tradeView(mode)
+  const pro = mode === "pro"
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const modernWallet = useCryptoWalletState()
@@ -661,12 +730,17 @@ export function TradeClient() {
    * where the figures genuinely stop applying.
    */
   const [dexStats, setDexStats] = React.useState<ChartStats | null>(null)
+  /* Which indexer the chart actually reached. Lifted out of the chart because
+     it is a fact about the PRICE, not about the picture — Pro's price-sources
+     panel names it beside the figure it produced. */
+  const [chartOrigin, setChartOrigin] = React.useState<ChartOrigin>(null)
   /* The last pool price seen, for the spot tick direction. Futures reads its
      direction off the book poll; spot has no book, so the chart poll is the
      only feed that can say whether the price moved, and which way. */
   const prevSpotPrice = React.useRef(0)
   React.useEffect(() => {
     setDexStats(null)
+    setChartOrigin(null)
     prevSpotPrice.current = 0
     setLastTick(null)
   }, [selection])
@@ -841,7 +915,8 @@ export function TradeClient() {
      the switch. Note this also forces `inTokenUnit` false, so the whole
      token-sizing branch — placeholder, estimate line, max rounding — follows
      without needing its own guard. */
-  const unitSwitchable = Boolean(spentSymbol && !sizesLikeUsd(spentSymbol)) && tradeView.unitSwitch
+  const unitSwitchable =
+    Boolean(spentSymbol && !sizesLikeUsd(spentSymbol)) && view.unitSwitch
   const inTokenUnit = amountUnit === "token" && unitSwitchable
 
   /**
@@ -1921,10 +1996,15 @@ export function TradeClient() {
           </div>
 
           <div className="flex items-center gap-2 rounded-2xl bg-surface-sunken px-4 py-3 ring-1 ring-transparent transition-shadow focus-within:ring-foreground/[0.14]">
+            {/* The ticket's own hero figure follows the price above it to
+               Medium 500. Leaving the amount at Light 300 beside a Medium
+               price would put two different weights on the same register on
+               one screen, which reads as a mistake rather than as a
+               hierarchy. */}
             {!inTokenUnit && (
               <span
                 aria-hidden
-                className="font-display text-[22px] leading-none font-light text-muted-foreground/70"
+                className="font-display text-[22px] leading-none font-medium text-muted-foreground/70"
               >
                 $
               </span>
@@ -1947,7 +2027,7 @@ export function TradeClient() {
                   : "Order amount in USD"
               }
               placeholder="0"
-              className="min-w-0 flex-1 bg-transparent font-display text-[28px] leading-none font-light tracking-[-0.02em] tabular-nums outline-none placeholder:text-muted-foreground/30"
+              className="min-w-0 flex-1 bg-transparent font-display text-[28px] leading-none font-medium tracking-[-0.02em] tabular-nums outline-none placeholder:font-light placeholder:text-muted-foreground/30"
             />
             {/* The unit switch. Where a spot row names the token being spent,
                 the ticket can size the order in it — which is what the second
@@ -1973,7 +2053,12 @@ export function TradeClient() {
                     data-vivid-target={`trade-amount-unit-${unit}`}
                     data-vivid-label={`Size this order in ${unitLabel}`}
                     className={cn(
-                      "rounded-full px-2 py-1 text-[10.5px] font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
+                      /* min-h-11 below lg: this was a 22px target sitting
+                         inside the one control on the screen that changes what
+                         a typed number MEANS. It fits: the amount row is ~52px
+                         tall around a 28px figure, so a 44px chip inside a
+                         2px track clears it without moving anything. */
+                      "inline-flex min-h-11 items-center justify-center rounded-full px-3 text-[10.5px] font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none lg:min-h-0 lg:px-2 lg:py-1",
                       amountUnit === unit
                         ? "bg-accent text-foreground shadow-sm"
                         : "text-subtle hover:text-foreground"
@@ -2273,7 +2358,8 @@ export function TradeClient() {
 
         {/* What the wallet holds of both sides of the pair — the answer to
             "how much can I buy" and "how much can I sell", where the button
-            is. */}
+            is. Both modes: this is the user's own money, which is the one
+            thing Simple must never hide. */}
         {walletRows.length > 0 && (
           <WalletStrip
             network={networkLabel}
@@ -2282,10 +2368,28 @@ export function TradeClient() {
           />
         )}
 
+        {/* Where the price came from (`TradeView.priceSources`). Pro only, and
+            in the ticket rather than under the header on purpose: it is a
+            reference a trader checks against the order they are about to
+            place, and putting it up top would push the chart down the screen
+            on the phone where this workspace is mostly used. */}
+        {view.priceSources && usingModern && market === "spot" && (
+          <PriceSources
+            livePrice={dexStats?.price ?? null}
+            listPrice={current?.price ?? null}
+            origin={chartOrigin}
+          />
+        )}
+
         {/* Which token this actually is. A ticker is not an identity on a
             9,000-row registry, so the contract and a link to it close the
-            ticket. */}
-        {tokenIdentity && (
+            ticket.
+            PRO ONLY, structural rather than flagged: a contract address is
+            the single most jargon-shaped thing on this screen, and Simple's
+            brief is the pair, the price, the ticket and the balance. Anyone
+            who needs to verify which TRUMP they are buying is, by definition,
+            the Pro reader. No `tokenIdentity` flag exists — see the report. */}
+        {pro && tokenIdentity && (
           <TokenIdentity
             symbol={symbol}
             icon={current && "icon" in current ? current.icon : null}
@@ -2338,7 +2442,12 @@ export function TradeClient() {
           money cluster keeps `ml-auto`, so when it does drop to a second row
           it lands right-aligned rather than adrift. Single row from lg up,
           where it has always fitted. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:gap-x-4 lg:flex-nowrap lg:px-4 lg:py-2.5">
+      {/* Rhythm note: this bar, the workspace body below it and every pane
+          inside share ONE padding scale — 10px on a phone, 16px from lg. The
+          screen used to run px-3/px-2/px-4 across three adjacent bands, which
+          is the kind of near-miss the eye reads as sloppiness without being
+          able to name. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-2.5 py-2.5 sm:gap-x-4 lg:flex-nowrap lg:px-4 lg:py-3">
         {/* This route has no sidebar or navbar, so it carries its own way
             out — a back control, not just a clickable logo. */}
         <div className="flex shrink-0 items-center gap-1.5">
@@ -2467,26 +2576,34 @@ export function TradeClient() {
           orders, ticket — on the `ws-pane` entrance; the header above the
           chart does not, so its picker's fixed layout on phones has no
           transformed ancestor to trip over. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pb-2 lg:flex-row lg:gap-2.5 lg:px-3 lg:pb-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 px-2.5 pb-2.5 lg:flex-row lg:gap-3 lg:px-4 lg:pb-4">
         {/* Markets rail — the full list lives on the left so switching pairs
-            is one click, not a menu dive. */}
-        <MarketsRail
-          list={list}
-          selected={selection}
-          onSelect={setSelection}
-          className="ws-pane hidden w-[280px] shrink-0 overflow-hidden rounded-2xl bg-card xl:flex"
-          style={
-            {
-              "--ws-pane-x": "-10px",
-              "--ws-pane-delay": "40ms",
-            } as React.CSSProperties
-          }
-        />
+            is one click, not a menu dive.
+            PRO ONLY, and structural rather than flagged: `TradeView` names
+            features inside the screen, and this is a whole pane of the
+            workspace. A wall of 9,000 tickers is the definition of what Simple
+            is for keeping off the screen; the pair picker in the header is
+            still one press away for anyone who wants to change market. There
+            is no `marketsRail` flag to read — see the report. */}
+        {pro && (
+          <MarketsRail
+            list={list}
+            selected={selection}
+            onSelect={setSelection}
+            className="ws-pane hidden w-[280px] shrink-0 overflow-hidden rounded-2xl bg-card xl:flex"
+            style={
+              {
+                "--ws-pane-x": "-10px",
+                "--ws-pane-delay": "40ms",
+              } as React.CSSProperties
+            }
+          />
+        )}
 
         {/* Market header + chart + bottom panel */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 lg:gap-2.5">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 lg:gap-3">
           <MarketHeader
-            className="shrink-0 px-1 pt-1 lg:px-2"
+            className="shrink-0 px-1.5 pt-1 lg:px-2 lg:pt-1.5"
             symbol={symbol}
             quote={market === "futures" ? "USDC" : quoteOf(current)}
             icon={current && "icon" in current ? current.icon : null}
@@ -2501,7 +2618,7 @@ export function TradeClient() {
             high24h={high24h}
             low24h={low24h}
             beat={beat}
-            showMarketStats={tradeView.marketStats}
+            showMarketStats={view.marketStats}
             pickerOpen={pickerOpen}
             onTogglePicker={() => setPickerOpen((v) => !v)}
             picker={picker}
@@ -2549,7 +2666,13 @@ export function TradeClient() {
                 </p>
               </div>
             ) : (
-              <CandleChart source={chartSource} onStats={handleChartStats} />
+              <CandleChart
+                source={chartSource}
+                onStats={handleChartStats}
+                onSource={setChartOrigin}
+                /* Simple keeps the chart and drops the workbench above it. */
+                toolbar={view.chartToolbar}
+              />
             )}
           </div>
           {/* Spot has neither positions nor resting orders — a swap settles or
@@ -2558,6 +2681,7 @@ export function TradeClient() {
               drawer, where both concepts are real. */}
           {market === "spot" ? (
             <OrdersPanel
+              showTabs={view.orderTabs}
               className="ws-pane hidden h-[224px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex"
               style={{ "--ws-pane-delay": "90ms" } as React.CSSProperties}
             />
@@ -2579,10 +2703,14 @@ export function TradeClient() {
               nothing. */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card lg:hidden">
             {market === "spot" ? (
-              <OrdersPanel className="min-h-0 flex-1" />
+              <OrdersPanel showTabs={view.orderTabs} className="min-h-0 flex-1" />
             ) : (
               <>
-                <div className="scrollbar-none flex shrink-0 items-center overflow-x-auto border-b border-border/30 px-2 py-1.5">
+                {/* Separated by FILL, not a hairline: the strip sits on the
+                    card's own ground and the pane below it is what moves.
+                    (Light mode brings the hairline back through the token
+                    layer, which is where that rule lives.) */}
+                <div className="scrollbar-none flex shrink-0 items-center overflow-x-auto px-3 pt-3 pb-2">
                   <Segmented
                     size="sm"
                     value={mobilePane}
@@ -2634,7 +2762,10 @@ export function TradeClient() {
             book={book}
             lastTick={lastTick}
             onPickPrice={pickPrice}
-            className="hidden w-[248px] shrink-0 border-l border-border/30 lg:flex xl:w-[276px]"
+            /* Its own card, separated by the workspace gap rather than by a
+               hairline drawn down its edge — the same treatment the chart,
+               the orders pane and the ticket already get. */
+            className="hidden w-[248px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex xl:w-[276px]"
           />
         )}
 
@@ -2660,7 +2791,11 @@ export function TradeClient() {
           padding already clears the device inset AND the tab bar, so a second
           inset inside this bar would only make it taller on a notched phone,
           on the screen with the least room to give. */}
-      <div className="flex shrink-0 items-center gap-2 border-t border-border/20 bg-background px-3 py-2.5 lg:hidden">
+      {/* No hairline over it: the workspace body above is `flex-1` and this bar
+          is `shrink-0`, so nothing ever scrolls underneath — the rule was
+          drawing a line between two identical fills, which is decoration. The
+          two coloured buttons are their own separation. */}
+      <div className="flex shrink-0 items-center gap-2 bg-background px-2.5 pt-1 pb-2.5 lg:hidden">
         {usingModern && needsWallet ? (
           /* Two big money buttons over a wallet that doesn't exist are two
              ways to reach the same dead end. One button, and it goes where

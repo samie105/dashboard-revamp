@@ -6,8 +6,6 @@ import { useAuth } from "@/components/auth-provider"
 import {
   parseUiMode,
   resolveUiMode,
-  simpleTradeView,
-  simpleWalletView,
   uiModeStorageKey,
   type UiMode,
 } from "@/lib/ui-mode"
@@ -118,27 +116,26 @@ export function UiModeProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * The mode, plus the view descriptors the two heavy screens read.
+ * The mode, and nothing else.
  *
- * Returns Simple's descriptors outside the provider rather than throwing.
- * The wallet and trade screens are always inside it, but this hook is the
- * kind of thing that gets reached for from a component rendered in a
- * portal or a test harness, and crashing a money screen over a missing
+ * It used to hand back the wallet's and the trade screen's descriptors too.
+ * Both moved out: the wallet no longer has two depths at all, and trade and
+ * swap each own a descriptor file so their flags can change without touching
+ * a provider every screen depends on. Callers that need a descriptor import
+ * `tradeView` or `swapView` and pass `mode` to it.
+ *
+ * Returns Simple outside the provider rather than throwing. Every screen that
+ * reads this is inside it, but this is the kind of hook that gets reached for
+ * from a portal or a test harness, and crashing a money screen over a missing
  * context is a worse failure than quietly showing the calmer view.
  */
-export function useUiMode(): UiModeContextValue & {
-  wallet: ReturnType<typeof simpleWalletView>
-  trade: ReturnType<typeof simpleTradeView>
-  isSimple: boolean
-} {
+export function useUiMode(): UiModeContextValue & { isSimple: boolean } {
   const context = React.useContext(UiModeContext)
   const mode = context?.mode ?? "simple"
   return {
     mode,
     setMode: context?.setMode ?? (() => {}),
     isDefault: context?.isDefault ?? true,
-    wallet: simpleWalletView(mode),
-    trade: simpleTradeView(mode),
     isSimple: mode === "simple",
   }
 }

@@ -37,7 +37,6 @@ import {
   ResponsiveModalTitle,
 } from "@/components/ui/responsive-modal"
 import { FlatCardSurface } from "@/components/ui/system"
-import { useUiMode } from "@/components/ui-mode-provider"
 import type { CryptoWalletAccount, CryptoWalletPackageDocument } from "@/lib/crypto-backend"
 import { CryptoSecurityPanel } from "./CryptoSecurityPanel"
 import { RecoveryPanel } from "./RecoveryPanel"
@@ -165,36 +164,24 @@ export function WalletSecurityModal({
   networksToAdd: number
 }) {
   const [view, setView] = useState<View>("menu")
-  const { isSimple } = useUiMode()
-  const [advancedShown, setAdvancedShown] = useState(false)
 
   // Back to the menu on close, but only once the modal is fully gone —
   // resetting while it animates out would swap the pane under the user's
-  // eyes on the way down. The disclosure re-folds with it, so the next
-  // opening is the calm list again.
+  // eyes on the way down.
   useEffect(() => {
     if (open) return
-    const id = setTimeout(() => {
-      setView("menu")
-      setAdvancedShown(false)
-    }, 220)
+    const id = setTimeout(() => setView("menu"), 220)
     return () => clearTimeout(id)
   }, [open])
 
-  const all = networksToAdd > 0 ? [NETWORKS_ENTRY, ...ENTRIES] : ENTRIES
+  /* Every row is listed outright. "Add new networks" and "Move an account to
+     another app" used to sit behind a "Show advanced options" disclosure for
+     anyone in Simple mode, and that came off with the wallet's Simple/Pro
+     switch in the 2026-09-03 review: a security list that folds away half
+     its doors is how somebody ends up at support asking where their export
+     went. The subtitles carry the warning instead of the fold. */
+  const entries = networksToAdd > 0 ? [NETWORKS_ENTRY, ...ENTRIES] : ENTRIES
   const onMenu = view === "menu"
-
-  /* Simple mode does not DELETE the advanced rows, it folds them. "Add new
-     networks" and "Move an account to another app" are the two entries whose
-     titles a newcomer cannot act on, but a wallet where a feature silently
-     vanished is worse than a busy one — they'd go to support asking where
-     their export went. So Simple shows the two everyday rows and a
-     disclosure; pressing it reveals the rest in place. */
-  const ADVANCED: Exclude<View, "menu">[] = ["networks", "export"]
-  const everyday = all.filter((entry) => !ADVANCED.includes(entry.key))
-  const advanced = all.filter((entry) => ADVANCED.includes(entry.key))
-  const entries = advancedShown || !isSimple ? all : everyday
-  const hiddenCount = entries.length === all.length ? 0 : advanced.length
 
   return (
     <ResponsiveModal open={open} onOpenChange={onOpenChange}>
@@ -243,15 +230,6 @@ export function WalletSecurityModal({
                   onClick={() => setView(entry.key)}
                 />
               ))}
-              {hiddenCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setAdvancedShown(true)}
-                  className="mx-3 mt-1 mb-2 inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-                >
-                  Show advanced options
-                </button>
-              )}
             </div>
           ) : (
             // The panels bring their own CardShell; FlatCardSurface strips the

@@ -25,7 +25,12 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowUpRight01Icon, InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { illustrations } from "@/components/ui/system"
+import {
+  CardHeader,
+  illustrations,
+  Segmented,
+  type SegmentedOption,
+} from "@/components/ui/system"
 import {
   ResponsiveModal,
   ResponsiveModalContent,
@@ -48,11 +53,39 @@ const TD = "px-4 py-2.5 text-[12px] tabular-nums"
 function statusOf(status: string): { label: string; className: string } {
   if (status === "confirmed") return { label: "Filled", className: "bg-credit-chip text-credit" }
   if (status === "failed") return { label: "Failed", className: "bg-debit-chip text-debit" }
+  /* In flight. Neutral, at the RAISED step of the stone ladder — gold means
+     brand, primary CTA or active state, and an order's status is none of those
+     three, it is data. The step above "Unconfirmed" below is what separates
+     "we are waiting on the chain" from "we could not reach it", without
+     borrowing a colour that already means something else on this screen. */
   if (status === "submitted")
-    return { label: "Filling", className: "bg-primary/[0.12] text-primary" }
+    return { label: "Filling", className: "bg-foreground/[0.08] text-foreground" }
   // 'unknown' is the reconciler saying it could not reach the chain — which is
   // not the same as "it didn't happen", and must not be dressed as either.
   return { label: "Unconfirmed", className: "bg-surface-sunken text-muted-foreground" }
+}
+
+/**
+ * The tab strip's three buckets (`TradeView.orderTabs`), and why they are
+ * these three and not "open / history / fills".
+ *
+ * That exchange triplet describes a venue with a book: an order rests, then
+ * fills, and the fills are their own record. Nothing here rests — a swap is
+ * broadcast and then it either settles or it doesn't — so those tabs would be
+ * three names for one list, two of them permanently empty. What a trader
+ * genuinely wants to separate on this venue is what is still moving from what
+ * is done, and what is done from what went wrong. Every bucket below is read
+ * off the ledger's own reconciled status; none of them is derived or guessed.
+ */
+type OrderFilter = "all" | "pending" | "filled" | "failed"
+
+function bucketOf(status: string): Exclude<OrderFilter, "all"> {
+  if (status === "confirmed") return "filled"
+  if (status === "failed") return "failed"
+  // 'submitted' and the reconciler's 'unknown' are both "we do not have an
+  // answer yet", which is one thing to a reader even though it is two to the
+  // backend.
+  return "pending"
 }
 
 function timeOf(iso: string | null, long = false): string {
@@ -247,9 +280,19 @@ function OrderDetailModal({ row, onClose }: { row: ResolvedOrder | null; onClose
 /* ── Panel ──────────────────────────────────────────────────────────────── */
 
 export function OrdersPanel({
+  showTabs = false,
   className,
   style,
 }: {
+  /**
+   * The status tab strip and the wider column set (`TradeView.orderTabs`).
+   *
+   * Simple gets one list of what you have placed and what became of it, which
+   * is the whole question a first-time buyer has. Pro gets the buckets, the
+   * counts, and the columns — time, side, value — that a narrow table
+   * otherwise folds away behind a row's detail sheet.
+   */
+  showTabs?: boolean
   className?: string
   /** For the workspace's pane-entrance custom properties. */
   style?: React.CSSProperties
@@ -257,11 +300,56 @@ export function OrdersPanel({
   const { orders, loading } = useSpotOrders()
   const registry = useSpotRegistry()
   const [detail, setDetail] = React.useState<ResolvedOrder | null>(null)
+  const [filter, setFilter] = React.useState<OrderFilter>("all")
 
   const rows = React.useMemo(
     () => orders.map((order) => resolveOrder(order, registry)),
     [orders, registry],
   )
+
+  /* Counts come off the WHOLE list, not the filtered one — a tab that says
+     how many are in it has to keep saying so once you are standing in another
+     one. */
+  const counts = React.useMemo(() => {
+    const out = { pending: 0, filled: 0, failed: 0 }
+    for (const row of rows) out[bucketOf(row.order.status)] += 1
+    return out
+  }, [rows])
+
+  const visible = React.useMemo(
+    () =>
+      filter === "all"
+        ? rows
+        : rows.filter((row) => bucketOf(row.order.status) === filter),
+    [rows, filter],
+  )
+
+  /* Only offer a bucket that has something in it. A tab that can only ever
+     answer "none" is the same broken-control lesson as a mode switch that
+     changes nothing — so an empty bucket is simply not a tab yet. */
+  const filterOptions = React.useMemo<SegmentedOption<OrderFilter>[]>(() => {
+    const out: SegmentedOption<OrderFilter>[] = [{ key: "all", label: "All" }]
+    if (counts.pending > 0) out.push({ key: "pending", label: `Pending · ${counts.pending}` })
+    if (counts.filled > 0) out.push({ key: "filled", label: `Filled · ${counts.filled}` })
+    if (counts.failed > 0) out.push({ key: "failed", label: `Failed · ${counts.failed}` })
+    return out
+  }, [counts])
+
+  /* A bucket can empty out under the poll — the last pending order settles —
+     and leaving the strip pointing at a tab that no longer exists strands the
+     table on an empty list with no lit tab to explain it. */
+  React.useEffect(() => {
+    if (!filterOptions.some((option) => option.key === filter)) setFilter("all")
+  }, [filterOptions, filter])
+
+  const tabs = showTabs && filterOptions.length > 1
+
+  /* Column visibility, one step earlier in Pro. Written out rather than
+     computed so the class strings stay literal — Tailwind reads source text,
+     not runtime concatenation. */
+  const timeCol = showTabs ? "hidden sm:table-cell" : "hidden md:table-cell"
+  const sideCol = showTabs ? "hidden md:table-cell" : "hidden lg:table-cell"
+  const valueCol = showTabs ? "hidden lg:table-cell" : "hidden xl:table-cell"
 
   return (
     <div
@@ -270,21 +358,40 @@ export function OrdersPanel({
       data-vivid-target="orders-panel"
       data-vivid-label="Your spot orders and their on-chain status"
     >
-      {/* The card names itself inside, in the CardHeader register — a title
-          and, once there is something to count, the count. */}
-      <div className="flex shrink-0 items-center gap-2.5 px-4 py-3">
-        <h3 className="font-display text-[14px] font-semibold leading-tight tracking-[-0.01em]">
-          Your orders
-        </h3>
-        {rows.length > 0 && (
-          <span className="rounded-full bg-foreground/[0.07] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
-            {rows.length}
-          </span>
-        )}
-        {!loading && rows.length > 0 && (
-          <span className="ml-auto text-[11.5px] text-subtle">Newest first</span>
-        )}
-      </div>
+      {/* The house `CardHeader`, not a local copy of one. It was hand-rolled
+          here — a display-face h3, its own count chip, its own padding — which
+          is how a screen ends up half a step off every card on the dashboard.
+          The kit already has a title, a badge and a right-hand slot, and the
+          tab strip drops straight into the third. */}
+      <CardHeader
+        title="Your orders"
+        badge={
+          rows.length > 0 ? (
+            <span className="rounded-full bg-foreground/[0.07] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+              {rows.length}
+            </span>
+          ) : undefined
+        }
+        right={
+          tabs ? (
+            // Scrolls rather than wraps: four buckets at their longest ("Pending
+            // · 12") outrun a 375px header, and a header that grows a second row
+            // pushes the table it belongs to off the pane.
+            <div className="scrollbar-none min-w-0 overflow-x-auto">
+              <Segmented
+                size="sm"
+                value={filter}
+                onChange={setFilter}
+                options={filterOptions}
+                vividPrefix="orders-filter"
+              />
+            </div>
+          ) : !loading && rows.length > 0 ? (
+            <span className="shrink-0 text-[11.5px] text-subtle">Newest first</span>
+          ) : undefined
+        }
+        className="shrink-0"
+      />
 
       <div className="slim-scroll min-h-0 flex-1 overflow-y-auto">
         {loading ? (
@@ -292,7 +399,7 @@ export function OrdersPanel({
             {/* Neutral, never gold — a spinner is not a brand moment. */}
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground/70" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : visible.length === 0 ? (
           // The empty state carries the trade illustration beside its copy
           // rather than above it, so it fits the drawer's height instead of
           // asking the chart to give up space for a picture.
@@ -306,10 +413,13 @@ export function OrdersPanel({
               className="h-20 w-20 shrink-0 object-contain"
             />
             <div className="flex max-w-xs flex-col gap-1">
-              <span className="text-[14px] font-semibold">No orders yet</span>
+              <span className="text-[14px] font-semibold">
+                {rows.length === 0 ? "No orders yet" : "Nothing in this tab"}
+              </span>
               <span className="text-[12.5px] leading-relaxed text-muted-foreground">
-                Every order you place shows up here with what you received and
-                whether it went through.
+                {rows.length === 0
+                  ? "Every order you place shows up here with what you received and whether it went through."
+                  : "Your other orders are still here — switch back to All to see them."}
               </span>
             </div>
           </div>
@@ -318,12 +428,20 @@ export function OrdersPanel({
             <thead className="sticky top-0 z-10 bg-card">
               <tr className="border-b border-border/30">
                 {/* Narrow screens carry only what identifies an order; the
-                    rest is one tap away rather than one sideways scroll. */}
-                <th className={cn(TH, "hidden md:table-cell")}>Time</th>
+                    rest is one tap away rather than one sideways scroll.
+                    Pro brings each column in one breakpoint earlier and adds
+                    the router — but NEVER below `sm`, because seven columns on
+                    a 390px screen is a horizontal scrollbar, which is a way of
+                    hiding information while pretending not to. Pro is denser,
+                    not narrower. */}
+                <th className={cn(TH, timeCol)}>Time</th>
                 <th className={TH}>Market</th>
-                <th className={cn(TH, "hidden lg:table-cell")}>Side</th>
+                <th className={cn(TH, sideCol)}>Side</th>
                 <th className={TH}>Received</th>
-                <th className={cn(TH, "hidden xl:table-cell")}>Value</th>
+                <th className={cn(TH, valueCol)}>Value</th>
+                {showTabs && (
+                  <th className={cn(TH, "hidden xl:table-cell")}>Routed via</th>
+                )}
                 <th className={cn(TH, "hidden sm:table-cell")}>Status</th>
                 <th className={cn(TH, "w-9 text-right")}>
                   <span className="sr-only">Details</span>
@@ -331,14 +449,14 @@ export function OrdersPanel({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {visible.map((row) => {
                 const status = statusOf(row.order.status)
                 return (
                   <tr
                     key={row.order.id}
                     className="border-b border-border/20 transition-colors last:border-0 hover:bg-accent/20"
                   >
-                    <td className={cn(TD, "hidden whitespace-nowrap text-muted-foreground md:table-cell")}>
+                    <td className={cn(TD, "whitespace-nowrap text-muted-foreground", timeCol)}>
                       {timeOf(row.order.createdAt)}
                     </td>
                     <td className={TD}>
@@ -371,7 +489,7 @@ export function OrdersPanel({
                         </span>
                       </span>
                     </td>
-                    <td className={cn(TD, "hidden whitespace-nowrap lg:table-cell")}>
+                    <td className={cn(TD, "whitespace-nowrap", sideCol)}>
                       {row.side ? (
                         <span
                           className={cn(
@@ -388,9 +506,14 @@ export function OrdersPanel({
                     <td className={TD}>
                       <span className="block truncate">{sizeText(row)}</span>
                     </td>
-                    <td className={cn(TD, "hidden whitespace-nowrap xl:table-cell")}>
+                    <td className={cn(TD, "whitespace-nowrap", valueCol)}>
                       {row.valueUsd !== null ? usd(row.valueUsd) : "—"}
                     </td>
+                    {showTabs && (
+                      <td className={cn(TD, "hidden whitespace-nowrap text-muted-foreground xl:table-cell")}>
+                        {row.order.router ?? "—"}
+                      </td>
+                    )}
                     <td className={cn(TD, "hidden whitespace-nowrap sm:table-cell")}>
                       <span
                         className={cn(

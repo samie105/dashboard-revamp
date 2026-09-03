@@ -16,14 +16,19 @@ const DASHBOARD_STEPS: OnboardingStep[] = [
     target: '[data-onboarding="dash-actions"]',
     title: "Quick Actions",
     description:
-      "Deposit funds into your wallet or withdraw to your bank in a few clicks — right from the dashboard.",
+      "Deposit and withdraw without leaving this page. Each one asks where the money is coming from first — your Dollar Account, or crypto you already own.",
     placement: "bottom",
   },
   {
     target: '[data-onboarding="dash-balance-cards"]',
     title: "Your Balances",
+    /* Rewritten 2026-09-03 with the accounts themselves. It used to promise a
+       "Main and Spot breakdown always in view", and both halves of that are
+       now wrong: Main is called Holdings, and the cards are earned rather
+       than permanent — a brand-new account sees none of them. Describing a
+       card someone is not looking at is worse than describing nothing. */
     description:
-      "Your total, with the Main and Spot breakdown always in view below it. Tap a card to open that account. Balances update in real-time.",
+      "Holdings is what you keep in your wallet. Spot is what you have moved onto the market to trade with. Each card appears once there is something in it, so this fills in as you go.",
     placement: "bottom",
   },
   {
