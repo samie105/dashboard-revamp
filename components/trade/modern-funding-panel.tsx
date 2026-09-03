@@ -90,6 +90,7 @@ const SLOW_BRIDGE =
   "The bridge is taking longer than usual. Your funds are safe — the deposit continues in the background."
 /** How long a bridge may run before the wait itself needs explaining. */
 const SLOW_AFTER_MS = 10 * 60_000
+const MIN_HYPERLIQUID_DEPOSIT_USDC = 5
 
 /* ── The resume record ─────────────────────────────────────────────────── */
 
@@ -533,6 +534,8 @@ function DepositFlow({
       ? "Enter an amount"
       : value === null
         ? "Enter a valid amount"
+        : value < MIN_HYPERLIQUID_DEPOSIT_USDC
+          ? `Minimum deposit is $${MIN_HYPERLIQUID_DEPOSIT_USDC}`
         : null
 
   /**
