@@ -3,8 +3,8 @@
  * from the Raydium API plus the caller's MNA/WMNA balances via JSON-RPC.
  *
  * Lives server-side so the (possibly credentialed) RPC endpoint never
- * reaches the browser — set SOLANA_RPC_URL in the environment; the public
- * mainnet endpoint is the fallback. No Solana SDK: balances come from
+ * reaches the browser — set SOLANA_RPC_URL in the environment to override
+ * the compiled-in Alchemy default. No Solana SDK: balances come from
  * getTokenAccountsByOwner filtered by mint with jsonParsed encoding, which
  * works for Token-2022 (MNA) and legacy SPL (WMNA) alike and needs no ATA
  * derivation.
@@ -22,7 +22,13 @@ import {
   type WorldstreetTokenSnapshot,
 } from "@/lib/worldstreet-token"
 
-const RPC_URL = process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com"
+/* Compiled-in Alchemy endpoint, verified live (getHealth -> "ok"). The
+   public mainnet-beta endpoint this used to fall back to is aggressively
+   rate-limited and not meant for production traffic — this card polls it on
+   every load. SOLANA_RPC_URL in the environment still wins. */
+const RPC_URL =
+  process.env.SOLANA_RPC_URL ??
+  "https://solana-mainnet.g.alchemy.com/v2/alch_95ewaWPcUZHZvDIsv_aB1"
 const RAYDIUM_POOL_INFO = `https://api-v3.raydium.io/pools/info/ids?ids=${WMNA_RAYDIUM_POOL}`
 
 /** Sum of a wallet's parsed token-account balances for one mint. */
