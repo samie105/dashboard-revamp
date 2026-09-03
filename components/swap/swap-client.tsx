@@ -22,7 +22,8 @@
  * This same component is the dashboard's swap panel (`compact`). The panel
  * honours the mode too — Simple is identical, Pro carries the controls that
  * fit a small card plus a way through to the full page. Both surfaces read
- * `swapView`, so they cannot drift apart.
+ * `swapView`, so they cannot drift apart in what a mode MEANS. Where they do
+ * differ is which mode each one starts in, and why: see `compactMode` below.
  */
 
 import * as React from "react"
@@ -38,13 +39,14 @@ import {
   Shield01Icon,
 } from "@hugeicons/core-free-icons"
 
-import { CardShell, CardHeader, EmptyState, SkeletonRows, PageHeader } from "@/components/ui/system"
+import { CardShell, CardHeader, EmptyState, SkeletonRows, PageHeader, Segmented } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { ModeSwitch } from "@/components/ui/mode-switch"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/error-state"
 import { useUiMode } from "@/components/ui-mode-provider"
 import { swapView } from "@/lib/swap-view"
+import type { UiMode } from "@/lib/ui-mode"
 import { cn } from "@/lib/utils"
 import { num, qty, usd } from "@/lib/num"
 import type { CoinData } from "@/lib/actions"
@@ -370,6 +372,41 @@ function ChainButton({ chain, onCycle }: { chain: string; onCycle: () => void })
   )
 }
 
+/* ── The dashboard card's own Simple/Pro switch ──
+   Same control as `ModeSwitch` — `Segmented`, `sm`, never gold, one tab
+   system — but CONTROLLED by the caller instead of reading the shared
+   preference, because the card owns its mode for the visit rather than
+   speaking for every screen. Its Vivid prefix differs from `ui-mode` for the
+   same reason: pressing this does not change the preference, and the
+   assistant should not believe it does. */
+const CARD_MODE_OPTIONS = [
+  { key: "simple" as const, label: "Simple" },
+  { key: "pro" as const, label: "Pro" },
+]
+
+function CardModeSwitch({
+  value,
+  onChange,
+  className,
+}: {
+  value: UiMode
+  onChange: (mode: UiMode) => void
+  className?: string
+}) {
+  return (
+    <div className={className}>
+      <span className="sr-only">How much detail this card shows</span>
+      <Segmented<UiMode>
+        size="sm"
+        value={value}
+        onChange={onChange}
+        options={CARD_MODE_OPTIONS}
+        vividPrefix="swap-card-mode"
+      />
+    </div>
+  )
+}
+
 /* ── Main SwapClient ── */
 interface SwapClientProps {
   coins: CoinData[]
@@ -384,7 +421,42 @@ function shortTransactionHash(hash?: string) {
 
 export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const available = React.useMemo(() => coins.filter((c) => c.price > 0), [coins])
-  const { mode, isSimple } = useUiMode()
+  const sharedUiMode = useUiMode()
+
+  /**
+   * Which mode this ticket is in — and the one place the two surfaces differ.
+   *
+   * The full /swap page reads and writes the SHARED Simple/Pro preference,
+   * which is right for it: someone who picks Pro on the trade workspace
+   * should find /swap in Pro too, and should still find it there tomorrow.
+   *
+   * The dashboard panel does not. It starts in Simple on every mount, and its
+   * switch writes to this local state only — never to the shared preference.
+   * From the owner call of 2026-09-03: "the swap card that is on the
+   * dashboard should by default be on the simple setting, not on the pro."
+   * The dashboard is a glance surface, not a workspace, and under the shared
+   * preference the moment anyone tried Pro anywhere the home screen turned
+   * into a trading terminal and stayed that way.
+   *
+   * Nothing is taken away: the switch is still on the card, so Pro is one
+   * press from the dashboard for anyone who wants the detail. That choice
+   * simply belongs to this card for this visit.
+   *
+   * The trade-off is real, and stating it here is the point — otherwise the
+   * next reader will "fix" it. The SAME control now behaves differently in
+   * two places: the card forgets on every load, the page remembers. That is
+   * deliberate. They are different kinds of surface, the owner asked for this
+   * behaviour on this card, and the alternative — a glance-surface toggle
+   * silently reconfiguring the trade workspace — is a worse surprise than the
+   * inconsistency it would remove.
+   *
+   * Both branches derive the view through `swapView(mode)`, so the two
+   * surfaces still cannot disagree about what Simple or Pro MEANS. They
+   * disagree only about which one they open in.
+   */
+  const [compactMode, setCompactMode] = React.useState<UiMode>("simple")
+  const mode = compact ? compactMode : sharedUiMode.mode
+  const isSimple = mode === "simple"
   const view = React.useMemo(() => swapView(mode), [mode])
 
   const { user } = useAuth()
@@ -894,7 +966,14 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
             {isSimple ? "Turn one coin into another" : "Live routing, on your terms"}
           </span>
         </div>
-        <ModeSwitch className="shrink-0" />
+        {/* Two switches, one control: the page's writes the shared
+            preference, the dashboard card's writes only its own state. See
+            `compactMode` for why they are not the same component. */}
+        {compact ? (
+          <CardModeSwitch className="shrink-0" value={compactMode} onChange={setCompactMode} />
+        ) : (
+          <ModeSwitch className="shrink-0" />
+        )}
       </div>
 
       <div className="p-4">
