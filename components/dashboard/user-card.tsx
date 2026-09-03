@@ -5,10 +5,7 @@ import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Copy01Icon,
-  Exchange01Icon,
-  CreditCardIcon,
   CoinsSwapIcon,
-  Clock01Icon,
   DollarCircleIcon,
   EyeIcon,
   HelpCircleIcon,
@@ -16,6 +13,7 @@ import {
   Chart01Icon,
   ChartLineData01Icon,
   ArrowUpRight01Icon,
+  ArrowDownLeft01Icon,
   MoreHorizontalIcon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons"
@@ -37,16 +35,12 @@ import { useWalletMode } from "@/components/wallet-mode-provider"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useTradeAccount } from "@/hooks/useTradeAccount"
 import { useAccountHistory, type AccountSpec } from "@/hooks/useAccountHistory"
-import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
-import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { fetchPrices } from "@/lib/crypto-api"
-import { useCashBalance } from "@/hooks/useCashBalance"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
 import { openWelcomeGuide } from "@/components/welcome-guide"
-import { FUTURES_CLOSED } from "@/lib/venues"
+import { usePortfolioTotal } from "@/hooks/usePortfolioTotal"
 import {
   ACCOUNT_KEYS,
-  cryptoTotal,
   dashboardCards,
   type AccountKey,
   type AccountSignal,
@@ -195,6 +189,11 @@ function Sparkline({ series, tone }: { series: number[]; tone: "up" | "down" | "
    quiet line under the hero now (see below), out of the total and out of the
    way.
 
+   Futures gets no card while the venue is shut — the reasoning is the other
+   branch's and it is right: a tile is a door, and this one would open onto a
+   screen that cannot trade. Its money is still real, so it still feeds the
+   30-day history below; only the destination isn't ready.
+
    WHICH of these render is `dashboardCards`' decision, not this table's. */
 const ACCOUNTS: Record<
   AccountKey,
@@ -219,28 +218,25 @@ const CARD_GRID_COLS: Record<number, string> = {
 
 export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const { user, isLoaded } = useAuth()
-  const { addresses, walletsGenerated } = useWallet()
-  /* `walletsGenerated` is the LEGACY (Privy) provider reporting that it
-     provisioned its wallets. A modern-wallet user never gets it — there is no
-     Privy wallet to provision — so gating the on-chain total on it zeroed the
-     dashboard for exactly the users whose balances had loaded fine.
-     `useWalletBalances` already follows the active mode; the totals below just
-     have to stop asking the other wallet for permission. Summing an empty
-     list is already 0, so nothing is lost by dropping the guard in modern
-     mode. */
+  const { addresses } = useWallet()
+  /* The old `walletsGenerated` gate is gone. It was the LEGACY (Privy)
+     provider reporting that it provisioned its wallets — a modern-wallet user
+     never gets it, there is no Privy wallet to provision — so gating the
+     on-chain figure on it zeroed the dashboard for exactly the users whose
+     balances had loaded fine. `useWalletBalances` already follows the active
+     mode, and `usePortfolioTotal` (which owns the arithmetic now) never asked
+     the other wallet for permission in the first place. Summing an empty list
+     is already 0, so nothing is lost. */
   const { mode: walletMode } = useWalletMode()
   const [moreOpen, setMoreOpen] = React.useState(false)
-  const balancesReady = walletMode === "modern" || walletsGenerated
   const { openDoor } = useMoneyFlow()
-  const { balances: onChainBalances, isLoading: onChainLoading } = useWalletBalances()
-  // One /api/trade/account read serves the Spot/Futures figures AND the
-  // futures positions the daily P&L needs.
-  const {
-    balances: hlAccountBalances,
-    positions: hlPositions,
-    futuresUsd,
-    isLoading: tradeAccountLoading,
-  } = useTradeAccount()
+  /* Still read here, but for the per-coin DETAIL only — the daily P&L and the
+     30-day curves are per-symbol arithmetic and the total is not. Every dollar
+     figure on this screen comes from `usePortfolioTotal` below. */
+  const { balances: onChainBalances } = useWalletBalances()
+  // One /api/trade/account read serves the futures positions the daily P&L
+  // needs AND the spot token quantities its 24h move is computed from.
+  const { balances: hlAccountBalances, positions: hlPositions } = useTradeAccount()
   /* Does this person have a wallet at all? Only the Networks strip asks, and
      only `needsSetup` can answer it: it is a CONFIRMED 404 from the backend,
      so it cannot be true while the lookup is still in flight — a wallet that
@@ -280,129 +276,79 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     load()
     const id = setInterval(load, 30_000)
     return () => { cancelled = true; clearInterval(id) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /* Dollar Account (worldstreet-wallet). It is NOT part of the crypto total
-     any more — that is a different product — but it is still the balance a
-     phone user has no other way to see, so the hero carries it as a quiet
-     second line. `loaded` is what keeps a placeholder zero from being read as
-     a real one. USD only; NGN is a different currency and never silently
-     folded into a USD figure. */
-  const { cash: cashBalance, loaded: cashLoaded } = useCashBalance()
+  /* EVERY dollar figure below comes out of this one hook, and that is the
+     whole point of it.
 
-  // SpotV2 ledger data (same source as assets page)
-  const [spotLedger, setSpotLedger] = React.useState<LedgerBalance[]>([])
-  const [spotV2Positions, setSpotV2Positions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
-  /* Whether the read above has come BACK, which the data alone cannot say —
-     an empty ledger and an unasked question look identical. The Spot card is
-     withheld until this flips, so a brand-new user is never shown a $0.00
-     that is really a request in flight. */
-  const [spotLoaded, setSpotLoaded] = React.useState(false)
+     This component used to add the money up itself — its own on-chain sum, its
+     own spot fetch, its own `cryptoTotal(...)` call — while the navbar added a
+     different set of things up in a pill directly above it. Two figures that
+     both look like "your balance", eight pixels apart, disagreeing. There is
+     no way to keep two copies of arithmetic in step by remembering to; the
+     only fix is for there to be one copy. So `usePortfolioTotal` owns it, the
+     navbar and /portfolio read the same call, and the three agree by
+     construction rather than by coincidence.
 
-  React.useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    async function load() {
-      try {
-        const [balances, positions] = await Promise.all([
-          getSpotBalances(),
-          getSpotPositions(),
-        ])
-        const tokens = positions.map((p) => p.token)
-        const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
-        if (cancelled) return
-        setSpotLedger(balances)
-        setSpotV2Positions(positions.map((p) => ({ ...p, currentPrice: priceMap.get(p.token) ?? 0 })))
-      } catch { /* empty state */ } finally {
-        /* A failed read still counts as answered. It is not the truth, but
-           the alternative is that one sulking service pins the whole
-           breakdown on skeletons forever — and "we could not reach spot"
-           looks the same to the user as "you have not used spot yet". */
-        if (!cancelled) setSpotLoaded(true)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [user])
+     `total` is Holdings + Spot + Futures — futures contributing zero while the
+     venue is shut, because the larger figure counted money nobody could open a
+     screen to reach. Cash is deliberately NOT in it: the hero is the CRYPTO
+     balance, and folding a dollar balance in was quietly answering "what are
+     my coins worth?" with a number that included money that is not coins. It
+     comes back alongside instead, for the Dollar Account chip under the hero.
 
-  // On-chain balance: sum of all on-chain tokens valued in USD
-  const onChainTotal = React.useMemo(() => {
-    if (!balancesReady) return 0
-    let total = 0
-    for (const b of onChainBalances) {
-      const p = getPrice(livePrices, b.symbol)
-      total += b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
-    }
-    return total
-  }, [onChainBalances, livePrices, balancesReady])
+     `livePrices` is passed in rather than polled again inside the hook — this
+     screen already runs a 30s feed, and a second poller would be a third
+     answer to the same question. */
+  const {
+    total: totalBalance,
+    onChain: onChainTotal,
+    spot: spotBalance,
+    futures: futuresBalance,
+    futuresOpen,
+    cash: cashBalance,
+    chainTotals,
+    onChainSettled,
+    spotSettled,
+    futuresSettled,
+    cashSettled,
+  } = usePortfolioTotal(livePrices)
 
-  // What each chain is worth — the network strip's figures (mobile grammar:
-  // the strip carries value, chains are never hidden behind a dropdown).
-  const chainTotals = React.useMemo(() => {
-    const m: Record<string, number> = Object.fromEntries(NETWORKS.map((n) => [n.key, 0]))
-    for (const b of onChainBalances) {
-      const p = getPrice(livePrices, b.symbol)
-      const v = b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
-      // The feed keys by network (arbitrum is its own key even though it shares
-      // the ethereum address), so this maps 1:1 onto the strip.
-      if (m[b.chain] !== undefined) m[b.chain] += v
-    }
-    return m
-  }, [onChainBalances, livePrices])
-
-  // Spot balance = SpotV2 ledger (available + locked) + positions value (matches assets page)
-  const spotBalance = React.useMemo(() => {
-    const usdcTotal = spotLedger.reduce((sum, b) => sum + b.available + b.locked, 0)
-    const posTotal = spotV2Positions.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0)
-    return usdcTotal + posTotal
-  }, [spotLedger, spotV2Positions])
-
-  // Futures balance (Hyperliquid perps account value)
-  const futuresBalance = futuresUsd
+  /* Spot's per-token quantities. The hook carries what spot is WORTH; what it
+     does not carry is which coins make that up, and both the 24h P&L and the
+     30-day curve are per-symbol arithmetic. No second request for it: the
+     /api/trade/account read already open for the futures positions is the
+     same call `getSpotPositions()` makes, so these are derived from data
+     that is here anyway. */
+  const spotTokens = React.useMemo(
+    () => (hlAccountBalances?.spotTokens ?? []).filter((t) => t.total > 0),
+    [hlAccountBalances],
+  )
 
   // ── Today's P&L, per account ──
   // Main: on-chain holdings moved by each coin's 24h change.
   const mainPnL = React.useMemo(() => {
-    if (!balancesReady) return 0
     const h: Record<string, number> = {}
     for (const b of onChainBalances) {
       h[b.symbol] = (h[b.symbol] || 0) + b.balance
     }
     return calculateDailyPnL(h, livePrices, coins)
-  }, [onChainBalances, balancesReady, livePrices, coins])
+  }, [onChainBalances, livePrices, coins])
 
   // Spot: HL spot token holdings, same 24h-change arithmetic (USDC is flat).
   const spotPnL = React.useMemo(() => {
     const h: Record<string, number> = {}
-    for (const p of spotV2Positions) {
-      h[p.token] = (h[p.token] || 0) + p.quantity
+    for (const t of spotTokens) {
+      h[t.symbol] = (h[t.symbol] || 0) + t.total
     }
     return calculateDailyPnL(h, livePrices, coins)
-  }, [spotV2Positions, livePrices, coins])
+  }, [spotTokens, livePrices, coins])
 
-  /* Futures' 24h P&L used to be summed in here. It went with the balance
-     below: the venue is closed, so counting its movement in "today" put a
-     number on the hero that nothing on any screen accounts for. */
+  /* Futures' 24h P&L used to be summed in here. It went the way of its
+     contribution to the total: the venue is closed, so counting its movement
+     in "today" put a number on the hero that nothing on any screen accounts
+     for. */
   const dailyPnL = mainPnL + spotPnL
-
-  const futuresOpen = !FUTURES_CLOSED
-
-  /* Holdings + Spot + Futures, and nothing else. The arithmetic lives in
-     `lib/dashboard-cards` so it can be asserted without mounting React, and
-     so the dashboard and /portfolio cannot drift apart again.
-
-     Two things are deliberately absent. Futures, because the venue is closed
-     and the larger figure counted money nobody could open a screen to reach.
-     And cash: the hero is the CRYPTO balance now, so folding a dollar
-     balance into it was quietly answering "what are my coins worth?" with a
-     number that included money that is not coins. */
-  const totalBalance = cryptoTotal({
-    holdings: onChainTotal,
-    spot: spotBalance,
-    futures: futuresBalance,
-    futuresOpen,
-  })
 
   const accountBalances: Record<AccountKey, number> = {
     holdings: onChainTotal,
@@ -415,26 +361,26 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
      right this second", because a trader who happens to be flat today should
      get their cards, not the new-user invitation. `settled` is the other
      half: it says an answer actually arrived, so a card is never withheld on
-     the strength of a placeholder zero. */
+     the strength of a placeholder zero — and those flags come from the hook
+     too, so "has spot answered?" cannot mean one thing here and another in
+     the pill above. */
   const accountSignals: Record<AccountKey, AccountSignal> = {
     holdings: {
       open: true,
-      /* `balancesReady` is a constant true in modern mode; in legacy mode it
-         is the Privy provisioning flag, and until it flips `onChainTotal` is
-         pinned to 0 above — so the figure is not an answer yet either. */
-      settled: balancesReady && !onChainLoading,
+      settled: onChainSettled,
       used: onChainBalances.length > 0 || onChainTotal > 0,
     },
     spot: {
       open: true,
-      /* A signed-out visitor's ledger never loads because it is never asked
-         for. That is still a settled answer, and it is "nothing". */
-      settled: spotLoaded || (isLoaded && !user),
-      used: spotLedger.length > 0 || spotV2Positions.length > 0 || spotBalance > 0,
+      /* The hook settles this for a signed-out visitor too: a ledger that is
+         never asked for is still a settled answer, and the answer is
+         "nothing". */
+      settled: spotSettled,
+      used: spotTokens.length > 0 || spotBalance > 0,
     },
     futures: {
       open: futuresOpen,
-      settled: !tradeAccountLoading,
+      settled: futuresSettled,
       used: futuresBalance > 0 || hlPositions.length > 0,
     },
   }
@@ -450,8 +396,8 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
       mainHoldings[b.symbol] = (mainHoldings[b.symbol] || 0) + b.balance
     }
     const spotHoldings: Record<string, number> = {}
-    for (const p of spotV2Positions) {
-      spotHoldings[p.token] = (spotHoldings[p.token] || 0) + p.quantity
+    for (const t of spotTokens) {
+      spotHoldings[t.symbol] = (spotHoldings[t.symbol] || 0) + t.total
     }
     const futuresHoldings: Record<string, number> = {}
     for (const p of hlPositions) {
@@ -472,7 +418,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
         holdings: futuresOpen ? futuresHoldings : {},
       },
     ]
-  }, [onChainBalances, spotV2Positions, hlPositions, onChainTotal, spotBalance, futuresBalance, futuresOpen])
+  }, [onChainBalances, spotTokens, hlPositions, onChainTotal, spotBalance, futuresBalance, futuresOpen])
 
   const { sparkSeries, changes: periodChanges } = useAccountHistory(accountSpecs)
 
@@ -482,12 +428,12 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     { label: "30 Days", value: periodChanges.month },
   ]
 
-  // Count active assets across on-chain + Hyperliquid spot
-  const activeAssetCount = React.useMemo(() => {
-    const onChainCount = onChainBalances.filter((b) => b.balance > 0).length
-    const hlCount = (hlAccountBalances?.spotTokens ?? []).filter((t) => t.total > 0).length
-    return onChainCount + hlCount
-  }, [onChainBalances, hlAccountBalances])
+  // Count active assets across on-chain + Hyperliquid spot. `spotTokens` is
+  // already filtered to the ones actually held, so it counts itself.
+  const activeAssetCount = React.useMemo(
+    () => onChainBalances.filter((b) => b.balance > 0).length + spotTokens.length,
+    [onChainBalances, spotTokens],
+  )
 
   const handleCopy = (addr: string, chain: string) => {
     if (addr) {
@@ -526,10 +472,17 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
      list of addresses, legacy Deposit opened the cash flow, and Withdraw was
      a link to a whole other page — so the button meant a different thing to
      two people looking at the same screen. The chooser owns that branch now,
-     which is why the `walletMode` conditional is gone from this pair. */
+     which is why the `walletMode` conditional is gone from this pair.
+
+     The ICONS come from the other branch, and they are right: Deposit and
+     Withdraw are ONE pair and now look like it — the same arrow, mirrored,
+     in and out. They used to be an exchange glyph and a credit card, two
+     unrelated pictures for two halves of one idea, and neither of them said
+     "direction". The glyphs are theirs; where the buttons GO is the chooser's,
+     not the wallet mode's. */
   type DashAction = {
     label: string
-    icon: typeof Exchange01Icon
+    icon: typeof ArrowDownLeft01Icon
     href?: string
     onClick?: () => void
     vivid: string
@@ -539,7 +492,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   }
 
   const PRIMARY_ACTIONS: DashAction[] = [
-    { label: "Deposit", onClick: () => openDoor("deposit"), icon: Exchange01Icon, vivid: "open-deposit", vividLabel: "Ask where the money is coming from, then deposit" },
+    { label: "Deposit", onClick: () => openDoor("deposit"), icon: ArrowDownLeft01Icon, vivid: "open-deposit", vividLabel: "Ask where the money is coming from, then deposit" },
     /* Withdraw no longer asks a question. Cash withdrawals are shut until
        there is a treasury to settle them (CASH_WITHDRAWALS_CLOSED in
        money-doors.tsx), which leaves exactly one way out, and a chooser with
@@ -547,7 +500,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
        The label has to say what actually happens, because Vivid reads it to
        decide what pressing this does. It goes back to asking on its own when
        that constant flips. */
-    { label: "Withdraw", onClick: () => openDoor("withdraw"), icon: CreditCardIcon, vivid: "open-withdraw", vividLabel: "Send crypto out of your wallet" },
+    { label: "Withdraw", onClick: () => openDoor("withdraw"), icon: ArrowUpRight01Icon, vivid: "open-withdraw", vividLabel: "Send crypto out of your wallet" },
   ]
 
   const MORE_ACTIONS: DashAction[] = [
@@ -678,8 +631,8 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   Deliberately subordinate, and deliberately outside the
                   figure above it: this money is a different product, and the
                   point of the line is to say so while still letting someone
-                  find their dollars. `loaded` holds the figure back so a real
-                  $0.00 is never confused with a request in flight. */}
+                  find their dollars. `cashSettled` holds the figure back so a
+                  real $0.00 is never confused with a request in flight. */}
               {/* A sunken chip rather than a third line of loose text. Under a
                   45px figure, "Dollar Account $1,250.75" set as a run-on read
                   as an orphaned caption — the label ran into its own number
@@ -696,7 +649,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                 />
                 Dollar Account
                 <span className="font-semibold tabular-nums text-foreground">
-                  {hidden ? MASK : cashLoaded ? formatUSD(cashBalance) : "––"}
+                  {hidden ? MASK : cashSettled ? formatUSD(cashBalance) : "––"}
                 </span>
               </span>
             </div>
@@ -930,12 +883,28 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
           </div>
 
           {/* Network footer — the receive surface, demoted under the actions.
-              One box per chain and all six on screen at once (three across
-              on a phone, six across on a desktop): nothing to swipe, nothing
-              hidden off the edge. Each box carries that chain's value; tap
-              one to surface its deposit address underneath, tap again to put
-              it away. Arbitrum reuses the Ethereum address, as the registry
-              says. */}
+              One box per chain and all six on screen at once: nothing to
+              swipe, nothing hidden off the edge. Each box carries that chain's
+              value; tap one to surface its deposit address underneath, tap
+              again to put it away. Arbitrum reuses the Ethereum address, as
+              the registry says.
+
+              The tiles themselves are the other branch's, and they are better
+              than what was here: the value set at a size worth reading rather
+              than 12px grey, and a SHARE BAR under it so the split between
+              chains is visible without doing arithmetic across six figures.
+              Two things came back the other way. The empty state below, which
+              that branch has no equivalent of — a wallet-less user was shown
+              six boxes of nothing. And the bar's colour: theirs painted it
+              gold, and gold in this system means brand, primary action or
+              active state, never a quantity. A share bar is a data mark, so it
+              is neutral ink here and the tile's gold is left to mean
+              "selected".
+
+              Breakpoints are both branches' put together: two across on a
+              phone, which is what gives the bigger figure room to sit on one
+              line, and all six across from lg, which is what keeps a footer a
+              footer on a desktop. */}
           <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between gap-3">
               <Eyebrow>Networks</Eyebrow>
@@ -972,18 +941,25 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               </div>
             ) : (
             <>
-            <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               {WALLETS.map((w) => {
                 const active = w.key === selectedWallet
-                const value = hidden ? "••••" : formatUSD(chainTotals[w.key] ?? 0)
+                const chainValue = chainTotals[w.key] ?? 0
+                const value = hidden ? "••••" : formatUSD(chainValue)
+                /* Share of the ON-CHAIN total, which is what these tiles add
+                   up to — not of the hero's total, which counts Spot and
+                   Futures money that lives on no chain in this row. */
+                const share = onChainTotal > 0 ? (chainValue / onChainTotal) * 100 : 0
                 return (
                   <button
                     key={w.key}
                     type="button"
                     onClick={() => setSelectedWallet(active ? null : w.key)}
+                    data-vivid-target={`dash-chain-${w.key}`}
+                    data-vivid-label={`Show the ${w.label} address and balance`}
                     aria-pressed={active}
                     aria-label={`${w.label}, ${hidden ? "balance hidden" : value}`}
-                    className={`ws-card-glass flex min-h-14 min-w-0 flex-col items-start justify-between gap-1.5 rounded-xl px-3 py-2.5 text-left ring-1 transition-all duration-150 active:scale-[0.97] motion-reduce:active:scale-100 ${
+                    className={`ws-card-glass flex min-h-14 min-w-0 flex-col items-start justify-between gap-2 rounded-xl px-3 py-2.5 text-left ring-1 transition-all duration-150 active:scale-[0.97] motion-reduce:active:scale-100 ${
                       active ? "bg-accent ring-border/70" : "bg-card/60 ring-border/40 hover:bg-accent/60"
                     }`}
                   >
@@ -991,8 +967,23 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                       <img src={w.icon} alt="" className="h-[18px] w-[18px] shrink-0 rounded-full" />
                       <span className="truncate text-[12.5px] font-semibold leading-tight">{w.label}</span>
                     </span>
-                    <span className={`text-[13px] leading-none tabular-nums ${active ? "text-foreground" : "text-muted-foreground"}`}>
+                    <span className={`w-full truncate text-[15px] font-semibold leading-none tabular-nums ${active ? "text-foreground" : "text-foreground/90"}`}>
                       {value}
+                    </span>
+                    {/* A chain holding nothing gets an empty track rather than
+                        a bar of zero width pretending to be a measurement.
+                        Hidden balances take the track away too — a visible
+                        split is still a balance. */}
+                    <span
+                      aria-hidden
+                      className="h-1 w-full overflow-hidden rounded-full bg-foreground/[0.06]"
+                    >
+                      {!hidden && share > 0 && (
+                        <span
+                          className="block h-full rounded-full bg-foreground/25"
+                          style={{ width: `${Math.max(share, 3)}%` }}
+                        />
+                      )}
                     </span>
                   </button>
                 )

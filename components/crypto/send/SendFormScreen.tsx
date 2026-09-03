@@ -13,17 +13,12 @@ import * as React from "react"
 
 import { AmountField, ChoiceRow, FlowCta, InlineNotice, UnavailablePanel } from "@/components/ui/flow"
 import { Eyebrow } from "@/components/ui/system"
-import { FEE_SELF_LABEL, FEE_SPONSORED_CHIP_LABEL } from "./send-helpers"
 
 export type ChoiceOption = { key: string; label: string; sub?: string; icon?: string }
 
 const ADDRESS_INPUT_CLASS =
   "w-full rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 font-mono text-[13px] outline-none ring-1 ring-border/25 transition-shadow focus-visible:ring-2 focus-visible:ring-primary/40 placeholder:font-sans disabled:opacity-50"
 
-const FEE_OPTIONS: ChoiceOption[] = [
-  { key: "self", label: FEE_SELF_LABEL },
-  { key: "sponsored", label: FEE_SPONSORED_CHIP_LABEL, sub: "When available" },
-]
 
 export function SendFormScreen({
   networkOptions,
@@ -46,9 +41,6 @@ export function SendFormScreen({
   amountApprox,
   amountHint,
   maxSpend,
-  feeOffered,
-  sponsorFees,
-  onSponsorFeesChange,
   ctaLabel,
   ctaDisabled,
   ctaBusy,
@@ -78,9 +70,6 @@ export function SendFormScreen({
   amountApprox: string | null
   amountHint: string | null
   maxSpend: number | null
-  feeOffered: boolean
-  sponsorFees: boolean
-  onSponsorFeesChange: (sponsorFees: boolean) => void
   ctaLabel: string
   ctaDisabled: boolean
   ctaBusy: boolean
@@ -165,20 +154,14 @@ export function SendFormScreen({
                 disabled={disabled}
               />
 
-              {/* Spec §11: rendered only when the service says sponsorship is
-                  available for this network and operation. */}
-              {feeOffered && (
-                <div className="flex flex-col gap-2">
-                  <Eyebrow>Network fee</Eyebrow>
-                  <ChoiceRow
-                    columns={2}
-                    options={FEE_OPTIONS}
-                    value={sponsorFees ? "sponsored" : "self"}
-                    onChange={(key) => onSponsorFeesChange(key === "sponsored")}
-                    disabled={disabled}
-                  />
-                </div>
-              )}
+              {/* The fee choice is gone from the form.
+                  It offered "Worldstreet pays — when available", which is a
+                  choice whose outcome the user cannot know when they make it,
+                  sitting above the button that spends their money. The sender
+                  pays the network fee; `sponsorFees` stays in the flow's state
+                  and its plumbing is untouched, so restoring the control is a
+                  matter of putting this block back once sponsorship is
+                  something we can actually promise. */}
             </>
           )}
 

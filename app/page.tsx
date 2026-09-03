@@ -11,7 +11,9 @@ import { DashboardOnboarding } from "@/components/dashboard/dashboard-onboarding
 // import { MnaBanner } from "@/components/dashboard/mna-banner"
 import { Rise } from "@/components/ui/system"
 import { WelcomeGuide } from "@/components/welcome-guide"
-import { getPrices, getTrades } from "@/lib/actions"
+// getTrades went with the public trade tape: Recent Trades reads the user's
+// own fills from the ledger now, so the page has nothing to prefetch for it.
+import { getPrices } from "@/lib/actions"
 
 async function WalletCardLoader() {
   const pricesData = await getPrices()
@@ -25,15 +27,13 @@ async function WalletCardLoader() {
 }
 
 async function DashboardGridLoader() {
-  const [pricesData, btcTrades] = await Promise.all([
-    getPrices(),
-    getTrades("BTCUSDT", 8),
-  ])
+  // The dashboard no longer previews a public trade tape — Recent Trades
+  // shows the user's OWN fills from the ledger — so nothing here needs it.
+  const pricesData = await getPrices()
   return (
     <DashboardGrid
       coins={pricesData.coins}
       prices={pricesData.prices}
-      initialTrades={btcTrades.data}
       error={pricesData.error || (pricesData.coins.length === 0 ? "No market data available" : undefined)}
     />
   )

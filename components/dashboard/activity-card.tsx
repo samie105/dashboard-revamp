@@ -5,28 +5,41 @@
  *
  * The single biggest reason people re-open a money dashboard is "did it
  * arrive?" — so anything still in flight is pinned to the top with a live
- * status chip, and the latest settled movements sit under it. Rows link
- * nowhere individually; the card is a preview of /transactions, and the
- * header link goes there.
+ * status chip, and the latest settled movements sit under it.
+ *
+ * It read `/api/transactions/unified`, which the crypto backend does not
+ * implement. The proxy forwarded it, the request failed, the catch set an
+ * empty list, and a user with a page of real transfers and swaps was told
+ * "No activity yet" — not a blank screen but a wrong answer, stated plainly,
+ * on the card people open the dashboard to read. It reads the ledger now:
+ * the same records the wallet's own history is built from.
  */
 
 import * as React from "react"
+import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   ArrowDown01Icon,
   ArrowUp01Icon,
   RepeatIcon,
-  Exchange01Icon,
+  ArrowDataTransferHorizontalIcon,
   Clock01Icon,
 } from "@hugeicons/core-free-icons"
 import { CardHeader, CardShell, EmptyState as SystemEmptyState, SkeletonRows } from "@/components/ui/system"
-import { fetchTransactions, type UnifiedTransaction } from "@/lib/crypto-api"
-import { useAuth } from "@/components/auth-provider"
+import { CoinAvatar } from "@/components/ui/coin-avatar"
+import { useLedgerRecords } from "@/hooks/useLedgerRecords"
+import { useSpotRegistry } from "@/hooks/useSpotRegistry"
+import { describeLedgerRecord, type LedgerRow } from "@/lib/ledger-rows"
+import { explorerTxUrl } from "@/lib/crypto-backend/network-meta"
+import { chainLabel } from "@/lib/spot-market-search"
 
-const PENDING_STATUSES = new Set(["pending", "processing"])
+/** Ledger statuses that mean "still moving". */
+const PENDING_STATUSES = new Set(["submitted", "pending", "processing"])
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string | null): string {
+  if (!iso) return ""
   const ms = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(ms)) return ""
   const min = Math.floor(ms / 60_000)
   if (min < 1) return "Just now"
   if (min < 60) return `${min}m ago`
@@ -36,40 +49,19 @@ function timeAgo(iso: string): string {
   return days === 1 ? "Yesterday" : `${days}d ago`
 }
 
-function txMeta(tx: UnifiedTransaction): {
-  label: string
-  icon: typeof RepeatIcon
-  direction: "in" | "out" | "neutral"
-} {
-  switch (tx.type) {
-    case "deposit":
-      return { label: "Deposit", icon: ArrowDown01Icon, direction: "in" }
-    case "withdrawal":
-      return { label: "Withdrawal", icon: ArrowUp01Icon, direction: "out" }
-    case "swap":
-      return { label: "Swap", icon: RepeatIcon, direction: "neutral" }
-    case "p2p":
-      return {
-        label: tx.side === "sell" ? "P2P Sell" : "P2P Buy",
-        icon: Exchange01Icon,
-        direction: tx.side === "sell" ? "out" : "in",
-      }
-    case "transfer":
-      return tx.direction === "incoming"
-        ? { label: "Received", icon: ArrowDown01Icon, direction: "in" }
-        : { label: "Sent", icon: ArrowUp01Icon, direction: "out" }
-    default:
-      return { label: tx.type, icon: RepeatIcon, direction: "neutral" }
-  }
+function iconFor(row: LedgerRow) {
+  if (row.kind === "trade") return RepeatIcon
+  if (row.direction === "neutral") return ArrowDataTransferHorizontalIcon
+  return row.direction === "in" ? ArrowDown01Icon : ArrowUp01Icon
 }
 
-function StatusChip({ status }: { status: UnifiedTransaction["status"] }) {
-  if (status === "completed") return null
+function StatusChip({ status }: { status: string }) {
+  if (status === "confirmed") return null
   if (PENDING_STATUSES.has(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-chip px-2 py-0.5 text-[11px] font-semibold text-warning">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
-        {status === "processing" ? "Processing" : "Pending"}
+        In flight
       </span>
     )
   }
@@ -80,43 +72,33 @@ function StatusChip({ status }: { status: UnifiedTransaction["status"] }) {
       </span>
     )
   }
-  // cancelled / expired
+  // `unknown` is the reconciler saying it could not reach the chain — which is
+  // not the same as "it didn't happen".
   return (
     <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      Unconfirmed
     </span>
   )
 }
 
 export function ActivityCard() {
-  const { user } = useAuth()
-  const [transactions, setTransactions] = React.useState<UnifiedTransaction[] | null>(null)
-
-  React.useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    async function load() {
-      try {
-        const page = await fetchTransactions({ limit: "12" })
-        if (!cancelled) setTransactions(page.transactions)
-      } catch {
-        if (!cancelled) setTransactions((prev) => prev ?? [])
-      }
-    }
-    load()
-    // Same 30s cadence as the balance polls — pending rows resolve on their own.
-    const id = setInterval(load, 30_000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [user])
+  const { records, loading } = useLedgerRecords()
+  const registry = useSpotRegistry()
 
   const rows = React.useMemo(() => {
-    if (!transactions) return []
-    const pending = transactions.filter((t) => PENDING_STATUSES.has(t.status))
-    const settled = transactions.filter((t) => !PENDING_STATUSES.has(t.status))
+    const described = records
+      .map((record) => describeLedgerRecord(record, registry))
+      .filter((row): row is LedgerRow => row !== null)
+    // Anything still moving is the reason the page was opened, so it leads.
+    const pending = described.filter((row) => PENDING_STATUSES.has(row.status))
+    const settled = described.filter((row) => !PENDING_STATUSES.has(row.status))
     return [...pending, ...settled].slice(0, 5)
-  }, [transactions])
+  }, [records, registry])
 
-  const pendingCount = transactions?.filter((t) => PENDING_STATUSES.has(t.status)).length ?? 0
+  const pendingCount = React.useMemo(
+    () => records.filter((record) => PENDING_STATUSES.has(String(record.status))).length,
+    [records],
+  )
 
   return (
     <CardShell data-onboarding="dash-activity">
@@ -134,71 +116,99 @@ export function ActivityCard() {
         link={{ label: "View all", href: "/transactions" }}
       />
 
-      {transactions === null ? (
+      {loading && records.length === 0 ? (
         <SkeletonRows rows={4} label="Loading activity" />
-      ) : transactions.length === 0 ? (
+      ) : rows.length === 0 ? (
         <SystemEmptyState
           illustration="noTransactions"
           title="No activity yet"
-          description="Deposits, withdrawals and swaps land here the moment they happen"
-          ctas={[{ label: "Make a deposit", href: "/portfolio" }]}
+          description="Deposits, withdrawals and swaps land here the moment they're made."
         />
       ) : (
         <div className="flex flex-col divide-y divide-border/20 px-1 pb-2">
-          {rows.map((tx) => {
-            const meta = txMeta(tx)
-            const isPending = PENDING_STATUSES.has(tx.status)
-            const failed = tx.status === "failed"
-            return (
-              <div key={tx.id} className="flex items-center gap-3 px-3 py-2.5">
+          {rows.map((row) => {
+            const pending = PENDING_STATUSES.has(row.status)
+            const failed = row.status === "failed"
+            const explorer = row.txHash ? explorerTxUrl(row.networkId, row.txHash) : null
+            /* Every row now goes somewhere. They linked nowhere before, which
+               on the card answering "did it arrive?" left the one question it
+               raises with no way to check. */
+            const body = (
+              <>
                 <span
                   className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                    failed
-                      ? "bg-debit-chip"
-                      : isPending
-                        ? "bg-warning-chip"
-                        : "bg-foreground/[0.05]"
+                    failed ? "bg-debit-chip" : pending ? "bg-warning-chip" : "bg-foreground/[0.05]"
                   }`}
                 >
-                  <HugeiconsIcon
-                    icon={isPending ? Clock01Icon : meta.icon}
-                    className={`h-[17px] w-[17px] ${
-                      failed ? "text-debit" : isPending ? "text-warning" : "text-muted-foreground"
-                    }`}
-                  />
+                  {row.icon || row.kind === "trade" ? (
+                    <CoinAvatar symbol={row.symbol} src={row.icon} size="sm" />
+                  ) : (
+                    <HugeiconsIcon
+                      icon={pending ? Clock01Icon : iconFor(row)}
+                      className={`h-[17px] w-[17px] ${
+                        failed ? "text-debit" : pending ? "text-warning" : "text-muted-foreground"
+                      }`}
+                    />
+                  )}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
                   <span className="flex items-center gap-2">
-                    <span className="truncate text-[13.5px] font-medium">{meta.label}</span>
-                    <StatusChip status={tx.status} />
+                    <span className="truncate text-[13.5px] font-medium">
+                      {row.label} {row.symbol}
+                    </span>
+                    <StatusChip status={row.status} />
                   </span>
                   <span className="truncate text-[12px] text-muted-foreground">
-                    {tx.chain ? `${tx.chain.charAt(0).toUpperCase()}${tx.chain.slice(1)} · ` : ""}
-                    {timeAgo(tx.createdAt)}
+                    {row.networkId ? `${chainLabel(row.networkId)} · ` : ""}
+                    {timeAgo(row.createdAt)}
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end leading-tight">
-                  <span
-                    className={`text-[13.5px] font-semibold tabular-nums ${
-                      failed || tx.status === "cancelled"
-                        ? "text-muted-foreground line-through"
-                        : meta.direction === "in"
-                          ? "text-credit"
-                          : meta.direction === "out"
-                            ? "text-debit"
-                            : ""
-                    }`}
-                  >
-                    {meta.direction === "in" ? "+" : meta.direction === "out" ? "−" : ""}
-                    {tx.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} {tx.token}
-                  </span>
-                  {tx.fiatAmount !== undefined && (
+                  {/* A number we cannot state honestly is left out, never
+                      printed as zero. */}
+                  {row.amountText && (
+                    <span
+                      className={`text-[13.5px] font-semibold tabular-nums ${
+                        failed
+                          ? "text-muted-foreground line-through"
+                          : row.direction === "in"
+                            ? "text-credit"
+                            : row.direction === "out"
+                              ? "text-debit"
+                              : ""
+                      }`}
+                    >
+                      {row.direction === "in" ? "+" : row.direction === "out" ? "−" : ""}
+                      {row.amountText}
+                    </span>
+                  )}
+                  {row.valueUsd !== null && (
                     <span className="text-[11.5px] tabular-nums text-muted-foreground">
-                      ${tx.fiatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ${row.valueUsd.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: row.valueUsd < 1 ? 4 : 2,
+                      })}
                     </span>
                   )}
                 </span>
-              </div>
+              </>
+            )
+            const className =
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-accent/40"
+            return explorer ? (
+              <a
+                key={row.id}
+                href={explorer}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={className}
+              >
+                {body}
+              </a>
+            ) : (
+              <Link key={row.id} href="/transactions" className={className}>
+                {body}
+              </Link>
             )
           })}
         </div>

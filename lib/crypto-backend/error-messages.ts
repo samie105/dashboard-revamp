@@ -49,6 +49,60 @@ export function existingOperationIdFrom(error: unknown): string | null {
   return null
 }
 
+
+/**
+ * Known chain failures, in words.
+ *
+ * Chains report failures as machine payloads — `{"InsufficientFundsForRent":
+ * {"account_index":0}}`, `{"InstructionError":[0,{"Custom":1}]}` — and the
+ * fall-through below used to print whatever it was handed. A user reading
+ * "Something went wrong. {"InsufficientFundsForRent":{"account_index":0}}" is
+ * being shown a debugger's output and asked to interpret it.
+ *
+ * Every entry here says the same thing that payload says, in the words the
+ * user needs: what is short, and therefore what to do.
+ */
+const CHAIN_FAILURES: readonly [RegExp, string][] = [
+  [/InsufficientFundsForRent|insufficient lamports|rent[- ]exempt/i, "Insufficient funds for gas"],
+  [/insufficient funds for gas|gas required exceeds/i, "Insufficient funds for gas"],
+  [/InsufficientFunds|insufficient balance|0x1/i, "Insufficient balance for this transfer"],
+  [/SlippageToleranceExceeded|0x1771/i, "The price moved too far before this could execute"],
+  [/BlockhashNotFound|blockhash/i, "The network moved on before this was submitted — try again"],
+  [/AccountNotFound|could not find account/i, "That account doesn't exist on this network yet"],
+  [/nonce too low|replacement transaction underpriced/i, "A newer transaction replaced this one"],
+]
+
+/** Does this read like a machine payload rather than a sentence? */
+function looksLikeRawPayload(message: string): boolean {
+  const trimmed = message.trim()
+  return (
+    trimmed.startsWith("{") ||
+    trimmed.startsWith("[") ||
+    /"[A-Za-z]+":/.test(trimmed) ||
+    /0x[0-9a-f]{2,}/i.test(trimmed)
+  )
+}
+
+/**
+ * A message fit to show someone.
+ *
+ * Recognised failures become their plain sentence. Anything that still reads
+ * like a payload is withheld entirely — a generic line the user can act on
+ * beats a precise one they cannot parse, and the raw text is still on the
+ * error object for logs and for support.
+ */
+export function humanizeErrorMessage(message: string | undefined | null): string {
+  const text = (message ?? "").trim()
+  if (!text) return "Something went wrong. Nothing was charged — try again."
+  for (const [pattern, plain] of CHAIN_FAILURES) {
+    if (pattern.test(text)) return plain
+  }
+  if (looksLikeRawPayload(text)) {
+    return "The network rejected this transaction. Nothing was sent."
+  }
+  return text
+}
+
 export function describeCryptoError(error: unknown): CryptoErrorDescription {
   // Node 21+ exposes a global `navigator` with `onLine` left `undefined` (not
   // `false`), so a bare `!navigator.onLine` would misfire outside a browser.
@@ -68,8 +122,26 @@ export function describeCryptoError(error: unknown): CryptoErrorDescription {
         return { title: "Verification needed", message: "Unlock your wallet to continue.", action: "unlock", requestId }
       case "INSUFFICIENT_FUNDS": {
         const d = error.details as { available?: string; requested?: string } | undefined
-        const extra = d?.available && d?.requested ? ` Available: ${d.available}. Requested: ${d.requested}.` : ""
-        return { title: "Not enough funds", message: `The amount exceeds what this account can spend.${extra}`, action: "none", requestId }
+        /* Figures first. When the service names what is available and what
+           was asked for, that is the most useful thing we can say and no
+           prose replaces it. Only without them does the backend's own
+           sentence get a turn — it states the shortfall in words (see
+           `simulationFailure`) — and a raw payload never does. */
+        if (d?.available && d?.requested) {
+          return {
+            title: "Not enough funds",
+            message: `The amount exceeds what this account can spend. Available: ${d.available}. Requested: ${d.requested}.`,
+            action: "none",
+            requestId,
+          }
+        }
+        const stated = error.message && !looksLikeRawPayload(error.message) ? error.message : null
+        return {
+          title: "Not enough funds",
+          message: stated ?? "The amount exceeds what this account can spend.",
+          action: "none",
+          requestId,
+        }
       }
       case "SPONSORSHIP_UNAVAILABLE":
         return { title: "Fee sponsorship unavailable", message: "Worldstreet can't cover this network fee right now. You can pay the fee yourself instead.", action: "pay-gas", requestId }
@@ -86,10 +158,16 @@ export function describeCryptoError(error: unknown): CryptoErrorDescription {
     }
     if (error.status === 429) return { title: "Too many requests", message: "Give it a moment, then try again.", action: "retry", requestId }
     if (error.status >= 500) return { title: "Wallet service issue", message: "The wallet service hit a problem. Try again shortly.", action: "retry", requestId }
-    return { title: "Something went wrong", message: error.message, action: "retry", requestId }
+    // Never the raw payload: `humanizeErrorMessage` turns a known chain
+    // failure into its sentence and withholds anything still machine-shaped.
+    return { title: "Something went wrong", message: humanizeErrorMessage(error.message), action: "retry", requestId }
   }
   if (error instanceof Error && error.name === "AbortError") {
     return { title: "Cancelled", message: "The request was cancelled.", action: "none" }
   }
-  return { title: "Something went wrong", message: error instanceof Error ? error.message : "Unexpected error.", action: "retry" }
+  return {
+    title: "Something went wrong",
+    message: humanizeErrorMessage(error instanceof Error ? error.message : null),
+    action: "retry",
+  }
 }

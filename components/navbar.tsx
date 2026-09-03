@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Search01Icon as Search,
@@ -9,7 +10,7 @@ import {
   Logout01Icon as LogOut,
   ArrowRight01Icon as ArrowRight,
   ArrowDownLeft01Icon as ArrowDownLeft,
-  BankIcon as Bank,
+  Wallet01Icon,
 } from "@hugeicons/core-free-icons"
 
 import {
@@ -28,17 +29,40 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/components/auth-provider"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { NavbarActions } from "@/components/navbar-actions"
-import { useMoneyFlow } from "@/components/flows/money-flow-modal"
-import { useCashBalance } from "@/hooks/useCashBalance"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
+import { usePortfolioTotal } from "@/hooks/usePortfolioTotal"
+import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
+import { getPrices } from "@/lib/actions"
 
 export function Navbar() {
   const isMobile = useIsMobile()
   const [profileOpen, setProfileOpen] = React.useState(false)
   const { user, signOut } = useAuth()
-  const { openFlow } = useMoneyFlow()
-  const { cash, loaded: cashLoaded } = useCashBalance()
   const { hidden } = useBalancePrivacy()
+  const [receiveOpen, setReceiveOpen] = React.useState(false)
+
+  /* The bar used to show the Dollar Account here — $0.00 — beside a hero
+     reading $0.48, in a pill of the same weight. Two figures that both look
+     like "your balance" and disagree teach the user to trust neither. It is
+     the portfolio total now, from the one hook the hero also reads, so the
+     two cannot drift apart. */
+  const [prices, setPrices] = React.useState<Record<string, number>>({})
+  React.useEffect(() => {
+    let cancelled = false
+    const load = () =>
+      getPrices()
+        .then((result) => {
+          if (!cancelled) setPrices(result.prices)
+        })
+        .catch(() => {})
+    void load()
+    const timer = window.setInterval(load, 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+  const { total, loading: totalLoading } = usePortfolioTotal(prices)
 
   // ⌘K / Ctrl-K jumps to search from anywhere. The hint chip renders the
   // Windows form first and corrects to ⌘ after mount — hydration-safe.
@@ -149,33 +173,45 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* Cash — the Dollar Account, which is the money a Deposit actually
-          spends. It sits immediately left of that CTA so the figure and the
-          action read as one thought. Masked by the same eye button as the
-          dashboard hero; withheld until loaded so it never flashes a $0.00
-          it would have to correct. */}
-      {cashLoaded && (
-        <div
-          className="ws-nav-glass hidden h-10 shrink-0 items-center gap-2 rounded-full bg-card/35 px-3.5 ring-1 ring-border/50 backdrop-blur-xl lg:flex"
-          title="Dollar Account"
+      {/* The crypto total — the same figure, from the same hook, as the
+          dashboard hero and the portfolio page. Masked by the same eye button,
+          and withheld until it has loaded so it never flashes a $0.00 it would
+          have to correct.
+
+          Named "crypto", not "portfolio". This figure is Holdings + Spot +
+          Futures and deliberately leaves out the Dollar Account, which is a
+          separate product; a pill in the top bar reading "total portfolio
+          value" over a number that excludes someone's dollars is the same
+          confusion the dashboard's own label was renamed to fix. */}
+      {!totalLoading && (
+        <Link
+          href="/wallet/modern"
+          className="ws-nav-glass hidden h-10 shrink-0 items-center gap-2 rounded-full bg-card/35 px-3.5 ring-1 ring-border/50 backdrop-blur-xl transition-colors hover:bg-card/60 lg:flex"
+          title="Total crypto balance — your Dollar Account is separate"
         >
-          {/* The icon replaces the "Cash" label, so the account it names has to
-              survive for screen readers — a title attribute alone doesn't. */}
-          <HugeiconsIcon icon={Bank} aria-hidden className="h-4 w-4 text-muted-foreground/70" />
-          <span className="sr-only">Dollar Account balance:</span>
+          <HugeiconsIcon
+            icon={Wallet01Icon}
+            aria-hidden
+            className="h-4 w-4 text-muted-foreground/70"
+          />
+          <span className="sr-only">Total crypto balance:</span>
           <span className="text-[13px] font-semibold tabular-nums">
             {hidden
               ? "$••••"
-              : cash.toLocaleString("en-US", { style: "currency", currency: "USD" })}
+              : total.toLocaleString("en-US", { style: "currency", currency: "USD" })}
           </span>
-        </div>
+        </Link>
       )}
 
       {/* Deposit — the one primary action, reachable from every page. The
           only gold in the bar, exactly as the system intends. */}
       <button
         type="button"
-        onClick={() => openFlow("buy")}
+        // Deposit means ONE thing: the wallet's own addresses, the same modal
+        // the wallet page opens. It was gated on wallet mode, which quietly
+        // left the cash flow in place for anyone not in modern mode — a second
+        // "Deposit" that funds a different account entirely.
+        onClick={() => setReceiveOpen(true)}
         className="hidden h-10 shrink-0 items-center gap-1.5 rounded-full bg-primary pl-3.5 pr-4 text-[13px] font-bold text-primary-foreground shadow-[0_8px_24px_-10px_color-mix(in_oklab,var(--primary)_60%,transparent)] transition-all hover:bg-primary/90 active:scale-[0.97] motion-reduce:active:scale-100 md:flex"
       >
         <HugeiconsIcon icon={ArrowDownLeft} className="h-4 w-4" />
@@ -241,6 +277,9 @@ export function Navbar() {
           </Popover>
         )}
       </div>
+
+      {/* Deposit's surface in modern mode: the wallet's own addresses. */}
+      <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} />
     </header>
   )
 }

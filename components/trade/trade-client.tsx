@@ -137,13 +137,13 @@ import { FUTURES_SOON_SHORT, FUTURES_SOON_TITLE } from "@/components/ui/coming-s
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Alert02Icon,
+  ArrowLeft01Icon,
   Cancel01Icon,
   Clock01Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons"
 import { useMoneyFlow } from "@/components/flows/money-flow-modal"
 import { registerVividContext } from "@/lib/vivid-page-context"
-import { ModernFundingPanel } from "./modern-funding-panel"
 
 type Market = "spot" | "futures"
 type Side = "buy" | "sell"
@@ -157,21 +157,33 @@ type OrderType = "market" | "limit"
  * matter of flipping this flag and deleting those blocks:
  *   1. `setMarketTab()` — a press on the Futures tab raises the notice instead
  *      of navigating, so the answer is the same on a phone as under a mouse.
+ *      Currently unreachable, because the market toggle it belongs to is
+ *      itself withdrawn from the top bar (see `MARKET_TABS` below). It stays
+ *      because the toggle comes back before the venue does, and it must not
+ *      come back ungated.
  *   2. `gatedMarket()` — `?market=futures` deep links resolve to spot, so no
  *      futures branch (chart source, book, ticket, positions) can ever run.
+ *      With the tab gone this is the ONLY live gate: a stale link is the only
+ *      way left to ask for futures.
  *   3. The top-bar balance readout — the Futures figure is withheld here.
- *   4. The notice strip itself, under the top bar.
+ *   4. The notice itself — a toast over the workspace, at the foot of the
+ *      render.
  * Typed `boolean` rather than left as the `false` literal so the guards below
  * read as switches, not as dead code a linter should strip.
  */
 const FUTURES_LIVE: boolean = false
 
+/* Retained while the market toggle is withdrawn — this and `setMarketTab`
+   below are the restoration point for futures, and rewriting them later is
+   strictly worse than leaving them here. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const MARKET_TABS: readonly SegmentedOption<Market>[] = [
   { key: "spot", label: "Spot" },
-  // The Futures tab stays visible AND selectable on purpose. A `disabled` tab
-  // answers only a hovering mouse — its `title` never fires on a touchscreen,
-  // which is most of this audience — so the press is let through and
-  // `setMarketTab` answers it with the notice instead of a dead control.
+  // When this toggle is restored the Futures tab comes back visible AND
+  // selectable, not `disabled`. A disabled tab answers only a hovering mouse —
+  // its `title` never fires on a touchscreen, which is most of this audience —
+  // so the press is let through and `setMarketTab` answers it with the notice
+  // instead of a dead control.
   { key: "futures", label: "Futures" },
 ]
 const ORDER_TYPES: readonly SegmentedOption<OrderType>[] = [
@@ -1037,6 +1049,7 @@ export function TradeClient() {
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's
   // default and the sync effect below writes it back to the URL.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function setMarketTab(m: Market) {
     // FUTURES GATE (1/4): futures is not open, so the press is ANSWERED rather
     // than followed. Nothing navigates: the URL never gains `market=futures`,
@@ -2434,17 +2447,22 @@ export function TradeClient() {
         backgroundRepeat: "no-repeat",
       }}
     >
-      {/* Top bar — the app's chrome only: a way out, the venue switch, and
-          the money doors. The market itself lives in the header over the
-          chart, where the price sits beside the thing it describes. */}
-      {/* It WRAPS below lg. Four control groups — back, venue, Simple/Pro and
-          the money doors — measure 485px at a 360px phone, so the last one
-          was pushed off the right edge and clipped: on a wallet-less account
-          that was "Set up wallet", the primary action on the screen, and with
-          a wallet it is the three funding doors, which are wider still. The
-          money cluster keeps `ml-auto`, so when it does drop to a second row
-          it lands right-aligned rather than adrift. Single row from lg up,
-          where it has always fitted. */}
+      {/* Top bar — the app's chrome only: a way out, the Simple/Pro switch,
+          and the way back to the wallet. The market itself lives in the header
+          over the chart, where the price sits beside the thing it describes.
+          The venue switch and the funding doors that used to sit here are
+          both gone — see the two notes below, at the points they occupied. */}
+      {/* It WRAPS below lg. This started as a fix for a measured overflow:
+          four control groups — back, venue, Simple/Pro and the money doors —
+          measured 485px at a 360px phone, so the last one was pushed off the
+          right edge and clipped, and on a wallet-less account that clipped
+          control was the primary action on the screen. Three of those groups
+          are now two, so the row fits on the narrowest phone we support and
+          the wrap is insurance rather than a fix. It is kept because the
+          venue switch is coming back (futures) and a clipped top bar is a
+          silent failure, where a wrapped one is merely a second row. The
+          right-hand cluster keeps `ml-auto`, so if it ever does drop it lands
+          right-aligned rather than adrift. Single row from lg up. */}
       {/* Rhythm note: this bar, the workspace body below it and every pane
           inside share ONE padding scale — 10px on a phone, 16px from lg. The
           screen used to run px-3/px-2/px-4 across three adjacent bands, which
@@ -2471,17 +2489,17 @@ export function TradeClient() {
         </div>
         <span className="hidden h-6 w-px bg-border/40 sm:block" />
 
-        {/* Market toggle */}
-        <Segmented
-          value={market}
-          onChange={setMarketTab}
-          options={MARKET_TABS}
-          /* Trimmed side padding on phones, as on the portfolio's view tabs:
-             it buys ~25px, which is the difference between this row wrapping
-             and not on the commonest widths. */
-          className="shrink-0 [&_button]:px-2.5 sm:[&_button]:px-3.5"
-          vividPrefix="market-tab"
-        />
+        {/* Market toggle — WITHDRAWN while futures is closed.
+            A tab whose only outcome is a "not open yet" notice is a control
+            that exists to disappoint. Everything behind it is intact — the
+            `market` state, the futures ticket, the positions drawer, the
+            gate below — so restoring this element is the whole change when
+            the venue opens.
+            When it comes back it comes back as the house `Segmented`, with
+            `options={MARKET_TABS}`, `onChange={setMarketTab}` and the phone
+            padding trim `[&_button]:px-2.5 sm:[&_button]:px-3.5` — that trim
+            bought ~25px, which was the difference between this row wrapping
+            and not on the commonest widths. */}
 
         {/* Simple / Pro. Same control and same place in the reading order as
            on the wallet: beside the screen's own identity, not buried in a
@@ -2492,7 +2510,7 @@ export function TradeClient() {
            beside the thing it describes. The mode switch is the only part of
            that block that is chrome. */}
         <ModeSwitch className="shrink-0" />
-        {/* Balances + money doors */}
+        {/* Balances + the way back to the wallet */}
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           {balances && (
             <span className="hidden text-xs text-muted-foreground tabular-nums 2xl:block">
@@ -2501,12 +2519,12 @@ export function TradeClient() {
                 ${balances.spotUsdc.toFixed(2)}
               </span>
               {/* FUTURES GATE (3/4): this readout is venue-scoped — it names
-                  the margin sitting on the perps venue, an inch from a Futures
-                  tab that can't be clicked. Printing it would advertise a
-                  place to put money that has no way in or out from this
-                  screen. The money itself is not hidden: the same figure is
-                  still shown by the funding panel beside this, by the fund
-                  screen and by the wallet, all of which can still move it. */}
+                  the margin sitting on the perps venue, on a screen that no
+                  longer offers any way to reach that venue. Printing it would
+                  advertise a place to put money with no door in or out of it
+                  from here. The money itself is not hidden: the fund screen
+                  and the wallet both still show the figure, and both can
+                  still move it. */}
               {FUTURES_LIVE && (
                 <>
                   <span className="mx-1 text-subtle">·</span>
@@ -2518,60 +2536,27 @@ export function TradeClient() {
               )}
             </span>
           )}
-          {/* Funding is a detour from trading, not a destination — it opens
-              over the workspace so the chart and the ticket keep their state.
-              Spec §10 keeps the three money doors apart: the modern wallet
-              renders its own Deposit / Transfer / Withdraw triggers, each
-              opening a flow of its own, rather than one blended form. */}
-          {usingModern ? (
-            walletReady &&
-            user?.userId &&
-            modernWallet.data &&
-            modernPackage.data ? (
-              <ModernFundingPanel
-                userId={user.userId}
-                wallet={modernWallet.data}
-                packageValue={modernPackage.data}
-              />
-            ) : walletLoading ? (
-              // The doors are coming; hold their shape rather than popping
-              // three buttons into the bar a second after it painted.
-              <Skel className="h-8 w-[188px] rounded-full" />
-            ) : (
-              /* No wallet yet. This corner held the money doors, and with
-                 nothing to open it simply went blank — the one moment the user
-                 most needed a way forward. Gold, because on this screen making
-                 a wallet IS the primary action. */
-              <Link
-                href="/wallet/modern"
-                data-vivid-target="trade-create-wallet"
-                data-vivid-label="Go to the wallet page to set up a wallet"
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[13px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
-              >
-                <HugeiconsIcon icon={Wallet01Icon} className="h-4 w-4" />
-                Set up wallet
-              </Link>
-            )
-          ) : (
-            <>
-              <button
-                onClick={() => openFlow("fund")}
-                data-vivid-target="trade-fund-button"
-                data-vivid-label="Open the fund-trading-account modal"
-                className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
-              >
-                Fund
-              </button>
-              <button
-                onClick={() => openFlow("trading-withdraw")}
-                data-vivid-target="trade-withdraw-button"
-                data-vivid-label="Open the withdraw-trading-balance modal"
-                className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
-              >
-                Withdraw
-              </button>
-            </>
-          )}
+          {/* One way back, not three money doors.
+              Deposit / Transfer / Withdraw each opened a flow for the TRADING
+              account — a different pot from the wallet the rest of the app
+              now funds — three primary-weight buttons in the corner of a
+              screen whose job is trading. The wallet owns those actions and
+              says so on its own page; this is the door to it.
+              The wallet-less case this corner used to answer is not lost with
+              them: it is answered where it is actually in the way — the
+              ticket's own "Set up your wallet" state, and the mobile action
+              bar at the foot of this file, both of which read `needsWallet`.
+              This control is neutral on purpose: it is a way out, not the
+              primary action, so it takes the sunken fill rather than gold. */}
+          <Link
+            href="/wallet/modern"
+            data-vivid-target="trade-back-to-wallet"
+            data-vivid-label="Go back to the wallet"
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
+          >
+            <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5" />
+            Back to wallet
+          </Link>
         </div>
       </div>
 

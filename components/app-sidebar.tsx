@@ -131,10 +131,6 @@ function isActiveRoute(pathname: string, url: string) {
   return pathname === url || pathname.startsWith(`${url}/`)
 }
 
-function groupHasActiveRoute(pathname: string, items: NavItem[]) {
-  return items.some((item) => isActiveRoute(pathname, item.url))
-}
-
 /**
  * One row height, one icon size, one gap — every nav row in the rail shares
  * these so the left edge reads as a single column instead of five.

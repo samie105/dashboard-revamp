@@ -5,12 +5,9 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Wallet01Icon,
   RefreshIcon,
-  Copy01Icon,
-  CheckmarkSquare01Icon,
   Add01Icon,
   Search01Icon,
   Cancel01Icon,
-  ArrowDown01Icon as ChevronDownIcon,
   ArrowUpRight01Icon,
   ArrowDownLeft01Icon,
   Chart01Icon,
@@ -21,6 +18,7 @@ import {
   CardHeader,
   CardShell,
   Eyebrow,
+  allocationColor,
   IconAction,
   PageHeader,
   Segmented,
@@ -28,7 +26,6 @@ import {
   SkeletonRows,
   SkeletonTable,
   WeightBar,
-  allocationColor,
 } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import {
@@ -38,15 +35,17 @@ import {
   ResponsiveModalTitle,
   ResponsiveModalDescription,
 } from "@/components/ui/responsive-modal"
-import { num, numOr, pctSigned, share, usd, usdCompact, UNKNOWN } from "@/lib/num"
+import { num, numOr, pctSigned, qty, share, usd, usdCompact, UNKNOWN } from "@/lib/num"
 import { getPrices, getFuturesMarkets, type CoinData, type FuturesMarket } from "@/lib/actions"
 import { fetchTokenMetadata, addCustomToken, type CustomTokenChain } from "@/lib/crypto-api"
-import { useWallet, type WalletAddresses } from "@/components/wallet-provider"
-import { WalletSetupLoader } from "@/components/wallet-setup-loader"
 import { OnboardingFlow, type OnboardingStep } from "@/components/onboarding-flow"
 import { useProfile } from "@/components/profile-provider"
 import { markOnboardingComplete } from "@/lib/profile-actions"
-import { useWalletBalances, type TokenBalance } from "@/hooks/useWalletBalances"
+import { useWalletBalances } from "@/hooks/useWalletBalances"
+/* The one place the money is added up. The navbar, the dashboard hero and
+   this page all read it, so the three agree by construction rather than by
+   coincidence — see the comment on the hook itself. */
+import { usePortfolioTotal } from "@/hooks/usePortfolioTotal"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useAuth } from "@/components/auth-provider"
 import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
@@ -54,9 +53,6 @@ import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { fetchPrices, type Coin } from "@/lib/crypto-api"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
 import { ReceiveModal, type ReceivableAsset } from "@/components/assets/receive-modal"
-/* Aliased: `WalletAddresses` is already the wallet provider's TYPE for the
-   per-chain address record, imported above. */
-import { WalletAddresses as AddressBook } from "@/components/portfolio/wallet-addresses"
 import { Watchlist, INITIAL_WATCHLIST } from "@/components/portfolio/watchlist"
 /* Futures is not live yet - the shared "not open" treatment. */
 import { ComingSoon, FUTURES_SOON_TITLE, SoonBadge } from "@/components/ui/coming-soon"
@@ -85,13 +81,10 @@ const ASSETS_ONBOARDING_STEPS: OnboardingStep[] = [
       "This card shows your total balance across all chains. Hit Refresh to sync the latest data.",
     placement: "bottom",
   },
-  {
-    target: '[data-onboarding="chain-selector"]',
-    title: "Switch chains",
-    description:
-      "Select a chain to view its wallet address. You can copy the address to receive tokens.",
-    placement: "bottom",
-  },
+  /* The "Switch chains" step is gone with the control it pointed at. It taught
+     a chain dropdown that showed one legacy address at a time; addresses now
+     come from Receive, which offers every network at once. A tour step whose
+     target has left the page is a tooltip anchored to nothing. */
   {
     target: '[data-onboarding="assets-table"]',
     title: "Your assets",
@@ -110,8 +103,13 @@ const ASSETS_ONBOARDING_STEPS: OnboardingStep[] = [
 
 // ── Chain config ─────────────────────────────────────────────────────────
 
+/* The chain badge that rides on a token's icon, and the labels for the chain
+   filter. A plain `string` key now: this used to be typed off the legacy
+   wallet provider's address record, which is the provider this page no longer
+   talks to. The keys match `displayChainKey` below, which is what the balance
+   feed's own network ids are normalised to. */
 interface ChainInfo {
-  key: keyof WalletAddresses | "arbitrum"
+  key: string
   name: string
   symbol: string
   icon: string
@@ -197,9 +195,15 @@ const ACCOUNT_LABELS = {
  * `/assets` and `/portfolio` were two screens answering one question. Assets
  * listed every token on every chain; Portfolio listed the same money again as
  * six per-chain rows, plus a trading summary the Spot tab already carried. The
- * pages are one now, and these are its tabs — the three Assets had, plus
- * Addresses, which is the only part of the old Portfolio with nowhere else to
- * live (the holdings view shows one chain's address at a time).
+ * pages are one now, and these are its tabs — the three accounts, and nothing
+ * else.
+ *
+ * There WAS a fourth, Addresses, carried over whole from the old Portfolio's
+ * Wallets tab. It is gone: it read the legacy wallet provider, which is not
+ * where a self-custodial wallet's addresses live, so it listed six addresses
+ * belonging to an account the user no longer has. Receive already offers every
+ * network from one sheet, which is the same answer without the wrong data
+ * behind it.
  *
  * The KEYS are unchanged (`main`, `spot`) because a dozen branches below read
  * them. "Main" named nothing a reader would recognise, so that label became
@@ -216,7 +220,6 @@ const WALLET_VIEWS = [
   { key: "main",      label: ACCOUNT_LABELS.holdings, icon: Wallet01Icon,        sub: "Every token you hold, on every chain" },
   { key: "spot",      label: ACCOUNT_LABELS.spot,     icon: Chart01Icon,         sub: "The money you trade with" },
   { key: "futures",   label: ACCOUNT_LABELS.futures,  icon: ChartLineData01Icon, sub: "Perpetual positions" },
-  { key: "addresses", label: "Addresses",             icon: Copy01Icon,          sub: "Your address on every chain" },
 ] as const
 
 type WalletView = (typeof WALLET_VIEWS)[number]["key"]
@@ -226,11 +229,6 @@ type WalletView = (typeof WALLET_VIEWS)[number]["key"]
    worth. Everything below that reads `FUTURES_CLOSED` is unchanged. */
 
 // ── Helpers ──────────────────────────────────────────────────────────────
-
-function truncAddr(addr: string) {
-  if (!addr || addr.length < 14) return addr
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
-}
 
 /* ========== Allocation — what the page is actually for ==========
    A list of balances answers "how much of each?" but never "what am I holding?"
@@ -792,13 +790,53 @@ function AddTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
 /* ========== Main Component ========== */
 
 export function PortfolioClient() {
-  const { addresses, walletsGenerated, isLoading, error, refreshWallets, setupStatus } = useWallet()
   const { profile, updateProfile } = useProfile()
   const { user } = useAuth()
-  const { balances: onChainBalances, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances()
-  const { positions: hlPositions, futuresUsd, loading: hlPositionsLoading } = useHyperliquidPositions()
 
-  // SpotV2 data
+  const [prices, setPrices] = React.useState<Record<string, number>>({})
+  /* The same request that prices the holdings also carries the coin catalogue
+     the watchlist renders from, so the merged page needs no server loader of
+     its own — which is what the old `/portfolio` route existed to do. */
+  const [coins, setCoins] = React.useState<CoinData[]>([])
+
+  /* WHERE THE MONEY COMES FROM.
+     This page used to read the legacy wallet provider for everything: it
+     gated on that provider's "wallets provisioned" flag and added the accounts
+     up itself. None of that is where the money is any more, so a funded
+     self-custodial wallet reported a net worth of zero — or never got past the
+     wallet-setup screen at all — across accounts it no longer has.
+
+     `usePortfolioTotal` is the same arithmetic the navbar and the dashboard
+     hero read, so all three agree by construction rather than by coincidence.
+     Its `total` is Holdings + Spot + Futures; the Dollar Account is returned
+     alongside and deliberately not inside it, so this page does not quote it.
+     The names below are the hook's parts under the names the rest of this file
+     already uses for them. */
+  const {
+    balances: onChainBalances,
+    isLoading: balancesLoading,
+    error,
+    refetch: refetchBalances,
+  } = useWalletBalances()
+  const {
+    total: netWorth,
+    onChain: onChainTotal,
+    spot: spotBalance,
+    futures: futuresBalance,
+    onChainSettled,
+    spotSettled,
+  } = usePortfolioTotal(prices)
+
+  /* The perps positions table, and only the table — its account VALUE comes
+     from the hook above with everything else. Still fetched while the venue is
+     shut so the section below stays type-checked; see FUTURES_CLOSED. */
+  const { positions: hlPositions, loading: hlPositionsLoading } = useHyperliquidPositions()
+
+  /* The spot account in detail: what is free, what is committed to orders, and
+     which coins those positions are in. The hook hands back one figure for the
+     whole account, which is all a total needs and not enough to draw a table
+     from — so the ledger itself is fetched here as well. The aggregate on
+     screen is still the hook's, so the tab and the hero cannot disagree. */
   const [spotLedger, setSpotLedger] = React.useState<LedgerBalance[]>([])
   const [spotV2Positions, setSpotV2Positions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
   const [spotV2Loading, setSpotV2Loading] = React.useState(true)
@@ -818,11 +856,6 @@ export function PortfolioClient() {
       .finally(() => { if (!cancelled) setSpotV2Loading(false) })
     return () => { cancelled = true }
   }, [user])
-  const [prices, setPrices] = React.useState<Record<string, number>>({})
-  /* The same request that prices the holdings also carries the coin catalogue
-     the watchlist renders from, so the merged page needs no server loader of
-     its own — which is what the old `/portfolio` route existed to do. */
-  const [coins, setCoins] = React.useState<CoinData[]>([])
   const [watchlistSymbols, setWatchlistSymbols] = React.useState<string[]>(
     profile?.watchlist?.length ? profile.watchlist : INITIAL_WATCHLIST,
   )
@@ -846,10 +879,6 @@ export function PortfolioClient() {
      wrong. */
   const [pricesLoaded, setPricesLoaded] = React.useState(false)
   const [activeView, setActiveView] = React.useState<WalletView>("main")
-  const [selectedChain, setSelectedChain] = React.useState<string>(CHAINS[0].key)
-  const [chainDropdownOpen, setChainDropdownOpen] = React.useState(false)
-  const chainDropdownRef = React.useRef<HTMLDivElement>(null)
-  const [copied, setCopied] = React.useState<string | null>(null)
   const [showAddToken, setShowAddToken] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [chainTab, setChainTab] = React.useState<ChainTab>("All")
@@ -976,65 +1005,44 @@ export function PortfolioClient() {
     return balanceMap.get(key) ?? 0
   }
 
-  /** One token row's USD value. Stables are worth their face value — quoting
-   *  them off a price feed makes $2,500 of USDT read as $0 when the feed is
-   *  cold. */
+  /**
+   * One token row's USD value, or `null` when we do not have one.
+   *
+   * Stables are worth their face value — quoting them off a price feed makes
+   * $2,500 of USDT read as $0 when the feed is cold.
+   *
+   * Everything else the feed has not priced is worth an unknown amount, which
+   * is NOT zero. This used to return 0 there, so a real balance sat beside a
+   * confident "$0.00" and the row read as worthless rather than unpriced. The
+   * callers print an em-dash instead; `usd(null)` already is one.
+   */
   const tokenUsd = React.useCallback(
-    (token: TokenInfo, bal: number) => {
+    (token: TokenInfo, bal: number): number | null => {
       if (bal <= 0) return 0
       if (["USDT", "USDC"].includes(token.symbol)) return bal
       const p = getPrice(token.symbol)
-      return p > 0 ? bal * p : 0
+      return p > 0 ? bal * p : null
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [prices],
   )
 
-  // On-chain total: all tokens valued in USD
-  const onChainTotal = React.useMemo(() => {
-    let total = 0
-    for (const token of assetCatalog) total += tokenUsd(token, getTokenBalance(token))
-    return total
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assetCatalog, balanceMap, tokenUsd])
-
-  // Spot balance = sum of SpotV2 USDC (available + locked) + positions value
-  const spotBalance = React.useMemo(() => {
-    const usdcTotal = spotLedger.reduce((sum, b) => sum + b.available + b.locked, 0)
-    const posTotal = spotV2Positions.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0)
-    return usdcTotal + posTotal
-  }, [spotLedger, spotV2Positions])
-
   /* The trading account's three headline figures, carried over from the old
      `/portfolio` page. The holdings list underneath says what you hold; these
      say what you can spend and what is already committed, which is the
-     question you actually have before placing an order. */
+     question you actually have before placing an order.
+
+     The account VALUE is not here: that is `spotBalance` from the hook, so the
+     tab and the hero quote one figure rather than two that round differently. */
   const usdcEntry = spotLedger.find((b) => b.token === "USDC")
   const availableUsdc = usdcEntry?.available ?? 0
   const inOrdersUsdc = usdcEntry?.locked ?? 0
 
-  // Futures balance = perps account value (margin + unrealized PnL), not just
-  // open-position notional — a funded account with no positions is not $0.
-  const futuresBalance = futuresUsd
-
-  /**
-   * Net worth — every account this page can see, added up.
-   *
-   * The hero used to show whichever account the open tab named, so the number
-   * changed when you pressed a tab and the page never once stated what the
-   * user is worth. The old `/portfolio` DID state a total, but from two
-   * accounts only: it counted six per-chain native balances and missed every
-   * token on the holdings list. Neither page could answer the question both
-   * existed to answer. This is the merge's whole point.
-   *
-   * Futures is excluded while the venue is closed — quoting a balance held
-   * somewhere with no way in or out would be money the reader cannot reach.
-   */
-  const netWorth = onChainTotal + spotBalance + (FUTURES_CLOSED ? 0 : futuresBalance)
   /* Every source has to have landed. A total that counts two of three accounts
-     is not a smaller total, it's a wrong one. */
-  const netWorthLoading =
-    (balancesLoading && onChainBalances.length === 0) || !pricesLoaded || spotV2Loading
+     is not a smaller total, it's a wrong one. Balances and prices arrive on
+     separate clocks and the spot ledger on a third; the settle flags come from
+     the hook, which is the thing that knows when each account has answered. */
+  const netWorthLoading = !onChainSettled || !pricesLoaded || !spotSettled
 
   /**
    * The allocation ring — the whole portfolio, by asset.
@@ -1050,12 +1058,16 @@ export function PortfolioClient() {
    */
   const portfolioByAsset = React.useMemo<Slice[]>(() => {
     const bySymbol = new Map<string, { usd: number; icon: string; name: string }>()
-    const add = (symbol: string, value: number, icon: string, name: string) => {
-      if (!(value > 0)) return
+    /* `value` is nullable because an unpriced holding has no figure, and a
+       slice of unknown size cannot be drawn — it is left out of the ring
+       rather than drawn as nothing. The table below still lists it. */
+    const add = (symbol: string, value: number | null, icon: string, name: string) => {
+      const amount = numOr(value)
+      if (!(amount > 0)) return
       const key = symbol.toUpperCase()
       const prev = bySymbol.get(key)
       bySymbol.set(key, {
-        usd: (prev?.usd ?? 0) + value,
+        usd: (prev?.usd ?? 0) + amount,
         icon: prev?.icon || icon,
         name: prev?.name || name,
       })
@@ -1134,16 +1146,13 @@ export function PortfolioClient() {
   const compositionSlices =
     compositionMode === "asset" ? portfolioByAsset : portfolioByAccount
 
-  const copy = React.useCallback((text: string, label: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(label)
-    setTimeout(() => setCopied(null), 2000)
-  }, [])
-
+  /* One thing to refresh now. This used to re-provision the legacy wallets
+     alongside the balances; the balance feed is the only source this page
+     reads, so it is the only one Refresh has to ask again. */
   const refresh = React.useCallback(async () => {
     setIsRefreshing(true)
-    try { await Promise.all([refreshWallets(), refetchBalances()]) } finally { setIsRefreshing(false) }
-  }, [refreshWallets, refetchBalances])
+    try { await refetchBalances() } finally { setIsRefreshing(false) }
+  }, [refetchBalances])
 
   /* Chain + search filtered, biggest holding first. Sorting by value is the
      whole point of an assets list: what you own most of should not be found by
@@ -1156,7 +1165,9 @@ export function PortfolioClient() {
       const q = search.toLowerCase()
       list = list.filter((t) => t.symbol.toLowerCase().includes(q) || t.name.toLowerCase().includes(q))
     }
-    return list.sort((a, b) => tokenUsd(b, getTokenBalance(b)) - tokenUsd(a, getTokenBalance(a)))
+    /* `numOr` because an unpriced holding has no value to sort ON — it sinks
+       to the bottom of the list rather than poisoning the comparison. */
+    return list.sort((a, b) => numOr(tokenUsd(b, getTokenBalance(b))) - numOr(tokenUsd(a, getTokenBalance(a))))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetCatalog, chainTab, search, balanceMap, tokenUsd])
 
@@ -1177,19 +1188,6 @@ export function PortfolioClient() {
   // Reset dismissed state when error changes
   React.useEffect(() => { if (error) setErrorDismissed(false) }, [error])
 
-  // Close chain dropdown on outside click
-  React.useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (chainDropdownRef.current && !chainDropdownRef.current.contains(e.target as Node)) setChainDropdownOpen(false)
-    }
-    if (chainDropdownOpen) document.addEventListener("mousedown", handle)
-    return () => document.removeEventListener("mousedown", handle)
-  }, [chainDropdownOpen])
-
-  const activeChain = CHAINS.find((c) => c.key === selectedChain) || CHAINS[0]
-  const addrKey = activeChain.key === "arbitrum" ? "ethereum" : activeChain.key
-  const displayedAddress = addresses?.[addrKey as keyof WalletAddresses] || ""
-
   // ── States ────────────────────────────────────────────────────────────
   /* The per-view loading flag is gone with the per-view hero: the figure at
      the top is now the whole portfolio, so `netWorthLoading` (every source
@@ -1202,7 +1200,7 @@ export function PortfolioClient() {
 
   /* What the WHOLE wallet holds — every coin with a balance, on every chain.
      Not `fundedTokens`, which is the table's list and is narrowed by the chain
-     dropdown and the search box: reading the summary off it meant picking
+     filter and the search box: reading the summary off it meant picking
      "Solana", or typing three letters into search, quietly rewrote the line
      under the hero to describe one chain. The hero speaks for the portfolio,
      so its counts have to come from the catalogue rather than from whatever
@@ -1240,29 +1238,42 @@ export function PortfolioClient() {
     [portfolioByAsset],
   )
 
-  if (isLoading && !walletsGenerated) {
-    return (
-      <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <div className="rounded-2xl bg-card">
-          <WalletSetupLoader status={setupStatus} />
-        </div>
-      </div>
-    )
-  }
+  /* One row model for the holdings list, worked out once and drawn twice: as
+     a stack on a phone and as the table from `sm` up. Computing it here rather
+     than inside either markup is what stops the two drifting — a share worked
+     out in one and not the other is the kind of difference nobody notices
+     until the two views disagree in front of a reader. */
+  const holdingRows = React.useMemo(
+    () =>
+      visibleTokens.map((token) => {
+        const bal = getTokenBalance(token)
+        const usdValue = tokenUsd(token, bal)
+        return {
+          token,
+          key: `${token.chain}-${token.symbol}-${token.contractAddress ?? "native"}`,
+          chainInfo: CHAINS.find((c) => c.key === token.chain),
+          bal,
+          usdValue,
+          /* Share of the wallet — the same figure the Holdings tile above
+             states, so a column of dollars stops being arithmetic the reader
+             has to do. `share` yields 0 for an unpriced holding rather than a
+             confident wrong number; the row draws a dash for it. */
+          pct: share(usdValue, onChainTotal),
+          rank: allocationRank.get(token.symbol) ?? 99,
+          empty: bal <= 0,
+        }
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleTokens, balanceMap, tokenUsd, onChainTotal, allocationRank],
+  )
 
-  if (!walletsGenerated && !addresses && !error) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center max-w-xs">
-          <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-full bg-muted">
-            <HugeiconsIcon icon={Wallet01Icon} size={24} className="text-muted-foreground" />
-          </div>
-          <h2 className="text-sm font-semibold mb-1">No Wallet Setup</h2>
-          <p className="text-xs text-muted-foreground">Sign in to generate your multi-chain wallets.</p>
-        </div>
-      </div>
-    )
-  }
+  /* The two whole-page gates that used to stand here are gone with the legacy
+     wallet provider that fed them: a setup loader while it was provisioning,
+     and a "No Wallet Setup" screen when it never had. Neither flag means
+     anything to a self-custodial wallet, so a funded one was told to go and
+     generate the wallets it was already holding money in. The page renders its
+     figures and lets the skeletons say what has not landed yet; a feed that is
+     down gets the non-blocking banner below rather than the whole screen. */
 
   // ── Main view ─────────────────────────────────────────────────────────
   return (
@@ -1354,7 +1365,7 @@ export function PortfolioClient() {
                  deliberately smaller than the dashboard's: the portfolio hero
                  shares its row with the allocation panel. */
               <Balance
-                value={`$${netWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                value={usd(netWorth)}
                 className="font-medium text-[clamp(2rem,4vw,3rem)]"
               />
             )}
@@ -1403,65 +1414,18 @@ export function PortfolioClient() {
             options={WALLET_VIEWS.map((v) => ({ key: v.key, label: v.label }))}
             value={activeView}
             onChange={setActiveView}
-            /* Four tabs at the standard 14px side padding measure 347px, and a
-               360px phone leaves 328px between the page gutters — so the last
-               tab was cut in half by the screen edge, on the one control that
-               tells you the page has four views at all. Trimming the padding
-               to 10px on phones brings the row to ~315px and it fits; the
-               full padding returns from `sm` up, where there was never a
-               problem. The scroller behind it stays as the floor for anything
-               narrower still. */
+            /* Trimmed side padding on phones. Four tabs at the standard 14px
+               measured 347px against the 328px a 360px phone leaves between
+               the page gutters, so the last one was cut in half by the screen
+               edge — on the one control that tells you the page has more than
+               one view at all. Three tabs clear that width, but the trim stays:
+               it is the same row and the same reasoning if a fourth returns.
+               Full padding from `sm` up, and the scroller behind it is still
+               the floor for anything narrower. */
             className="[&_button]:px-2.5 sm:[&_button]:px-3.5"
           />
         </div>
 
-        {/* Divider + Chain selector — shown when Main tab is active */}
-        {activeView === "main" && (
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <div ref={chainDropdownRef} className="relative">
-              <button
-                onClick={() => setChainDropdownOpen((v) => !v)}
-                className="inline-flex h-9 items-center gap-2 rounded-full bg-surface-sunken px-3.5 text-[13px] font-semibold transition-colors hover:bg-accent"
-              >
-                <img src={activeChain.icon} alt={activeChain.name} className="h-4 w-4 rounded-full" />
-                <span>{activeChain.name}</span>
-                <HugeiconsIcon icon={ChevronDownIcon} className={`h-3 w-3 text-muted-foreground transition-transform ${chainDropdownOpen ? "rotate-180" : ""}`} />
-              </button>
-              {chainDropdownOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1.5 min-w-[180px] overflow-hidden rounded-2xl bg-popover py-1 shadow-2xl ring-1 ring-foreground/10">
-                  {CHAINS.map((chain) => (
-                    <button
-                      key={chain.key}
-                      onClick={() => { setSelectedChain(chain.key); setChainDropdownOpen(false) }}
-                      className={`flex w-full items-center gap-2.5 px-3 py-2 text-[13px] transition-colors hover:bg-accent ${
-                        selectedChain === chain.key ? "text-foreground font-medium" : "text-muted-foreground"
-                      }`}
-                    >
-                      <img src={chain.icon} alt={chain.name} className="h-4 w-4 rounded-full" />
-                      <span>{chain.name}</span>
-                      <span className="ml-auto text-[12px] text-muted-foreground/60">{chain.symbol}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            {displayedAddress && (
-              <button
-                onClick={() => copy(displayedAddress, activeChain.key)}
-                className={`inline-flex h-9 items-center gap-2 rounded-full px-3.5 font-mono text-[13px] transition-colors ${
-                  copied === activeChain.key ? "bg-credit-chip text-credit" : "bg-surface-sunken hover:bg-accent"
-                }`}
-              >
-                <span className={copied === activeChain.key ? "" : "text-muted-foreground"}>{truncAddr(displayedAddress)}</span>
-                <HugeiconsIcon
-                  icon={copied === activeChain.key ? CheckmarkSquare01Icon : Copy01Icon}
-                  className={`h-3.5 w-3.5 ${copied === activeChain.key ? "text-credit" : "text-muted-foreground/60"}`}
-                />
-                {copied === activeChain.key && <span className="font-sans text-[12px] font-semibold">Copied</span>}
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       {/* ═══ The accounts, and the one panel that isn't an account ═══
@@ -1477,10 +1441,13 @@ export function PortfolioClient() {
         {activeView === "main" && (
           <>
             {/* CardHeader names the card — no decorative leading icon, per the
-                system. Search and Add Token ride on the right. */}
+                system. Search and Add Token ride on the right. The title is
+                ACCOUNT_LABELS too: the tab above it, the tile under the hero
+                and this card are the same account, so they say the same word.
+                It read "My Assets" here while the tab said Holdings. */}
             <CardHeader
               className="flex-wrap"
-              title="My Assets"
+              title={ACCOUNT_LABELS.holdings}
               subtitle="Every token you hold, on every chain"
               right={
                 /* Drops to its own row on narrow screens — sharing one line
@@ -1517,96 +1484,141 @@ export function PortfolioClient() {
                 <p className="mt-1 text-[11px] text-muted-foreground/70">Deposit an asset or refresh after receiving one.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
-                      <th className="px-4 py-2 text-left font-semibold">Asset</th>
-                      <th className="hidden px-4 py-2 text-right font-semibold sm:table-cell">Balance</th>
-                      <th className="px-4 py-2 text-right font-semibold">Value</th>
-                      <th className="hidden px-4 py-2 text-right font-semibold sm:table-cell">Share</th>
-                      {/* The actions column had no header cell, so every row
-                          carried one td more than the thead declared. */}
-                      <th className="px-4 py-2"><span className="sr-only">Actions</span></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/15">
-                    {visibleTokens.map((token) => {
-                      const chainInfo = CHAINS.find((c) => c.key === token.chain)
-                      const bal = getTokenBalance(token)
-                      const usdVal = tokenUsd(token, bal)
-                      const share = onChainTotal > 0 ? (usdVal / onChainTotal) * 100 : 0
-                      const empty = bal <= 0
-                      return (
-                        <tr key={`${token.chain}-${token.symbol}-${token.contractAddress ?? "native"}`}
-                          className="group transition-colors hover:bg-accent/30">
+              <div>
+                {/* Two shapes, one list. Five columns at 375px is a
+                    horizontal scrollbar pretending to be a layout, so below
+                    `sm` a holding is a two-line row — what it is and what it
+                    is worth — and the full table returns from `sm` up, where
+                    Balance and Share have room to be columns. */}
+                <ul className="flex flex-col divide-y divide-border/15 sm:hidden">
+                  {holdingRows.map((row) => (
+                    <li key={row.key} className="flex items-center gap-2.5 px-3 py-3">
+                      <div className={`relative shrink-0 ${row.empty ? "opacity-50" : ""}`}>
+                        <img src={row.token.icon || getCoinImage(row.token.symbol) || coinFallback(row.token.symbol)} alt={row.token.symbol} className="h-8 w-8 rounded-full"
+                          onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(row.token.symbol) }} />
+                        {row.chainInfo && (
+                          <img src={row.chainInfo.icon} alt="" className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-card"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+                        )}
+                      </div>
+                      <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                        <span className="truncate text-[13.5px] font-semibold">{row.token.symbol}</span>
+                        {/* The chain, and the share of the wallet this row is.
+                            Two facts, not a strung-together sentence: the bar
+                            that carries the share on the table cannot be read
+                            at this width, so down here it is a figure. */}
+                        <span className="truncate text-[11.5px] text-muted-foreground">
+                          {row.chainInfo?.name ?? row.token.chain}
+                          {row.pct > 0 && ` · ${pctLabel(row.pct)}`}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 flex-col items-end leading-tight">
+                        {/* An unpriced holding is an em-dash, never $0.00
+                            beside a real balance. `usd(null)` already is one. */}
+                        <span className={`text-[13.5px] font-semibold tabular-nums ${row.empty ? "text-muted-foreground/50" : ""}`}>
+                          {usd(row.usdValue)}
+                        </span>
+                        <span className="text-[11.5px] tabular-nums text-muted-foreground">{qty(row.bal)}</span>
+                      </span>
+                      <span className="flex shrink-0 items-center">
+                        <button onClick={() => setReceiveModal({ open: true, asset: {
+                          symbol: row.token.symbol, chain: row.token.chain, icon: row.token.icon } })}
+                          aria-label={`Receive ${row.token.symbol}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-credit-chip hover:text-credit">
+                          <HugeiconsIcon icon={ArrowDownLeft01Icon} className="h-4 w-4" />
+                        </button>
+                        {/* Send is only meaningful with something to send. */}
+                        {!row.empty && (
+                          <button onClick={() => setSendModal({ open: true, asset: { symbol: row.token.symbol, name: row.token.name, balance: row.bal,
+                            chain: row.token.chain as SendableAsset["chain"], icon: row.token.icon, contractAddress: row.token.contractAddress,
+                            decimals: row.token.isNative ? undefined : row.token.decimals } })}
+                            aria-label={`Send ${row.token.symbol}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-debit-chip hover:text-debit">
+                            <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
+                          </button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="hidden overflow-x-auto sm:block">
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
+                        <th className="px-4 py-2 text-left font-semibold">Asset</th>
+                        <th className="px-4 py-2 text-right font-semibold">Balance</th>
+                        <th className="px-4 py-2 text-right font-semibold">Value</th>
+                        <th className="px-4 py-2 text-right font-semibold">Share</th>
+                        {/* The actions column had no header cell, so every row
+                            carried one td more than the thead declared. */}
+                        <th className="px-4 py-2"><span className="sr-only">Actions</span></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/15">
+                      {holdingRows.map((row) => (
+                        <tr key={row.key} className="group transition-colors hover:bg-accent/30">
                           {/* Network column dropped: the chain badge already
                               rides on the icon and names itself right here, so
                               a whole column was repeating the sub-label. */}
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2.5">
-                              <div className={`relative shrink-0 ${empty ? "opacity-50" : ""}`}>
-                                <img src={token.icon || getCoinImage(token.symbol) || coinFallback(token.symbol)} alt={token.symbol} className="h-8 w-8 rounded-full"
-                                  onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(token.symbol) }} />
-                                {chainInfo && (
-                                  <img src={chainInfo.icon} alt="" className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-card"
+                              <div className={`relative shrink-0 ${row.empty ? "opacity-50" : ""}`}>
+                                <img src={row.token.icon || getCoinImage(row.token.symbol) || coinFallback(row.token.symbol)} alt={row.token.symbol} className="h-8 w-8 rounded-full"
+                                  onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(row.token.symbol) }} />
+                                {row.chainInfo && (
+                                  <img src={row.chainInfo.icon} alt="" className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-card"
                                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
                                 )}
                               </div>
                               <div className="flex min-w-0 flex-col leading-tight">
-                                <span className="font-semibold">{token.symbol}</span>
+                                <span className="font-semibold">{row.token.symbol}</span>
                                 <span className="truncate text-[12px] text-muted-foreground">
-                                  {token.name}
-                                  {chainInfo && chainInfo.name !== token.name && (
-                                    <span className="text-muted-foreground/60"> · {chainInfo.name}</span>
+                                  {row.token.name}
+                                  {row.chainInfo && row.chainInfo.name !== row.token.name && (
+                                    <span className="text-muted-foreground/60"> · {row.chainInfo.name}</span>
                                   )}
                                 </span>
                               </div>
                             </div>
                           </td>
-                          <td className={`hidden px-4 py-3 text-right font-medium tabular-nums sm:table-cell ${empty ? "text-muted-foreground/50" : ""}`}>
-                            {bal > 0 ? bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }) : "0.00"}
+                          <td className={`px-4 py-3 text-right font-medium tabular-nums ${row.empty ? "text-muted-foreground/50" : ""}`}>
+                            {qty(row.bal)}
                           </td>
-                          <td className={`px-4 py-3 text-right tabular-nums ${empty ? "text-muted-foreground/50" : ""}`}>
-                            <span className="font-semibold">
-                              ${usdVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                            <span className="block text-[12px] text-muted-foreground sm:hidden">
-                              {bal > 0 ? bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }) : "0.00"}
-                            </span>
+                          <td className={`px-4 py-3 text-right font-semibold tabular-nums ${row.empty ? "text-muted-foreground/50" : ""}`}>
+                            {usd(row.usdValue)}
                           </td>
-                          {/* Share ties each row back to the bar up top. */}
-                          <td className="hidden px-4 py-3 sm:table-cell">
-                            {share > 0 ? (
+                          {/* Share ties each row back to the ring up top: the
+                              bar takes its colour from the same rank, so a row
+                              and its arc are the same colour rather than two
+                              palettes the reader has to learn twice. */}
+                          <td className="px-4 py-3">
+                            {row.pct > 0 ? (
                               <div className="flex items-center justify-end gap-2">
-                                <WeightBar
-                                  pct={share}
-                                  rank={allocationRank.get(token.symbol) ?? 99}
-                                  className="w-20"
-                                />
-                                <span className="w-11 text-right text-[12px] tabular-nums text-muted-foreground">{share.toFixed(1)}%</span>
+                                <WeightBar pct={row.pct} rank={row.rank} className="w-20" />
+                                <span className="w-11 text-right text-[12px] tabular-nums text-muted-foreground">{pctLabel(row.pct)}</span>
                               </div>
                             ) : (
-                              <span className="block text-right text-[12px] text-muted-foreground/40">—</span>
+                              <span className="block text-right text-[12px] text-muted-foreground/40">{UNKNOWN}</span>
                             )}
                           </td>
                           {/* Actions are quiet until wanted. Twenty-eight
                               always-on text buttons shouted over the numbers;
-                              on touch there's no hover, so they stay visible. */}
+                              this column only exists from `sm` up, where there
+                              is a pointer to hover with. */}
                           <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+                            <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                               <button onClick={() => setReceiveModal({ open: true, asset: {
-                                symbol: token.symbol, chain: token.chain, icon: token.icon } })}
-                                aria-label={`Receive ${token.symbol}`}
+                                symbol: row.token.symbol, chain: row.token.chain, icon: row.token.icon } })}
+                                aria-label={`Receive ${row.token.symbol}`}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-credit-chip hover:text-credit">
                                 <HugeiconsIcon icon={ArrowDownLeft01Icon} className="h-4 w-4" />
                               </button>
-                              {/* Send is only meaningful with something to send. */}
-                              {!empty && (
-                                <button onClick={() => setSendModal({ open: true, asset: { symbol: token.symbol, name: token.name, balance: bal,
-                                  chain: token.chain as SendableAsset["chain"], icon: token.icon, contractAddress: token.contractAddress,
-                                  decimals: token.isNative ? undefined : token.decimals } })}
-                                  aria-label={`Send ${token.symbol}`}
+                              {!row.empty && (
+                                <button onClick={() => setSendModal({ open: true, asset: { symbol: row.token.symbol, name: row.token.name, balance: row.bal,
+                                  chain: row.token.chain as SendableAsset["chain"], icon: row.token.icon, contractAddress: row.token.contractAddress,
+                                  decimals: row.token.isNative ? undefined : row.token.decimals } })}
+                                  aria-label={`Send ${row.token.symbol}`}
                                   className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-debit-chip hover:text-debit">
                                   <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
                                 </button>
@@ -1614,10 +1626,11 @@ export function PortfolioClient() {
                             </div>
                           </td>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
                 {/* The empty rows are still one tap away. */}
                 {emptyCount > 0 && (
                   <button
@@ -1641,6 +1654,9 @@ export function PortfolioClient() {
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div>
                   <p className="mb-0.5 text-[13px] text-muted-foreground">Account value</p>
+                  {/* The hook's figure, the same one the Spot tile under the
+                      hero shows. Adding the ledger up again here is how a tab
+                      and a hero come to quote the same account differently. */}
                   <p className="text-[17px] font-semibold tabular-nums">
                     {spotV2Loading ? <Skel className="h-5 w-20" /> : usd(spotBalance)}
                   </p>
@@ -2087,8 +2103,6 @@ export function PortfolioClient() {
           </>
         )}
 
-        {/* ═══ ADDRESSES TAB — from the old /portfolio page ═══ */}
-        {activeView === "addresses" && <AddressBook chains={CHAINS} />}
       </CardShell>
 
       {/* The coins you follow but may not hold — the only thing on this page

@@ -814,9 +814,6 @@ export function SendFlow({
       amountApprox={amountApprox}
       amountHint={amountHint}
       maxSpend={maxSpend}
-      feeOffered={feeOffered}
-      sponsorFees={sponsorFees}
-      onSponsorFeesChange={setSponsorFees}
       ctaLabel={transfer.isLoading ? "Preparing review…" : blocker ?? "Review transfer"}
       ctaDisabled={Boolean(blocker)}
       ctaBusy={transfer.isLoading}
