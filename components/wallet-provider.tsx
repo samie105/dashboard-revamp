@@ -8,7 +8,7 @@ import {
   getTradingWalletStatus,
   getExistingWallets,
 } from "@/lib/wallet-actions"
-import { isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { isCryptoBackendEnabled, isLegacyPrivyEnabled } from "@/lib/crypto-backend"
 import { shouldProvisionLegacy } from "@/lib/wallet-mode"
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [legacyWalletExists, setLegacyWalletExists] = React.useState<boolean | null>(null)
 
   const checkTradingWallet = React.useCallback(async () => {
-    if (!user?.email) return
+    if (!isLegacyPrivyEnabled || !user?.email) return
     try {
       const status = await getTradingWalletStatus(user.email)
       if (status.success) {
@@ -94,6 +94,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const fetchWallets = React.useCallback(async () => {
     if (!user?.email) {
+      setIsLoading(false)
+      return
+    }
+
+    if (!isLegacyPrivyEnabled) {
+      setWallets(null)
+      setAddresses(null)
+      setWalletsGenerated(false)
+      setTradingWallet(null)
+      setHasTradingWallet(false)
+      setPrivyType(null)
+      setLegacyWalletExists(false)
+      setSetupStatus(null)
+      setError(null)
       setIsLoading(false)
       return
     }
@@ -189,7 +203,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [user?.email])
 
   const refreshWallets = React.useCallback(async () => {
-    if (!user?.email) return
+    if (!isLegacyPrivyEnabled || !user?.email) return
 
     try {
       setIsLoading(true)

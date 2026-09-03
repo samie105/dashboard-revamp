@@ -10,6 +10,8 @@
  * which, and a cutover doesn't touch this file.
  */
 
+import { isLegacyPrivyEnabled } from "@/lib/crypto-backend"
+
 // ── Errors ──────────────────────────────────────────────────────────────────
 
 /** Carries the HTTP status so callers can branch (404 = no wallet, 409 = etc). */
@@ -70,6 +72,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return data as T
+}
+
+/** Legacy Privy mutations must never be reachable when the compatibility
+ * boundary is disabled. Reads remain available for migration/status UI. */
+function assertLegacyPrivyEnabled() {
+  if (!isLegacyPrivyEnabled) throw new CryptoApiError(409, "Legacy Privy wallet actions are disabled; use the modern wallet flow.")
 }
 
 const get = <T,>(path: string) => request<T>(path)
@@ -249,6 +257,7 @@ export async function sendNative(input: {
   to: string
   amount: string
 }): Promise<SendResult> {
+  assertLegacyPrivyEnabled()
   return normalizeSend(await post<RawSend>("/api/privy/wallet/send", input))
 }
 
@@ -258,6 +267,7 @@ export async function sendSplToken(input: {
   amount: number
   mint: string
 }): Promise<SendResult> {
+  assertLegacyPrivyEnabled()
   return normalizeSend(await post<RawSend>("/api/privy/wallet/solana/send-token", input))
 }
 
@@ -268,6 +278,7 @@ export async function sendErc20Token(input: {
   tokenAddress: string
   chain?: EvmTokenChain
 }): Promise<SendResult> {
+  assertLegacyPrivyEnabled()
   return normalizeSend(await post<RawSend>("/api/privy/wallet/ethereum/send-token", input))
 }
 
@@ -277,6 +288,7 @@ export async function sendTrc20Token(input: {
   amount: number
   contractAddress: string
 }): Promise<SendResult> {
+  assertLegacyPrivyEnabled()
   return normalizeSend(await post<RawSend>("/api/privy/wallet/tron/send-token", input))
 }
 
@@ -422,6 +434,7 @@ export function fetchBuyAvailability(): Promise<BuyAvailability> {
 
 /** 200 = delivered; 202 = in flight (poll fetchBuy). */
 export async function initiateBuy(input: { usdtAmount: number; network: BuyNetwork }): Promise<Buy> {
+  assertLegacyPrivyEnabled()
   const res = await post<{ success: boolean; buy: Buy }>("/api/buy", input)
   return res.buy
 }
@@ -442,6 +455,7 @@ export function fetchSellInfo(): Promise<SellInfo> {
 
 /** 200 = credited; 202 = confirming/credit retrying (poll fetchSell). */
 export async function initiateSell(input: { usdtAmount: number; network: SellNetwork }): Promise<Sell> {
+  assertLegacyPrivyEnabled()
   const res = await post<{ success: boolean; sell: Sell }>("/api/sell", input)
   return res.sell
 }
@@ -611,6 +625,7 @@ export function placeSpotOrder(input: {
   size?: number
   limitPrice?: number
 }): Promise<HlOrderOutcome> {
+  assertLegacyPrivyEnabled()
   return post<HlOrderOutcome>("/api/trade/spot", input)
 }
 
@@ -626,10 +641,12 @@ export function placeFuturesOrder(input: {
   stopLossPrice?: number
   reduceOnly?: boolean
 }): Promise<HlOrderOutcome> {
+  assertLegacyPrivyEnabled()
   return post<HlOrderOutcome>("/api/trade/futures", input)
 }
 
 export function closePosition(input: { symbol: string; size?: number }): Promise<HlCloseOutcome> {
+  assertLegacyPrivyEnabled()
   return post<HlCloseOutcome>("/api/trade/close", input)
 }
 
@@ -638,6 +655,7 @@ export function cancelOrder(input: {
   symbol: string
   market: "spot" | "futures"
 }): Promise<{ success: boolean; error?: string }> {
+  assertLegacyPrivyEnabled()
   return post("/api/trade/cancel", input)
 }
 
