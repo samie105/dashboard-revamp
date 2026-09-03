@@ -585,13 +585,21 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               Figure + today's P&L on the left, the portfolio's Today / 7d /
               30d moves on the right (derived from real price history). */}
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-            <div data-onboarding="dash-balance" className="flex w-fit flex-col gap-1">
+            {/* w-full on a phone, w-fit from sm. The column used to shrink to
+                its widest child at every width, which meant the help pill had
+                nowhere to go but hard against the label — three unlike things
+                (a tracked-out caps label, a bare icon, a raised pill) crammed
+                into one 12px-gapped run. Full width gives the pill a right
+                edge to sit against, so the label gets to be a label again.
+                From sm the column shrink-wraps as before, because it shares
+                that row with the Today/7d/30d strip. */}
+            <div data-onboarding="dash-balance" className="flex w-full flex-col gap-1.5 sm:w-fit">
               {/* flex-wrap is load-bearing now that the label is three words.
                   "TOTAL CRYPTO BALANCE" at 12px with 0.08em tracking, plus the
                   eye and the guide pill, runs past the content box below about
                   360px — which is a real phone, not an edge case. Wrapping puts
                   the pill on its own line there instead of squeezing it. */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
                 {/* Not just "Total balance". There are two balances in a
                     Worldstreet user's life and they belong to different
                     products: this one, which is Holdings + Spot + Futures, and
@@ -602,10 +610,32 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                     people could not read the number, it was that they could
                     not tell which money it counted. */}
                 <Eyebrow>Total crypto balance</Eyebrow>
+                {/* `ws-icon-mono` while balances are SHOWN is the point of this
+                    button, not styling. globals.css paints the inner path of
+                    every 24px icon with `--primary` (the house two-tone
+                    treatment), so this eye was gold in BOTH states and the one
+                    thing it exists to tell you — are your figures hidden —
+                    could not be read off it. A permanently gold icon beside a
+                    quiet label is also gold as decoration, which the system
+                    reserves for brand, primary action and active state.
+                    Shown: the glyph collapses to one muted colour. Hidden: the
+                    two-tone gold is allowed back and the whole thing goes
+                    primary, so the state reads instantly.
+                    The opt-out has to be a globals.css class rather than
+                    `[&_path]:stroke-current` here — layered Tailwind utilities
+                    lose to un-layered author CSS whatever their specificity,
+                    so the call-site version looks right and silently does
+                    nothing. -m-2 p-2 buys a 44px hit area without moving the
+                    layout. */}
                 <button
                   onClick={toggleHidden}
-                  className={`transition-colors ${hidden ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"}`}
+                  className={`-m-2 p-2 transition-colors ${
+                    hidden
+                      ? "text-primary"
+                      : "ws-icon-mono text-muted-foreground/60 hover:text-foreground"
+                  }`}
                   aria-label={hidden ? "Show balances" : "Hide balances"}
+                  aria-pressed={hidden}
                 >
                   <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
                 </button>
@@ -618,7 +648,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   onClick={openWelcomeGuide}
                   data-vivid-target="open-welcome-guide"
                   data-vivid-label="Open the guide to Worldstreet"
-                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-card/70 px-2.5 text-[11px] font-semibold text-muted-foreground ring-1 ring-border/40 transition-colors hover:bg-accent hover:text-foreground"
+                  className="ml-auto inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full bg-card/70 px-2.5 text-[11px] font-semibold text-muted-foreground ring-1 ring-border/40 transition-colors hover:bg-accent hover:text-foreground ws-icon-mono"
                 >
                   <HugeiconsIcon icon={HelpCircleIcon} className="h-3.5 w-3.5" />
                   How this works
@@ -650,10 +680,22 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   point of the line is to say so while still letting someone
                   find their dollars. `loaded` holds the figure back so a real
                   $0.00 is never confused with a request in flight. */}
-              <span className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                <HugeiconsIcon icon={DollarCircleIcon} className="h-[15px] w-[15px] text-muted-foreground/70" />
+              {/* A sunken chip rather than a third line of loose text. Under a
+                  45px figure, "Dollar Account $1,250.75" set as a run-on read
+                  as an orphaned caption — the label ran into its own number
+                  and the whole thing sat 4px below a hero it is not part of.
+                  Giving it an outline makes it a separate OBJECT, which is
+                  exactly the thing this line has to communicate: different
+                  money, different product, deliberately not inside the total.
+                  w-fit so it hugs its content instead of striping the column,
+                  and mt-1 buys the figure above it room to be the hero. */}
+              <span className="mt-1 inline-flex w-fit items-center gap-2 rounded-full bg-surface-sunken/70 py-1.5 pl-2 pr-3 text-[12.5px] leading-none text-muted-foreground ring-1 ring-border/25 ws-icon-mono">
+                <HugeiconsIcon
+                  icon={DollarCircleIcon}
+                  className="h-4 w-4 text-muted-foreground/70"
+                />
                 Dollar Account
-                <span className="font-medium tabular-nums text-foreground/80">
+                <span className="font-semibold tabular-nums text-foreground">
                   {hidden ? MASK : cashLoaded ? formatUSD(cashBalance) : "––"}
                 </span>
               </span>

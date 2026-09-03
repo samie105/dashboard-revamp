@@ -229,6 +229,27 @@ svg[viewBox="0 0 24 24"] > path:not(:first-child) {
   stroke: currentColor;
 }
 
+/* …and an explicit opt-out, for icons whose COLOUR is carrying information.
+
+   The two-tone rule is unconditional, so until this existed there was no way
+   to say "this glyph is one colour". That bit the dashboard's hide-balances
+   eye: it is meant to read gold when your figures are hidden and muted when
+   they are shown, and it was gold in both states, so the one thing the button
+   exists to tell you could not be read off it. A permanently gold icon beside
+   a quiet label is also gold as decoration, which the system reserves for
+   brand, primary action and active state.
+
+   Same shape and the same reason as the `.bg-primary` rule above: (0,3,2)
+   beats (0,2,2), and it has to live here rather than at the call site because
+   layered Tailwind utilities lose to un-layered author CSS whatever their
+   specificity. `[&_path]:stroke-current` from a className looks like it should
+   work and silently does not.
+
+   Put it on the ELEMENT WRAPPING the icon (button, span), not the icon. */
+.ws-icon-mono svg[viewBox="0 0 24 24"] > path:not(:first-child) {
+  stroke: currentColor;
+}
+
 /* Safe area bottom padding for iOS notch devices */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
