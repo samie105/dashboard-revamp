@@ -294,6 +294,7 @@ export function WalletKeyExportPanel({
       </AlertDialog>
 
       <WalletUnlockDialog
+        action="wallet-export"
         open={unlockOpen}
         onOpenChange={(open) => {
           setUnlockOpen(open)

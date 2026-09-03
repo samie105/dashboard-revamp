@@ -5,6 +5,7 @@ import type {
   CryptoBalance,
   CryptoBalanceSnapshot,
   Device,
+  WalletTradingSession,
   HyperliquidMarkets,
   HyperliquidAccount,
   HyperliquidIntent,
@@ -315,6 +316,39 @@ export class CryptoBackendClient {
       method: "POST",
       body: JSON.stringify({ signatures }),
     }, { signal })
+  }
+
+  async createTradingSession(input: {
+    accountId: string
+    chainFamily: "evm" | "solana"
+    networkIds: string[]
+    allowedTargets?: string[]
+    allowedOperations?: string[]
+    maxTransactionValue?: string
+    maxDailyValue?: string
+    maxRequestsPerMinute?: number
+    ttlSeconds?: number
+  }, walletAuthorizationToken: string) {
+    return this.request<{ session: WalletTradingSession; token: string }>("/wallets/me/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        ...input,
+        // Delegated sessions are deliberately limited to trading operations.
+        allowedOperations: input.allowedOperations ?? ["transfer"],
+      }),
+    }, { walletAuthorizationToken })
+  }
+
+  async listTradingSessions() {
+    return this.request<WalletTradingSession[]>("/wallets/me/sessions")
+  }
+
+  async revokeTradingSession(sessionId: string, walletAuthorizationToken: string) {
+    await this.request(`/wallets/me/sessions/${encodeURIComponent(sessionId)}/revoke`, { method: "POST" }, { walletAuthorizationToken })
+  }
+
+  async revokeAllTradingSessions(walletAuthorizationToken: string) {
+    await this.request("/wallets/me/sessions/revoke-all", { method: "POST" }, { walletAuthorizationToken })
   }
 
   async getHyperliquidIntent(intentId: string, signal?: AbortSignal): Promise<HyperliquidIntent> {

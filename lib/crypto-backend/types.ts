@@ -238,6 +238,24 @@ export interface Device {
   revokedAt?: string
 }
 
+export interface WalletTradingSession {
+  id: string
+  accountId: string
+  chainFamily: "evm" | "solana" | string
+  permissions: {
+    networkIds: string[]
+    allowedTargets: string[]
+    allowedOperations: string[]
+    maxTransactionValue?: string
+    maxDailyValue?: string
+    maxRequestsPerMinute?: number
+  }
+  status: "active" | "revoked" | "expired" | string
+  issuedAt?: string
+  expiresAt: string
+  lastUsedAt?: string
+}
+
 export interface HyperliquidMarket {
   symbol: string
   price: number

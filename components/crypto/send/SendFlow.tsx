@@ -627,6 +627,7 @@ export function SendFlow({
       {/* Mounted on every branch: the DEK can lapse at any point, and the
           dialog is what resumes whatever was interrupted. */}
       <WalletUnlockDialog
+        action="send"
         open={unlockOpen}
         onOpenChange={setUnlockOpen}
         onUnlocked={() => {

@@ -1105,6 +1105,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const overlays = (
     <>
       <WalletUnlockDialog
+        action="swap"
         open={unlockOpen}
         onOpenChange={setUnlockOpen}
         onUnlocked={() => {

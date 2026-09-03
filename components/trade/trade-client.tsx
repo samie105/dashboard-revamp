@@ -1255,7 +1255,13 @@ export function TradeClient() {
         throw new Error("Set up and unlock the modern wallet before trading")
       }
       if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) {
-        throw new Error("Unlock the modern wallet locally before trading")
+        // A session can expire while the review modal is open. Resume the
+        // reviewed intent in-place instead of forcing the user to navigate
+        // away or rebuild the order.
+        setSubmitting(false)
+        resumeAfterUnlock.current = () => void confirmFuturesOrder()
+        setUnlockOpen(true)
+        return
       }
       const signatures = await signHyperliquidIntent(
         user.userId,
@@ -2978,6 +2984,7 @@ export function TradeClient() {
       {/* Unlock, then place the order the user already pressed — the same
           resume the swap screen does. */}
       <WalletUnlockDialog
+        action="futures-order"
         open={unlockOpen}
         onOpenChange={setUnlockOpen}
         onUnlocked={() => {
