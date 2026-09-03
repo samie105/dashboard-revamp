@@ -38,6 +38,9 @@ import {
   type SeenSnapshot,
 } from "@/lib/welcome-guide"
 
+/** The same mark the sidebar and the app launcher use. */
+const BRAND_MARK = "/worldstreet-logo/WorldStreet1.png"
+
 /** A line in a card's list. Rows are how this guide organises information —
  *  a newcomer scans a labelled list; they do not read a paragraph. */
 type GuideRow = {
@@ -49,6 +52,9 @@ type GuideRow = {
 }
 
 type GuideCard = {
+  /** The brand mark. The opening card only: it is a greeting FROM
+   *  Worldstreet, so Worldstreet is what belongs at the top of it. */
+  mark?: boolean
   /** A house illustration, or nothing — the list is the card's substance. */
   art?: IllustrationKey
   title: string
@@ -74,7 +80,7 @@ type GuideCard = {
  */
 const CARDS: GuideCard[] = [
   {
-    art: "welcome",
+    mark: true,
     title: "Welcome to Worldstreet",
     body:
       "Your money and your crypto in one place. Here is what is on your screen, and where everything lives.",
@@ -388,13 +394,21 @@ export function WelcomeGuide({
               sr-only copy beside a visible <h2> made a screen reader announce
               every card's name twice. */}
           <ResponsiveModalHeader className="flex flex-col items-center gap-2.5 space-y-0 text-center">
-            {current.art && (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={illustrations[current.art]}
-                alt=""
-                className="h-[88px] w-[88px] object-contain"
-              />
+            {/* One slot, so the title sits at the same height on every card
+                that has something above it. The mark is smaller than the
+                illustrations on purpose — a logo carries at a size a drawing
+                does not. */}
+            {(current.mark || current.art) && (
+              <span className="flex h-[88px] items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={current.mark ? BRAND_MARK : illustrations[current.art!]}
+                  alt=""
+                  className={
+                    current.mark ? "h-16 w-16 object-contain" : "h-[88px] w-[88px] object-contain"
+                  }
+                />
+              </span>
             )}
             {/* Keyed so each card's text settles in rather than swapping
                 under the reader mid-sentence. */}
