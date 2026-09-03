@@ -540,7 +540,14 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
 
   const PRIMARY_ACTIONS: DashAction[] = [
     { label: "Deposit", onClick: () => openDoor("deposit"), icon: Exchange01Icon, vivid: "open-deposit", vividLabel: "Ask where the money is coming from, then deposit" },
-    { label: "Withdraw", onClick: () => openDoor("withdraw"), icon: CreditCardIcon, vivid: "open-withdraw", vividLabel: "Ask where the money is going, then withdraw" },
+    /* Withdraw no longer asks a question. Cash withdrawals are shut until
+       there is a treasury to settle them (CASH_WITHDRAWALS_CLOSED in
+       money-doors.tsx), which leaves exactly one way out, and a chooser with
+       one option is a dead click — so this walks straight to the send screen.
+       The label has to say what actually happens, because Vivid reads it to
+       decide what pressing this does. It goes back to asking on its own when
+       that constant flips. */
+    { label: "Withdraw", onClick: () => openDoor("withdraw"), icon: CreditCardIcon, vivid: "open-withdraw", vividLabel: "Send crypto out of your wallet" },
   ]
 
   const MORE_ACTIONS: DashAction[] = [

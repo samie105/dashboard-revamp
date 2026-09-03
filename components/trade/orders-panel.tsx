@@ -198,10 +198,11 @@ function sizeText(row: ResolvedOrder): string {
   return `${row.size.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${row.unit}`
 }
 
-/* ── Detail sheet ─────────────────────────────────────────────────────────
+/* ── Detail modal ─────────────────────────────────────────────────────────
    Everything the narrow table leaves out, in the house modal — the same glass
-   shell the order confirmation uses, so a row's detail reads as part of the
-   same product rather than a second idea about what a sheet is. */
+   shell the order confirmation and the order ticket use, so a row's detail
+   reads as part of the same product rather than a second idea about what a
+   dialog is. `ResponsiveModal` owns the shape; this only picks the size. */
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (

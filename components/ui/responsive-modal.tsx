@@ -4,6 +4,7 @@ import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
+import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Button } from "@/components/ui/button"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -52,40 +53,25 @@ function ResponsiveModalContent({
   return (
     <DialogPrimitive.Portal>
       {/* Overlay / backdrop — the app-wide frost */}
-      <DialogPrimitive.Backdrop
-        className="ws-backdrop-in data-closed:animate-out data-closed:fade-out-0 data-closed:duration-200 bg-black/45 backdrop-blur-md fixed inset-0 z-50"
-      />
+      <DialogPrimitive.Backdrop className={MODAL_BACKDROP} />
 
-      {/* Popup — dialog on desktop, bottom sheet on mobile */}
+      {/* Popup — a centred card at every width. This component is the
+          REFERENCE IMPLEMENTATION of the house modal: it holds nothing of its
+          own shape any more, only the size and inner layout that make it the
+          everyday dialog. Anything that needs a different size imports the
+          same two constants rather than re-deriving the shape, which is how
+          the money-flow modal came to be a bottom drawer while this was a
+          card. See components/ui/modal-surface.ts. */}
       <DialogPrimitive.Popup
         data-slot="responsive-modal-content"
         className={cn(
-          // ws-glass: modals are the top of the elevation ladder, so they get
-          // the heavy frost — the page stays visible as material behind the
-          // surface instead of disappearing behind a solid card.
-          "ws-glass ws-glass-edge outline-none text-sm z-50 fixed shadow-2xl ring-1 ring-foreground/10",
-          /* ONE SHAPE AT EVERY WIDTH: a card centred in the viewport with a
-             1rem gutter around it, rounded on all four corners.
-
-             Below 640px this used to be a bottom sheet — `inset-x-0 bottom-0
-             rounded-t-3xl` — which is the documented house pattern
-             (design-system 05: "Modal → bottom sheet under 640"). Owner call
-             on 2026-09-02, looking at the passphrase dialog: glued to both
-             edges and pinned to the floor, it read as a panel that had fallen
-             off the layout rather than a dialog addressed to you. Centred with
-             room around it is the shape now; the design-system note is the one
-             that is out of date.
-
-             `max-w-[calc(100%-2rem)]` is what supplies the side gutter on a
-             phone, and `sm:max-w-sm` caps it on anything larger.
-
+          MODAL_SURFACE,
+          /* The everyday size: small, and hugging its own content.
              max-h + scroll stays load-bearing rather than polish: content
              taller than the screen has to scroll INSIDE the card, or the
              title and the primary action end up off both ends of it. */
-          "ws-modal-in data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[0.97] data-closed:duration-200",
-          "top-1/2 left-1/2 w-full -translate-x-1/2 -translate-y-1/2",
-          "max-w-[calc(100%-2rem)] sm:max-w-sm",
-          "flex max-h-[calc(100dvh-2rem)] flex-col gap-4 overflow-y-auto overscroll-contain rounded-2xl p-4",
+          "sm:max-w-sm",
+          "flex max-h-[calc(100dvh-2rem)] flex-col gap-4 overflow-y-auto overscroll-contain p-4",
           className
         )}
         {...props}

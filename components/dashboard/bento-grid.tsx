@@ -23,6 +23,12 @@ import { getSpotBalances, getSpotPositions, getTokenPrices, getSpotTradeHistory 
 import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { ErrorState } from "@/components/error-state"
 import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalTitle,
+} from "@/components/ui/responsive-modal"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import {
   CardHeader,
   CardShell,
   ChangeText,
@@ -75,11 +81,33 @@ function TradeConfirmDialog({
   onClose: () => void
 }) {
   const router = useRouter()
-  if (!item) return null
+  /* Phone-only, exactly as before. The rows below set `tradeItem` at every
+     width but this surface was `sm:hidden`, so on a desktop the confirm step
+     simply never appeared. Gating `open` on the media query rather than
+     hiding the card with a class is what keeps that true now that the modal
+     is portalled: a `sm:hidden` popup would still paint its backdrop over the
+     page on a desktop, dimming the screen for a dialog nobody can see.
+     (Worth knowing separately: because the row's onClick is unconditional, a
+     desktop click on a market row currently does nothing at all. That is a
+     pre-existing dead click, not something introduced here.) */
+  const onPhone = useMediaQuery("(max-width: 639px)")
 
-  const isFutures = item.type === "futures"
-  const isUp = item.change24h >= 0
-  const href = isFutures ? `/trade?market=futures&symbol=${item.symbol}` : `/trade?symbol=${item.symbol}`
+  /* The item survives the close so the card keeps its content while the exit
+     transition plays, instead of blanking the instant it is dismissed.
+     Render-phase setState rather than a ref: writing a ref during render is
+     unsafe under concurrent rendering (and the lint rule that says so is
+     right). This is React's documented "adjust state when a prop changes"
+     pattern — the extra render happens before the browser paints, so nothing
+     flashes. */
+  const [lastItem, setLastItem] = React.useState<TradeConfirmItem | null>(item)
+  if (item && item !== lastItem) setLastItem(item)
+  const shown = item ?? lastItem
+
+  if (!shown) return null
+
+  const isFutures = shown.type === "futures"
+  const isUp = shown.change24h >= 0
+  const href = isFutures ? `/trade?market=futures&symbol=${shown.symbol}` : `/trade?symbol=${shown.symbol}`
 
   function handleTrade() {
     onClose()
@@ -87,74 +115,76 @@ function TradeConfirmDialog({
   }
 
   return (
-    // backdrop
-    <div
-      className="ws-backdrop-in fixed inset-0 z-[60] flex items-end justify-center bg-black/45 backdrop-blur-md sm:hidden"
-      onClick={onClose}
-    >
-      {/* sheet */}
-      <div
-        className="ws-sheet-in ws-glass ws-glass-edge relative w-full rounded-t-3xl px-6 pt-6 pb-28 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    /* The house modal, not a hand-rolled sheet. This was two bare divs — a
+       floor-anchored panel with `rounded-t-3xl` and a click-outside handler —
+       which meant no focus trap, no Escape, no portal and no scroll lock on a
+       surface that starts a trade. Owner call 2026-09-03: every modal pops up
+       the same way. ResponsiveModal brings the centred card AND the dialog
+       semantics that were missing. */
+    <ResponsiveModal open={item !== null && onPhone} onOpenChange={(open) => { if (!open) onClose() }}>
+      <ResponsiveModalContent>
+        <ResponsiveModalTitle className="sr-only">
+          Trade {shown.symbol}
+        </ResponsiveModalTitle>
         {/* coin header */}
-        <div className="mb-6 flex items-center gap-3">
-          {item.image ? (
+        <div className="flex items-center gap-3">
+          {shown.image ? (
             <img
-              src={item.image}
-              alt={item.symbol}
+              src={shown.image}
+              alt={shown.symbol}
               className="h-12 w-12 rounded-full object-contain ring-2 ring-primary/30"
-              onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(item.symbol) }}
+              onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(shown.symbol) }}
             />
           ) : (
             <div className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold bg-primary/10 text-primary">
-              {item.symbol.slice(0, 3)}
+              {shown.symbol.slice(0, 3)}
             </div>
           )}
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col">
             <span className="text-base font-bold">
-              {item.symbol}{isFutures ? "-PERP" : "/USDC"}
+              {shown.symbol}{isFutures ? "-PERP" : "/USDC"}
             </span>
-            <span className="text-xs text-muted-foreground">{item.name}</span>
+            <span className="truncate text-xs text-muted-foreground">{shown.name}</span>
           </div>
-          <div className="ml-auto flex flex-col items-end">
+          <div className="ml-auto flex shrink-0 flex-col items-end">
             <span className="text-base font-bold tabular-nums">
-              ${item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: item.price < 1 ? 4 : 2 })}
+              ${shown.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: shown.price < 1 ? 4 : 2 })}
             </span>
             <span className={`text-xs font-medium tabular-nums ${
               isUp ? "text-credit" : "text-debit"
             }`}>
-              {isUp ? "+" : ""}{item.change24h.toFixed(2)}%
+              {isUp ? "+" : ""}{shown.change24h.toFixed(2)}%
             </span>
           </div>
         </div>
 
         {/* type badge */}
-        <div className="mb-5 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
-            {isFutures ? `Perpetual · up to ${(item as Extract<TradeConfirmItem, {type:"futures"}>).leverage}× leverage` : "Spot Market"}
+            {isFutures ? `Perpetual · up to ${(shown as Extract<TradeConfirmItem, {type:"futures"}>).leverage}× leverage` : "Spot Market"}
           </span>
         </div>
 
-        {/* CTAs */}
+        {/* CTAs. min-h-12 rather than py-3: the card is a touch surface and
+            44px is the floor. */}
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border/50 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent"
+            className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-border/50 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent"
           >
             <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
             Cancel
           </button>
           <button
             onClick={handleTrade}
-            className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+            className="flex min-h-12 flex-[2] items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Trade {item.symbol}
+            Trade {shown.symbol}
             <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
           </button>
         </div>
-      </div>
-    </div>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   )
 }
 const MARKET_TABS = ["Spot", "Futures"] as const

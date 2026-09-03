@@ -16,8 +16,10 @@
  * as fixed side rails. Panes are CARDS separated by fill and the workspace gap
  * — one padding scale (10px on a phone, 16px from lg) across every band —
  * rather than by hairlines drawn between identical grounds. Below lg the rails
- * fold: the rail goes entirely, and the ticket becomes a bottom sheet the
- * buy/sell action bar opens, so the chart keeps the screen.
+ * fold: the rail goes entirely, and the ticket becomes a modal the buy/sell
+ * action bar opens, so the chart keeps the screen. That modal is the house
+ * centred card (`components/ui/modal-surface.ts`) — it was a bottom sheet
+ * until 2026-09-03; see the note where it is mounted.
  *
  * SIMPLE vs PRO (`lib/trade-view.ts`, and the long note where it is read):
  * Simple is the complete buy/sell story and nothing else — the pair, the price
@@ -118,6 +120,7 @@ import { loadSpotMarkets } from "@/lib/spot-markets"
 import { nativeTokenFor } from "@/lib/native-token"
 import { chainLabel } from "@/lib/spot-market-search"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
+import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
 import { EmptyState, Skel } from "@/components/ui/system"
 import {
   BackAction,
@@ -432,7 +435,7 @@ export function TradeClient() {
   const [error, setError] = React.useState<string | null>(null)
   const [busyKey, setBusyKey] = React.useState<string | null>(null)
   // Mobile-only view state: which pane sits under the chart, and whether the
-  // order ticket sheet is up.
+  // order ticket modal is up.
   const [mobilePane, setMobilePane] = React.useState<
     "book" | "positions" | "orders"
   >("book")
@@ -2770,7 +2773,7 @@ export function TradeClient() {
         )}
 
         {/* Ticket rail — desktop keeps it always-on; below lg it becomes the
-            bottom sheet the action bar opens, so the chart owns the screen. */}
+            modal the action bar opens, so the chart owns the screen. */}
         <aside
           aria-label="Order ticket"
           className="slim-scroll ws-pane hidden shrink-0 overflow-hidden rounded-2xl bg-card lg:block lg:w-[320px] lg:overflow-y-auto xl:w-[344px]"
@@ -2837,19 +2840,50 @@ export function TradeClient() {
         )}
       </div>
 
-      {/* Ticket sheet (mobile) */}
+      {/* Ticket modal (mobile) — a CENTRED CARD, not a bottom sheet.
+          Owner call, 2026-09-03: every modal in the app pops up the same way,
+          and this one was the odd one out. It was glued to the floor with a
+          grabber on its lid while the confirmation modal that follows it — and
+          every other dialog on this screen — was a centred card with a gutter.
+          Two presentations inside ONE flow read as two different apps.
+          The SHAPE now comes from `MODAL_SURFACE`/`MODAL_BACKDROP` (see
+          components/ui/modal-surface.ts) rather than from classes written here,
+          so it cannot quietly drift again; what stays local is only the size
+          and the inner layout, which are this modal's own business.
+          Do NOT reintroduce `inset-x-0 bottom-0`, `rounded-t-3xl`,
+          `safe-area-bottom`, the translate-Y slide or the drag grabber. A
+          centred card has a gutter on all four sides, so it clears the device
+          inset without asking for a second one, and a grabber on a card that
+          does not swipe advertises a gesture that does nothing. */}
       <Dialog.Root open={ticketOpen} onOpenChange={setTicketOpen}>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/45 transition-opacity duration-300 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-md lg:hidden" />
+          {/* `lg:hidden` on both halves: from lg up the ticket lives in its own
+              always-on rail, so this surface must not exist there at all. */}
+          <Dialog.Backdrop className={cn(MODAL_BACKDROP, "lg:hidden")} />
           <Dialog.Popup
             aria-label={`${market === "futures" ? (side === "buy" ? "Long" : "Short") : side === "buy" ? "Buy" : "Sell"} ${symbol}`}
-            className="safe-area-bottom fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] translate-y-0 flex-col rounded-t-3xl bg-card shadow-2xl transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] outline-none data-ending-style:translate-y-full data-starting-style:translate-y-full lg:hidden"
+            className={cn(
+              MODAL_SURFACE,
+              /* Size and inner layout — the only things this modal owns.
+                 `sm:max-w-md`: the dialog is live all the way up to lg, and on
+                 a tablet a ticket stretched to the full gutter width would put
+                 the amount field and its Max buttons at opposite ends of the
+                 screen. Below sm the `max-w-[calc(100%-2rem)]` inside
+                 MODAL_SURFACE is what applies, which is where the phone gutter
+                 comes from.
+                 `max-h-[calc(100dvh-2rem)]` honours that same 1rem gutter at
+                 the top and the bottom. The old `92dvh` was measured for a
+                 sheet that only had a top edge to clear.
+                 `overflow-hidden` keeps the scrolling body inside the 20px
+                 corners. The body below is the scroll container, not this
+                 element, so the pair header stays put while the ticket scrolls
+                 and the submit button is always reachable. */
+              "flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-md lg:hidden"
+            )}
           >
-            <div
-              aria-hidden
-              className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/[0.16]"
-            />
-            <div className="flex shrink-0 items-center justify-between px-4 pt-2">
+            {/* One padding scale with the ticket body's own `p-4`, so the pair
+                and the first control below it share a left edge. */}
+            <div className="flex shrink-0 items-center justify-between px-4 pt-4">
               <span className="flex items-center gap-2.5">
                 <CoinAvatar
                   symbol={bookCoin ?? symbol}
@@ -2872,7 +2906,11 @@ export function TradeClient() {
                 type="button"
                 onClick={() => setTicketOpen(false)}
                 aria-label="Close"
-                className="-mr-1 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                /* 44px on the phone this surface exists for, the house modal's
+                   own close-button size (`size-11 sm:size-9`). It was 36px,
+                   which is under the target minimum on the one control that
+                   dismisses an order ticket. */
+                className="-mr-1 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:h-9 sm:w-9"
               >
                 <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
               </button>

@@ -10,10 +10,12 @@
  * sentence in the ticket is not an acknowledgement. Pressing the button that
  * spends money should be answered by something that takes over the screen.
  *
- * The house modal is `ResponsiveModal`: centred dialog on desktop, bottom
- * sheet on mobile, heavy frost, Escape and outside-click for free. Same shell
- * as the unlock dialog, so this reads as part of the app rather than a new
- * kind of surface invented for one screen.
+ * The house modal is `ResponsiveModal`: one centred card at every width (it
+ * was a bottom sheet under 640 until the 2026-09-03 owner call — see
+ * components/ui/modal-surface.ts), heavy frost, Escape and outside-click for
+ * free. Same shell as the unlock dialog and, since that call, as the order
+ * ticket this confirmation follows — so the whole flow reads as one product
+ * rather than a new kind of surface invented per screen.
  *
  * The copy map is exported because the ticket shows the same status inline
  * once this is dismissed, and two places describing one intent in different

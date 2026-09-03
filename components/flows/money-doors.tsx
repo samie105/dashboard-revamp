@@ -18,6 +18,13 @@
  * Deep links keep their old behaviour: openFlow("fund") and the /fund, /buy,
  * /sell routes still land straight on a flow. The chooser only exists for the
  * dashboard's two ambiguous buttons.
+ *
+ * ── The directions are NOT symmetric, on purpose ──────────────────────────
+ * Deposit asks the question; withdraw currently does not, because only one of
+ * its two doors is open (see CASH_WITHDRAWALS_CLOSED below). A chooser with a
+ * single row is a dead click dressed up as a decision, so the modal walks
+ * straight through it. Please don't "restore" the missing row for tidiness —
+ * the asymmetry is telling the truth about how many ways out there are.
  */
 
 import * as React from "react"
@@ -48,12 +55,39 @@ type Door = {
 }
 
 /**
+ * Cash withdrawals are closed.
+ *
+ * Money leaving the trading account for the Dollar Account has to land
+ * somewhere, and the treasury that would hold it does not exist yet — so the
+ * door was offering a route that cannot settle. Owner call, 2026-09-03: take
+ * it off the withdraw chooser until there is a treasury behind it. The code
+ * stays; only the door is shut.
+ *
+ * Typed `boolean` on purpose so TypeScript keeps checking both arms.
+ *
+ * TO RE-OPEN: set this to false. That is the entire change. `doorsFor` stops
+ * filtering, the withdraw chooser is two rows again, and the money-flow
+ * modal's `openDoor` goes back to asking the question rather than walking
+ * through it — it counts the open doors instead of naming them, so nothing
+ * there needs editing. Once the treasury is permanent, delete this constant
+ * and the one `if` in `doorsFor` (search `CASH_WITHDRAWALS_CLOSED`).
+ *
+ * NOT affected: the trading-withdraw FLOW itself. openFlow("trading-withdraw")
+ * still works for deep links and for Vivid, and the direction toggle inside an
+ * open cash flow still reaches it. This shuts a door, not a room.
+ */
+export const CASH_WITHDRAWALS_CLOSED: boolean = true
+
+/**
  * The copy is the product here. "From your Dollar Account" and "From crypto"
  * are the words the owner used, and the dollar-account line is his sentence
  * verbatim — it is the one place we explain how the two products connect, so
  * it does not get paraphrased into something vaguer.
+ *
+ * Every door that has ever existed lives here, open or not. Read it through
+ * `doorsFor`, never directly, so a closed door can't leak onto a screen.
  */
-const DOORS: Record<MoneyDirection, readonly Door[]> = {
+const ALL_DOORS: Record<MoneyDirection, readonly Door[]> = {
   deposit: [
     {
       key: "cash",
@@ -86,7 +120,27 @@ const DOORS: Record<MoneyDirection, readonly Door[]> = {
 
 const HEADINGS: Record<MoneyDirection, { title: string; subtitle: string }> = {
   deposit: { title: "Add money", subtitle: "Two ways in — pick where the money is coming from." },
+  // Written for the day CASH_WITHDRAWALS_CLOSED flips back to false. While it
+  // is true this heading is unreachable — one open door means no question gets
+  // asked — and leaving the copy correct is what makes re-opening a one-line
+  // change rather than a one-line change plus a hunt for the stale sentence.
   withdraw: { title: "Take money out", subtitle: "Two ways out — pick where the money should go." },
+}
+
+/**
+ * The doors currently open in a direction — the only way to read ALL_DOORS.
+ *
+ * Callers should treat the LENGTH as meaningful, not just the contents: one
+ * door means there is no question worth asking, and the money-flow modal
+ * skips the chooser on exactly that signal. Doing it by count rather than by
+ * naming "withdraw" is what keeps re-opening down to flipping one constant.
+ */
+export function doorsFor(direction: MoneyDirection): readonly Door[] {
+  const doors = ALL_DOORS[direction]
+  if (direction === "withdraw" && CASH_WITHDRAWALS_CLOSED) {
+    return doors.filter((door) => door.key !== "cash")
+  }
+  return doors
 }
 
 export function DoorChooser({
@@ -109,7 +163,7 @@ export function DoorChooser({
       />
 
       <div className="mt-5 flex flex-col gap-2.5">
-        {DOORS[direction].map((door, i) => (
+        {doorsFor(direction).map((door, i) => (
           <button
             key={door.key}
             type="button"

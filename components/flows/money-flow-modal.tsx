@@ -2,9 +2,17 @@
 
 /**
  * Money-flow modal — deposit (/buy) and withdrawal (/sell) as an overlay
- * instead of a page walk: a centered modal on desktop, a bottom drawer on
- * mobile. The /buy and /sell routes still render the full-page variant for
- * deep links and the /deposit → /buy, /withdraw → /sell redirects.
+ * instead of a page walk: one centred card at every width. The /buy and /sell
+ * routes still render the full-page variant for deep links and the
+ * /deposit → /buy, /withdraw → /sell redirects.
+ *
+ * The shape comes from components/ui/modal-surface.ts, the same two strings
+ * ResponsiveModal uses, so this surface cannot drift away from the rest of the
+ * app's dialogs again. It used to be a bottom drawer under 640px — glued to
+ * both edges and pinned to the floor while every other modal was a centred
+ * card. Owner call, 2026-09-03: one way in, everywhere, and mobile above all.
+ * Only the SIZE is ours (see the popup below), because this is the one modal
+ * that has to be wide enough for a two-pane terminal.
  *
  * Built on the same Base UI Dialog primitive as sheet.tsx, so focus trap,
  * scroll lock (modal), portal, and aria wiring come from one place.
@@ -26,6 +34,13 @@
  * money-doors.tsx. Picking a door advances the same modal in place; the back
  * arrow in the master bar returns to the question, so a wrong turn costs one
  * tap rather than close-reopen-refind.
+ *
+ * A direction with only ONE open door skips the question entirely and lands on
+ * that door, with no back arrow — there is nothing behind it. That is withdraw
+ * today, because cash withdrawals are closed until a treasury exists to settle
+ * them (money-doors.tsx, CASH_WITHDRAWALS_CLOSED). The test is the door COUNT,
+ * never the word "withdraw", so re-opening the door restores the question on
+ * its own.
  */
 
 import * as React from "react"
@@ -36,11 +51,12 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowLeft01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
 import { Segmented, type SegmentedOption } from "@/components/ui/system"
 import { BuySellClient } from "@/components/buy-sell/buy-sell-client"
 import { FundClient } from "@/components/fund/fund-client"
 import { FlowSkeleton } from "@/components/ui/flow"
-import { DoorChooser, type DoorKey, type MoneyDirection } from "@/components/flows/money-doors"
+import { DoorChooser, doorsFor, type DoorKey, type MoneyDirection } from "@/components/flows/money-doors"
 import { PENDING_PANEL_KEY } from "@/lib/vivid-functions"
 import { registerVividContext } from "@/lib/vivid-page-context"
 
@@ -106,6 +122,21 @@ type FlowView = "choice" | "flow" | "receive" | "send"
 /** In-flight is tracked per panel, and the crypto send is a panel too — it
  *  reports the same way, so one OR covers every surface that can be mid-move. */
 type InFlightKey = FlowMode | "send"
+
+/**
+ * Where a door leads. Pure, and outside the component, because TWO callers
+ * need the same answer from different places: `pickDoor` (the user answered
+ * the question) and `openDoor` (there was only one answer, so nobody asked).
+ * Keeping it in one function is what stops those two paths drifting apart.
+ */
+function doorTarget(
+  direction: MoneyDirection,
+  door: DoorKey,
+): { view: FlowView; mode?: FlowMode } {
+  const out = direction === "withdraw"
+  if (door === "crypto") return { view: out ? "send" : "receive" }
+  return { view: "flow", mode: out ? "trading-withdraw" : "fund" }
+}
 
 const MoneyFlowContext = React.createContext<{
   openFlow: (mode: FlowMode) => void
@@ -188,6 +219,17 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
   // asks for the narrow one.
   const compact = view === "flow" ? !!compactByMode[mode] : true
 
+  // Is there a question behind what's on screen? Only then does the back arrow
+  // earn its place. Two things can make the answer no: a caller named the flow
+  // outright (`direction === null` — Vivid, /buy, /sell, the trade workspace),
+  // or the direction has a single open door and the chooser was never shown.
+  //
+  // Derived from the door COUNT rather than from any particular direction, so
+  // re-opening a closed door (money-doors.tsx, CASH_WITHDRAWALS_CLOSED) brings
+  // the arrow back by itself — including for someone who reached a one-door
+  // direction sideways, by flipping the Segmented toggle inside a flow.
+  const canGoBack = direction !== null && doorsFor(direction).length > 1
+
   const openFlow = React.useCallback((next: FlowMode) => {
     inFlightRef.current = false
     inFlightByMode.current = {}
@@ -203,7 +245,23 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
     inFlightRef.current = false
     inFlightByMode.current = {}
     setDirection(next)
-    setView("choice")
+
+    // A question with one answer isn't a question. Withdraw has a single open
+    // door while cash withdrawals are closed (money-doors.tsx), and a one-row
+    // chooser would cost a tap while teaching nothing — so walk straight
+    // through to that door. `canGoBack` sees the same count and keeps the back
+    // arrow off, since the only thing behind here is the question we skipped.
+    //
+    // The test is the COUNT, never the word "withdraw". Re-open the door and
+    // this branch stops firing on its own.
+    const doors = doorsFor(next)
+    if (doors.length === 1) {
+      const target = doorTarget(next, doors[0].key)
+      if (target.mode) setMode(target.mode)
+      setView(target.view)
+    } else {
+      setView("choice")
+    }
     setOpen(true)
   }, [])
 
@@ -218,13 +276,11 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
   // shipped — and the crypto doors swap the body for the wallet's own surface.
   const pickDoor = React.useCallback(
     (door: DoorKey) => {
-      const out = direction === "withdraw"
-      if (door === "crypto") {
-        setView(out ? "send" : "receive")
-        return
-      }
-      setMode(out ? "trading-withdraw" : "fund")
-      setView("flow")
+      // `direction` is non-null whenever a chooser is on screen — that is the
+      // only view that calls this — so defaulting is about types, not reality.
+      const target = doorTarget(direction ?? "deposit", door)
+      if (target.mode) setMode(target.mode)
+      setView(target.view)
     },
     [direction],
   )
@@ -234,8 +290,12 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
   // a menu, and the crypto send has no server-side record to come back to.
   const backToChoice = React.useCallback(() => {
     if (inFlightRef.current) return
+    // Belt and braces: the arrow is only rendered when this is true, but a
+    // one-door direction has no chooser to return to and landing on one would
+    // be a dead end rather than a wrong turn.
+    if (!canGoBack) return
     setView("choice")
-  }, [])
+  }, [canGoBack])
 
   // Direction toggle: swap to the paired flow in place. Ignored while a move
   // is in flight — switching would hide a live status screen.
@@ -244,7 +304,9 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
     setMode(next)
     // Re-aim the back arrow at whichever question now matches what's on
     // screen. Only when a door was used to get here — otherwise there is
-    // still nothing behind this flow.
+    // still nothing behind this flow. If the direction we land on has a single
+    // open door, `canGoBack` hides the arrow rather than aiming it at a
+    // one-row chooser, and un-hides it if the toggle comes back.
     setDirection((prev) => (prev === null ? null : MODE_DIRECTION[next]))
   }, [])
 
@@ -336,11 +398,18 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
 
       <Dialog.Root open={open} onOpenChange={handleOpenChange} modal>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/35 transition-opacity duration-300 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-md" />
+          {/* Verbatim, no local additions: the frost behind this modal is the
+              frost behind every modal. See components/ui/modal-surface.ts. */}
+          <Dialog.Backdrop className={MODAL_BACKDROP} />
 
           {/* Backlight — a direction-coloured bloom BEHIND the glass, so the
               modal reads as lit from the money's side of the wall. The wrapper
-              carries the scale-in; the two tints cross-fade inside it. */}
+              carries the scale-in; the two tints cross-fade inside it.
+
+              Still desktop-only, and this is the one thing `useIsMobile` is
+              left doing. A 620px bloom centred on a phone spills past every
+              edge of the screen, so it stops reading as light coming from
+              behind the card and starts reading as a tinted screen. */}
           {!isMobile && (
             <div
               aria-hidden
@@ -365,33 +434,59 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
           <Dialog.Popup
             aria-label={title}
             className={cn(
+              // The house shape: material, elevation, centring, corners, and
+              // the entrance/exit animation — byte-identical to the "How this
+              // works" guide and every other dialog. Everything BELOW this line
+              // is size and inner layout, which modal-surface.ts deliberately
+              // leaves to the caller, and is the only thing this modal is
+              // allowed to have an opinion about.
+              MODAL_SURFACE,
+
               // overflow-hidden is load-bearing: the sticky CTA footer paints a
               // solid card fill to the popup's edges, and without clipping it
-              // squared off the bottom corners against a rounded top.
-              // ws-glass: heavy frost — the dashboard stays present as blurred
-              // material behind the money, which is what sells the elevation.
-              "ws-glass ws-glass-edge fixed z-50 flex flex-col overflow-hidden outline-none",
-              "shadow-[0_40px_100px_-24px_rgb(0_0_0/0.65)] ring-1 ring-foreground/10",
-              isMobile
-                ? // Bottom drawer — slides up, safe-area padded. A FIXED height
-                  // (not max-h) so switching direction never resizes the sheet.
-                  // The chooser is the exception: it's two rows, and a
-                  // full-height sheet holding them would be mostly empty. It
-                  // isn't a flow, so nothing can resize under the user there.
-                  cn(
-                    "inset-x-0 bottom-0 translate-y-0 rounded-t-[28px] safe-area-bottom transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-y-full data-starting-style:translate-y-full",
-                    view === "choice" ? "max-h-[86dvh]" : "h-[86dvh]",
-                  )
-                : // Centered modal — springy push-up with a blur-to-focus
-                  // resolve, quick fade out. WIDE for the two-pane terminal;
-                  // MORPHS narrow when the active panel shows a single-column
-                  // screen (status, receive, setup). Fixed height either way;
-                  // dvh cap keeps it honest on laptops.
-                  cn(
-                    "ws-modal-in left-1/2 top-1/2 max-h-[86dvh] w-full -translate-x-1/2 -translate-y-1/2 rounded-[28px] transition-all duration-300 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0",
-                    view === "choice" ? "h-auto" : "h-[680px]",
-                    compact ? "max-w-md" : "max-w-2xl",
-                  ),
+              // squared off the bottom corners against the rounded top.
+              "flex flex-col overflow-hidden",
+
+              // A FIXED height, so flipping direction with the Segmented toggle
+              // never resizes the card out from under a half-read screen.
+              //
+              // The dvh cap is what makes a fixed height survivable now that
+              // the card floats in the middle instead of standing on the floor:
+              // 680px + the 1rem gutter needs 712px of viewport, and plenty of
+              // phones have less. Under that the card shrinks to fit and the
+              // body below scrolls, which it was already built to do. The 2rem
+              // matches the side gutter MODAL_SURFACE supplies, so the card
+              // sits in an even margin rather than a wide one and a thin one.
+              "max-h-[calc(100dvh-2rem)]",
+
+              // The chooser is the exception: it is two rows, and a 680px slab
+              // holding them would be mostly empty air on any screen. It isn't
+              // a flow, so nothing can resize under the user there.
+              //
+              // auto → a pixel height cannot tween, so stepping from the
+              // question into a flow SNAPS. That is the deliberate trade: a
+              // snap costs one frame, an empty card costs every frame.
+              view === "choice" ? "h-auto" : "h-[680px]",
+
+              // WIDE for the two-pane terminal; MORPHS narrow when the active
+              // panel is a single column (status, receive, setup).
+              //
+              // Both caps are breakpoint-prefixed on purpose. MODAL_SURFACE
+              // sets the base `max-w-[calc(100%-2rem)]` that gives the phone
+              // its gutter, and an unprefixed cap here would be a second
+              // max-width fighting it for the same declaration; a variant wins
+              // cleanly instead. So below 640px both morph states are simply
+              // "the screen minus the gutter", which is the right answer on a
+              // phone anyway. The wide state waits for `md` because 42rem is
+              // wider than a 640px screen — it would eat its own gutter — and
+              // keeps the full-width-minus-gutter cap in the 640–767px band.
+              compact ? "sm:max-w-md" : "sm:max-w-[calc(100%-2rem)] md:max-w-2xl",
+
+              // Only the width can actually tween between morph states (auto ↔
+              // px height cannot), so the transition names it rather than using
+              // transition-all, which would also try to interpolate every
+              // property MODAL_SURFACE's entrance and exit animations touch.
+              "transition-[max-width] duration-300 ease-out",
             )}
           >
             {/* Gold rim shimmer — a faint standing stroke with a slow glint
@@ -402,10 +497,8 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                 flow-terminal.tsx) — it swaps with the panels, so no wash is
                 painted at the shell level. */}
 
-            {/* Grabber — the drawer names its own gesture. */}
-            {isMobile && (
-              <div aria-hidden className="relative mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/[0.16]" />
-            )}
+            {/* The grabber went with the drawer. A handle on a card that
+                doesn't move advertises a gesture that does nothing. */}
 
             {/* Master bar — the direction toggle spans the width (this modal's
                 one top-level choice) with the X inline beside it. The X stays
@@ -418,7 +511,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                 competing to answer the same thing. The bar carries only the X
                 there — the way back out of a question is to leave it. */}
             <div className="ws-casc ws-casc-0 relative flex shrink-0 items-center gap-2 px-4 pb-1 pt-4 sm:px-5">
-              {direction && view !== "choice" && (
+              {canGoBack && view !== "choice" && (
                 /* Deliberately not <BackAction>, which is styled identically
                    but hard-labelled "Back". SendFlow draws its own "Back" a
                    few rows below on the review step, and two controls with one
@@ -451,7 +544,10 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={closeFlow}
                 aria-label="Close"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                /* 44px on touch, 36 once there's a pointer — the same pair
+                   ResponsiveModal's X uses (`size-11 sm:size-9`). The glyph
+                   stays 16px at both sizes; only the tap area grows. */
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:h-9 sm:w-9"
               >
                 <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
               </button>
