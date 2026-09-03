@@ -1,5 +1,5 @@
-import { FundClient } from "@/components/fund/fund-client"
+import { HyperliquidFundingClient } from "@/components/fund/hyperliquid-funding-client"
 
 export default function FundPage() {
-  return <FundClient mode="fund" />
+  return <HyperliquidFundingClient mode="fund" />
 }

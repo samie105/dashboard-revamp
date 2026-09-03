@@ -58,14 +58,11 @@ const navItems: NavItem[] = [
           icon: Exchange01Icon,
         },
         {
-          // Futures is not open yet — listed so the roadmap stays visible,
-          // tagged so nobody expects it to work.
           name: "Futures",
-          description: "Not open yet",
+          description: "Perpetual contracts",
           href: "/trade?market=futures",
           icon: ChartLineData02Icon,
-          tag: "Soon",
-          soon: true,
+          tag: "Live",
         },
         {
           name: "Swap",

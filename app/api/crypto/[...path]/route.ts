@@ -26,6 +26,7 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^trading\/spot\/lifi\/quote$/,
     /^trading\/hyperliquid\/markets$/,
     /^trading\/hyperliquid\/account$/,
+    /^trading\/hyperliquid\/intents\/[^/]+$/,
   ],
   POST: [
     /^wallets$/,

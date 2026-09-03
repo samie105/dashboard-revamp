@@ -75,6 +75,11 @@ import {
 } from "@/lib/crypto-backend"
 import { signEvmIntent, signHyperliquidIntent } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
+import {
+  buildHyperliquidTransferRequest,
+  exceedsFundingBalance,
+  parseFundingAmount,
+} from "@/lib/crypto-backend/hyperliquid-funding"
 import { cn } from "@/lib/utils"
 
 /* ── Copy Deck ─────────────────────────────────────────────────────────── */
@@ -179,10 +184,7 @@ const RESIGNABLE_STATUSES = new Set(["created", "simulated", "validated", "signe
  *  sets, which is the whole point (see above). */
 const ALREADY_SENT = new Set(["submitted", "pending", "confirmed"])
 
-function parseAmount(value: string): number | null {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
-}
+const parseAmount = parseFundingAmount
 
 function formatUsdc(value: number) {
   return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -866,7 +868,7 @@ function TransferFlow({ userId, wallet, packageValue, evm, open, onOpenChange, r
   const maxSpend = balances ? (direction === "toPerps" ? balances.spotUsdc : balances.perpsWithdrawableUsdc) : null
 
   const value = parseAmount(amount)
-  const overspend = value !== null && maxSpend !== null && value > maxSpend
+  const overspend = exceedsFundingBalance(value, maxSpend)
   const blocker = !evm?.canonicalAddress
     ? "Your wallet isn't ready yet"
     : amount.trim().length === 0
@@ -893,12 +895,9 @@ function TransferFlow({ userId, wallet, packageValue, evm, open, onOpenChange, r
     setError(null)
     setPhase("status")
     try {
-      const intent = await cryptoBackendClient.createHyperliquidIntent({
-        type: "usdClassTransfer",
-        amount: amountValue,
-        toPerp: direction === "toPerps",
-        idempotencyKey: key,
-      })
+      const intent = await cryptoBackendClient.createHyperliquidIntent(
+        buildHyperliquidTransferRequest(direction, amountValue, key),
+      )
       setReference(intent.id)
       const signatures = await signHyperliquidIntent(userId, wallet.id, packageValue, evm.id, intent.steps)
       const result = await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)

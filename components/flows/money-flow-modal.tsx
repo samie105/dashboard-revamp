@@ -54,7 +54,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
 import { Segmented, type SegmentedOption } from "@/components/ui/system"
 import { BuySellClient } from "@/components/buy-sell/buy-sell-client"
-import { FundClient } from "@/components/fund/fund-client"
+import { HyperliquidFundingClient } from "@/components/fund/hyperliquid-funding-client"
 import { FlowSkeleton } from "@/components/ui/flow"
 import { DoorChooser, doorsFor, type DoorKey, type MoneyDirection } from "@/components/flows/money-doors"
 import { PENDING_PANEL_KEY } from "@/lib/vivid-functions"
@@ -630,7 +630,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                               onCompactChange={compactHandlers[opt.key]}
                             />
                           ) : (
-                            <FundClient
+                            <HyperliquidFundingClient
                               mode={opt.key === "fund" ? "fund" : "withdraw"}
                               variant="modal"
                               onInFlightChange={inFlightHandlers[opt.key]}

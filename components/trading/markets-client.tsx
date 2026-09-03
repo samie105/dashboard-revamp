@@ -10,7 +10,6 @@ import {
   Search01Icon,
   ArrowUpRight01Icon,
   StarIcon,
-  Chart01Icon,
   Fire02Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData, FuturesMarket } from "@/lib/actions"
@@ -27,7 +26,7 @@ import { getCoinImage, coinFallback } from "@/lib/coin-images"
 import { useSpotRegistry, tradeHref, type RegistryRow } from "@/hooks/useSpotRegistry"
 import { chainLabel, ALL_CHAINS } from "@/lib/spot-market-search"
 /* Futures is not live yet - the shared "not open" treatment. */
-import { ComingSoon, FUTURES_SOON_TITLE, SoonBadge } from "@/components/ui/coming-soon"
+import { ComingSoon } from "@/components/ui/coming-soon"
 
 /* The "7D Chart" column used to be Math.sin() noise seeded from the coin's
    own symbol — deterministic, so it looked stable and trustworthy, and
@@ -85,14 +84,13 @@ function TradeButton({ rows }: { rows: RegistryRow[] | undefined }) {
    with its hover classes and the ArrowUpRight01Icon. */
 function FuturesTradeButton({ symbol }: { symbol: string }) {
   return (
-    <span
-      title={FUTURES_SOON_TITLE}
-      aria-label={`${symbol} - ${FUTURES_SOON_TITLE}`}
-      className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-semibold text-muted-foreground/45"
+    <Link
+      href={`/trade?market=futures&symbol=${encodeURIComponent(symbol)}`}
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
     >
       Trade
-      <SoonBadge />
-    </span>
+      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3 w-3" />
+    </Link>
   )
 }
 
@@ -175,9 +173,9 @@ function RankedFuturesRow({ market, rank }: { market: FuturesMarket; rank: numbe
        offer a click it won't honour. TO RE-OPEN: swap this <div> back to
        <Link href={`/trade?market=futures&symbol=${market.symbol}`}> and restore
        "transition-colors hover:bg-accent/40". */
-    <div
-      title={FUTURES_SOON_TITLE}
-      className="group flex items-center gap-3 rounded-xl px-3 py-2.5"
+    <Link
+      href={`/trade?market=futures&symbol=${encodeURIComponent(market.symbol)}`}
+      className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-accent/40"
     >
       <span className="w-5 text-center text-[11px] font-semibold text-muted-foreground">
         {rank}
@@ -209,7 +207,7 @@ function RankedFuturesRow({ market, rank }: { market: FuturesMarket; rank: numbe
           {Math.abs(market.change24h).toFixed(2)}%
         </span>
       </div>
-    </div>
+    </Link>
   )
 }
 
@@ -231,7 +229,7 @@ type Tab = (typeof MARKET_TABS)[number]
 
    TO RE-OPEN: set this to false, then delete it and the `futuresClosed`
    blocks that reference it. */
-const FUTURES_CLOSED: boolean = true
+const FUTURES_CLOSED: boolean = false
 
 type SortKey = "marketCap" | "price" | "change24h" | "volume24h"
 

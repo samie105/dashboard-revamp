@@ -21,7 +21,6 @@ import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { useAuth } from "@/components/auth-provider"
 import { useWalletMode } from "@/components/wallet-mode-provider"
 import { Segmented } from "@/components/ui/system"
-import { SoonBadge } from "@/components/ui/coming-soon"
 import { MigrationNotice } from "@/components/crypto/MigrationNotice"
 import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
 import { SendModal as ModernSendModal } from "@/components/crypto/SendModal"
@@ -324,29 +323,15 @@ export function NavbarActions() {
                   <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-1 mb-1 block">Wallets</span>
                   <div className="flex flex-col gap-0.5">
                     {([
-                      { label: "Spot Wallet", href: "/portfolio", icon: Wallet01Icon, soon: false },
-                      // Futures is not open yet — the row stays so the balance
-                      // still has a name, but it does not lead anywhere.
-                      { label: "Futures Wallet", href: "", icon: Activity01Icon, soon: true },
-                      { label: "Funding", href: "/portfolio", icon: Wallet01Icon, soon: false },
+                      { label: "Spot Wallet", href: "/portfolio", icon: Wallet01Icon },
+                      { label: "Futures Wallet", href: "/trade?market=futures", icon: Activity01Icon },
+                      { label: "Funding", href: "/fund", icon: Wallet01Icon },
                     ] as const).map(w =>
-                      w.soon ? (
-                        <span
-                          key={w.label}
-                          title="Futures is not open yet"
-                          className="flex cursor-not-allowed items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground/50"
-                        >
-                          <HugeiconsIcon icon={w.icon} className="h-3.5 w-3.5 text-muted-foreground/40" />
-                          <span className="flex-1 font-medium">{w.label}</span>
-                          <SoonBadge />
-                        </span>
-                      ) : (
                         <a key={w.label} href={w.href} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors group/link">
                           <HugeiconsIcon icon={w.icon} className="h-3.5 w-3.5 text-primary" />
                           <span className="flex-1 font-medium">{w.label}</span>
                           <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 opacity-0 -translate-x-1 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all" />
                         </a>
-                      ),
                     )}
                     <Link href="/wallet/modern" className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors group/link">
                       <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary" />

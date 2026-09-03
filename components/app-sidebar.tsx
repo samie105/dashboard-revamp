@@ -89,7 +89,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: "Markets", description: "Full market screener", url: "/trading/markets", icon: BarChartIcon },
       { name: "Spot Trading", description: "Multi-chain DEX trading", url: "/trade", icon: Exchange01Icon },
-      { name: "Futures", description: "Perpetual contracts", url: "/trade?market=futures", icon: Chart01Icon, badge: "Soon", soon: true },
+      { name: "Futures", description: "Perpetual contracts", url: "/trade?market=futures", icon: Chart01Icon, badge: "Live" },
       { name: "Swap", description: "One-tap conversion", url: "/swap", icon: RepeatIcon },
     ],
   },

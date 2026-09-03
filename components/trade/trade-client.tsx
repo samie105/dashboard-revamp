@@ -77,6 +77,7 @@ import {
 } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
+import { ModernFundingPanel } from "@/components/trade/modern-funding-panel"
 import {
   OrderPlacedModal,
   orderCopy,
@@ -171,7 +172,7 @@ type OrderType = "market" | "limit"
  * Typed `boolean` rather than left as the `false` literal so the guards below
  * read as switches, not as dead code a linter should strip.
  */
-const FUTURES_LIVE: boolean = false
+const FUTURES_LIVE: boolean = true
 
 /* Retained while the market toggle is withdrawn — this and `setMarketTab`
    below are the restoration point for futures, and rewriting them later is
@@ -456,6 +457,7 @@ export function TradeClient() {
   // must never be mistaken for an account that exists but isn't set up.
   const [marketsError, setMarketsError] = React.useState(false)
   const [accountError, setAccountError] = React.useState(false)
+  const [accountUpdatedAt, setAccountUpdatedAt] = React.useState<number | null>(null)
   const usingModern = isCryptoBackendEnabled
 
   // Spot intent status — the same poll `useTransactionIntent` runs for
@@ -525,6 +527,7 @@ export function TradeClient() {
       .then((a) => {
         setAccount(a as HlAccount)
         setAccountError(false)
+        setAccountUpdatedAt(Date.now())
       })
       .catch(() => setAccountError(true))
   }, [market])
@@ -601,9 +604,12 @@ export function TradeClient() {
   React.useEffect(() => {
     loadMarkets()
     refreshAccount()
-    const id = setInterval(refreshAccount, 30_000)
+    // Positions and open orders are the live part of the futures workspace;
+    // keep them responsive without making the spot screen poll an account it
+    // does not use.
+    const id = setInterval(refreshAccount, market === "futures" ? 10_000 : 30_000)
     return () => clearInterval(id)
-  }, [loadMarkets, refreshAccount])
+  }, [loadMarkets, refreshAccount, market])
 
   // Pick the default/URL row once markets load. The id wins over the symbol:
   // it is the only field that separates two same-symbol rows on different
@@ -1316,6 +1322,12 @@ export function TradeClient() {
         !position
       )
         throw new Error("Unlock the modern wallet before closing a position")
+      if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) {
+        setBusyKey(null)
+        resumeAfterUnlock.current = () => void handleClose(sym)
+        setUnlockOpen(true)
+        return
+      }
       const intent = await cryptoBackendClient.createHyperliquidIntent({
         type: "order",
         market: "futures",
@@ -1361,6 +1373,12 @@ export function TradeClient() {
         !evmAccount
       )
         throw new Error("Unlock the modern wallet before cancelling an order")
+      if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) {
+        setBusyKey(null)
+        resumeAfterUnlock.current = () => void handleCancel(oid, sym, mkt)
+        setUnlockOpen(true)
+        return
+      }
       const intent = await cryptoBackendClient.createHyperliquidIntent({
         type: "cancel",
         market: "futures",
@@ -1837,6 +1855,12 @@ export function TradeClient() {
             title="This pair isn't available on the new wallet yet"
             detail={spotPlan.reason}
           />
+        )}
+
+        {modernFutures && accountUpdatedAt && !accountError && (
+          <p className="text-right text-[11px] tabular-nums text-subtle">
+            Futures account live · updated {Math.max(0, Math.round((Date.now() - accountUpdatedAt) / 1000))}s ago
+          </p>
         )}
 
         {/* Side — a direction choice, so it wears the money colours. On a
@@ -2536,6 +2560,13 @@ export function TradeClient() {
               )}
             </span>
           )}
+          {modernFutures && walletReady && modernWallet.data && modernPackage.data && user?.userId ? (
+            <ModernFundingPanel
+              userId={user.userId}
+              wallet={modernWallet.data}
+              packageValue={modernPackage.data}
+            />
+          ) : null}
           {/* One way back, not three money doors.
               Deposit / Transfer / Withdraw each opened a flow for the TRADING
               account — a different pot from the wallet the rest of the app

@@ -1,5 +1,5 @@
-import { FundClient } from "@/components/fund/fund-client"
+import { HyperliquidFundingClient } from "@/components/fund/hyperliquid-funding-client"
 
 export default function TradingWithdrawPage() {
-  return <FundClient mode="withdraw" />
+  return <HyperliquidFundingClient mode="withdraw" />
 }

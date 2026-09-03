@@ -317,6 +317,10 @@ export class CryptoBackendClient {
     }, { signal })
   }
 
+  async getHyperliquidIntent(intentId: string, signal?: AbortSignal): Promise<HyperliquidIntent> {
+    return this.request<HyperliquidIntent>(`/trading/hyperliquid/intents/${encodeURIComponent(intentId)}`, {}, { signal })
+  }
+
   async createModernSpotIntent(input: {
     networkId: "ethereum-mainnet" | "arbitrum-one"
     sellToken: string

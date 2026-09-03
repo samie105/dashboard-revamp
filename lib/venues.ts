@@ -13,4 +13,4 @@
  * reads it (search `FUTURES_CLOSED`). The dashboard's `dailyPnL` also dropped
  * its futures term when this went in; that comes back with the venue.
  */
-export const FUTURES_CLOSED: boolean = true
+export const FUTURES_CLOSED: boolean = false

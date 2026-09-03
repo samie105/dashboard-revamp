@@ -21,7 +21,7 @@
  * flow reaches a terminal state.
  */
 
-export type PendingFlowKind = "buy" | "sell" | "fund" | "trading-withdraw"
+export type PendingFlowKind = "buy" | "sell" | "fund" | "trading-withdraw" | "hyperliquid-deposit" | "hyperliquid-withdrawal"
 
 export interface PendingFlow {
   reference: string
