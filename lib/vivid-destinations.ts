@@ -31,8 +31,13 @@ export const DESTINATIONS: Destination[] = [
     label: "Dashboard home",
     url: "/",
     external: false,
+    /* Kept accurate deliberately: this string is how the assistant knows what
+       is on the page, so a stale one makes it describe a screen that no longer
+       exists. It used to promise "Total/Main/Spot/Futures views" — Main is now
+       Holdings, Futures is shut, and the views became cards that only appear
+       once an account is in use. */
     description:
-      "The main dashboard — total balance hero with Total/Main/Spot/Futures views, per-chain wallet strip, Deposit/Withdraw/Swap/Trade/History actions, holdings, watchlist and market movers. The default 'home'.",
+      "The crypto dashboard — a Total crypto balance hero (Holdings + Spot + Futures, NOT cash) with the Dollar Account's cash balance on a separate line beneath it. Account cards appear only once that account is in use, so a new user may see none. Deposit and Withdraw open a chooser asking whether the money moves via the Dollar Account or as crypto. Also a per-chain network strip, activity, holdings, watchlist, market movers and a compact swap desk. The default 'home'.",
   },
   /* Assets merged into Portfolio. Both ids are kept and point at the one
      page: "take me to my assets" is still what people say, and an id that

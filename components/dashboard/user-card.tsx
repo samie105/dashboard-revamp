@@ -579,8 +579,22 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               30d moves on the right (derived from real price history). */}
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
             <div data-onboarding="dash-balance" className="flex w-fit flex-col gap-1">
-              <div className="flex items-center gap-3">
-                <Eyebrow>Total balance</Eyebrow>
+              {/* flex-wrap is load-bearing now that the label is three words.
+                  "TOTAL CRYPTO BALANCE" at 12px with 0.08em tracking, plus the
+                  eye and the guide pill, runs past the content box below about
+                  360px — which is a real phone, not an edge case. Wrapping puts
+                  the pill on its own line there instead of squeezing it. */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                {/* Not just "Total balance". There are two balances in a
+                    Worldstreet user's life and they belong to different
+                    products: this one, which is Holdings + Spot + Futures, and
+                    the Dollar Account's cash — which now sits directly
+                    underneath it. Naming this one "crypto" is what lets the
+                    two be told apart at a glance, and it is the same fix as
+                    renaming the app itself: the confusion was never that
+                    people could not read the number, it was that they could
+                    not tell which money it counted. */}
+                <Eyebrow>Total crypto balance</Eyebrow>
                 <button
                   onClick={toggleHidden}
                   className={`transition-colors ${hidden ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"}`}
