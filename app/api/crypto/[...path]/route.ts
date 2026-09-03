@@ -68,6 +68,9 @@ const FORWARDED_HEADERS = [
   "accept",
   "idempotency-key",
   "x-request-id",
+  // WebAuthn uses the browser origin to select a valid relying-party ID.
+  // Keep it intact when the dashboard proxies passkey ceremonies upstream.
+  "origin",
   "x-wallet-authorization",
   "x-wallet-session-token",
 ]
