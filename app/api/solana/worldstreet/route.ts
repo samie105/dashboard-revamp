@@ -2,9 +2,10 @@
  * Read-only Solana data for the Worldstreet token card: WMNA market state
  * from the Raydium API plus the caller's MNA/WMNA balances via JSON-RPC.
  *
- * Lives server-side so the (possibly credentialed) RPC endpoint never
- * reaches the browser — set SOLANA_RPC_URL in the environment to override
- * the compiled-in Alchemy default. No Solana SDK: balances come from
+ * Lives server-side so credentialed RPC endpoints never reach the browser —
+ * set SOLANA_RPC_URLS as a comma-separated list in the environment. The
+ * legacy SOLANA_RPC_URL remains accepted as a single-provider fallback. No
+ * Solana SDK: balances come from
  * getTokenAccountsByOwner filtered by mint with jsonParsed encoding, which
  * works for Token-2022 (MNA) and legacy SPL (WMNA) alike and needs no ATA
  * derivation.
@@ -22,39 +23,44 @@ import {
   type WorldstreetTokenSnapshot,
 } from "@/lib/worldstreet-token"
 
-/* Compiled-in Alchemy endpoint, verified live (getHealth -> "ok"). The
-   public mainnet-beta endpoint this used to fall back to is aggressively
-   rate-limited and not meant for production traffic — this card polls it on
-   every load. SOLANA_RPC_URL in the environment still wins. */
-const RPC_URL =
-  process.env.SOLANA_RPC_URL ??
-  "https://solana-mainnet.g.alchemy.com/v2/alch_95ewaWPcUZHZvDIsv_aB1"
+const RPC_URLS = [
+  ...(process.env.SOLANA_RPC_URLS ?? "").split(",").map((url) => url.trim()).filter(Boolean),
+  ...(process.env.SOLANA_RPC_URL ? [process.env.SOLANA_RPC_URL] : []),
+].filter((url, index, urls) => urls.indexOf(url) === index)
 const RAYDIUM_POOL_INFO = `https://api-v3.raydium.io/pools/info/ids?ids=${WMNA_RAYDIUM_POOL}`
 
 /** Sum of a wallet's parsed token-account balances for one mint. */
 async function tokenBalance(owner: string, mint: string): Promise<number> {
-  const res = await fetch(RPC_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "getTokenAccountsByOwner",
-      params: [owner, { mint }, { encoding: "jsonParsed", commitment: "confirmed" }],
-    }),
-    cache: "no-store",
-  })
-  if (!res.ok) throw new Error(`RPC ${res.status}`)
-  const json = await res.json()
-  if (json.error) throw new Error(json.error.message ?? "RPC error")
-  const accounts: unknown[] = json.result?.value ?? []
-  let total = 0
-  for (const acc of accounts) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ui = (acc as any)?.account?.data?.parsed?.info?.tokenAmount?.uiAmount
-    if (typeof ui === "number") total += ui
+  let lastError: Error | undefined
+  for (const url of RPC_URLS) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getTokenAccountsByOwner",
+          params: [owner, { mint }, { encoding: "jsonParsed", commitment: "confirmed" }],
+        }),
+        cache: "no-store",
+      })
+      if (!res.ok) throw new Error(`RPC ${res.status}`)
+      const json = await res.json()
+      if (json.error) throw new Error(json.error.message ?? "RPC error")
+      const accounts: unknown[] = json.result?.value ?? []
+      let total = 0
+      for (const acc of accounts) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ui = (acc as any)?.account?.data?.parsed?.info?.tokenAmount?.uiAmount
+        if (typeof ui === "number") total += ui
+      }
+      return total
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("RPC request failed")
+    }
   }
-  return total
+  throw lastError ?? new Error("No Solana RPC provider configured")
 }
 
 async function poolMarket(): Promise<WorldstreetTokenSnapshot["market"]> {
