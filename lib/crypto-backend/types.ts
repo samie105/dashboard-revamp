@@ -256,6 +256,17 @@ export interface WalletTradingSession {
   lastUsedAt?: string
 }
 
+export interface HyperliquidTradingAgent {
+  id: string
+  agentAddress: string
+  agentName?: string
+  status: "pending" | "active" | "revoked" | string
+  encryptedKeyMaterial: { ciphertext: string; iv: string; aad: string; dekVersion: number; encoding: "base64url" }
+  permissions: { network: "mainnet"; markets: string[]; maxOrderUsd?: string; maxDailyNotionalUsd?: string; maxLeverage?: number }
+  approvedAt?: string
+  revokedAt?: string
+}
+
 export interface HyperliquidMarket {
   symbol: string
   price: number
@@ -295,6 +306,7 @@ export interface HyperliquidIntent {
   status: string
   expiresAt: string
   summary?: Record<string, unknown>
+  signerAddress?: string
 }
 
 export interface HyperliquidAccount {

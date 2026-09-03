@@ -9,6 +9,7 @@ import type {
   HyperliquidMarkets,
   HyperliquidAccount,
   HyperliquidIntent,
+  HyperliquidTradingAgent,
   CryptoNetwork,
   CryptoServiceHealth,
   CryptoTransactionIntent,
@@ -316,6 +317,18 @@ export class CryptoBackendClient {
       method: "POST",
       body: JSON.stringify({ signatures }),
     }, { signal })
+  }
+
+  async listHyperliquidAgents(signal?: AbortSignal) {
+    return this.request<HyperliquidTradingAgent[]>("/trading/hyperliquid/agents", {}, { signal })
+  }
+
+  async registerHyperliquidAgent(input: Omit<HyperliquidTradingAgent, "id" | "status" | "approvedAt" | "revokedAt">, walletAuthorizationToken: string, signal?: AbortSignal) {
+    return this.request<HyperliquidTradingAgent>("/trading/hyperliquid/agents", { method: "POST", body: JSON.stringify(input) }, { walletAuthorizationToken, signal })
+  }
+
+  async revokeHyperliquidAgent(address: string, walletAuthorizationToken: string, signal?: AbortSignal) {
+    return this.request<HyperliquidTradingAgent>(`/trading/hyperliquid/agents/${encodeURIComponent(address)}/revoke`, { method: "POST" }, { walletAuthorizationToken, signal })
   }
 
   async createTradingSession(input: {
