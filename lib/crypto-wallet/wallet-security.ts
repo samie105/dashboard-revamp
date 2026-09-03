@@ -567,6 +567,15 @@ export async function rotateWalletPackage(
     }
     const authorization = await authorizeWallet()
     const committed = await client.commitWalletPackage(nextPackage, authorization.walletAuthorizationToken, true)
+    // Do not replace the browser copy until the server's active package has
+    // been verified with the fresh DEK. This catches a malformed response or
+    // encryption mismatch before the old local package is discarded.
+    for (const account of committed.accounts as Array<Record<string, unknown>>) {
+      const encrypted = account.encryptedKeyMaterial as { ciphertext: string; iv: string; aad: string } | undefined
+      if (!encrypted) throw new Error("Rotated wallet package is missing account key material")
+      const verified = await decryptKeyMaterial(encrypted, nextDek)
+      wipeBytes(verified)
+    }
     return { package: committed, dek: nextDek }
   } catch (error) {
     wipeBytes(nextDek)
