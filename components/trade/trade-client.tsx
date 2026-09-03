@@ -51,6 +51,7 @@ import {
   cryptoBackendClient,
   cryptoQueryKeys,
   isCryptoBackendEnabled,
+  isDelegatedTradingEnabled,
   LIQUIDATION_WARNING,
   readFuturesOrderFigures,
   reduceOnlyProblem,
@@ -350,7 +351,7 @@ export function TradeClient() {
   const hyperliquidAgents = useQuery({
     queryKey: ["crypto", "hyperliquid-agents", user?.userId ?? "anonymous"],
     queryFn: ({ signal }) => cryptoBackendClient.listHyperliquidAgents(signal),
-    enabled: isCryptoBackendEnabled && !!user?.userId && !!modernWallet.data,
+    enabled: isCryptoBackendEnabled && isDelegatedTradingEnabled && !!user?.userId && !!modernWallet.data,
     staleTime: 30_000,
   })
   const activeHyperliquidAgent = hyperliquidAgents.data?.find((agent) => agent.status === "active")
