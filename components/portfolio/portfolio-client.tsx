@@ -176,6 +176,22 @@ function assetIdentity(symbol: string, contractAddress?: string) {
 // ── Wallet view tabs ─────────────────────────────────────────────────────
 
 /**
+ * The three accounts a balance can sit in, and the ONE place their names are
+ * written down. The tabs, the breakdown under the hero and the allocation
+ * ring's "by account" key all read from here.
+ *
+ * They did not, which is how this page came to call the spot account
+ * "Trading" in two of those three places while the dashboard called it Spot —
+ * two screens describing the same money in different words, which a reader
+ * has no way to tell from two different piles of money.
+ */
+const ACCOUNT_LABELS = {
+  holdings: "Holdings",
+  spot: "Spot",
+  futures: "Futures",
+} as const
+
+/**
  * The views this page holds.
  *
  * `/assets` and `/portfolio` were two screens answering one question. Assets
@@ -186,14 +202,21 @@ function assetIdentity(symbol: string, contractAddress?: string) {
  * live (the holdings view shows one chain's address at a time).
  *
  * The KEYS are unchanged (`main`, `spot`) because a dozen branches below read
- * them; only the labels moved to plain words. "Main" named nothing a reader
- * would recognise, and "Spot" is a venue's word for "the money you trade with".
+ * them. "Main" named nothing a reader would recognise, so that label became
+ * Holdings and stayed there.
+ *
+ * Spot did NOT stay renamed. An earlier pass called this tab "Trading" on the
+ * grounds that "spot" is a venue's word, and the owner reversed it: every
+ * other screen in the ecosystem — the dashboard's three accounts included —
+ * still says Spot and Futures, so a portfolio that alone called it something
+ * else was a translation problem rather than a simplification. The explaining
+ * happens in `sub`, which is where it belongs.
  */
 const WALLET_VIEWS = [
-  { key: "main",      label: "Holdings",  icon: Wallet01Icon,        sub: "Every token you hold, on every chain" },
-  { key: "spot",      label: "Trading",   icon: Chart01Icon,         sub: "The money you trade with" },
-  { key: "futures",   label: "Futures",   icon: ChartLineData01Icon, sub: "Perpetual positions" },
-  { key: "addresses", label: "Addresses", icon: Copy01Icon,          sub: "Your address on every chain" },
+  { key: "main",      label: ACCOUNT_LABELS.holdings, icon: Wallet01Icon,        sub: "Every token you hold, on every chain" },
+  { key: "spot",      label: ACCOUNT_LABELS.spot,     icon: Chart01Icon,         sub: "The money you trade with" },
+  { key: "futures",   label: ACCOUNT_LABELS.futures,  icon: ChartLineData01Icon, sub: "Perpetual positions" },
+  { key: "addresses", label: "Addresses",             icon: Copy01Icon,          sub: "Your address on every chain" },
 ] as const
 
 type WalletView = (typeof WALLET_VIEWS)[number]["key"]
@@ -526,6 +549,121 @@ function CompositionSkeleton() {
         ))}
       </div>
       </div>
+    </div>
+  )
+}
+
+/* ========== Net worth breakdown ==========
+   What the hero figure is made of, directly under the hero figure.
+
+   This used to be one 13px sentence — "Holdings $9,120.40 · Trading $3,225.27
+   · 10 assets across 4 chains" — four unrelated facts strung on middle dots,
+   every amount buried mid-line with nothing to separate it from its label, and
+   no structure at any width. The owner's word for it was "plain text", which
+   is exactly what it was.
+
+   There are two ranks of fact here and they look like two ranks now. The
+   accounts are MONEY: a tile each, a quiet label over an amount with enough
+   weight to be read at a glance, tabular so the columns line up and so a live
+   figure does not jitter as it refreshes. The tiles sit on the sunken step and
+   are separated by the gap between them rather than by borders — the same
+   grammar as the allocation panel beside them, so the two halves of the page's
+   introduction read as one composed thing rather than two widgets. Underneath,
+   at a lower rank entirely, sits the single line of metadata: what the money is
+   spread across, which is a fact ABOUT the portfolio rather than a part of it.
+
+   Sentence case on the tile labels, deliberately. There is already an uppercase
+   NET WORTH two lines above; three more tracked-out caps beneath it would be a
+   wall of eyebrows instead of a hierarchy. */
+
+type BreakdownAccount = {
+  key: string
+  label: string
+  icon: typeof Wallet01Icon
+  usd: number
+}
+
+/* Literal class names — Tailwind cannot see an interpolated one. Two accounts
+   is the live case while futures is shut, and two columns is what two accounts
+   want at every width this column is ever given (full page on a phone, 22rem
+   beside the allocation panel on a desktop). The third column arrives only
+   from `sm` up: three amounts across a 320px phone leaves each about 66px,
+   which is less than a five-figure balance needs, so down there the third tile
+   takes a full row of its own instead of being squeezed into a third of one. */
+const BREAKDOWN_COLS: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-2",
+  3: "grid-cols-2 [&>*:last-child]:col-span-2 sm:grid-cols-3 sm:[&>*:last-child]:col-span-1",
+}
+
+function NetWorthBreakdown({
+  accounts,
+  assets,
+  chains,
+  loading,
+}: {
+  accounts: BreakdownAccount[]
+  /** How many different coins the wallet actually holds, across every chain. */
+  assets: number
+  chains: number
+  loading: boolean
+}) {
+  /* "Adding up your accounts" is the wording the old loading line said out
+     loud. It is an accessible label now rather than rendered copy: the shapes
+     below already say "figures are coming" to anyone who can see them, and a
+     screen reader is told the region is busy instead of being read a row of
+     empty boxes. */
+  return (
+    <div
+      role={loading ? "status" : undefined}
+      aria-busy={loading || undefined}
+      aria-label={loading ? "Adding up your accounts" : undefined}
+      className="flex flex-col gap-2"
+    >
+      <div className={`grid gap-2 ${BREAKDOWN_COLS[accounts.length] ?? "grid-cols-2"}`}>
+        {accounts.map((a) => (
+          <div
+            key={a.key}
+            className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-surface-sunken/60 px-3 py-2.5"
+          >
+            <span className="flex min-w-0 items-center gap-1.5 text-[12px] leading-none text-muted-foreground">
+              <HugeiconsIcon icon={a.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+              <span className="truncate">{a.label}</span>
+            </span>
+            {/* The skeleton is the amount's own line held open, so the tile is
+                the same height before and after the figures land. */}
+            {loading ? (
+              <Skel className="h-[17px] w-20 max-w-full" />
+            ) : (
+              <span
+                title={usd(a.usd)}
+                className="truncate text-[17px] font-semibold leading-none tabular-nums tracking-[-0.01em]"
+              >
+                {usd(a.usd)}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      {/* The metadata slot is always present, whether or not there is a count
+          to put in it: a portfolio holding nothing gets a quiet 16px rather
+          than a line reading "0 assets across 0 chains", and either way
+          nothing below this block moves when the real figures arrive. */}
+      <p className="min-h-4 text-[12.5px] leading-4 text-muted-foreground">
+        {loading ? (
+          <Skel className="h-3 w-44 max-w-full" />
+        ) : assets > 0 ? (
+          <>
+            <span className="font-medium tabular-nums text-foreground/80">
+              {assets} {assets === 1 ? "asset" : "assets"}
+            </span>
+            {" across "}
+            <span className="font-medium tabular-nums text-foreground/80">
+              {chains} {chains === 1 ? "chain" : "chains"}
+            </span>
+          </>
+        ) : null}
+      </p>
     </div>
   )
 }
@@ -968,18 +1106,22 @@ export function PortfolioClient() {
 
   /** The same money read the other way: which account is it sitting in. */
   const portfolioByAccount = React.useMemo<Slice[]>(() => {
-    /* No descriptions: "Holdings" and "Trading" are the names of the tabs
+    /* No descriptions: "Holdings" and "Spot" are the names of the tabs
        directly below, and the column they'd sit in is ~30px wide once the bar
        and figures have taken theirs — a gloss that truncates to "Your spot
        tr…" is worse than none. The panel's own subtitle says what the split
-       is. */
+       is.
+
+       The labels are ACCOUNT_LABELS so the ring's key, the breakdown under the
+       hero and the tabs cannot drift apart again — which is exactly how this
+       row came to say "Trading" while the dashboard said "Spot". */
     const rows = [
-      { key: "holdings", symbol: "Holdings", name: "", usd: onChainTotal },
-      { key: "trading", symbol: "Trading", name: "", usd: spotBalance },
+      { key: "holdings", symbol: ACCOUNT_LABELS.holdings, name: "", usd: onChainTotal },
+      { key: "spot", symbol: ACCOUNT_LABELS.spot, name: "", usd: spotBalance },
       // Excluded while the venue is closed, exactly as net worth excludes it.
       ...(FUTURES_CLOSED
         ? []
-        : [{ key: "futures", symbol: "Futures", name: "", usd: futuresBalance }]),
+        : [{ key: "futures", symbol: ACCOUNT_LABELS.futures, name: "", usd: futuresBalance }]),
     ].filter((r) => r.usd > 0)
     const totalUsd = rows.reduce((sum, r) => sum + r.usd, 0)
     if (totalUsd <= 0) return []
@@ -1058,10 +1200,35 @@ export function PortfolioClient() {
      quoting a perps figure. The tab bar stays live so the reader can leave. */
   const futuresClosed = activeView === "futures" && FUTURES_CLOSED
 
-  const fundedChains = React.useMemo(
-    () => new Set(fundedTokens.map((t) => t.chain)).size,
-    [fundedTokens],
+  /* What the WHOLE wallet holds — every coin with a balance, on every chain.
+     Not `fundedTokens`, which is the table's list and is narrowed by the chain
+     dropdown and the search box: reading the summary off it meant picking
+     "Solana", or typing three letters into search, quietly rewrote the line
+     under the hero to describe one chain. The hero speaks for the portfolio,
+     so its counts have to come from the catalogue rather than from whatever
+     the reader is currently filtering the table down to. */
+  const heldTokens = React.useMemo(
+    () => assetCatalog.filter((t) => getTokenBalance(t) > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [assetCatalog, balanceMap],
   )
+  const heldChains = React.useMemo(
+    () => new Set(heldTokens.map((t) => t.chain)).size,
+    [heldTokens],
+  )
+
+  /* The tiles under the hero, in the order the money gets explained: what you
+     hold, then what you moved over to trade with. Futures is left out while
+     the venue is closed, exactly as net worth leaves it out — a tile quoting a
+     balance the reader has no way to reach would not add up to the figure
+     above it. */
+  const breakdownAccounts: BreakdownAccount[] = [
+    { key: "holdings", label: ACCOUNT_LABELS.holdings, icon: Wallet01Icon, usd: onChainTotal },
+    { key: "spot", label: ACCOUNT_LABELS.spot, icon: Chart01Icon, usd: spotBalance },
+    ...(FUTURES_CLOSED
+      ? []
+      : [{ key: "futures", label: ACCOUNT_LABELS.futures, icon: ChartLineData01Icon, usd: futuresBalance }]),
+  ]
 
   /* Where a symbol sits in the ring. The table's Share bars borrow it so a
      row's colour is the colour of its arc — otherwise the page shows the same
@@ -1163,35 +1330,43 @@ export function PortfolioClient() {
             the strip scroll inside the column, which is what it is for. */}
         <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-8">
         <div className="flex flex-col gap-4">
-        {/* Balance hero — the whole portfolio, not the open tab. */}
-        <div className="flex w-fit flex-col gap-1">
-          <Eyebrow>Net worth</Eyebrow>
-          {netWorthLoading ? (
-            /* The word "Loading…" set in the balance's 3rem display face was
-               louder than most of the figures it stood in for, and it changed
-               width the instant the real number landed. A block the size of
-               the number says the same thing without shouting it. */
-            <Skel className="my-1.5 h-[clamp(2rem,4vw,3rem)] w-[clamp(11rem,22vw,17rem)] rounded-lg" />
-          ) : (
-            <Balance
-              value={`$${netWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-              className="text-[clamp(2rem,4vw,3rem)]"
-            />
-          )}
+        {/* Balance hero — the whole portfolio, not the open tab. Full width
+            rather than `w-fit`: the breakdown underneath is a grid, and a
+            block sized to its widest child would hand that grid whatever
+            width the balance string happened to be this second. */}
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <Eyebrow>Net worth</Eyebrow>
+            {netWorthLoading ? (
+              /* The word "Loading…" set in the balance's 3rem display face was
+                 louder than most of the figures it stood in for, and it changed
+                 width the instant the real number landed. A block the size of
+                 the number says the same thing without shouting it. */
+              <Skel className="my-1.5 h-[clamp(2rem,4vw,3rem)] w-[clamp(11rem,22vw,17rem)] rounded-lg" />
+            ) : (
+              /* font-medium overrides Balance's own font-light. The house hero
+                 weight is Poppins Light 300 (design-system/02) and stays that
+                 everywhere else; the owner's call on 2026-09-03 was that the
+                 two top-level money figures — the dashboard's crypto total and
+                 this one — want weight behind them, and that 600 read too
+                 heavy, so 500. Poppins Medium is a real loaded cut, not a
+                 synthesised one. The size clamp is this page's own and is
+                 deliberately smaller than the dashboard's: the portfolio hero
+                 shares its row with the allocation panel. */
+              <Balance
+                value={`$${netWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                className="font-medium text-[clamp(2rem,4vw,3rem)]"
+              />
+            )}
+          </div>
           {/* What the figure is made of, so the page reconciles with itself —
               the reader can check the total against the tabs below it. */}
-          <span className="text-[13px] text-muted-foreground">
-            {netWorthLoading ? (
-              "Adding up your accounts…"
-            ) : (
-              <>
-                {`Holdings ${usd(onChainTotal)} · Trading ${usd(spotBalance)}`}
-                {!FUTURES_CLOSED && ` · Futures ${usd(futuresBalance)}`}
-                {fundedTokens.length > 0 &&
-                  ` · ${fundedTokens.length} ${fundedTokens.length === 1 ? "asset" : "assets"} across ${fundedChains} ${fundedChains === 1 ? "chain" : "chains"}`}
-              </>
-            )}
-          </span>
+          <NetWorthBreakdown
+            accounts={breakdownAccounts}
+            assets={heldTokens.length}
+            chains={heldChains}
+            loading={netWorthLoading}
+          />
         </div>
 
         {/* No money buttons here. Deposit, Withdraw and the funding transfers
@@ -1207,7 +1382,7 @@ export function PortfolioClient() {
             figures fade in where the placeholders were. */}
         <CompositionPanel
           slices={compositionSlices}
-          chains={fundedChains}
+          chains={heldChains}
           loading={netWorthLoading}
           mode={compositionMode}
           onModeChange={setCompositionMode}

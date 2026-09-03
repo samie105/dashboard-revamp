@@ -88,7 +88,12 @@ export function WalletAddresses({ chains }: { chains: readonly AddressChain[] })
 
   return (
     <div className="space-y-4 p-4">
-      {/* Trading wallet — the one address that isn't a chain, so it leads. */}
+      {/* The Spot wallet — the one address that isn't a chain, so it leads.
+          Named for the account it belongs to: the tabs, the breakdown under
+          the hero and the dashboard all call that account Spot, and an
+          address panel that alone called it the "trading wallet" left the
+          reader to work out that the two were the same place. The variable
+          keeps its name because it is the wallet provider's. */}
       <div className="rounded-2xl bg-surface-sunken/70 p-4 ring-1 ring-primary/20">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -96,8 +101,8 @@ export function WalletAddresses({ chains }: { chains: readonly AddressChain[] })
               <HugeiconsIcon icon={Chart01Icon} className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <p className="text-[15px] font-semibold leading-tight">Trading wallet</p>
-              <p className="text-[13px] text-muted-foreground">Where your spot orders settle</p>
+              <p className="text-[15px] font-semibold leading-tight">Spot wallet</p>
+              <p className="text-[13px] text-muted-foreground">Where your orders settle</p>
             </div>
           </div>
           <span
@@ -113,7 +118,7 @@ export function WalletAddresses({ chains }: { chains: readonly AddressChain[] })
         {tradingWallet?.address ? (
           <button
             onClick={() => copyAddr(tradingWallet.address)}
-            aria-label="Copy the trading wallet address"
+            aria-label="Copy the Spot wallet address"
             className="group flex w-full items-center justify-between rounded-xl bg-card px-3 py-2.5 ring-1 ring-border/40 transition-colors hover:ring-primary/40"
           >
             <code className="font-mono text-[13px] text-foreground/80">
@@ -130,7 +135,7 @@ export function WalletAddresses({ chains }: { chains: readonly AddressChain[] })
           </button>
         ) : (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border/40 bg-card/50 px-3 py-3">
-            <p className="text-[13px] text-muted-foreground">No trading wallet yet</p>
+            <p className="text-[13px] text-muted-foreground">No Spot wallet yet</p>
             <Link
               href="/trade"
               className="shrink-0 rounded-full bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
@@ -196,7 +201,7 @@ export function WalletAddresses({ chains }: { chains: readonly AddressChain[] })
         <div className="flex items-center gap-2 rounded-xl bg-credit-chip px-3 py-2.5">
           <HugeiconsIcon icon={CheckmarkCircle01Icon} className="h-3.5 w-3.5 shrink-0 text-credit" />
           <p className="text-[13px] text-credit">
-            One account — your Ethereum address doubles as your trading wallet.
+            One account — your Ethereum address doubles as your Spot wallet.
           </p>
         </div>
       )}
