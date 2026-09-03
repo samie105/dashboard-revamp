@@ -69,9 +69,10 @@ export function useWalletSecurity(walletId?: string) {
     return unlockWalletWithPin(userId, walletId, packageValue, pin)
   }, [userId, walletId])
 
-  const setPin = useCallback(async (packageValue: CryptoWalletPackageDocument, passphrase: string, pin: string) => {
+  const setPin = useCallback(async (packageValue: CryptoWalletPackageDocument, passphrase: string, pin: string, recoverySecret?: string) => {
     if (!walletId) throw new Error("A wallet ID is required to configure the wallet PIN")
-    const result = await setWalletPin(userId, walletId, packageValue, passphrase, pin, () => cryptoBackendClient.authorizeWallet())
+    if (!recoverySecret) throw new Error("Enter your recovery secret to set a PIN on an existing wallet")
+    const result = await setWalletPin(userId, walletId, packageValue, passphrase, pin, () => authorizeWalletWithRecoverySecret(recoverySecret))
     await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.walletPackage(userId) })
     return result
   }, [queryClient, userId, walletId])

@@ -223,7 +223,7 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked, action }: {
     setBusy(true)
     setUnlockError(null)
     try {
-      await security.setPin(packageValue, pinPassphrase, pin)
+      await security.setPin(packageValue, pinPassphrase, pin, recoverySecret)
       handleUnlocked()
     } catch (cause) { setUnlockError(cause) } finally { setBusy(false) }
   }
@@ -326,11 +326,12 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked, action }: {
               </>
             ) : (
               <div className="flex flex-col gap-4 rounded-2xl bg-surface-sunken/70 p-3.5 ring-1 ring-border/40">
-                <p className="text-[12.5px] leading-relaxed text-muted-foreground">Set a device PIN for everyday unlocks. Your passphrase is used once to authorize the existing wallet key; it is never stored.</p>
+                <p className="text-[12.5px] leading-relaxed text-muted-foreground">Set a device PIN for everyday unlocks. Your passphrase unlocks the wallet locally; your recovery secret authorizes this change to an existing wallet. Neither is stored.</p>
                 <SecretField id="wallet-pin-passphrase" label="Current wallet passphrase" value={pinPassphrase} onChange={setPinPassphrase} placeholder="Enter your passphrase" autoComplete="current-password" />
+                <SecretField id="wallet-pin-recovery-secret" label="Recovery secret" value={recoverySecret} onChange={setRecoverySecret} placeholder="Enter your recovery secret" autoComplete="off" />
                 <SecretField id="wallet-new-pin" label="New wallet PIN" value={pin} onChange={setPin} placeholder="6–12 digits" autoComplete="new-password" />
                 <SecretField id="wallet-new-pin-confirmation" label="Confirm new PIN" value={pinConfirmation} onChange={setPinConfirmation} placeholder="Type it again" autoComplete="new-password" />
-                <button type="button" onClick={() => void configurePin()} disabled={busy || !pinPassphrase || !pin || pin !== pinConfirmation} className={cn(CTA_CLASS, "h-11 text-sm")}>
+                <button type="button" onClick={() => void configurePin()} disabled={busy || !pinPassphrase || !recoverySecret || !pin || pin !== pinConfirmation} className={cn(CTA_CLASS, "h-11 text-sm")}>
                   {busy ? "Setting…" : "Set device PIN"}
                 </button>
               </div>
