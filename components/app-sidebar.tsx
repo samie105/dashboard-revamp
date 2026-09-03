@@ -77,7 +77,9 @@ const NAV_GROUPS: NavGroup[] = [
       // Points at /wallet/modern, not /wallet: on the production branch
       // /wallet is still the legacy wallet, and this row means the new one.
       { name: "Wallet", description: "Your Worldstreet wallet", url: "/wallet/modern", icon: Wallet01Icon },
-      { name: "Portfolio", description: "Market activity", url: "/portfolio", icon: ChartCandlestickIcon },
+      // Assets merged into Portfolio: the two rows led to the same money in
+      // two shapes, so there is one row and one page. `/assets` redirects.
+      { name: "Portfolio", description: "Everything you own", url: "/portfolio", icon: ChartCandlestickIcon },
       { name: "Transactions", description: "History and receipts", url: "/transactions", icon: File01Icon },
     ],
   },

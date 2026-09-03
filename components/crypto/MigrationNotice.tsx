@@ -27,6 +27,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Wallet01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { useAuth } from "@/components/auth-provider"
@@ -52,6 +53,10 @@ const MIGRATION_REST =
   "by a passphrase only you know, and not even Worldstreet can open it. When you're ready, " +
   "move your money over."
 const MIGRATION_COPY = MIGRATION_LEAD + MIGRATION_REST
+
+/** Where both surfaces send the user. Named once because the popup's showing
+ *  rule depends on it: see `useOnMigrationDestination`. */
+const MIGRATION_DESTINATION = "/wallet/modern"
 
 type DismissalValue = "dismissed" | "confirmed" | null
 /** "unknown" = not read yet (SSR / not-yet-mounted) — treated as "don't
@@ -218,7 +223,7 @@ function MigrationPopupBody({ onConfirm, onClose }: {
       </div>
       <div className="flex flex-col gap-2">
         <Link
-          href="/wallet/modern"
+          href={MIGRATION_DESTINATION}
           onClick={onClose}
           className="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-5 text-[13px] font-bold text-primary-foreground transition-colors hover:bg-primary/90"
         >
@@ -264,7 +269,7 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
         </p>
         <div className="mt-1 flex items-center gap-3">
           <Link
-            href="/wallet/modern"
+            href={MIGRATION_DESTINATION}
             className="inline-flex min-h-9 items-center text-[11px] font-semibold text-primary transition-colors hover:text-primary/80"
           >
             Move my funds
@@ -291,6 +296,62 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
 }
 
 /**
+ * Whether this popup currently owns the screen.
+ *
+ * The welcome guide has to know, because two first-run modals on one load is
+ * the exact failure both are written to avoid — and `popupSeen` cannot answer
+ * it: this popup marks itself seen the MOMENT it opens, so the predicate goes
+ * false while the modal is still standing there.
+ *
+ * Module-level, like the dismissal store above and for the same reason: the
+ * fact is about the screen, not about one component instance.
+ */
+const popupOnScreen = (() => {
+  let open = false
+  const listeners = new Set<() => void>()
+  return {
+    set(next: boolean) {
+      if (open === next) return
+      open = next
+      for (const listener of listeners) listener()
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    get: () => open,
+    getServerSnapshot: () => false,
+  }
+})()
+
+/**
+ * Are we already on the page this popup exists to send people to?
+ *
+ * Reactive, so leaving that page lets the announcement through — the showing
+ * is deferred, never spent.
+ */
+function useOnMigrationDestination(): boolean {
+  const pathname = usePathname()
+  return Boolean(pathname?.startsWith(MIGRATION_DESTINATION))
+}
+
+/** For anything that must wait its turn behind this popup. */
+export function useMigrationPopupOwnsScreen(): boolean {
+  const live = React.useSyncExternalStore(
+    popupOnScreen.subscribe,
+    popupOnScreen.get,
+    popupOnScreen.getServerSnapshot,
+  )
+  const { eligible, resolved, popupSeen } = useMigrationNoticeState()
+  const onDestination = useOnMigrationDestination()
+  /* `live` only turns true in an effect, one commit after a sibling could
+     already have opened itself. The predicate is what covers that first
+     render; the store is what covers every render after `markSeen` has made
+     the predicate lie. Either one is reason enough to wait. */
+  return live || migrationNoticeSurfaces({ eligible, resolved, popupSeen, onDestination }).popup
+}
+
+/**
  * The one-time introduction. Mounted once, app-wide, by LayoutShell.
  *
  * `markSeen` fires when the popup is first shown, not when it is closed: a
@@ -300,14 +361,35 @@ function MigrationNotificationRow({ onConfirm, onDismiss }: {
  */
 export function MigrationNoticePopup() {
   const { eligible, resolved, popupSeen, dismiss, markSeen } = useMigrationNoticeState()
-  const show = migrationNoticeSurfaces({ eligible, resolved, popupSeen }).popup
-  const [open, setOpen] = React.useState(false)
+  const onDestination = useOnMigrationDestination()
+  const show = migrationNoticeSurfaces({ eligible, resolved, popupSeen, onDestination }).popup
+  const [open, setOpenState] = React.useState(false)
+
+  // Every open/close goes through the shared store as well as local state,
+  // so whatever is waiting behind this popup learns the moment it lets go.
+  const setOpen = React.useCallback((next: boolean) => {
+    setOpenState(next)
+    popupOnScreen.set(next)
+  }, [])
 
   React.useEffect(() => {
     if (!show) return
     setOpen(true)
     markSeen()
-  }, [show, markSeen])
+  }, [show, markSeen, setOpen])
+
+  /* Walking onto the destination closes it, whether that was its own link or
+     the sidebar. It is mounted app-wide and survives navigation, so without
+     this an announcement opened on the dashboard would ride along to
+     /wallet/modern and sit on top of the setup ceremony — the stack this
+     rule exists to prevent, arrived at from the other direction. The showing
+     is already spent by then, which is correct: they saw it and acted on it. */
+  React.useEffect(() => {
+    if (onDestination) setOpen(false)
+  }, [onDestination, setOpen])
+
+  // A route change that unmounts this must not leave the screen claimed.
+  React.useEffect(() => () => popupOnScreen.set(false), [])
 
   if (!show && !open) return null
 

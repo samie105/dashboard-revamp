@@ -5,15 +5,19 @@ import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Copy01Icon,
-  Exchange01Icon,
   CoinsSwapIcon,
+  DollarCircleIcon,
   EyeIcon,
+  HelpCircleIcon,
+  Wallet01Icon,
+  Chart01Icon,
   ChartLineData01Icon,
   ArrowUpRight01Icon,
   ArrowDownLeft01Icon,
   MoreHorizontalIcon,
+  Tick02Icon,
 } from "@hugeicons/core-free-icons"
-import { Balance, ChangeText, DeltaChip, Eyebrow } from "@/components/ui/system"
+import { Balance, ChangeText, DeltaChip, Eyebrow, Skel } from "@/components/ui/system"
 import {
   ResponsiveModal,
   ResponsiveModalContent,
@@ -28,14 +32,19 @@ import { ErrorState } from "@/components/error-state"
 import type { CoinData } from "@/lib/actions"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useWalletMode } from "@/components/wallet-mode-provider"
-import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
+import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useTradeAccount } from "@/hooks/useTradeAccount"
 import { useAccountHistory, type AccountSpec } from "@/hooks/useAccountHistory"
-import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
-import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { fetchPrices } from "@/lib/crypto-api"
-import { useCashBalance } from "@/hooks/useCashBalance"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
+import { openWelcomeGuide } from "@/components/welcome-guide"
+import { usePortfolioTotal } from "@/hooks/usePortfolioTotal"
+import {
+  ACCOUNT_KEYS,
+  dashboardCards,
+  type AccountKey,
+  type AccountSignal,
+} from "@/lib/dashboard-cards"
 
 function truncAddr(addr: string) {
   if (!addr || addr.length < 14) return addr
@@ -162,35 +171,79 @@ function Sparkline({ series, tone }: { series: number[]; tone: "up" | "down" | "
   )
 }
 
-// The accounts under the Total — always on screen as cards (no tab
-// switching), each linking to the surface where that money actually lives.
-// Cash gets no card (a USD balance draws a dead-flat line); it stays inside
-// the Total and is called out in the hero's sub-label instead.
-// Futures has no card while the venue is unavailable: a tile is a door, and
-// this one would open onto a screen that cannot trade. Its balance still
-// counts toward the Total and still feeds the 30-day history below — the
-// money is real, only the destination isn't ready.
+/* The Total's breakdown — the three things a crypto balance is made of, in
+   the owner's own words: what you HOLD, what you have moved into SPOT, and
+   what is in FUTURES.
+
+   The labels are the platform's labels. An earlier pass renamed Spot to
+   "Trading" to sound friendlier; that is reverted, because every other screen
+   in the ecosystem still says spot and futures and a dashboard that alone
+   calls them something else is a translation problem, not a simplification.
+   Plain language still governs the line underneath, which is where the
+   explaining actually belongs.
+
+   Cash is gone from here entirely. Dollars live in the Dollar Account — a
+   separate product with its own dashboard — and a cash card sitting on the
+   crypto screen is precisely what had people arriving expecting to deposit
+   money into a wallet. The figure did not disappear with the card: it is a
+   quiet line under the hero now (see below), out of the total and out of the
+   way.
+
+   Futures gets no card while the venue is shut — the reasoning is the other
+   branch's and it is right: a tile is a door, and this one would open onto a
+   screen that cannot trade. Its money is still real, so it still feeds the
+   30-day history below; only the destination isn't ready.
+
+   WHICH of these render is `dashboardCards`' decision, not this table's. */
+const ACCOUNTS: Record<
+  AccountKey,
+  { label: string; icon: typeof Wallet01Icon; sub: string; href: string }
+> = {
+  holdings: { label: "Holdings", icon: Wallet01Icon, sub: "Coins only you can move", href: "/wallet/modern" },
+  spot: { label: "Spot", icon: Chart01Icon, sub: "Money you moved over to buy and sell with", href: "/trade" },
+  futures: { label: "Futures", icon: ChartLineData01Icon, sub: "Your futures trading account", href: "/trade" },
+}
+
+/* The row is as wide as it has cards. Now that cards are earned one at a
+   time, the common case is one or two of them — and a lone card sitting in a
+   third of the row with two empty columns beside it reads as two cards that
+   failed to load, which is the exact opposite of what earning a card is meant
+   to say. Literal class names, because Tailwind cannot see an interpolated
+   one. */
+const CARD_GRID_COLS: Record<number, string> = {
+  1: "sm:grid-cols-1",
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-3",
+}
 
 export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const { user, isLoaded } = useAuth()
-  const { addresses, walletsGenerated } = useWallet()
-  /* `walletsGenerated` is the LEGACY (Privy) provider reporting that it
-     provisioned its wallets. A modern-wallet user never gets it — there is no
-     Privy wallet to provision — so gating the on-chain total on it zeroed the
-     dashboard for exactly the users whose balances had loaded fine.
-     `useWalletBalances` already follows the active mode; the totals below just
-     have to stop asking the other wallet for permission. Summing an empty
-     list is already 0, so nothing is lost by dropping the guard in modern
-     mode. */
+  const { addresses } = useWallet()
+  /* The old `walletsGenerated` gate is gone. It was the LEGACY (Privy)
+     provider reporting that it provisioned its wallets — a modern-wallet user
+     never gets it, there is no Privy wallet to provision — so gating the
+     on-chain figure on it zeroed the dashboard for exactly the users whose
+     balances had loaded fine. `useWalletBalances` already follows the active
+     mode, and `usePortfolioTotal` (which owns the arithmetic now) never asked
+     the other wallet for permission in the first place. Summing an empty list
+     is already 0, so nothing is lost. */
   const { mode: walletMode } = useWalletMode()
-  const [receiveOpen, setReceiveOpen] = React.useState(false)
   const [moreOpen, setMoreOpen] = React.useState(false)
-  const balancesReady = walletMode === "modern" || walletsGenerated
-  const { openFlow } = useMoneyFlow()
+  const { openDoor } = useMoneyFlow()
+  /* Still read here, but for the per-coin DETAIL only — the daily P&L and the
+     30-day curves are per-symbol arithmetic and the total is not. Every dollar
+     figure on this screen comes from `usePortfolioTotal` below. */
   const { balances: onChainBalances } = useWalletBalances()
-  // One /api/trade/account read serves the Spot/Futures figures AND the
-  // futures positions the daily P&L needs.
-  const { balances: hlAccountBalances, positions: hlPositions, futuresUsd } = useTradeAccount()
+  // One /api/trade/account read serves the futures positions the daily P&L
+  // needs AND the spot token quantities its 24h move is computed from.
+  const { balances: hlAccountBalances, positions: hlPositions } = useTradeAccount()
+  /* Does this person have a wallet at all? Only the Networks strip asks, and
+     only `needsSetup` can answer it: it is a CONFIRMED 404 from the backend,
+     so it cannot be true while the lookup is still in flight — a wallet that
+     exists never flashes "set up your wallet" on its way in. The query is
+     shared with the wallet page through its react-query key, so this costs
+     no extra request. */
+  const walletState = useCryptoWalletState()
   const [isCopied, setIsCopied] = React.useState<string | null>(null)
   // null = "All networks"; a chain key surfaces that chain's address chip.
   const [selectedWallet, setSelectedWallet] = React.useState<string | null>(null)
@@ -225,108 +278,116 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     return () => { cancelled = true; clearInterval(id) }
   }, [])
 
-  // Dollar Account (worldstreet-wallet) — the Cash card. USD only; NGN is a
-  // different currency and never silently folded into a USD figure.
-  const { cash: cashBalance } = useCashBalance()
+  /* EVERY dollar figure below comes out of this one hook, and that is the
+     whole point of it.
 
-  // SpotV2 ledger data (same source as assets page)
-  const [spotLedger, setSpotLedger] = React.useState<LedgerBalance[]>([])
-  const [spotV2Positions, setSpotV2Positions] = React.useState<(PositionInfo & { currentPrice: number })[]>([])
+     This component used to add the money up itself — its own on-chain sum, its
+     own spot fetch, its own `cryptoTotal(...)` call — while the navbar added a
+     different set of things up in a pill directly above it. Two figures that
+     both look like "your balance", eight pixels apart, disagreeing. There is
+     no way to keep two copies of arithmetic in step by remembering to; the
+     only fix is for there to be one copy. So `usePortfolioTotal` owns it, the
+     navbar and /portfolio read the same call, and the three agree by
+     construction rather than by coincidence.
 
-  React.useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    async function load() {
-      try {
-        const [balances, positions] = await Promise.all([
-          getSpotBalances(),
-          getSpotPositions(),
-        ])
-        const tokens = positions.map((p) => p.token)
-        const priceMap = tokens.length > 0 ? await getTokenPrices(tokens) : new Map<string, number>()
-        if (cancelled) return
-        setSpotLedger(balances)
-        setSpotV2Positions(positions.map((p) => ({ ...p, currentPrice: priceMap.get(p.token) ?? 0 })))
-      } catch { /* empty state */ }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [user])
+     `total` is Holdings + Spot + Futures — futures contributing zero while the
+     venue is shut, because the larger figure counted money nobody could open a
+     screen to reach. Cash is deliberately NOT in it: the hero is the CRYPTO
+     balance, and folding a dollar balance in was quietly answering "what are
+     my coins worth?" with a number that included money that is not coins. It
+     comes back alongside instead, for the Dollar Account chip under the hero.
 
-  // On-chain balance: sum of all on-chain tokens valued in USD
-  const onChainTotal = React.useMemo(() => {
-    if (!balancesReady) return 0
-    let total = 0
-    for (const b of onChainBalances) {
-      const p = getPrice(livePrices, b.symbol)
-      total += b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
-    }
-    return total
-  }, [onChainBalances, livePrices, balancesReady])
+     `livePrices` is passed in rather than polled again inside the hook — this
+     screen already runs a 30s feed, and a second poller would be a third
+     answer to the same question. */
+  const {
+    total: totalBalance,
+    onChain: onChainTotal,
+    spot: spotBalance,
+    futures: futuresBalance,
+    futuresOpen,
+    cash: cashBalance,
+    chainTotals,
+    onChainSettled,
+    spotSettled,
+    futuresSettled,
+    cashSettled,
+  } = usePortfolioTotal(livePrices)
 
-  // What each chain is worth — the network strip's figures (mobile grammar:
-  // the strip carries value, chains are never hidden behind a dropdown).
-  const chainTotals = React.useMemo(() => {
-    const m: Record<string, number> = Object.fromEntries(NETWORKS.map((n) => [n.key, 0]))
-    for (const b of onChainBalances) {
-      const p = getPrice(livePrices, b.symbol)
-      const v = b.balance * (p > 0 ? p : b.symbol === "USDT" || b.symbol === "USDC" ? 1 : 0)
-      // The feed keys by network (arbitrum is its own key even though it shares
-      // the ethereum address), so this maps 1:1 onto the strip.
-      if (m[b.chain] !== undefined) m[b.chain] += v
-    }
-    return m
-  }, [onChainBalances, livePrices])
-
-  // Spot balance = SpotV2 ledger (available + locked) + positions value (matches assets page)
-  const spotBalance = React.useMemo(() => {
-    const usdcTotal = spotLedger.reduce((sum, b) => sum + b.available + b.locked, 0)
-    const posTotal = spotV2Positions.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0)
-    return usdcTotal + posTotal
-  }, [spotLedger, spotV2Positions])
-
-  // Futures balance (Hyperliquid perps account value)
-  const futuresBalance = futuresUsd
+  /* Spot's per-token quantities. The hook carries what spot is WORTH; what it
+     does not carry is which coins make that up, and both the 24h P&L and the
+     30-day curve are per-symbol arithmetic. No second request for it: the
+     /api/trade/account read already open for the futures positions is the
+     same call `getSpotPositions()` makes, so these are derived from data
+     that is here anyway. */
+  const spotTokens = React.useMemo(
+    () => (hlAccountBalances?.spotTokens ?? []).filter((t) => t.total > 0),
+    [hlAccountBalances],
+  )
 
   // ── Today's P&L, per account ──
   // Main: on-chain holdings moved by each coin's 24h change.
   const mainPnL = React.useMemo(() => {
-    if (!balancesReady) return 0
     const h: Record<string, number> = {}
     for (const b of onChainBalances) {
       h[b.symbol] = (h[b.symbol] || 0) + b.balance
     }
     return calculateDailyPnL(h, livePrices, coins)
-  }, [onChainBalances, balancesReady, livePrices, coins])
+  }, [onChainBalances, livePrices, coins])
 
   // Spot: HL spot token holdings, same 24h-change arithmetic (USDC is flat).
   const spotPnL = React.useMemo(() => {
     const h: Record<string, number> = {}
-    for (const p of spotV2Positions) {
-      h[p.token] = (h[p.token] || 0) + p.quantity
+    for (const t of spotTokens) {
+      h[t.symbol] = (h[t.symbol] || 0) + t.total
     }
     return calculateDailyPnL(h, livePrices, coins)
-  }, [spotV2Positions, livePrices, coins])
+  }, [spotTokens, livePrices, coins])
 
-  // Futures: the 24h mark-price move on each open position, signed (shorts
-  // profit when price falls). Funding and intraday opens aren't served, so
-  // this is the price-move component — real data, honestly incomplete.
-  const futuresPnL = React.useMemo(() => {
-    let pnl = 0
-    for (const p of hlPositions) {
-      const coin = coins.find((c) => c.symbol === p.symbol)
-      const change = coin?.change24h ?? 0
-      if (!change || !p.markPrice) continue
-      const prevPrice = p.markPrice / (1 + change / 100)
-      pnl += p.size * (p.markPrice - prevPrice)
-    }
-    return pnl
-  }, [hlPositions, coins])
+  /* Futures' 24h P&L used to be summed in here. It went the way of its
+     contribution to the total: the venue is closed, so counting its movement
+     in "today" put a number on the hero that nothing on any screen accounts
+     for. */
+  const dailyPnL = mainPnL + spotPnL
 
-  // The stats tile covers every account; the Main card's chip is Main-only.
-  const dailyPnL = mainPnL + spotPnL + futuresPnL
+  const accountBalances: Record<AccountKey, number> = {
+    holdings: onChainTotal,
+    spot: spotBalance,
+    futures: futuresBalance,
+  }
 
-  const totalBalance = onChainTotal + spotBalance + futuresBalance + cashBalance
+  /* Which cards are allowed to exist. `used` is read GENEROUSLY — the
+     question is "has this person used this account", not "is it above zero
+     right this second", because a trader who happens to be flat today should
+     get their cards, not the new-user invitation. `settled` is the other
+     half: it says an answer actually arrived, so a card is never withheld on
+     the strength of a placeholder zero — and those flags come from the hook
+     too, so "has spot answered?" cannot mean one thing here and another in
+     the pill above. */
+  const accountSignals: Record<AccountKey, AccountSignal> = {
+    holdings: {
+      open: true,
+      settled: onChainSettled,
+      used: onChainBalances.length > 0 || onChainTotal > 0,
+    },
+    spot: {
+      open: true,
+      /* The hook settles this for a signed-out visitor too: a ledger that is
+         never asked for is still a settled answer, and the answer is
+         "nothing". */
+      settled: spotSettled,
+      used: spotTokens.length > 0 || spotBalance > 0,
+    },
+    futures: {
+      open: futuresOpen,
+      settled: futuresSettled,
+      used: futuresBalance > 0 || hlPositions.length > 0,
+    },
+  }
+  const cards = dashboardCards(accountSignals)
+  // How many skeletons the loading state owes: one per account that could
+  // still turn up, which is two while futures is shut and three when it opens.
+  const openAccountCount = ACCOUNT_KEYS.filter((key) => accountSignals[key].open).length
 
   // ── 30-day value history per account (holdings × real price series) ──
   const accountSpecs: AccountSpec[] = React.useMemo(() => {
@@ -335,48 +396,31 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
       mainHoldings[b.symbol] = (mainHoldings[b.symbol] || 0) + b.balance
     }
     const spotHoldings: Record<string, number> = {}
-    for (const p of spotV2Positions) {
-      spotHoldings[p.token] = (spotHoldings[p.token] || 0) + p.quantity
+    for (const t of spotTokens) {
+      spotHoldings[t.symbol] = (spotHoldings[t.symbol] || 0) + t.total
     }
     const futuresHoldings: Record<string, number> = {}
     for (const p of hlPositions) {
       futuresHoldings[p.symbol] = (futuresHoldings[p.symbol] || 0) + p.size
     }
+    /* Exactly the money in `totalBalance`, because these curves are what the
+       Today / 7d / 30d figures beside the hero are computed from — a spec
+       list that disagrees with the total would have the percentages
+       describing a different pile of money than the number above them. So
+       cash is gone with its card, and a closed futures venue contributes the
+       zero it contributes to the sum. */
     return [
-      { key: "main", balance: onChainTotal, holdings: mainHoldings },
+      { key: "holdings", balance: onChainTotal, holdings: mainHoldings },
       { key: "spot", balance: spotBalance, holdings: spotHoldings },
-      { key: "futures", balance: futuresBalance, holdings: futuresHoldings },
-      { key: "cash", balance: cashBalance, holdings: {} },
+      {
+        key: "futures",
+        balance: futuresOpen ? futuresBalance : 0,
+        holdings: futuresOpen ? futuresHoldings : {},
+      },
     ]
-  }, [onChainBalances, spotV2Positions, hlPositions, onChainTotal, spotBalance, futuresBalance, cashBalance])
+  }, [onChainBalances, spotTokens, hlPositions, onChainTotal, spotBalance, futuresBalance, futuresOpen])
 
   const { sparkSeries, changes: periodChanges } = useAccountHistory(accountSpecs)
-
-  /* One curve for the whole portfolio, replacing the per-account cards.
-     The accounts were shown as two tiles with a sparkline each — a lot of
-     furniture for a breakdown most people read once. The total's own shape is
-     the thing worth seeing, so the per-account series are summed into it.
-     Accounts report different history lengths, so the sum runs to the SHORTEST:
-     padding a missing account with zeros would draw a cliff on the day its
-     history begins. */
-  const totalSeries = React.useMemo(() => {
-    const series = Object.values(sparkSeries).filter(
-      (s): s is number[] => Array.isArray(s) && s.length > 1,
-    )
-    if (series.length === 0) return null
-    const length = Math.min(...series.map((s) => s.length))
-    return Array.from({ length }, (_, i) =>
-      series.reduce((sum, s) => sum + s[s.length - length + i], 0),
-    )
-  }, [sparkSeries])
-
-  const totalTone: "up" | "down" | "flat" = React.useMemo(() => {
-    if (!totalSeries || totalSeries.length < 2) return "flat"
-    const first = totalSeries[0]
-    const last = totalSeries[totalSeries.length - 1]
-    if (Math.abs(first) < 1e-9 || Math.abs(last - first) / Math.abs(first) < 0.00005) return "flat"
-    return last > first ? "up" : "down"
-  }, [totalSeries])
 
   const PERIODS = [
     { label: "Today", value: periodChanges.today },
@@ -384,12 +428,12 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
     { label: "30 Days", value: periodChanges.month },
   ]
 
-  // Count active assets across on-chain + Hyperliquid spot
-  const activeAssetCount = React.useMemo(() => {
-    const onChainCount = onChainBalances.filter((b) => b.balance > 0).length
-    const hlCount = (hlAccountBalances?.spotTokens ?? []).filter((t) => t.total > 0).length
-    return onChainCount + hlCount
-  }, [onChainBalances, hlAccountBalances])
+  // Count active assets across on-chain + Hyperliquid spot. `spotTokens` is
+  // already filtered to the ones actually held, so it counts itself.
+  const activeAssetCount = React.useMemo(
+    () => onChainBalances.filter((b) => b.balance > 0).length + spotTokens.length,
+    [onChainBalances, spotTokens],
+  )
 
   const handleCopy = (addr: string, chain: string) => {
     if (addr) {
@@ -412,21 +456,33 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   }))
   // No chain selected ("All networks") → no address chip.
   const activeChain = selectedWallet ? WALLETS.find((w) => w.key === selectedWallet) : undefined
+  /* Six tiles reading $0.00 over addresses that do not exist is what someone
+     with no wallet at all used to be shown — a dead grid where the next step
+     should be. `needsSetup` is a confirmed 404 and so cannot be true mid-flight,
+     which is the whole point: a wallet that exists must never flash "set up
+     your wallet" on its way in.
+     Scoped to modern mode because that is the only mode this answer is about
+     and the only mode the CTA's destination serves — a legacy-wallet user gets
+     their addresses from Privy and would be sent to the wrong screen. */
+  const needsWalletSetup = walletMode === "modern" && walletState.needsSetup
 
-  /* Deposit and Withdraw are ONE pair and now look like it: the same arrow,
-     mirrored — in and out of the wallet. They used to be an exchange glyph and
-     a credit card, two unrelated pictures for two halves of one idea, and
-     neither of them said "direction".
+  /* Both verbs open the same question first: where is the money coming from,
+     or where is it going. That used to be decided FOR the user by whichever
+     wallet mode they happened to be in — modern Deposit went straight to a
+     list of addresses, legacy Deposit opened the cash flow, and Withdraw was
+     a link to a whole other page — so the button meant a different thing to
+     two people looking at the same screen. The chooser owns that branch now,
+     which is why the `walletMode` conditional is gone from this pair.
 
-     Deposit opens in place — funding a self-custodial wallet is being shown
-     its address, which is a modal's worth of content and no reason to leave
-     the page. Withdraw goes to /wallet/modern: sending needs a balance to
-     pick from, a chain, a destination and an unlock, and that is a screen.
-     Legacy mode keeps the cash flow, which is the right one for a wallet the
-     user holds no keys to. */
+     The ICONS come from the other branch, and they are right: Deposit and
+     Withdraw are ONE pair and now look like it — the same arrow, mirrored,
+     in and out. They used to be an exchange glyph and a credit card, two
+     unrelated pictures for two halves of one idea, and neither of them said
+     "direction". The glyphs are theirs; where the buttons GO is the chooser's,
+     not the wallet mode's. */
   type DashAction = {
     label: string
-    icon: typeof Exchange01Icon
+    icon: typeof ArrowDownLeft01Icon
     href?: string
     onClick?: () => void
     vivid: string
@@ -436,10 +492,15 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   }
 
   const PRIMARY_ACTIONS: DashAction[] = [
-    { label: "Deposit", onClick: () => setReceiveOpen(true), icon: ArrowDownLeft01Icon, vivid: "open-deposit", vividLabel: "Show the wallet's deposit addresses" },
-    walletMode === "modern"
-      ? { label: "Withdraw", href: "/wallet/modern", icon: ArrowUpRight01Icon, vivid: "open-withdraw", vividLabel: "Go to the wallet to send funds" }
-      : { label: "Withdraw", onClick: () => openFlow("sell"), icon: ArrowUpRight01Icon, vivid: "open-withdraw", vividLabel: "Open the withdraw modal" },
+    { label: "Deposit", onClick: () => openDoor("deposit"), icon: ArrowDownLeft01Icon, vivid: "open-deposit", vividLabel: "Ask where the money is coming from, then deposit" },
+    /* Withdraw no longer asks a question. Cash withdrawals are shut until
+       there is a treasury to settle them (CASH_WITHDRAWALS_CLOSED in
+       money-doors.tsx), which leaves exactly one way out, and a chooser with
+       one option is a dead click — so this walks straight to the send screen.
+       The label has to say what actually happens, because Vivid reads it to
+       decide what pressing this does. It goes back to asking on its own when
+       that constant flips. */
+    { label: "Withdraw", onClick: () => openDoor("withdraw"), icon: ArrowUpRight01Icon, vivid: "open-withdraw", vividLabel: "Send crypto out of your wallet" },
   ]
 
   const MORE_ACTIONS: DashAction[] = [
@@ -477,29 +538,119 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               Figure + today's P&L on the left, the portfolio's Today / 7d /
               30d moves on the right (derived from real price history). */}
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-            <div data-onboarding="dash-balance" className="flex w-fit flex-col gap-1">
-              <div className="flex items-center gap-3">
-                <Eyebrow>Est. Total Value</Eyebrow>
+            {/* w-full on a phone, w-fit from sm. The column used to shrink to
+                its widest child at every width, which meant the help pill had
+                nowhere to go but hard against the label — three unlike things
+                (a tracked-out caps label, a bare icon, a raised pill) crammed
+                into one 12px-gapped run. Full width gives the pill a right
+                edge to sit against, so the label gets to be a label again.
+                From sm the column shrink-wraps as before, because it shares
+                that row with the Today/7d/30d strip. */}
+            <div data-onboarding="dash-balance" className="flex w-full flex-col gap-1.5 sm:w-fit">
+              {/* flex-wrap is load-bearing now that the label is three words.
+                  "TOTAL CRYPTO BALANCE" at 12px with 0.08em tracking, plus the
+                  eye and the guide pill, runs past the content box below about
+                  360px — which is a real phone, not an edge case. Wrapping puts
+                  the pill on its own line there instead of squeezing it. */}
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
+                {/* Not just "Total balance". There are two balances in a
+                    Worldstreet user's life and they belong to different
+                    products: this one, which is Holdings + Spot + Futures, and
+                    the Dollar Account's cash — which now sits directly
+                    underneath it. Naming this one "crypto" is what lets the
+                    two be told apart at a glance, and it is the same fix as
+                    renaming the app itself: the confusion was never that
+                    people could not read the number, it was that they could
+                    not tell which money it counted. */}
+                <Eyebrow>Total crypto balance</Eyebrow>
+                {/* `ws-icon-mono` while balances are SHOWN is the point of this
+                    button, not styling. globals.css paints the inner path of
+                    every 24px icon with `--primary` (the house two-tone
+                    treatment), so this eye was gold in BOTH states and the one
+                    thing it exists to tell you — are your figures hidden —
+                    could not be read off it. A permanently gold icon beside a
+                    quiet label is also gold as decoration, which the system
+                    reserves for brand, primary action and active state.
+                    Shown: the glyph collapses to one muted colour. Hidden: the
+                    two-tone gold is allowed back and the whole thing goes
+                    primary, so the state reads instantly.
+                    The opt-out has to be a globals.css class rather than
+                    `[&_path]:stroke-current` here — layered Tailwind utilities
+                    lose to un-layered author CSS whatever their specificity,
+                    so the call-site version looks right and silently does
+                    nothing. -m-2 p-2 buys a 44px hit area without moving the
+                    layout. */}
                 <button
                   onClick={toggleHidden}
-                  className={`transition-colors ${hidden ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"}`}
+                  className={`-m-2 p-2 transition-colors ${
+                    hidden
+                      ? "text-primary"
+                      : "ws-icon-mono text-muted-foreground/60 hover:text-foreground"
+                  }`}
                   aria-label={hidden ? "Show balances" : "Hide balances"}
+                  aria-pressed={hidden}
                 >
                   <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
                 </button>
+                {/* The guide, reachable. It used to appear unbidden exactly
+                    once, which meant most people met it while busy with
+                    something else and could never get it back. Here it sits
+                    beside the number they came to the page not understanding. */}
+                <button
+                  type="button"
+                  onClick={openWelcomeGuide}
+                  data-vivid-target="open-welcome-guide"
+                  data-vivid-label="Open the guide to Worldstreet"
+                  className="ml-auto inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full bg-card/70 px-2.5 text-[11px] font-semibold text-muted-foreground ring-1 ring-border/40 transition-colors hover:bg-accent hover:text-foreground ws-icon-mono"
+                >
+                  <HugeiconsIcon icon={HelpCircleIcon} className="h-3.5 w-3.5" />
+                  How this works
+                </button>
               </div>
               <div className="flex flex-wrap items-center gap-3">
+                {/* font-medium overrides Balance own font-light. The house hero
+                   weight is Poppins Light 300 (design-system/02) and still is
+                   everywhere else; owner call on 2026-09-03 that the dashboard
+                   total specifically wants weight behind it — 600 read too
+                   heavy, so 500. Poppins Medium is loaded in app/layout.tsx
+                   FOR THIS: drop the weight there and 500 gets synthesised. */}
                 <Balance
                   value={formatUSD(totalBalance)}
                   hidden={hidden}
                   mask={MASK}
-                  className="text-[clamp(2.5rem,11.5vw,3.5rem)] sm:text-[clamp(2.75rem,5.5vw,4.5rem)]"
+                  className="font-medium text-[clamp(2.5rem,11.5vw,3.5rem)] sm:text-[clamp(2.75rem,5.5vw,4.5rem)]"
                 />
                 {dailyPnL !== 0 && !hidden && <DeltaChip value={dailyPnL} prefix="$" suffix="" />}
               </div>
-              <span className="text-[13px] text-muted-foreground">
-                All accounts
-                {cashBalance > 0 && ` · incl. ${hidden ? "••••" : formatUSD(cashBalance)} cash`}
+              {/* The Dollar Account, which is the one balance with nowhere
+                  else to be on a phone — the navbar that carries it is a
+                  desktop surface, and the cash card is gone from below.
+                  It replaced a line reading "Everything below, added up",
+                  which described the layout rather than telling anyone
+                  anything they did not already have eyes for.
+                  Deliberately subordinate, and deliberately outside the
+                  figure above it: this money is a different product, and the
+                  point of the line is to say so while still letting someone
+                  find their dollars. `cashSettled` holds the figure back so a
+                  real $0.00 is never confused with a request in flight. */}
+              {/* A sunken chip rather than a third line of loose text. Under a
+                  45px figure, "Dollar Account $1,250.75" set as a run-on read
+                  as an orphaned caption — the label ran into its own number
+                  and the whole thing sat 4px below a hero it is not part of.
+                  Giving it an outline makes it a separate OBJECT, which is
+                  exactly the thing this line has to communicate: different
+                  money, different product, deliberately not inside the total.
+                  w-fit so it hugs its content instead of striping the column,
+                  and mt-1 buys the figure above it room to be the hero. */}
+              <span className="mt-1 inline-flex w-fit items-center gap-2 rounded-full bg-surface-sunken/70 py-1.5 pl-2 pr-3 text-[12.5px] leading-none text-muted-foreground ring-1 ring-border/25 ws-icon-mono">
+                <HugeiconsIcon
+                  icon={DollarCircleIcon}
+                  className="h-4 w-4 text-muted-foreground/70"
+                />
+                Dollar Account
+                <span className="font-semibold tabular-nums text-foreground">
+                  {hidden ? MASK : cashSettled ? formatUSD(cashBalance) : "––"}
+                </span>
               </span>
             </div>
 
@@ -519,13 +670,181 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             </div>
           </div>
 
-          {/* The portfolio's own 30-day shape. One curve where two account
-              cards used to be: the same information the tiles carried between
-              them, at the size the number beside it deserves. */}
-          {totalSeries && !hidden && (
-            <div className="h-14 w-full sm:h-16">
-              <Sparkline series={totalSeries} tone={totalTone} />
+          {/* Account cards — the Total's breakdown, every figure on screen at
+              once instead of hidden behind tabs. Each card is a door to the
+              surface where that money actually lives.
+
+              A card is EARNED, not permanent. Someone who signed up a minute
+              ago holds nothing and has traded nothing, and three cards reading
+              $0.00 do not inform them — they say the product is empty and
+              that they are already behind. So the row has three states
+              (`dashboardCards`): skeletons while the accounts are still
+              answering, one invitation when every answer came back empty, and
+              the earned cards once there is something true to put in them.
+              The dashboard fills in as the platform gets used.
+
+              `data-onboarding` stays on the wrapper in ALL THREE — the
+              coachmark tour skips a step whose target is missing, and the
+              step about the accounts is the one a brand-new user, i.e. exactly
+              the person seeing the invitation, most needs. */}
+          {cards.status === "empty" ? (
+            <div data-onboarding="dash-balance-cards">
+              <div className="ws-card-glass relative flex flex-col gap-3.5 rounded-2xl bg-card/70 p-4 sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+                {/* Same masked gold stroke as the cards it stands in for, so
+                    the empty state reads as the row rather than as an error
+                    that replaced it. */}
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 rounded-2xl p-px opacity-80"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, color-mix(in oklab, var(--primary) 55%, transparent), color-mix(in oklab, var(--primary) 14%, transparent) 38%, transparent 68%)",
+                    WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                    WebkitMaskComposite: "xor",
+                    mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                    maskComposite: "exclude",
+                  }}
+                />
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/[0.12]">
+                  <HugeiconsIcon icon={Wallet01Icon} className="h-5 w-5 text-primary" />
+                </span>
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="text-[15px] font-semibold">Your accounts will show up here</span>
+                  <span className="text-[13px] leading-relaxed text-muted-foreground">
+                    Buy your first coin, or have someone send you one. It lands in your holdings
+                    and this is where you will see what it is worth.
+                  </span>
+                </div>
+                <Link
+                  href="/buy"
+                  data-vivid-target="start-first-buy"
+                  data-vivid-label="Buy a first coin to get started"
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-[14px] font-semibold text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.97] motion-reduce:active:scale-100 sm:ml-auto"
+                >
+                  Buy a coin
+                  <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
+                </Link>
+              </div>
             </div>
+          ) : cards.status === "loading" ? (
+            <div
+              data-onboarding="dash-balance-cards"
+              role="status"
+              aria-busy="true"
+              aria-label="Loading your accounts"
+              className={`grid grid-cols-1 gap-2.5 ${CARD_GRID_COLS[openAccountCount] ?? "sm:grid-cols-3"}`}
+            >
+              {/* Card-shaped, not a generic bar: the row is about to be cards,
+                  and a skeleton that is the wrong shape re-lays-out the page
+                  the moment the real answer lands. */}
+              {Array.from({ length: openAccountCount }, (_, i) => (
+                <div
+                  key={i}
+                  className="ws-card-glass flex min-w-0 flex-col gap-2 rounded-2xl bg-card/70 p-3.5 pb-3 sm:gap-3 sm:p-4 sm:pb-3.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <Skel className="h-7 w-7 rounded-lg" />
+                    <Skel className="h-3 w-20" />
+                  </div>
+                  <Skel className="h-[22px] w-28" />
+                  <Skel className="h-8 w-full sm:h-12" />
+                  <Skel className="h-3 w-24" />
+                </div>
+              ))}
+            </div>
+          ) : (
+          <div
+            data-onboarding="dash-balance-cards"
+            className={`grid grid-cols-1 gap-2.5 ${CARD_GRID_COLS[cards.accounts.length] ?? "sm:grid-cols-3"}`}
+          >
+            {cards.accounts.map((accountKey) => {
+              const a = ACCOUNTS[accountKey]
+              const series = sparkSeries[accountKey]
+              const first = series?.[0] ?? 0
+              const cardChange =
+                series && Math.abs(first) > 1e-9
+                  ? ((series[series.length - 1] - first) / Math.abs(first)) * 100
+                  : null
+              const tone: "up" | "down" | "flat" =
+                cardChange === null || Math.abs(cardChange) < 0.005
+                  ? "flat"
+                  : cardChange > 0
+                    ? "up"
+                    : "down"
+              /* An account with no movement to plot draws a dead-flat line
+                 with a pulsing dot on the end, which reads as a stray artifact
+                 rather than as "nothing happened". Those cards keep their
+                 height and skip the chart. (The cash exemption that used to
+                 live on this line went with the cash card.) */
+              const flat =
+                !series || series.length < 2 || Math.max(...series) === Math.min(...series)
+              const showSpark = !flat
+              /* Holdings is the wallet, and which wallet that is depends on
+                 the mode the user is in. */
+              const href =
+                accountKey === "holdings" && walletMode !== "modern" ? "/wallet" : a.href
+              return (
+                <Link
+                  key={accountKey}
+                  href={href}
+                  data-vivid-target={`balance-view-${accountKey}`}
+                  data-vivid-label={`Open the ${a.label} account`}
+                  className="ws-card-glass group relative flex min-w-0 flex-col gap-2 rounded-2xl bg-card/70 p-3.5 pb-3 sm:gap-3 sm:p-4 sm:pb-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent/60 hover:shadow-[0_12px_32px_-16px_rgb(0_0_0/0.5)] motion-reduce:hover:translate-y-0"
+                >
+                  {/* Gradient stroke — brand gold dissolving diagonally to
+                      nothing. Masked ring (padding-box XOR) instead of a
+                      border-image so the translucent fill keeps showing the
+                      silk through the card. */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-2xl p-px opacity-80 transition-opacity group-hover:opacity-100"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, color-mix(in oklab, var(--primary) 55%, transparent), color-mix(in oklab, var(--primary) 14%, transparent) 38%, transparent 68%)",
+                      WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                      WebkitMaskComposite: "xor",
+                      mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                      maskComposite: "exclude",
+                    }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.05]">
+                      <HugeiconsIcon icon={a.icon} className="h-4 w-4 text-muted-foreground" />
+                    </span>
+                    <Eyebrow>{a.label}</Eyebrow>
+                    <span className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                  <span className="text-[22px] font-semibold leading-none tabular-nums tracking-tight">
+                    {hidden ? "••••" : formatUSD(accountBalances[accountKey])}
+                  </span>
+                  {/* Three states, not two. A chart when there is movement to
+                     draw; the loading skeleton only while the history is still
+                     being computed; and NOTHING at all for an account that will
+                     never have a line — an account holding only stables has
+                     nothing to plot. Reserving the band for those left a hole
+                     in the middle of the card, and a skeleton there would be
+                     promising a chart that is never coming. */}
+                  {showSpark ? (
+                    <Sparkline series={series!} tone={tone} />
+                  ) : !series ? (
+                    <Skel className="h-8 w-full rounded-md sm:h-12" />
+                  ) : null}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">{a.sub}</span>
+                    {cardChange !== null && tone !== "flat" && !hidden ? (
+                      <ChangeText value={cardChange} className="text-[11.5px]" />
+                    ) : (
+                      <span className="text-[11.5px] font-medium tabular-nums text-muted-foreground/50">
+                        {hidden ? "••" : showSpark ? "30d" : ""}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
           )}
 
           {/* Action rail — two verbs and an overflow, no sideways scroll. */}
@@ -563,85 +882,143 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
             </button>
           </div>
 
-          {/* Where the money actually sits.
-              This was a single scrolling row of pills, each carrying a chain
-              name and a value in 12px grey — six chains competing for one line,
-              so nothing was legible and the differences between them were
-              invisible. It is a grid now: every chain on screen at once, its
-              value at a size worth reading, and a share bar making the split
-              obvious without arithmetic. Selecting one opens its address in
-              place rather than appending a chip to the end of the row. */}
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {WALLETS.map((w) => {
-              const active = w.key === selectedWallet
-              const value = chainTotals[w.key] ?? 0
-              // Share of the on-chain total, which is what these chips add up
-              // to — not of the portfolio, which includes accounts they don't.
-              const share = onChainTotal > 0 ? (value / onChainTotal) * 100 : 0
-              return (
-                <button
-                  key={w.key}
-                  onClick={() => setSelectedWallet(active ? null : w.key)}
-                  data-vivid-target={`dash-chain-${w.key}`}
-                  data-vivid-label={`Show the ${w.label} address and balance`}
-                  aria-pressed={active}
-                  className={`ws-card-glass flex flex-col gap-2 rounded-xl px-3 py-2.5 text-left ring-1 transition-all ${
-                    active
-                      ? "bg-accent/70 ring-primary/30"
-                      : "bg-card/50 ring-border/40 hover:bg-accent/50"
-                  }`}
+          {/* Network footer — the receive surface, demoted under the actions.
+              One box per chain and all six on screen at once: nothing to
+              swipe, nothing hidden off the edge. Each box carries that chain's
+              value; tap one to surface its deposit address underneath, tap
+              again to put it away. Arbitrum reuses the Ethereum address, as
+              the registry says.
+
+              The tiles themselves are the other branch's, and they are better
+              than what was here: the value set at a size worth reading rather
+              than 12px grey, and a SHARE BAR under it so the split between
+              chains is visible without doing arithmetic across six figures.
+              Two things came back the other way. The empty state below, which
+              that branch has no equivalent of — a wallet-less user was shown
+              six boxes of nothing. And the bar's colour: theirs painted it
+              gold, and gold in this system means brand, primary action or
+              active state, never a quantity. A share bar is a data mark, so it
+              is neutral ink here and the tile's gold is left to mean
+              "selected".
+
+              Breakpoints are both branches' put together: two across on a
+              phone, which is what gives the bigger figure room to sit on one
+              line, and all six across from lg, which is what keeps a footer a
+              footer on a desktop. */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <Eyebrow>Networks</Eyebrow>
+              {!needsWalletSetup && (
+                <span className="hidden text-[12px] tabular-nums text-muted-foreground lg:block">
+                  {activeAssetCount} assets · {NETWORKS.length} networks
+                </span>
+              )}
+            </div>
+            {needsWalletSetup ? (
+              /* No wallet, so there are no addresses to tap and no balances to
+                 read — the grid would be six boxes of nothing standing between
+                 this person and the one thing they need to do next. */
+              <div className="ws-card-glass flex flex-col gap-3 rounded-2xl bg-card/70 p-4 ring-1 ring-border/40 sm:flex-row sm:items-center sm:gap-4">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/[0.12]">
+                  <HugeiconsIcon icon={Wallet01Icon} className="h-5 w-5 text-primary" />
+                </span>
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="text-[15px] font-semibold">Set up your wallet to continue</span>
+                  <span className="text-[13px] leading-relaxed text-muted-foreground">
+                    It takes a minute, and it gives you an address on every network so people can
+                    send you coins.
+                  </span>
+                </div>
+                <Link
+                  href="/wallet/modern"
+                  data-vivid-target="start-wallet-setup"
+                  data-vivid-label="Set up the wallet"
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-[14px] font-semibold text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.97] motion-reduce:active:scale-100 sm:ml-auto"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <img src={w.icon} alt="" className="h-5 w-5 shrink-0 rounded-full" />
-                    <span className="truncate text-[12.5px] font-medium">{w.label}</span>
-                  </span>
-                  <span className="text-[15px] font-semibold leading-none tabular-nums">
-                    {hidden ? "••••" : formatUSD(value)}
-                  </span>
-                  {/* A chain holding nothing gets an empty track rather than a
-                      bar of zero width pretending to be a measurement. */}
-                  <span
-                    aria-hidden
-                    className="h-1 w-full overflow-hidden rounded-full bg-foreground/[0.06]"
+                  Set up wallet
+                  <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
+                </Link>
+              </div>
+            ) : (
+            <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              {WALLETS.map((w) => {
+                const active = w.key === selectedWallet
+                const chainValue = chainTotals[w.key] ?? 0
+                const value = hidden ? "••••" : formatUSD(chainValue)
+                /* Share of the ON-CHAIN total, which is what these tiles add
+                   up to — not of the hero's total, which counts Spot and
+                   Futures money that lives on no chain in this row. */
+                const share = onChainTotal > 0 ? (chainValue / onChainTotal) * 100 : 0
+                return (
+                  <button
+                    key={w.key}
+                    type="button"
+                    onClick={() => setSelectedWallet(active ? null : w.key)}
+                    data-vivid-target={`dash-chain-${w.key}`}
+                    data-vivid-label={`Show the ${w.label} address and balance`}
+                    aria-pressed={active}
+                    aria-label={`${w.label}, ${hidden ? "balance hidden" : value}`}
+                    className={`ws-card-glass flex min-h-14 min-w-0 flex-col items-start justify-between gap-2 rounded-xl px-3 py-2.5 text-left ring-1 transition-all duration-150 active:scale-[0.97] motion-reduce:active:scale-100 ${
+                      active ? "bg-accent ring-border/70" : "bg-card/60 ring-border/40 hover:bg-accent/60"
+                    }`}
                   >
-                    {share > 0 && (
-                      <span
-                        className="block h-full rounded-full bg-primary/70"
-                        style={{ width: `${Math.max(share, 3)}%` }}
-                      />
-                    )}
-                  </span>
-                </button>
-              )
-            })}
+                    <span className="flex w-full min-w-0 items-center gap-1.5">
+                      <img src={w.icon} alt="" className="h-[18px] w-[18px] shrink-0 rounded-full" />
+                      <span className="truncate text-[12.5px] font-semibold leading-tight">{w.label}</span>
+                    </span>
+                    <span className={`w-full truncate text-[15px] font-semibold leading-none tabular-nums ${active ? "text-foreground" : "text-foreground/90"}`}>
+                      {value}
+                    </span>
+                    {/* A chain holding nothing gets an empty track rather than
+                        a bar of zero width pretending to be a measurement.
+                        Hidden balances take the track away too — a visible
+                        split is still a balance. */}
+                    <span
+                      aria-hidden
+                      className="h-1 w-full overflow-hidden rounded-full bg-foreground/[0.06]"
+                    >
+                      {!hidden && share > 0 && (
+                        <span
+                          className="block h-full rounded-full bg-foreground/25"
+                          style={{ width: `${Math.max(share, 3)}%` }}
+                        />
+                      )}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            {activeChain && (
+              <div className="ws-card-glass flex min-h-11 items-center gap-3 rounded-xl bg-card/60 px-3.5 py-2 ring-1 ring-border/40 animate-in fade-in-0 slide-in-from-top-1 motion-reduce:animate-none">
+                {activeChain.addr ? (
+                  <>
+                    <span className="shrink-0 text-[12px] text-muted-foreground">{activeChain.label} address</span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-[12px]" title={activeChain.addr}>
+                      <span className="md:hidden">{truncAddr(activeChain.addr)}</span>
+                      <span className="hidden md:inline">{activeChain.addr}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(activeChain.addr, activeChain.key)}
+                      className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold transition-colors ${
+                        isCopied === activeChain.key
+                          ? "bg-credit-chip text-credit"
+                          : "bg-foreground/[0.06] hover:bg-foreground/[0.1]"
+                      }`}
+                    >
+                      <HugeiconsIcon icon={isCopied === activeChain.key ? Tick02Icon : Copy01Icon} className="h-3.5 w-3.5" />
+                      {isCopied === activeChain.key ? "Copied" : "Copy"}
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[12px] text-muted-foreground">No {activeChain.label} address yet</span>
+                )}
+              </div>
+            )}
+            </>
+            )}
           </div>
-
-          {/* The selected chain's address, in its own row so it is readable
-              rather than squeezed onto the end of a scroller. */}
-          {activeChain && activeChain.addr && (
-            <button
-              onClick={() => handleCopy(activeChain.addr, activeChain.key)}
-              className="ws-card-glass flex items-center gap-2 self-start rounded-xl bg-card/60 px-3 py-2 ring-1 ring-border/40 transition-colors hover:bg-accent"
-            >
-              <img src={activeChain.icon} alt="" className="h-4 w-4 shrink-0 rounded-full" />
-              <span className="font-mono text-[12px] text-muted-foreground">
-                {truncAddr(activeChain.addr)}
-              </span>
-              <HugeiconsIcon
-                icon={Copy01Icon}
-                className={`h-3.5 w-3.5 shrink-0 ${
-                  isCopied === activeChain.key ? "text-credit" : "text-muted-foreground/50"
-                }`}
-              />
-              <span className="text-[11px] font-medium text-muted-foreground/70">
-                {isCopied === activeChain.key ? "Copied" : "Copy"}
-              </span>
-            </button>
-          )}
-
-          <span className="text-[12px] text-muted-foreground">
-            {activeAssetCount} assets · {NETWORKS.length} networks
-          </span>
         </div>
       </div>
 
@@ -675,8 +1052,11 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
         </ResponsiveModalContent>
       </ResponsiveModal>
 
-      {/* Deposit's own surface — the wallet's addresses, per chain. */}
-      <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} />
+      {/* The receive modal used to be mounted here, because Deposit opened it
+          directly. Deposit now opens the chooser — where is this money coming
+          from — and the addresses are one of the answers it offers, so the
+          modal lives with the flow rather than being a second door onto the
+          same thing from a screen that no longer knows the question. */}
     </div>
   )
 }

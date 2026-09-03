@@ -67,7 +67,10 @@ function Row({
     read 18, which over-reported capacity by 22% and asked the pane for more
     rows than it could ever show. */
 const ROW_H = 22
-const CHROME_H = 124
+/* Bumped from 124 when the mid row traded its bracketing hairlines for a
+   sunken pill: `my-1` and the extra vertical padding add 12px of chrome, and
+   a capacity figure that over-reports asks the pane for rows it cannot show. */
+const CHROME_H = 136
 
 export function OrderBook({
   book,
@@ -149,7 +152,11 @@ export function OrderBook({
       {/* Mid — the row the whole pane hangs on. */}
       <button
         onClick={() => onPickPrice(book.midPrice)}
-        className="flex shrink-0 items-center justify-between border-y border-border/30 bg-surface-sunken/60 px-3 py-1.5 transition-colors hover:bg-accent/50"
+        /* The sunken fill IS the separation — the rows above and below sit on
+           the card's ground, this one a step below it. The hairlines that used
+           to bracket it were a second answer to a question the fill had
+           already answered. */
+        className="my-1 flex shrink-0 items-center justify-between rounded-lg bg-surface-sunken px-3 py-2 transition-colors hover:bg-accent/50"
         title="Set limit price to mid"
       >
         <span

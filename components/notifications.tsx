@@ -13,11 +13,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  Sheet,
-  SheetTrigger,
-  SheetContent,
-  SheetHeader,
-} from "@/components/ui/sheet"
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+  ResponsiveModalTrigger,
+} from "@/components/ui/responsive-modal"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 const defaultAnnouncements = [
@@ -78,10 +79,14 @@ function AnnouncementsList({
             <span className="text-xs text-muted-foreground line-clamp-2">{item.description}</span>
             <span className="text-[10px] text-muted-foreground/60">{item.time}</span>
           </div>
+          {/* Hover-to-reveal is a pointer idea: a phone has no hover, so on
+              the modal (below `md`) the dismiss button is simply there, and
+              big enough to hit. From `md` up — the popover — it goes back to
+              appearing with the row it belongs to. */}
           <button
             onClick={() => onDismiss(item.id)}
-            className="shrink-0 self-start p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent"
-            aria-label="Dismiss"
+            className="flex h-11 w-11 shrink-0 items-center justify-center self-start rounded-lg transition-opacity hover:bg-accent md:h-7 md:w-7 md:opacity-0 md:group-hover:opacity-100"
+            aria-label={`Dismiss ${item.title}`}
           >
             <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
@@ -116,28 +121,49 @@ export function NotificationBell() {
     </button>
   )
 
+  /* The panel used to rise from the bottom edge as a sheet on a phone. It
+     stopped: it is opened from a bell in the TOP bar, and a surface that
+     answers a control up there has no business arriving from the floor. It is
+     now the same centred card as every other dialog in the app — see
+     `components/ui/modal-surface.ts` for the one shape. The app launcher on
+     the mobile task bar is the sanctioned exception and keeps its sheet,
+     because that bar IS the bottom edge and rising from it is the gesture the
+     tap asked for.
+
+     No height cap of our own here. The modal already scrolls inside itself at
+     `calc(100dvh-2rem)`; a `max-h-[70vh]` on top of that would just be a
+     second, shorter answer to a question that is already settled. */
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger render={trigger} />
-        <SheetContent side="bottom" className="max-h-[70vh] rounded-t-2xl">
-          <SheetHeader>
-            <div className="flex items-center gap-2">
-              <HugeiconsIcon icon={Megaphone01Icon} className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Announcements</h3>
-              {newCount > 0 && (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
-                  {newCount}
-                </span>
-              )}
-            </div>
-          </SheetHeader>
-          <AnnouncementsList items={items} onDismiss={dismiss} />
-        </SheetContent>
-      </Sheet>
+      <ResponsiveModal open={open} onOpenChange={setOpen}>
+        <ResponsiveModalTrigger render={trigger} />
+        <ResponsiveModalContent className="gap-3 sm:max-w-sm">
+          {/* `pr-9` keeps the title and its count clear of the sticky close
+              button the modal renders for itself. */}
+          <ResponsiveModalHeader className="flex-row items-center gap-2 pr-9">
+            <HugeiconsIcon icon={Megaphone01Icon} className="h-4 w-4 shrink-0 text-primary" />
+            <ResponsiveModalTitle className="text-sm font-semibold">Announcements</ResponsiveModalTitle>
+            {newCount > 0 && (
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold tabular-nums text-primary-foreground">
+                {newCount}
+              </span>
+            )}
+          </ResponsiveModalHeader>
+          {/* Full-bleed, so the row dividers run the width of the card the way
+              they run the width of the popover. The card's own bottom padding
+              keeps the last row off the rounded corners. */}
+          <div className="-mx-4">
+            <AnnouncementsList items={items} onDismiss={dismiss} />
+          </div>
+        </ResponsiveModalContent>
+      </ResponsiveModal>
     )
   }
 
+  /* Desktop is left alone as a popover. Anchored under the bell it points at
+     the control that opened it, which is the right affordance for a glance-at
+     list and is not what the "every modal looks different" complaint was
+     about — that was the phone. */
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={trigger} />
@@ -148,7 +174,7 @@ export function NotificationBell() {
             <h3 className="text-sm font-semibold">Announcements</h3>
           </div>
           {newCount > 0 && (
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold tabular-nums text-primary-foreground">
               {newCount}
             </span>
           )}

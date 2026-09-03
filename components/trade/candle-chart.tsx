@@ -14,6 +14,13 @@
  *
  * `source` is a discriminated union so a caller cannot hand a mint to the
  * perps loader, or a perp ticker to the DEX one.
+ *
+ * Chrome: the interval switch is the house `Segmented` (one tab system, no
+ * exceptions), and an O/H/L/C readout follows the crosshair — the bar under
+ * the cursor, or the latest bar when the cursor is elsewhere — so the chart
+ * states its numbers instead of asking the eye to read them off an axis.
+ * Colours come from the design tokens at mount, not from hard-coded hexes,
+ * so the candles are the same emerald and red as every other money figure.
  */
 
 import * as React from "react"
@@ -22,14 +29,31 @@ import {
   CandlestickSeries,
   HistogramSeries,
   AreaSeries,
+  LineSeries,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
 } from "lightweight-charts"
+import { cn } from "@/lib/utils"
+import { Segmented, type SegmentedOption } from "@/components/ui/system"
 import { fetchHlCandles, type HlCandleInterval } from "@/lib/hl-public"
 
 const INTERVALS: HlCandleInterval[] = ["1m", "5m", "15m", "1h", "4h", "1d"]
 const POLL_MS = 15_000
+
+/**
+ * The two moving averages the toolbar can lay over the bars.
+ *
+ * Fast and slow, the periods every exchange chart opens with. They are
+ * COMPUTED FROM THE BARS ALREADY ON SCREEN — no second request, no upstream
+ * indicator service — so an average can never claim to describe a window the
+ * loaded series does not cover: below `period` bars it simply draws nothing.
+ */
+const MA_FAST = 7
+const MA_SLOW = 25
+
+/** Where the bars came from, in the words the reader gets. */
+export type ChartOrigin = "birdeye" | "geckoterminal" | "coingecko" | null
 
 export type ChartSource =
   /** A perpetual contract — Hyperliquid is authoritative for its own venue. */
@@ -42,13 +66,112 @@ export type ChartStats = {
   price: number | null
   changePct24h: number | null
   volume24h: number | null
+  /** The day's traded range, from the bars themselves. */
+  high24h?: number | null
+  low24h?: number | null
+  /** Other windows the same series can answer for. */
+  changePct1h?: number | null
+  changePct7d?: number | null
+}
+
+const HOUR = 60 * 60
+const DAY = 24 * HOUR
+const WEEK = 7 * DAY
+
+/**
+ * The move across a window, or `null` when the loaded series does not span it.
+ *
+ * The gate is the whole point. A 1m chart holds about sixteen hours, so asking
+ * it for a 24h change would return the sixteen-hour move under a "24h" label —
+ * the quiet wrongness this codebase refuses. Mirrors `stats24hFrom` on the
+ * server, which does the same thing for the one window it reports.
+ */
+function windowChange(candles: readonly Candle[], seconds: number): number | null {
+  if (candles.length === 0) return null
+  const last = candles[candles.length - 1]
+  const cutoff = last.time - seconds
+  if (candles[0].time > cutoff) return null
+  let reference = candles[0]
+  for (const candle of candles) {
+    if (candle.time >= cutoff) {
+      reference = candle
+      break
+    }
+  }
+  const base = reference.open || reference.close
+  if (!base) return null
+  return ((last.close - base) / base) * 100
+}
+
+/** High and low across a window, on the same "must actually span it" rule. */
+function windowRange(
+  candles: readonly Candle[],
+  seconds: number,
+): { high: number; low: number } | null {
+  if (candles.length === 0) return null
+  const last = candles[candles.length - 1]
+  const cutoff = last.time - seconds
+  if (candles[0].time > cutoff) return null
+  let high = -Infinity
+  let low = Infinity
+  for (const candle of candles) {
+    if (candle.time < cutoff) continue
+    if (candle.high > high) high = candle.high
+    if (candle.low < low) low = candle.low
+  }
+  if (!Number.isFinite(high) || !Number.isFinite(low) || high <= 0) return null
+  return { high, low }
+}
+
+/**
+ * The figures the market header shows, derived from the series that is already
+ * on screen — no second request, and nothing reported that the bars can't back.
+ *
+ * The upstream's own `stats` stays authoritative where it exists: it is
+ * computed from the full history rather than from whatever window this chart
+ * happens to be showing.
+ */
+function deriveStats(candles: readonly Candle[], upstream: ChartStats | null): ChartStats {
+  const range = windowRange(candles, DAY)
+  const last = candles.length > 0 ? candles[candles.length - 1].close : null
+  return {
+    price: upstream?.price ?? last,
+    changePct24h: upstream?.changePct24h ?? windowChange(candles, DAY),
+    volume24h: upstream?.volume24h ?? null,
+    high24h: range?.high ?? null,
+    low24h: range?.low ?? null,
+    changePct1h: windowChange(candles, HOUR),
+    changePct7d: windowChange(candles, WEEK),
+  }
 }
 
 type ChartPayload = {
   candles: Candle[]
   stats: ChartStats | null
-  source: "birdeye" | "geckoterminal" | "coingecko" | null
+  source: ChartOrigin
   intervals?: string[]
+}
+
+/**
+ * A simple moving average over the closes, as `lightweight-charts` wants it.
+ *
+ * Returns nothing at all when the series is shorter than the period. The
+ * alternative — averaging whatever bars happen to exist and calling it a
+ * 25-period line — is the quiet wrongness this file already refuses for the
+ * 24h/7d windows: a figure that looks like an answer and is not one.
+ */
+function sma(candles: readonly Candle[], period: number) {
+  if (candles.length < period) return []
+  const out: { time: UTCTimestamp; value: number }[] = []
+  let sum = 0
+  for (let i = 0; i < candles.length; i += 1) {
+    sum += candles[i].close
+    if (i >= period) sum -= candles[i - period].close
+    if (i >= period - 1) {
+      out.push({ time: candles[i].time as UTCTimestamp, value: sum / period })
+    }
+  }
+  return out
 }
 
 type Candle = {
@@ -59,6 +182,11 @@ type Candle = {
   close: number
   volume: number
 }
+
+/** What the readout shows: a full bar, or a single sampled price. */
+type Readout =
+  | { kind: "bar"; open: number; high: number; low: number; close: number; volume: number | null }
+  | { kind: "point"; value: number }
 
 /**
  * Decimals the axis should carry for a price of this size.
@@ -75,39 +203,107 @@ function priceFormatFor(price: number): { precision: number; minMove: number } {
   return { precision: 9, minMove: 0.000000001 }
 }
 
-async function loadCandles(
-  source: ChartSource,
-  interval: HlCandleInterval,
-  signal: AbortSignal,
-): Promise<ChartPayload> {
-  if (source.kind === "hyperliquid") {
-    const candles = await fetchHlCandles(source.coin, interval)
-    return { candles, stats: null, source: null }
+function fmtReadout(p: number) {
+  const { precision } = priceFormatFor(p)
+  return p.toLocaleString(undefined, { minimumFractionDigits: Math.min(precision, 2), maximumFractionDigits: precision })
+}
+
+function fmtVolume(v: number) {
+  if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`
+  if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`
+  return v.toFixed(0)
+}
+
+/**
+ * The tokens the chart paints with, read off the document so the series are
+ * literally the same colour as `text-credit` / `text-debit` beside them.
+ *
+ * Only a plain hex or rgb() value is accepted: lightweight-charts parses the
+ * colours it is given with its own parser (to derive axis-label contrast and
+ * gradient stops) and THROWS on anything else — a `color-mix()` or `oklch()`
+ * token doesn't degrade to a wrong shade, it blanks the whole canvas. So a
+ * token in any other notation falls back to the dark-theme value.
+ */
+function readPalette() {
+  const fallback = {
+    credit: "#10B981",
+    debit: "#EF4444",
+    text: "#71717A",
+    font: "system-ui, sans-serif",
   }
-  const url = new URL("/api/charts/ohlcv", window.location.origin)
-  url.searchParams.set("network", source.networkId)
-  url.searchParams.set("token", source.token)
-  url.searchParams.set("interval", interval)
-  if (source.coingeckoId) url.searchParams.set("cg", source.coingeckoId)
-  const response = await fetch(url, { signal })
-  if (!response.ok) throw new Error(`Chart source returned ${response.status}`)
-  return (await response.json()) as ChartPayload
+  if (typeof window === "undefined") return fallback
+  const css = getComputedStyle(document.documentElement)
+  const pick = (name: string, dflt: string) => {
+    const v = css.getPropertyValue(name).trim()
+    return /^#[0-9a-f]{6}$/i.test(v) || /^rgba?\(/i.test(v) ? v : dflt
+  }
+  // The body's resolved stack (next/font's generated family name), not the
+  // `var(--font-sans)` reference — a canvas font string cannot resolve one.
+  const bodyFont = getComputedStyle(document.body).fontFamily.trim()
+  return {
+    credit: pick("--credit", fallback.credit),
+    debit: pick("--debit", fallback.debit),
+    text: pick("--subtle", fallback.text),
+    font: bodyFont || fallback.font,
+  }
+}
+
+/** A colour with an alpha applied, in the rgba() form the chart can parse. */
+function withAlpha(color: string, alpha: number) {
+  const hex = color.match(/^#([0-9a-f]{6})$/i)?.[1]
+  if (hex) {
+    const n = parseInt(hex, 16)
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+  }
+  const rgb = color.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i)
+  if (rgb) return `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${alpha})`
+  return `rgba(113, 113, 122, ${alpha})`
 }
 
 export function CandleChart({
   source,
   onStats,
+  onSource,
+  toolbar = true,
   className,
 }: {
   source: ChartSource | null
   /** 24h figures from the chart's own source, for the market strip. */
   onStats?: (stats: ChartStats | null) => void
+  /** Which upstream drew these bars — the workspace states it beside the
+   *  other price sources in Pro. */
+  onSource?: (origin: ChartOrigin) => void
+  /**
+   * The workbench above the bars: the interval switch, the O/H/L/C readout and
+   * the moving-average toggle (`TradeView.chartToolbar`).
+   *
+   * Simple keeps the chart and drops all of it. The line is information — is
+   * this going up or down — and that question is answered without a single
+   * control. The toolbar is a workbench, and a workbench in front of someone
+   * buying their first $20 of a coin is furniture in a corridor. With it gone
+   * the interval stays on the hour, which is the window that reads as "today".
+   */
+  toolbar?: boolean
   className?: string
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<IChartApi | null>(null)
   const seriesRef = React.useRef<ISeriesApi<"Candlestick"> | null>(null)
   const volumeRef = React.useRef<ISeriesApi<"Histogram"> | null>(null)
+  /* The two moving averages, and the bars they are computed from. The bars are
+     held so toggling the overlay repaints from what is already loaded rather
+     than waiting out a poll — a control that takes fifteen seconds to answer
+     reads as broken. */
+  const maFastRef = React.useRef<ISeriesApi<"Line"> | null>(null)
+  const maSlowRef = React.useRef<ISeriesApi<"Line"> | null>(null)
+  const candlesRef = React.useRef<readonly Candle[]>([])
+  const [showMa, setShowMa] = React.useState(false)
+  /* Read inside the poll, which deliberately does not depend on this state —
+     restarting the request loop because someone toggled an overlay would
+     throw away the bars the overlay is drawn from. */
+  const showMaRef = React.useRef(showMa)
+  showMaRef.current = showMa
   /* A price series is not trade data and must not be drawn as candles.
      CoinGecko samples hourly, so bucketing to a 1h bar gives ONE sample per
      bar — open, high, low and close all the same number, which candlestick
@@ -121,6 +317,10 @@ export function CandleChart({
      so a 1m button there would be a control that returns nothing. */
   const [available, setAvailable] = React.useState<string[]>(INTERVALS)
   const [origin, setOrigin] = React.useState<ChartPayload["source"]>(null)
+  /* The readout. `hover` is the bar under the crosshair; `latest` is the last
+     bar loaded, shown whenever the cursor is off the chart. */
+  const [hover, setHover] = React.useState<Readout | null>(null)
+  const [latest, setLatest] = React.useState<Readout | null>(null)
   /* A fit that is owed but cannot be performed yet.
      The first candles routinely arrive while the pane still measures zero
      wide — `fitContent` against that computes a bar spacing for a chart of no
@@ -159,42 +359,82 @@ export function CandleChart({
   // `onStats` is usually an inline arrow; holding it in a ref keeps it out of
   // the effect's deps so a parent re-render can't restart the poll.
   const onStatsRef = React.useRef(onStats)
+  const onSourceRef = React.useRef(onSource)
   React.useEffect(() => {
     onStatsRef.current = onStats
+    onSourceRef.current = onSource
   })
 
-  // Create the chart once; theme-neutral colours so light and dark both work.
+  /**
+   * Paint (or clear) the moving averages from whatever bars are loaded.
+   *
+   * Neutral ink, deliberately: emerald and red mean money direction on every
+   * other surface in this app, and gold means brand or an active control. An
+   * indicator is neither, so it borrows the chart's own text colour at two
+   * weights — the slow line heavier than the fast one, which is the only
+   * distinction the eye needs when both are the same hue.
+   */
+  const paintMa = React.useCallback((on: boolean) => {
+    const fast = maFastRef.current
+    const slow = maSlowRef.current
+    if (!fast || !slow) return
+    const candles = candlesRef.current
+    fast.applyOptions({ visible: on })
+    slow.applyOptions({ visible: on })
+    fast.setData(on ? sma(candles, MA_FAST) : [])
+    slow.setData(on ? sma(candles, MA_SLOW) : [])
+  }, [])
+
+  React.useEffect(() => {
+    paintMa(showMa)
+  }, [showMa, paintMa])
+
+  /* Simple has no toolbar, so it has no way to turn an overlay back off. The
+     overlay is dropped with the controls rather than left stranded on the
+     bars of someone who cannot see why it is there. */
+  React.useEffect(() => {
+    if (!toolbar) setShowMa(false)
+  }, [toolbar])
+
+  // Create the chart once, painted with the document's own tokens.
   React.useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    const palette = readPalette()
 
     const chart = createChart(el, {
       autoSize: true,
       layout: {
         background: { color: "transparent" },
-        textColor: "#9ca3af",
+        textColor: palette.text,
+        fontFamily: palette.font,
+        fontSize: 11,
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: "rgba(148, 163, 184, 0.08)" },
-        horzLines: { color: "rgba(148, 163, 184, 0.08)" },
+        vertLines: { color: withAlpha(palette.text, 0.1) },
+        horzLines: { color: withAlpha(palette.text, 0.1) },
       },
-      rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
-      crosshair: { mode: 0 },
+      rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.22 } },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: 4 },
+      crosshair: {
+        mode: 0,
+        vertLine: { color: withAlpha(palette.text, 0.5), width: 1, style: 3, labelBackgroundColor: "#27272A" },
+        horzLine: { color: withAlpha(palette.text, 0.5), width: 1, style: 3, labelBackgroundColor: "#27272A" },
+      },
     })
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#10b981",
-      downColor: "#ef4444",
+      upColor: palette.credit,
+      downColor: palette.debit,
       borderVisible: false,
-      wickUpColor: "#10b981",
-      wickDownColor: "#ef4444",
+      wickUpColor: palette.credit,
+      wickDownColor: palette.debit,
     })
     const area = chart.addSeries(AreaSeries, {
-      lineColor: "#10b981",
+      lineColor: palette.credit,
       lineWidth: 2,
-      topColor: "rgba(16, 185, 129, 0.22)",
-      bottomColor: "rgba(16, 185, 129, 0)",
+      topColor: withAlpha(palette.credit, 0.22),
+      bottomColor: withAlpha(palette.credit, 0),
       priceLineVisible: true,
       visible: false,
     })
@@ -207,13 +447,64 @@ export function CandleChart({
       priceLineVisible: false,
     })
     chart.priceScale("volume").applyOptions({
-      scaleMargins: { top: 0.82, bottom: 0 },
+      scaleMargins: { top: 0.84, bottom: 0 },
+      visible: false,
+    })
+    /* The averages ride the price scale, hidden until asked for. Created here
+       with the rest so the toggle is one `applyOptions` rather than a series
+       being added and removed under a live chart. */
+    const maFast = chart.addSeries(LineSeries, {
+      color: withAlpha(palette.text, 0.85),
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      visible: false,
+    })
+    const maSlow = chart.addSeries(LineSeries, {
+      color: withAlpha(palette.text, 0.45),
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
       visible: false,
     })
     chartRef.current = chart
     seriesRef.current = series
     areaRef.current = area
     volumeRef.current = volume
+    maFastRef.current = maFast
+    maSlowRef.current = maSlow
+
+    // The readout follows the crosshair. Off the chart → back to the latest
+    // bar, which the load effect keeps current.
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.time || !param.point) {
+        setHover(null)
+        return
+      }
+      const bar = param.seriesData.get(series) as
+        | { open?: number; high?: number; low?: number; close?: number }
+        | undefined
+      const vol = param.seriesData.get(volume) as { value?: number } | undefined
+      if (bar && typeof bar.open === "number" && typeof bar.close === "number") {
+        setHover({
+          kind: "bar",
+          open: bar.open,
+          high: bar.high ?? bar.open,
+          low: bar.low ?? bar.close,
+          close: bar.close,
+          volume: typeof vol?.value === "number" ? vol.value : null,
+        })
+        return
+      }
+      const point = param.seriesData.get(area) as { value?: number } | undefined
+      if (point && typeof point.value === "number") {
+        setHover({ kind: "point", value: point.value })
+        return
+      }
+      setHover(null)
+    })
 
     // The chart's own `autoSize` handles resizing; this observer exists only
     // to notice the moment the pane first HAS a width.
@@ -227,6 +518,8 @@ export function CandleChart({
       seriesRef.current = null
       areaRef.current = null
       volumeRef.current = null
+      maFastRef.current = null
+      maSlowRef.current = null
     }
   }, [settleFit])
 
@@ -246,32 +539,40 @@ export function CandleChart({
     let first = true
     setState("loading")
     setAvailable(INTERVALS)
+    setHover(null)
+    setLatest(null)
+    const palette = readPalette()
 
     const load = async () => {
       try {
         const payload = await loadCandles(source, interval, controller.signal)
         const { candles, stats } = payload
         if (cancelled || !seriesRef.current) return
-        onStatsRef.current?.(stats)
+        onStatsRef.current?.(deriveStats(candles, stats))
         setOrigin(payload.source)
+        onSourceRef.current?.(payload.source)
         if (payload.intervals?.length) setAvailable(payload.intervals)
         if (candles.length === 0) {
           // Only claim "no data" on the FIRST answer. A later empty response
           // is an upstream wobble, and blanking a chart the user is reading
           // is worse than leaving the last bars up.
           if (first) {
+            candlesRef.current = []
             seriesRef.current.setData([])
             areaRef.current?.setData([])
             volumeRef.current?.setData([])
+            paintMa(false)
             setState("empty")
           }
           return
         }
+        candlesRef.current = candles
         // Sized from the data, not the source: the same series can be BTC or a
         // token nine decimals below a cent.
+        const last = candles[candles.length - 1]
         const priceFormat = {
           type: "price" as const,
-          ...priceFormatFor(candles[candles.length - 1].close),
+          ...priceFormatFor(last.close),
         }
         // A sampled price line gets a line. Only a source that reports real
         // per-bar OHLC earns candlesticks.
@@ -284,6 +585,7 @@ export function CandleChart({
             candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close })),
           )
           seriesRef.current.setData([])
+          setLatest({ kind: "point", value: last.close })
         } else {
           seriesRef.current.setData(
             candles.map((c) => ({
@@ -295,6 +597,14 @@ export function CandleChart({
             })),
           )
           areaRef.current?.setData([])
+          setLatest({
+            kind: "bar",
+            open: last.open,
+            high: last.high,
+            low: last.low,
+            close: last.close,
+            volume: last.volume,
+          })
         }
         volumeRef.current?.setData(
           // A price series carries no volume, so the histogram stays empty
@@ -305,9 +615,14 @@ export function CandleChart({
                 time: c.time as UTCTimestamp,
                 value: c.volume,
                 color:
-                  c.close >= c.open ? "rgba(16, 185, 129, 0.35)" : "rgba(239, 68, 68, 0.35)",
+                  c.close >= c.open
+                    ? withAlpha(palette.credit, 0.35)
+                    : withAlpha(palette.debit, 0.35),
               })),
         )
+        // Repaint from the bars that just landed, so the overlay tracks the
+        // poll instead of freezing at whatever it was drawn from first.
+        paintMa(showMaRef.current)
         setState("ready")
         if (first) {
           first = false
@@ -328,47 +643,107 @@ export function CandleChart({
       clearInterval(id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceKey, interval, settleFit])
+  }, [sourceKey, interval, settleFit, paintMa])
+
+  const intervalOptions = React.useMemo<SegmentedOption<HlCandleInterval>[]>(
+    () =>
+      INTERVALS.map((i) => ({
+        key: i,
+        label: i,
+        disabled: !available.includes(i),
+        disabledReason: "Not available for this token's price source",
+      })),
+    [available],
+  )
+
+  const readout = hover ?? latest
 
   return (
-    <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`}>
-      <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto px-2 pt-2">
-        {INTERVALS.map((i) => {
-          const usable = available.includes(i)
-          return (
-            <button
-              key={i}
-              onClick={() => setIntervalKey(i)}
-              disabled={!usable}
-              title={usable ? undefined : "Not available for this token's price source"}
-              data-vivid-target={`chart-interval-${i}`}
-              data-vivid-label={`Show the ${i} candle interval`}
-              className={`shrink-0 rounded-md px-2.5 py-2 text-xs font-semibold transition-colors lg:py-1 ${
-                interval === i
-                  ? "bg-accent text-foreground"
-                  : usable
-                    ? "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                    : "cursor-not-allowed text-subtle/40"
-              }`}
+    <div className={cn("relative flex h-full min-h-0 flex-col overflow-hidden", className)}>
+      {/* Toolbar: intervals on the left, the readout beside them, source note
+          on the right. Wraps on narrow panes rather than clipping.
+          Pro only — see the `toolbar` prop. */}
+      {toolbar && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 px-4 pt-3.5 pb-1">
+          <Segmented
+            size="sm"
+            value={interval}
+            onChange={setIntervalKey}
+            options={intervalOptions}
+            vividPrefix="chart-interval"
+          />
+
+          {/* Moving averages. Not a Segmented — this is a two-state switch on
+              an overlay, not a choice between views, and the one tab system is
+              for choices. Neutral when off, raised when on; never gold, which
+              on this screen is reserved for the brand and the primary CTA. */}
+          <button
+            type="button"
+            onClick={() => setShowMa((v) => !v)}
+            aria-pressed={showMa}
+            data-vivid-target="chart-moving-averages"
+            data-vivid-label="Show or hide the moving averages over the bars"
+            title={`Moving averages over ${MA_FAST} and ${MA_SLOW} bars`}
+            className={cn(
+              "inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[11px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
+              showMa
+                // The Segmented thumb's own fill, so an overlay that is ON reads
+                // as the same "raised" state as a selected tab.
+                ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/[0.08] dark:bg-accent"
+                : "bg-surface-sunken text-muted-foreground hover:text-foreground",
+            )}
+          >
+            MA {MA_FAST}/{MA_SLOW}
+          </button>
+
+          {readout && state === "ready" && (
+            /* Below sm the readout is withheld, and this is the deliberate
+               shape of Pro on a phone: the toolbar is already two controls wide
+               at 375px, a third element wraps it onto a second line, and every
+               line it takes comes out of a chart pane that is only 44dvh tall.
+               The readout is also the most redundant thing in the row there —
+               with no cursor to hover there is no bar to inspect, so it can only
+               repeat the latest close, which the header states in full above. */
+            <span
+              aria-live="off"
+              className="hidden min-w-0 items-center gap-x-3 text-[11px] tabular-nums text-muted-foreground sm:flex"
             >
-              {i}
-            </button>
-          )
-        })}
-        {/* Say where the bars came from. A price series is not trade data, and
-            a chart that looks identical either way should admit which it is. */}
-        {origin === "coingecko" && (
-          <span className="ml-auto hidden shrink-0 pr-2 text-[10px] font-medium text-subtle sm:inline">
-            CoinGecko · price history
-          </span>
-        )}
-      </div>
-      <div ref={containerRef} className="min-h-0 flex-1" />
+              {readout.kind === "bar" ? (
+                <>
+                  <Figure label="O" value={fmtReadout(readout.open)} />
+                  <Figure label="H" value={fmtReadout(readout.high)} />
+                  <Figure label="L" value={fmtReadout(readout.low)} />
+                  <Figure
+                    label="C"
+                    value={fmtReadout(readout.close)}
+                    tone={readout.close >= readout.open ? "credit" : "debit"}
+                  />
+                  {readout.volume !== null && (
+                    <Figure label="Vol" value={fmtVolume(readout.volume)} className="hidden sm:inline-flex" />
+                  )}
+                </>
+              ) : (
+                <Figure label="Price" value={fmtReadout(readout.value)} />
+              )}
+            </span>
+          )}
+
+          {/* Say where the bars came from. A price series is not trade data, and
+              a chart that looks identical either way should admit which it is. */}
+          {origin === "coingecko" && (
+            <span className="ml-auto hidden shrink-0 text-[10.5px] font-medium text-subtle sm:inline">
+              Price history from CoinGecko
+            </span>
+          )}
+        </div>
+      )}
+      <div ref={containerRef} className={cn("min-h-0 flex-1", !toolbar && "pt-2")} />
 
       {state !== "ready" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           {state === "loading" ? (
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            // Neutral, never gold: a spinner is not a brand moment.
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground/70" />
           ) : (
             <p className="max-w-xs px-6 text-center text-xs leading-relaxed text-muted-foreground">
               No price history for this token yet — it isn&apos;t in an indexed
@@ -379,4 +754,51 @@ export function CandleChart({
       )}
     </div>
   )
+}
+
+/** One letter + one figure in the readout. */
+function Figure({
+  label,
+  value,
+  tone,
+  className,
+}: {
+  label: string
+  value: string
+  tone?: "credit" | "debit"
+  className?: string
+}) {
+  return (
+    <span className={cn("inline-flex items-baseline gap-1", className)}>
+      <span className="text-[10px] font-semibold text-subtle">{label}</span>
+      <span
+        className={cn(
+          "font-medium text-foreground/80",
+          tone === "credit" && "text-credit",
+          tone === "debit" && "text-debit",
+        )}
+      >
+        {value}
+      </span>
+    </span>
+  )
+}
+
+async function loadCandles(
+  source: ChartSource,
+  interval: HlCandleInterval,
+  signal: AbortSignal,
+): Promise<ChartPayload> {
+  if (source.kind === "hyperliquid") {
+    const candles = await fetchHlCandles(source.coin, interval)
+    return { candles, stats: null, source: null }
+  }
+  const url = new URL("/api/charts/ohlcv", window.location.origin)
+  url.searchParams.set("network", source.networkId)
+  url.searchParams.set("token", source.token)
+  url.searchParams.set("interval", interval)
+  if (source.coingeckoId) url.searchParams.set("cg", source.coingeckoId)
+  const response = await fetch(url, { signal })
+  if (!response.ok) throw new Error(`Chart source returned ${response.status}`)
+  return (await response.json()) as ChartPayload
 }

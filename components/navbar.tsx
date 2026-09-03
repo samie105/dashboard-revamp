@@ -19,12 +19,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  Sheet,
-  SheetTrigger,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+  ResponsiveModalTrigger,
+} from "@/components/ui/responsive-modal"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/components/auth-provider"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -86,39 +86,47 @@ export function Navbar() {
   const email = user?.email || ""
   const initials = displayName.charAt(0).toUpperCase()
 
-  /* ── Shared profile content ── */
-  const profileContent = (
-    <div className="flex flex-col gap-1 py-1">
-      <div className="flex items-center gap-2.5 px-2 py-2">
-        <div className="relative">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={user?.imageUrl} alt={displayName} />
-            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">{initials}</AvatarFallback>
-          </Avatar>
-          <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border-[1.5px] border-background bg-emerald-500" />
-        </div>
-        <div className="flex flex-col">
-          <p className="text-sm font-semibold leading-none">{displayName}</p>
-          <p className="text-[11px] leading-none text-muted-foreground mt-0.5">{email}</p>
-        </div>
-      </div>
-      <div className="h-px bg-border/15 mx-1" />
-      <a href="/profile" className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors">
-        <HugeiconsIcon icon={User} className="h-3.5 w-3.5" />
+  /* ── The account menu ──────────────────────────────────────────────────
+     One set of rows, worn by two frames: a centred modal on a phone and a
+     popover on a laptop. The two frames never coexist — `useIsMobile` splits
+     at 768px, which is exactly Tailwind's `md` — so the base classes size a
+     row for a thumb (44px minimum) and the `md:` overrides hand it back the
+     tighter measurements a pointer wants. Nothing here is width-aware at
+     runtime; the branch below decides which frame renders. */
+  const menuRow =
+    "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 text-[13px] font-medium transition-colors md:min-h-0 md:py-1.5 md:text-xs"
+  const menuIcon = "h-4 w-4 shrink-0 md:h-3.5 md:w-3.5"
+
+  const profileMenu = (
+    <div className="flex flex-col gap-1">
+      <a href="/profile" className={`${menuRow} text-muted-foreground hover:bg-accent/40 hover:text-foreground`}>
+        <HugeiconsIcon icon={User} className={menuIcon} />
         Profile
       </a>
-      <a href="/settings" className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors">
-        <HugeiconsIcon icon={Settings} className="h-3.5 w-3.5" />
+      <a href="/settings" className={`${menuRow} text-muted-foreground hover:bg-accent/40 hover:text-foreground`}>
+        <HugeiconsIcon icon={Settings} className={menuIcon} />
         Settings
       </a>
-      <div className="h-px bg-border/15 mx-1" />
+      <div className="mx-1 h-px bg-border/15" />
       <button
+        type="button"
         onClick={() => signOut()}
-        className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors"
+        className={`${menuRow} text-red-500 hover:bg-red-500/10`}
       >
-        <HugeiconsIcon icon={LogOut} className="h-3.5 w-3.5" />
+        <HugeiconsIcon icon={LogOut} className={menuIcon} />
         Log out
       </button>
+    </div>
+  )
+
+  /** The person, drawn once — it heads both frames. */
+  const profileIdentity = (
+    <div className="relative shrink-0">
+      <Avatar className="h-9 w-9 md:h-8 md:w-8">
+        <AvatarImage src={user?.imageUrl} alt={displayName} />
+        <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">{initials}</AvatarFallback>
+      </Avatar>
+      <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border-[1.5px] border-background bg-emerald-500" />
     </div>
   )
 
@@ -165,21 +173,28 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* The portfolio total — the same figure, from the same hook, as the
-          dashboard hero. Masked by the same eye button, and withheld until it
-          has loaded so it never flashes a $0.00 it would have to correct. */}
+      {/* The crypto total — the same figure, from the same hook, as the
+          dashboard hero and the portfolio page. Masked by the same eye button,
+          and withheld until it has loaded so it never flashes a $0.00 it would
+          have to correct.
+
+          Named "crypto", not "portfolio". This figure is Holdings + Spot +
+          Futures and deliberately leaves out the Dollar Account, which is a
+          separate product; a pill in the top bar reading "total portfolio
+          value" over a number that excludes someone's dollars is the same
+          confusion the dashboard's own label was renamed to fix. */}
       {!totalLoading && (
         <Link
           href="/wallet/modern"
           className="ws-nav-glass hidden h-10 shrink-0 items-center gap-2 rounded-full bg-card/35 px-3.5 ring-1 ring-border/50 backdrop-blur-xl transition-colors hover:bg-card/60 lg:flex"
-          title="Total portfolio value"
+          title="Total crypto balance — your Dollar Account is separate"
         >
           <HugeiconsIcon
             icon={Wallet01Icon}
             aria-hidden
             className="h-4 w-4 text-muted-foreground/70"
           />
-          <span className="sr-only">Total portfolio value:</span>
+          <span className="sr-only">Total crypto balance:</span>
           <span className="text-[13px] font-semibold tabular-nums">
             {hidden
               ? "$••••"
@@ -210,22 +225,54 @@ export function Navbar() {
         <NavbarActions />
         <div className="mx-0.5 h-4 w-px bg-border/60" />
 
-        {/* Profile — bottom sheet on mobile, popover on desktop */}
+        {/* Profile — the house modal on mobile, popover on desktop.
+            This used to rise from the bottom edge as a sheet. It stopped,
+            because a menu opened from a control in the TOP bar has no
+            relationship to the floor of the screen, and every other dialog in
+            the app is now one centred card (`components/ui/modal-surface.ts`).
+            The app launcher on the mobile task bar keeps its sheet, and that
+            is not an inconsistency: it hangs off a bar welded to the bottom
+            edge, so rising from that edge is the gesture it answers. This
+            hangs off the top.
+            Desktop stays a popover on purpose — anchored to the avatar it
+            points at the thing it belongs to, which a centred card cannot. */}
         {isMobile ? (
-          <Sheet open={profileOpen} onOpenChange={setProfileOpen}>
-            <SheetTrigger render={profileTrigger} />
-            <SheetContent side="bottom" className="max-h-[60vh] rounded-t-2xl">
-              <SheetHeader>
-                <SheetTitle className="text-sm">Account</SheetTitle>
-              </SheetHeader>
-              <div className="px-2 pb-6">{profileContent}</div>
-            </SheetContent>
-          </Sheet>
+          <ResponsiveModal open={profileOpen} onOpenChange={setProfileOpen}>
+            <ResponsiveModalTrigger render={profileTrigger} />
+            <ResponsiveModalContent className="gap-3 sm:max-w-sm">
+              {/* The identity block IS the dialog's title, so a screen reader
+                  announces whose account this is rather than the word
+                  "Account". `pr-9` keeps a long email out from under the
+                  sticky close button the modal renders for itself. */}
+              <ResponsiveModalHeader className="flex-row items-center gap-3 pr-9">
+                {profileIdentity}
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <ResponsiveModalTitle className="truncate text-sm font-semibold">
+                    {displayName}
+                  </ResponsiveModalTitle>
+                  {email && (
+                    <span className="truncate text-[11px] leading-none text-muted-foreground">{email}</span>
+                  )}
+                </div>
+              </ResponsiveModalHeader>
+              {profileMenu}
+            </ResponsiveModalContent>
+          </ResponsiveModal>
         ) : (
           <Popover open={profileOpen} onOpenChange={setProfileOpen}>
             <PopoverTrigger render={profileTrigger} />
             <PopoverContent className="w-52 rounded-xl border-0 bg-popover p-1.5 shadow-xl shadow-black/40 ring-1 ring-border/40" align="end" sideOffset={8}>
-              {profileContent}
+              <div className="flex flex-col gap-1 py-1">
+                <div className="flex items-center gap-2.5 px-2 py-2">
+                  {profileIdentity}
+                  <div className="flex min-w-0 flex-col">
+                    <p className="truncate text-sm font-semibold leading-none">{displayName}</p>
+                    <p className="mt-0.5 truncate text-[11px] leading-none text-muted-foreground">{email}</p>
+                  </div>
+                </div>
+                <div className="mx-1 h-px bg-border/15" />
+                {profileMenu}
+              </div>
             </PopoverContent>
           </Popover>
         )}

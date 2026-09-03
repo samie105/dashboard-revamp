@@ -31,16 +31,13 @@ export const PAGE_CONTEXT: Record<string, PageInfo> = {
     actions:
       "Switch balance view, copy a wallet address, open Deposit or Withdraw (modal), go to Swap/Trade/History, star coins on the watchlist.",
   },
+  /* One entry, because there is now one page: Assets merged into Portfolio. */
   "/portfolio": {
     name: "Portfolio",
     summary:
-      "The portfolio breakdown — total value, per-account split (on-chain, spot, futures), per-chain balances and performance.",
-    actions: "Inspect balances per account and chain; jump to deposit, swap, or trade.",
-  },
-  "/assets": {
-    name: "Assets",
-    summary: "Every asset held — on-chain tokens and spot balances with quantities, USD values and quick actions.",
-    actions: "Review holdings, jump into a trade or swap for a specific asset.",
+      "Everything the user owns, on one screen: a net-worth hero summing every account, then tabs — Holdings (every token on every chain, with an allocation ring and per-token send/receive), Trading (spot account value, available and in-orders, plus holdings and markets), Futures (not open yet), and Addresses (the receiving address for each chain). A watchlist of followed coins sits alongside.",
+    actions:
+      "Switch between Holdings, Trading, Futures and Addresses; search or add a token; send or receive an asset; copy a chain address; add or remove watchlist coins; jump to deposit, swap or trade.",
   },
   "/transactions": {
     name: "Transaction history",

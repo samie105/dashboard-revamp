@@ -36,6 +36,7 @@ import { AuthProvider } from "@/components/auth-provider"
 import { AuthGate } from "@/components/auth-gate"
 import { WalletProvider } from "@/components/wallet-provider"
 import { WalletModeProvider } from "@/components/wallet-mode-provider"
+import { UiModeProvider } from "@/components/ui-mode-provider"
 import { CryptoQueryProvider } from "@/components/crypto/query-provider"
 import { CryptoProvider } from "@/components/crypto/CryptoProvider"
 
@@ -46,7 +47,10 @@ const publicSans = Public_Sans({subsets:['latin'],variable:'--font-sans'})
 // Headlines and hero figures lead with it; body/labels stay Public Sans.
 // 300 is load-bearing: the design system's hero Balance is Poppins LIGHT —
 // without this weight the browser substitutes 600 and the figure turns bold.
-const poppins = Poppins({ subsets: ["latin"], weight: ["300", "600", "700", "800"], variable: "--font-display" })
+// 500 is load-bearing too: the dashboard total sits between the light hero
+// cut and Semibold, and without the real Medium the browser snaps 500 to one
+// of its neighbours or fakes it.
+const poppins = Poppins({ subsets: ["latin"], weight: ["300", "500", "600", "700", "800"], variable: "--font-display" })
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
@@ -57,6 +61,16 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { LayoutShell } from "@/components/layout-shell"
 import { VividVoiceProvider } from "@/components/vivid-provider"
 import { LocalClerkConfigurationNotice } from "@/components/auth/local-clerk-configuration-notice"
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+
+// Under the dev bypass, ClerkProvider must not mount at all: clerk-js boots in
+// the browser with the production, domain-locked key and floods the console
+// with origin/403 errors it can never resolve on localhost. The server seams
+// are already mocked, and AuthProvider skips Clerk's hooks when the flag is on.
+function MaybeClerk({ children }: { children: React.ReactNode }) {
+  if (DEV_AUTH_BYPASS) return <>{children}</>
+  return <ClerkProvider signInUrl="/login" signUpUrl="/register">{children}</ClerkProvider>
+}
 
 export default function RootLayout({
   children,
@@ -70,7 +84,7 @@ export default function RootLayout({
     // with a primary that was this very app. `useUser().isLoaded` never flipped
     // true and every visit hung on "Verifying identity…". Satellite config
     // belongs only on academy/vision/arcade, which point back here.
-    <ClerkProvider signInUrl="/login" signUpUrl="/register">
+    <MaybeClerk>
       <html
         lang="en"
         suppressHydrationWarning
@@ -86,6 +100,11 @@ export default function RootLayout({
                     <AuthGate>
                       <WalletProvider>
                       <WalletModeProvider>
+                      {/* Simple/Pro sits inside AuthProvider (it keys the
+                          preference by user) and outside LayoutShell, because
+                          /trade is full-bleed and renders outside the shell's
+                          sidebar branch but still reads the mode. */}
+                      <UiModeProvider>
 
                       <TooltipProvider>
                         <VividVoiceProvider>
@@ -93,6 +112,7 @@ export default function RootLayout({
                         </VividVoiceProvider>
                       </TooltipProvider>
 
+                      </UiModeProvider>
                       </WalletModeProvider>
                       </WalletProvider>
                     </AuthGate>
@@ -103,6 +123,6 @@ export default function RootLayout({
           </ThemeProvider>
         </body>
       </html>
-    </ClerkProvider>
+    </MaybeClerk>
   )
 }

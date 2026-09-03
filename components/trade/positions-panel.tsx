@@ -45,6 +45,7 @@ export function PositionsPanel({
   onClosePosition,
   onCancelOrder,
   className,
+  style,
   hideTabs = false,
   tab: controlledTab,
 }: {
@@ -53,6 +54,8 @@ export function PositionsPanel({
   onClosePosition: (symbol: string) => void
   onCancelOrder: (oid: number, symbol: string, market: "spot" | "futures") => void
   className?: string
+  /** For the workspace's pane-entrance custom properties. */
+  style?: React.CSSProperties
   /** The mobile pane supplies its own tab strip, so the panel drops its own
    *  rather than stacking two rows of tabs. */
   hideTabs?: boolean
@@ -68,12 +71,15 @@ export function PositionsPanel({
   return (
     <div
       className={cn("flex min-h-0 flex-col", className)}
+      style={style}
       data-vivid-target="positions-panel"
       data-vivid-label="Open positions and resting orders"
     >
       {/* Tab strip — the house Segmented, so this reads like every other tab
-          set in the app rather than inventing an underline idiom. */}
-      <div className={cn("flex items-center border-b border-border/30 px-2 py-1.5", hideTabs && "hidden")}>
+          set in the app rather than inventing an underline idiom. Separated
+          from the table by fill and space, not a hairline, which is the same
+          treatment the orders pane and the mobile strip beside it now get. */}
+      <div className={cn("flex items-center px-3 pt-3 pb-2", hideTabs && "hidden")}>
         <Segmented
           size="sm"
           value={tab}
@@ -93,7 +99,7 @@ export function PositionsPanel({
             </p>
           ) : (
             <table className="w-full">
-              <thead className="sticky top-0 bg-background">
+              <thead className="sticky top-0 z-10 bg-card">
                 <tr className="border-b border-border/20">
                   <th className={TH}>Contract</th>
                   <th className={TH}>Size</th>
@@ -165,7 +171,7 @@ export function PositionsPanel({
           </p>
         ) : (
           <table className="w-full">
-            <thead className="sticky top-0 bg-background">
+            <thead className="sticky top-0 z-10 bg-card">
               <tr className="border-b border-border/20">
                 <th className={TH}>Market</th>
                 <th className={TH}>Side</th>

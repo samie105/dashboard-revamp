@@ -174,6 +174,12 @@ export function WalletSecurityModal({
     return () => clearTimeout(id)
   }, [open])
 
+  /* Every row is listed outright. "Add new networks" and "Move an account to
+     another app" used to sit behind a "Show advanced options" disclosure for
+     anyone in Simple mode, and that came off with the wallet's Simple/Pro
+     switch in the 2026-09-03 review: a security list that folds away half
+     its doors is how somebody ends up at support asking where their export
+     went. The subtitles carry the warning instead of the fold. */
   const entries = networksToAdd > 0 ? [NETWORKS_ENTRY, ...ENTRIES] : ENTRIES
   const onMenu = view === "menu"
 

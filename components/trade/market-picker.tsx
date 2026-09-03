@@ -41,8 +41,12 @@ import { useMarketPrefs } from "@/hooks/useMarketPrefs"
    end or by asking. */
 const PAGE_SIZE = 60
 
+/** Same pinned-decimal rule as the market header: a money column that changes
+ *  its digit count doesn't line up, tabular numerals or not. */
 function fmtPx(p: number) {
-  return p.toLocaleString(undefined, { maximumFractionDigits: p < 1 ? 6 : 2 })
+  return p < 1
+    ? p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })
+    : p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 /** A market row. The star is a sibling button, not nested inside the row's. */
@@ -65,16 +69,19 @@ function MarketRow({
   const isFutures = "maxLeverage" in market
   const networkNote = network ? ` on ${network}` : ""
   return (
+    // Two lines per row — the ListRow idiom: identity on the first, where it
+    // trades on the second, the figure on the right. One line tried to carry
+    // symbol, quote, chain chip and price and truncated the symbol ("W…") to
+    // make room for the chips, which is the one thing a market row must not
+    // lose. The active row wears a slim gold rail: gold means "active" here.
     <div
       className={cn(
-        "group relative flex items-center transition-colors",
+        "group relative flex items-center gap-1 pr-2 transition-colors",
         active ? "bg-accent" : "hover:bg-accent/50",
       )}
     >
-      {/* The active pair gets a rail marker. In a list of 9,000 rows, a
-          background tint alone is easy to lose. */}
       {active && (
-        <span aria-hidden className="absolute inset-y-1 left-0 w-[3px] rounded-r-full bg-primary" />
+        <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-primary" />
       )}
       <button
         role="option"
@@ -83,36 +90,32 @@ function MarketRow({
         data-vivid-target={`pick-pair-${rowKey}`}
         data-vivid-label={`Switch to the ${market.symbol} market${networkNote}`}
         onClick={() => onSelect(rowKey)}
-        className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-3 pr-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
       >
         <CoinAvatar
           symbol={"coinName" in market ? market.coinName : market.symbol}
           src={"icon" in market ? market.icon : undefined}
-          size="md"
+          size="lg"
         />
-        {/* The PAIR gets its own line and the width to be read.
-            Everything used to sit on one: avatar, symbol, quote, chain badge
-            and price, in a 260px rail — so the symbol truncated to a letter
-            and an ellipsis while the price took the space. The identity of the
-            market is the reason this list exists; the price is a detail about
-            it, and now reads like one. */}
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-none">
-          <span className="flex min-w-0 items-baseline gap-1">
+        <span className="flex min-w-0 flex-1 flex-col leading-tight">
+          <span className="flex items-center gap-1.5">
             <span className="truncate text-[13.5px] font-semibold">{market.symbol}</span>
-            <span className="shrink-0 text-[11px] font-medium text-subtle">
-              /{isFutures ? "PERP" : quoteOf(market)}
-            </span>
+            {/* Neutral, not gold: the leverage a contract offers is a fact
+               about the row, and gold on this screen means brand, primary CTA
+               or active state — the row's own selected indicator is already
+               spending it two elements away. */}
             {isFutures && (
-              <span className="shrink-0 rounded bg-primary/[0.12] px-1 py-px text-[9px] font-bold text-primary">
+              <span className="shrink-0 rounded bg-foreground/[0.08] px-1 py-0.5 text-[9px] font-bold text-muted-foreground">
                 {market.maxLeverage}×
               </span>
             )}
           </span>
-          {network && (
-            <span className="truncate text-[10.5px] text-subtle">{network}</span>
-          )}
+          <span className="truncate text-[11px] text-muted-foreground">
+            {isFutures ? "Perpetual" : quoteOf(market)}
+            {network && <> · {network}</>}
+          </span>
         </span>
-        <span className="shrink-0 pl-1 text-right text-[12px] tabular-nums text-muted-foreground">
+        <span className="shrink-0 text-[12.5px] font-medium tabular-nums text-foreground/85">
           ${fmtPx(market.price)}
         </span>
       </button>
@@ -303,7 +306,7 @@ export function MarketPicker({
           // registry looks identical here; the ticket carries the honest
           // "markets are unavailable" message, this list only holds space.
           Array.from({ length: isRail ? 12 : 6 }).map((_, i) => (
-            <div key={i} className="mx-3 my-1.5 h-9 animate-pulse rounded-lg bg-surface-sunken/70" />
+            <div key={i} className="mx-3 my-1.5 h-11 animate-pulse rounded-xl bg-surface-sunken/70" />
           ))
         ) : results.length === 0 ? (
           <div className="px-3 py-8 text-center">

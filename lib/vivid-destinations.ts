@@ -31,22 +31,31 @@ export const DESTINATIONS: Destination[] = [
     label: "Dashboard home",
     url: "/",
     external: false,
+    /* Kept accurate deliberately: this string is how the assistant knows what
+       is on the page, so a stale one makes it describe a screen that no longer
+       exists. It used to promise "Total/Main/Spot/Futures views" — Main is now
+       Holdings, Futures is shut, and the views became cards that only appear
+       once an account is in use. */
     description:
-      "The main dashboard — total balance hero with Total/Main/Spot/Futures views, per-chain wallet strip, Deposit/Withdraw/Swap/Trade/History actions, holdings, watchlist and market movers. The default 'home'.",
+      "The crypto dashboard — a Total crypto balance hero (Holdings + Spot + Futures, NOT cash) with the Dollar Account's cash balance on a separate line beneath it. Account cards appear only once that account is in use, so a new user may see none. Deposit asks first whether the money comes from the Dollar Account or as crypto; Withdraw goes straight to sending crypto out, because cash withdrawals are closed until there is a treasury. Also a per-chain network strip, activity, holdings, watchlist, market movers and a compact swap desk. The default 'home'.",
   },
+  /* Assets merged into Portfolio. Both ids are kept and point at the one
+     page: "take me to my assets" is still what people say, and an id that
+     stops resolving is a request Vivid can no longer answer. */
   {
     id: "portfolio",
     label: "Portfolio",
     url: "/portfolio",
     external: false,
-    description: "Portfolio breakdown — balances by account and chain, allocation, and performance.",
+    description:
+      "Everything the user owns — net worth, holdings on every chain, the trading account, and a receiving address per chain.",
   },
   {
     id: "assets",
     label: "Assets",
-    url: "/assets",
+    url: "/portfolio",
     external: false,
-    description: "Every asset the user holds — on-chain tokens and spot balances, with values and actions.",
+    description: "Every asset the user holds — the Holdings tab of the portfolio.",
   },
   {
     id: "transactions",
