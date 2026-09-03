@@ -7,12 +7,14 @@ import { generateAccountKey, signEd25519Message } from "./key-generation"
 import {
   derivePrfWrappingKey,
   derivePassphraseWrappingKey,
+  derivePinWrappingKey,
   deriveRecoveryWrappingKey,
   decryptKeyMaterial,
   encryptKeyMaterial,
   fingerprint,
   PASSKEY_PRF_SALT,
   WALLET_PASSPHRASE_KDF_ITERATIONS,
+  WALLET_PIN_KDF_ITERATIONS,
   unwrapDek,
   wrapDek,
 } from "./package-crypto"
@@ -41,6 +43,14 @@ type PackageEnvelope = {
 function packageEnvelopes(packageValue: CryptoWalletPackageDocument | CryptoWalletPackage) {
   return (Array.isArray(packageValue.envelopes) ? packageValue.envelopes : []) as PackageEnvelope[]
 }
+
+function validatePin(pin: string) {
+  if (!/^\d{6,12}$/.test(pin)) throw new Error("Use a 6 to 12 digit PIN")
+}
+
+const pinFailures = new Map<string, { count: number; lockedUntil: number }>()
+const PIN_MAX_ATTEMPTS = 5
+const PIN_LOCK_MS = 60_000
 
 async function unwrapRecoveryDek(envelope: PackageEnvelope, secret: Uint8Array) {
   try {
@@ -79,7 +89,7 @@ export async function authenticateAndUnlockWallet(
   const salt = typeof metadata.salt === "string" ? fromBase64Url(metadata.salt) : undefined
   const wrappingKey = await derivePrfWrappingKey(authentication.prfOutput, salt)
   const dek = await unwrapDek(envelope.wrappedDek, envelope.iv, wrappingKey, envelope.aad)
-  setUnlockedWalletState(userId, walletId, dek, authentication.expiresIn * 1000)
+  setUnlockedWalletState(userId, walletId, dek)
   dek.fill(0)
 
   return {
@@ -114,7 +124,7 @@ export async function unlockWalletWithRecoverySecret(
     }
     throw new WalletUnlockError(error instanceof Error ? error.message : "Wallet unlock failed", "unlock-failed")
   }
-  setUnlockedWalletState(userId, walletId, dek, 5 * 60_000)
+  setUnlockedWalletState(userId, walletId, dek)
   dek.fill(0)
   secret.fill(0)
   return packageValue
@@ -144,7 +154,7 @@ export async function unlockWalletWithPassphrase(
     salt = fromBase64Url(metadata.salt)
     wrappingKey = await derivePassphraseWrappingKey(passphrase.trim(), salt, iterations)
     const dek = await unwrapDek(envelope.wrappedDek, envelope.iv, wrappingKey, envelope.aad)
-    setUnlockedWalletState(userId, walletId, dek, 5 * 60_000)
+    setUnlockedWalletState(userId, walletId, dek)
     dek.fill(0)
     return packageValue
   } catch (error) {
@@ -156,6 +166,69 @@ export async function unlockWalletWithPassphrase(
     wipeBytes(salt)
     wipeBytes(wrappingKey)
   }
+}
+
+export async function unlockWalletWithPin(userId: string, walletId: string, packageValue: CryptoWalletPackageDocument, pin: string) {
+  validatePin(pin)
+  const attemptKey = `${userId}:${walletId}`
+  const previous = pinFailures.get(attemptKey)
+  if (previous && previous.lockedUntil > Date.now()) throw new WalletUnlockError("Too many incorrect PIN attempts. Try again in one minute or use your passphrase.", "unlock-failed")
+  const envelope = packageEnvelopes(packageValue).find((candidate) => candidate.purpose === "pin")
+  if (!envelope) throw new WalletUnlockError("No PIN is configured for this wallet", "malformed-package")
+  const metadata = envelope.keyDerivationMetadata ?? {}
+  if (metadata.kind !== "pbkdf2-sha256-pin" || typeof metadata.salt !== "string") throw new WalletUnlockError("This wallet PIN envelope is invalid", "malformed-package")
+  const iterations = Number(metadata.iterations)
+  if (!Number.isSafeInteger(iterations) || iterations < 200_000 || iterations > 2_000_000) throw new WalletUnlockError("This wallet PIN envelope has invalid key-derivation settings", "malformed-package")
+  let salt: Uint8Array | undefined
+  let wrappingKey: Uint8Array | undefined
+  try {
+    salt = fromBase64Url(metadata.salt)
+    wrappingKey = await derivePinWrappingKey(pin, salt, iterations)
+    const dek = await unwrapDek(envelope.wrappedDek, envelope.iv, wrappingKey, envelope.aad)
+    pinFailures.delete(attemptKey)
+    setUnlockedWalletState(userId, walletId, dek)
+    dek.fill(0)
+    return packageValue
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "OperationError") {
+      const count = (previous?.count ?? 0) + 1
+      const lockedUntil = count >= PIN_MAX_ATTEMPTS ? Date.now() + PIN_LOCK_MS : 0
+      pinFailures.set(attemptKey, { count, lockedUntil })
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1_000 * 2 ** (count - 1), 8_000)))
+      throw new WalletUnlockError(lockedUntil ? "Too many incorrect PIN attempts. Try again in one minute or use your passphrase." : "PIN is incorrect.", lockedUntil ? "unlock-failed" : "wrong-passphrase")
+    }
+    throw new WalletUnlockError(error instanceof Error ? error.message : "Wallet unlock failed", "unlock-failed")
+  } finally { wipeBytes(salt); wipeBytes(wrappingKey) }
+}
+
+export async function setWalletPin(userId: string, walletId: string, packageValue: CryptoWalletPackageDocument, passphrase: string, pin: string, authorizeWallet: () => Promise<{ walletAuthorizationToken: string }>, client: CryptoBackendClient = cryptoBackendClient) {
+  validatePin(pin)
+  await unlockWalletWithPassphrase(userId, walletId, packageValue, passphrase)
+  const state = getUnlockedWalletState(userId, walletId)
+  if (!state) throw new Error("Wallet could not be unlocked for PIN setup")
+  const dek = new Uint8Array(state.dek)
+  let salt: Uint8Array | undefined
+  let wrappingKey: Uint8Array | undefined
+  try {
+    const wallet = await client.getWallet()
+    const envelopeId = crypto.randomUUID()
+    salt = randomBytes(16)
+    wrappingKey = await derivePinWrappingKey(pin, salt)
+    const wrapped = await wrapDek(dek, wrappingKey, `worldstreet:pin:${wallet.id}:${envelopeId}`)
+    const nextPackage = {
+      format: packageValue.format, version: wallet.version + 1, baseVersion: wallet.version, walletId: wallet.id,
+      securityVersion: Math.max(wallet.securityVersion, packageValue.securityVersion), accounts: packageValue.accounts,
+      envelopes: [...packageEnvelopes(packageValue).filter((candidate) => candidate.purpose !== "pin"), {
+        envelopeId, purpose: "pin", methodVersion: 1, wrappedDek: wrapped.wrappedDek, iv: wrapped.iv, aad: wrapped.aad,
+        keyDerivationMetadata: { kind: "pbkdf2-sha256-pin", version: 1, salt: toBase64Url(salt), iterations: WALLET_PIN_KDF_ITERATIONS },
+      }],
+    }
+    const authorization = await authorizeWallet()
+    const committed = await client.commitWalletPackage(nextPackage, authorization.walletAuthorizationToken)
+    await saveEncryptedWalletPackage(userId, walletId, committed)
+    setUnlockedWalletState(userId, walletId, dek)
+    return committed
+  } finally { wipeBytes(dek); wipeBytes(salt); wipeBytes(wrappingKey) }
 }
 
 /** Adds newly enabled chain families to an existing encrypted wallet. */
@@ -221,7 +294,7 @@ export async function addWalletChains(
     const authorization = await authorizeWallet()
     const committed = await client.commitWalletPackage(nextPackage, authorization.walletAuthorizationToken)
     await saveEncryptedWalletPackage(userId, walletId, committed)
-    setUnlockedWalletState(userId, walletId, dek, 5 * 60_000)
+    setUnlockedWalletState(userId, walletId, dek)
     return committed
   } finally {
     wipeBytes(dek)
@@ -288,7 +361,7 @@ export async function setWalletPassphraseWithRecovery(
     const authorization = await authorizeWallet()
     const committed = await client.commitWalletPackage(nextPackage, authorization.walletAuthorizationToken)
     await saveEncryptedWalletPackage(userId, walletId, committed)
-    setUnlockedWalletState(userId, walletId, dek, 5 * 60_000)
+    setUnlockedWalletState(userId, walletId, dek)
     return { package: committed, walletAuthorizationToken: authorization.walletAuthorizationToken }
   } finally {
     wipeBytes(dek)
@@ -352,7 +425,7 @@ export async function replaceWalletPasskeyWithRecovery(
 
     const committed = await client.commitWalletPackage(nextPackage, registration.walletAuthorizationToken)
     await saveEncryptedWalletPackage(userId, walletId, committed)
-    setUnlockedWalletState(userId, walletId, dek, 5 * 60_000)
+    setUnlockedWalletState(userId, walletId, dek)
     return {
       package: committed,
       walletAuthorizationToken: registration.walletAuthorizationToken,

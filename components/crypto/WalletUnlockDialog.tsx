@@ -30,10 +30,11 @@ import { useCryptoContext } from "@/components/crypto/CryptoProvider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
 import { WalletUnlockError } from "@/lib/crypto-wallet/wallet-security"
 
-type UnlockTab = "passphrase" | "recovery"
+type UnlockTab = "passphrase" | "pin" | "recovery"
 
 const UNLOCK_TABS: readonly SegmentedOption<UnlockTab>[] = [
   { key: "passphrase", label: "Passphrase" },
+  { key: "pin", label: "PIN" },
   { key: "recovery", label: "Recovery secret" },
 ]
 
@@ -118,10 +119,14 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
   })
   const packageValue = packageQuery.data
   const hasPassphrase = packageValue ? packageValue.envelopes.some((envelope) => (envelope as { purpose?: string }).purpose === "passphrase") : false
+  const hasPin = packageValue ? packageValue.envelopes.some((envelope) => (envelope as { purpose?: string }).purpose === "pin") : false
 
   const [tab, setTab] = useState<UnlockTab>("passphrase")
   const [passphrase, setPassphrase] = useState("")
   const [recoverySecret, setRecoverySecret] = useState("")
+  const [pin, setPin] = useState("")
+  const [pinPassphrase, setPinPassphrase] = useState("")
+  const [pinConfirmation, setPinConfirmation] = useState("")
   const [newPassphrase, setNewPassphrase] = useState("")
   const [newPassphraseConfirmation, setNewPassphraseConfirmation] = useState("")
   const [busy, setBusy] = useState(false)
@@ -130,12 +135,15 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
   // Land on whichever tab this wallet can actually use — a passphrase-less
   // (recovery-only) wallet opens straight to Recovery secret.
   useEffect(() => {
-    if (open) setTab(hasPassphrase ? "passphrase" : "recovery")
-  }, [open, hasPassphrase])
+    if (open) setTab(hasPin ? "pin" : hasPassphrase ? "passphrase" : "recovery")
+  }, [open, hasPassphrase, hasPin])
 
   function clearSecrets() {
     setPassphrase("")
     setRecoverySecret("")
+    setPin("")
+    setPinPassphrase("")
+    setPinConfirmation("")
     setNewPassphrase("")
     setNewPassphraseConfirmation("")
   }
@@ -181,6 +189,28 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function unlockWithPin() {
+    if (!packageValue || busy || !pin) return
+    setBusy(true)
+    setUnlockError(null)
+    try {
+      await security.unlockWithPin(packageValue, pin)
+      handleUnlocked()
+    } catch (cause) { setUnlockError(cause) } finally { setBusy(false) }
+  }
+
+  async function configurePin() {
+    if (!packageValue || busy) return
+    if (!/^\d{6,12}$/.test(pin)) { setUnlockError(new Error("Use a 6 to 12 digit PIN")); return }
+    if (pin !== pinConfirmation) { setUnlockError(new Error("The PINs do not match")); return }
+    setBusy(true)
+    setUnlockError(null)
+    try {
+      await security.setPin(packageValue, pinPassphrase, pin)
+      handleUnlocked()
+    } catch (cause) { setUnlockError(cause) } finally { setBusy(false) }
   }
 
   async function configurePassphrase() {
@@ -269,6 +299,26 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked }: {
                 <span className="font-semibold text-foreground">Recovery secret</span> to unlock and
                 set one.
               </p>
+            )
+          ) : tab === "pin" ? (
+            hasPin ? (
+              <>
+                <SecretField id="wallet-unlock-pin" label="Wallet PIN" value={pin} onChange={setPin} onSubmit={() => void unlockWithPin()} placeholder="6–12 digits" autoComplete="current-password" />
+                <button type="button" onClick={() => void unlockWithPin()} disabled={busy || !pin} className={CTA_CLASS}>
+                  {busy ? "Unlocking…" : "Unlock wallet"}
+                </button>
+                <p className="text-[12px] leading-relaxed text-muted-foreground">PIN unlock works on this device. Use your passphrase or recovery secret if you need to restore access on another device.</p>
+              </>
+            ) : (
+              <div className="flex flex-col gap-4 rounded-2xl bg-surface-sunken/70 p-3.5 ring-1 ring-border/40">
+                <p className="text-[12.5px] leading-relaxed text-muted-foreground">Set a device PIN for everyday unlocks. Your passphrase is used once to authorize the existing wallet key; it is never stored.</p>
+                <SecretField id="wallet-pin-passphrase" label="Current wallet passphrase" value={pinPassphrase} onChange={setPinPassphrase} placeholder="Enter your passphrase" autoComplete="current-password" />
+                <SecretField id="wallet-new-pin" label="New wallet PIN" value={pin} onChange={setPin} placeholder="6–12 digits" autoComplete="new-password" />
+                <SecretField id="wallet-new-pin-confirmation" label="Confirm new PIN" value={pinConfirmation} onChange={setPinConfirmation} placeholder="Type it again" autoComplete="new-password" />
+                <button type="button" onClick={() => void configurePin()} disabled={busy || !pinPassphrase || !pin || pin !== pinConfirmation} className={cn(CTA_CLASS, "h-11 text-sm")}>
+                  {busy ? "Setting…" : "Set device PIN"}
+                </button>
+              </div>
             )
           ) : (
             <>

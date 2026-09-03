@@ -19,6 +19,8 @@ import {
   registerNewWalletPasskey,
   setWalletPassphraseWithRecovery,
   unlockWalletWithPassphrase,
+  unlockWalletWithPin,
+  setWalletPin,
   unlockWalletWithRecoverySecret,
   authorizeWalletWithRecoverySecret,
   addWalletChains,
@@ -61,6 +63,18 @@ export function useWalletSecurity(walletId?: string) {
     if (!walletId) throw new Error("A wallet ID is required to unlock the wallet")
     return unlockWalletWithPassphrase(userId, walletId, packageValue, passphrase)
   }, [userId, walletId])
+
+  const unlockWithPin = useCallback(async (packageValue: CryptoWalletPackageDocument, pin: string) => {
+    if (!walletId) throw new Error("A wallet ID is required to unlock the wallet")
+    return unlockWalletWithPin(userId, walletId, packageValue, pin)
+  }, [userId, walletId])
+
+  const setPin = useCallback(async (packageValue: CryptoWalletPackageDocument, passphrase: string, pin: string) => {
+    if (!walletId) throw new Error("A wallet ID is required to configure the wallet PIN")
+    const result = await setWalletPin(userId, walletId, packageValue, passphrase, pin, () => cryptoBackendClient.authorizeWallet())
+    await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.walletPackage(userId) })
+    return result
+  }, [queryClient, userId, walletId])
 
   const setPassphraseWithRecovery = useCallback(async (packageValue: CryptoWalletPackageDocument, recoverySecret: string, passphrase: string) => {
     if (!walletId) throw new Error("A wallet ID is required to configure the wallet passphrase")
@@ -163,6 +177,8 @@ export function useWalletSecurity(walletId?: string) {
     registerPasskey,
     authenticatePasskey,
     unlockWithPassphrase,
+    unlockWithPin,
+    setPin,
     unlockWithRecoverySecret,
     setPassphraseWithRecovery,
     replacePasskey,

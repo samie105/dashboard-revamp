@@ -5,6 +5,7 @@ export const WALLET_PACKAGE_VERSION = 1
 export const WALLET_DEK_VERSION = 1
 export const PASSKEY_PRF_SALT = utf8("worldstreet-wallet-dek-prf-v1")
 export const WALLET_PASSPHRASE_KDF_ITERATIONS = 600_000
+export const WALLET_PIN_KDF_ITERATIONS = 600_000
 
 async function digest(value: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", value as unknown as BufferSource))
@@ -45,6 +46,13 @@ export async function derivePassphraseWrappingKey(
     key,
     256,
   )
+  return new Uint8Array(bits)
+}
+
+/** Derives a local-only PIN wrapping key. The PIN never leaves the browser. */
+export async function derivePinWrappingKey(pin: string, salt: Uint8Array, iterations = WALLET_PIN_KDF_ITERATIONS) {
+  const key = await crypto.subtle.importKey("raw", utf8(pin) as unknown as BufferSource, { name: "PBKDF2" }, false, ["deriveBits"])
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: salt as unknown as BufferSource, iterations }, key, 256)
   return new Uint8Array(bits)
 }
 
