@@ -30,6 +30,7 @@ import { useCryptoContext } from "@/components/crypto/CryptoProvider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
 import { WalletUnlockError } from "@/lib/crypto-wallet/wallet-security"
 import { walletActionPolicy, type WalletAction } from "@/lib/crypto-wallet/action-policy"
+import { describePasskeyError } from "@/lib/crypto-wallet/passkey"
 
 type UnlockTab = "passphrase" | "pin" | "passkey" | "recovery"
 
@@ -217,7 +218,7 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked, action }: {
       handleUnlocked()
     } catch (cause) {
       setNeedsPasskeyAdoption(cause instanceof Error && cause.message === "No passkey wallet envelope is configured")
-      setUnlockError(cause)
+      setUnlockError(describePasskeyError(cause))
     } finally { setBusy(false) }
   }
 

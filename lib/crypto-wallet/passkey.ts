@@ -142,9 +142,12 @@ export async function createPasskeyCredential(options: PasskeyRegistrationOption
   if (!window.PublicKeyCredential || !navigator.credentials) {
     throw new Error("Passkeys are not supported in this browser")
   }
-  const credential = await navigator.credentials.create({
-    publicKey: publicKeyOptions(options.options, "registration"),
-  })
+  let credential: Credential | null
+  try {
+    credential = await navigator.credentials.create({ publicKey: publicKeyOptions(options.options, "registration") })
+  } catch (error) {
+    throw describePasskeyError(error)
+  }
   return serializeRegistrationCredential(requirePublicKeyCredential(credential))
 }
 
@@ -152,8 +155,23 @@ export async function getPasskeyAssertion(options: PasskeyAuthenticationOptions)
   if (!window.PublicKeyCredential || !navigator.credentials) {
     throw new Error("Passkeys are not supported in this browser")
   }
-  const credential = await navigator.credentials.get({
-    publicKey: publicKeyOptions(options.options, "authentication"),
-  })
+  let credential: Credential | null
+  try {
+    credential = await navigator.credentials.get({ publicKey: publicKeyOptions(options.options, "authentication") })
+  } catch (error) {
+    throw describePasskeyError(error)
+  }
   return serializeAuthenticationCredential(requirePublicKeyCredential(credential))
+}
+
+/** Preserve the browser/OS WebAuthn diagnosis instead of collapsing it into
+ * a generic credential-manager message. */
+export function describePasskeyError(error: unknown): Error {
+  if (error instanceof DOMException || (error && typeof error === "object" && "name" in error)) {
+    const value = error as { name?: unknown; message?: unknown }
+    const name = typeof value.name === "string" ? value.name : "WebAuthnError"
+    const message = typeof value.message === "string" && value.message ? value.message : "The credential manager rejected the passkey operation."
+    return new Error(`${name}: ${message}`)
+  }
+  return error instanceof Error ? error : new Error("Passkey ceremony failed")
 }

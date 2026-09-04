@@ -3,6 +3,7 @@
 import { useState } from "react"
 
 import { useWalletSecurity } from "@/hooks/crypto/useWalletSecurity"
+import { describePasskeyError } from "@/lib/crypto-wallet/passkey"
 
 export function PasskeyButton({ mode = "authenticate", walletId, onAction, onSuccess, disabled = false }: { mode?: "register" | "authenticate"; walletId?: string; onAction?: () => Promise<unknown>; onSuccess?: (result: unknown) => void; disabled?: boolean }) {
   const security = useWalletSecurity(walletId)
@@ -16,7 +17,7 @@ export function PasskeyButton({ mode = "authenticate", walletId, onAction, onSuc
       const result = mode === "register" ? await (onAction ? onAction() : security.registerPasskey()) : await security.authenticatePasskey()
       onSuccess?.(result)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Passkey ceremony failed")
+      setError(describePasskeyError(cause).message)
     } finally {
       setBusy(false)
     }
