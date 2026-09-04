@@ -24,6 +24,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   AlertCircleIcon,
   ArrowDownLeft01Icon,
+  ArrowLeft01Icon,
   ArrowRight01Icon,
   ArrowUpRight01Icon,
 } from "@hugeicons/core-free-icons"
@@ -922,7 +923,7 @@ export function StatusScreen({
                 href={primary.href}
                 target={primary.href.startsWith("http") ? "_blank" : undefined}
                 rel={primary.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                className="flex h-[52px] flex-1 items-center justify-center gap-1.5 rounded-full bg-primary text-[15px] font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                className="flex min-h-[58px] w-full flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-[16px] font-bold text-primary-foreground shadow-[0_8px_24px_color-mix(in_srgb,var(--primary)_22%,transparent)] transition-[transform,background-color,box-shadow] hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.99] sm:min-h-[56px]"
               >
                 {primary.label}
                 {primary.href.startsWith("http") && (
@@ -930,17 +931,19 @@ export function StatusScreen({
                 )}
               </Link>
             ) : (
-              <button onClick={primary.onClick} className="flex h-[52px] flex-1 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-primary-foreground transition-colors hover:bg-primary/90">
+              <button onClick={primary.onClick} className="flex min-h-[58px] w-full flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-[16px] font-bold text-primary-foreground shadow-[0_8px_24px_color-mix(in_srgb,var(--primary)_22%,transparent)] transition-[transform,background-color,box-shadow] hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.99] sm:min-h-[56px]">
                 {primary.label}
               </button>
             ))}
           {secondary &&
             (secondary.href ? (
-              <Link href={secondary.href} className="flex h-[52px] flex-1 items-center justify-center rounded-full bg-surface-sunken text-[15px] font-semibold text-foreground ring-1 ring-border/40 transition-colors hover:bg-accent">
+              <Link href={secondary.href} className="flex min-h-[58px] w-full flex-1 items-center justify-center gap-2 rounded-2xl bg-surface-sunken px-4 text-[16px] font-semibold text-foreground ring-1 ring-border/50 transition-[transform,background-color] hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.99] sm:min-h-[56px]">
+                <HugeiconsIcon icon={ArrowLeft01Icon} className="h-5 w-5" />
                 {secondary.label}
               </Link>
             ) : (
-              <button onClick={secondary.onClick} className="flex h-[52px] flex-1 items-center justify-center rounded-full bg-surface-sunken text-[15px] font-semibold text-foreground ring-1 ring-border/40 transition-colors hover:bg-accent">
+              <button onClick={secondary.onClick} className="flex min-h-[58px] w-full flex-1 items-center justify-center gap-2 rounded-2xl bg-surface-sunken px-4 text-[16px] font-semibold text-foreground ring-1 ring-border/50 transition-[transform,background-color] hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.99] sm:min-h-[56px]">
+                <HugeiconsIcon icon={ArrowLeft01Icon} className="h-5 w-5" />
                 {secondary.label}
               </button>
             ))}
