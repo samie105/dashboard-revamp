@@ -2589,7 +2589,7 @@ export function TradeClient() {
             href="/wallet/modern"
             data-vivid-target="trade-back-to-wallet"
             data-vivid-label="Go back to the wallet"
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold ring-1 ring-border/40 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none sm:px-4 sm:py-2 sm:text-sm"
           >
             <HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5" />
             Back to wallet

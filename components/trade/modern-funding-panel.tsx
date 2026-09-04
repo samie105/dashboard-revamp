@@ -247,7 +247,12 @@ function TriggerPill({
         "rounded-full px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:px-4 sm:py-2 sm:text-sm",
         tone === "primary"
           ? "bg-primary font-bold text-primary-foreground hover:bg-primary/90"
-          : "bg-surface-sunken font-semibold hover:bg-accent",
+          : /* The hairline is what makes this read as a CONTROL. Sunken fill
+               alone is within a few percent of the top bar's own ground, so
+               beside a gold pill these two looked like bare labels somebody
+               had forgotten to style. The dashboard's action rail draws the
+               same ring for the same reason. */
+            "bg-surface-sunken font-semibold ring-1 ring-border/40 hover:bg-accent",
       )}
     >
       {label}

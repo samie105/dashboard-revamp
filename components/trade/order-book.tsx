@@ -2,10 +2,29 @@
 
 /**
  * OrderBook — the exchange-standard vertical book: asks stacked above a large
- * mid-price row, bids below, cumulative depth bars growing from the right,
- * and a buy/sell pressure bar at the foot. Clicking any level hands its price
- * to the ticket (which flips to a limit order) — the interaction every
+ * mid-price row, bids below, cumulative depth bars growing from the right, and
+ * a buy/sell pressure bar at the foot. Clicking any level hands its price to
+ * the ticket (which flips to a limit order) — the interaction every
  * Binance/Bybit user expects from a book.
+ *
+ * ── The 2026-09-04 pass ───────────────────────────────────────────────────
+ * The ladder was drawing its depth as a near-opaque chip wash anchored to the
+ * right edge, which stopped reading as depth and started reading as a coloured
+ * slab bolted to the side of the pane: a hard vertical edge where each bar
+ * ended, two solid wedges of red and green, and no stated reason for either.
+ * Three things fixed it, none of them a redesign of the book itself:
+ *
+ *  - The bar fades. A gradient that dies out before it reaches the price means
+ *    the eye reads a QUANTITY rather than a filled rectangle, and the numbers
+ *    on top stay legible instead of sitting on a colour field.
+ *  - The bar is labelled. It plots cumulative size, which was nowhere on
+ *    screen — so the widest bar in the pane was unexplained. `Total` is now a
+ *    column, which is also what every book this one is imitating does.
+ *  - The chrome speaks. "spread 1" and "B 68% / 32% S" were the two most
+ *    compressed strings in the app; they are "Spread" and "Buyers / Sellers".
+ *
+ * Colour still means exactly one thing here — direction — and gold appears
+ * nowhere, per the design system.
  *
  * Pure display component: data arrives via props, polling stays in the page.
  */
@@ -25,6 +44,16 @@ function fmtSize(s: number) {
   return s.toFixed(5)
 }
 
+/** Cumulative size, which is a bigger number in a narrower column — so it
+ *  abbreviates where the per-level size does not. */
+function fmtTotal(t: number) {
+  if (t >= 1_000_000) return `${(t / 1_000_000).toFixed(2)}M`
+  if (t >= 1_000) return `${(t / 1_000).toFixed(1)}K`
+  if (t >= 100) return t.toFixed(0)
+  if (t >= 1) return t.toFixed(2)
+  return t.toFixed(4)
+}
+
 function Row({
   price,
   size,
@@ -40,24 +69,30 @@ function Row({
   side: "bid" | "ask"
   onPick: (price: number) => void
 }) {
+  const width = Math.min(100, (total / (maxTotal || 1)) * 100)
   return (
     <button
       onClick={() => onPick(price)}
-      aria-label={`${side === "bid" ? "Bid" : "Ask"} ${fmtPrice(price)} — set as limit price`}
-      className="relative grid w-full grid-cols-[1fr_auto] gap-2 px-3 py-[3px] text-left text-[11px] leading-4 tabular-nums transition-colors hover:bg-accent/50"
-      title={`Set limit price ${fmtPrice(price)}`}
+      aria-label={`${side === "bid" ? "Bid" : "Ask"} ${fmtPrice(price)}, size ${fmtSize(size)} — set as limit price`}
+      className="relative grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-[3px] text-left text-[11px] leading-4 tabular-nums transition-colors hover:bg-accent/50"
+      title={`Set limit price ${fmtPrice(price)} · cumulative ${fmtSize(total)}`}
     >
+      {/* Depth. A gradient rather than a block: it dies out before it reaches
+          the price column, so the row reads as a quantity with numbers on top
+          rather than as text sitting on a colour field. */}
       <span
+        aria-hidden
         className={cn(
-          "absolute inset-y-0 right-0 opacity-90",
-          side === "bid" ? "bg-credit-chip" : "bg-debit-chip",
+          "absolute inset-y-0 right-0 bg-gradient-to-l to-transparent",
+          side === "bid" ? "from-credit/[0.18]" : "from-debit/[0.18]",
         )}
-        style={{ width: `${Math.min(100, (total / (maxTotal || 1)) * 100)}%` }}
+        style={{ width: `${width}%` }}
       />
-      <span className={cn("relative font-medium", side === "bid" ? "text-credit" : "text-debit")}>
+      <span className={cn("relative truncate font-medium", side === "bid" ? "text-credit" : "text-debit")}>
         {fmtPrice(price)}
       </span>
-      <span className="relative text-muted-foreground">{fmtSize(size)}</span>
+      <span className="relative text-right text-foreground/70">{fmtSize(size)}</span>
+      <span className="relative text-right tabular-nums text-subtle">{fmtTotal(total)}</span>
     </button>
   )
 }
@@ -134,13 +169,16 @@ export function OrderBook({
       data-vivid-label="The live order book — asks, mid price, bids"
       className={cn("flex min-h-0 flex-col overflow-hidden", className)}
     >
-      <div className="flex shrink-0 items-center justify-between px-3 pb-1 pt-3">
+      <div className="flex shrink-0 items-baseline justify-between gap-2 px-3 pb-1.5 pt-3">
         <Eyebrow className="text-[10px]">Order book</Eyebrow>
-        <span className="text-[10px] tabular-nums text-subtle">spread {fmtPrice(book.spread)}</span>
+        <span className="text-[10px] text-subtle">
+          Spread <span className="tabular-nums text-foreground/70">{fmtPrice(book.spread)}</span>
+        </span>
       </div>
-      <div className="grid shrink-0 grid-cols-[1fr_auto] gap-2 px-3 pb-1 text-[10px] uppercase tracking-wide text-subtle">
+      <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3 pb-1 text-[10px] uppercase tracking-wide text-subtle">
         <span>Price</span>
-        <span>Size</span>
+        <span className="text-right">Size</span>
+        <span className="text-right">Total</span>
       </div>
 
       <div className="slim-scroll flex min-h-0 flex-1 flex-col justify-end overflow-y-auto">
@@ -161,15 +199,19 @@ export function OrderBook({
       >
         <span
           className={cn(
-            "text-[15px] font-bold tabular-nums",
+            "font-display text-[15px] font-semibold tabular-nums",
             lastTick === "up" && "text-credit",
             lastTick === "down" && "text-debit",
           )}
         >
           {fmtPrice(book.midPrice)}
-          {lastTick && <span className="ml-1 text-[11px]">{lastTick === "up" ? "▲" : "▼"}</span>}
+          {lastTick && (
+            <span aria-hidden className="ml-1 align-middle text-[10px]">
+              {lastTick === "up" ? "▲" : "▼"}
+            </span>
+          )}
         </span>
-        <span className="text-[10px] text-subtle">mid</span>
+        <span className="text-[10px] text-subtle">Mid price</span>
       </button>
 
       <div className="slim-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -178,13 +220,18 @@ export function OrderBook({
         ))}
       </div>
 
-      {/* Buy/sell pressure across the visible depth. */}
+      {/* Pressure across the visible depth. Named rather than initialled: "B
+          68% / 32% S" was two letters doing the work of two words. */}
       <div className="shrink-0 px-3 pb-3 pt-2">
-        <div className="flex items-center justify-between pb-1 text-[10px] tabular-nums">
-          <span className="font-semibold text-credit">B {buyPct}%</span>
-          <span className="font-semibold text-debit">{100 - buyPct}% S</span>
+        <div className="flex items-center justify-between pb-1.5 text-[10px]">
+          <span className="text-subtle">
+            Buyers <span className="font-semibold tabular-nums text-credit">{buyPct}%</span>
+          </span>
+          <span className="text-subtle">
+            <span className="font-semibold tabular-nums text-debit">{100 - buyPct}%</span> Sellers
+          </span>
         </div>
-        <div className="flex h-1 overflow-hidden rounded-full bg-debit/60">
+        <div className="flex h-1 overflow-hidden rounded-full bg-debit/50">
           <div className="h-full rounded-full bg-credit" style={{ width: `${buyPct}%` }} />
         </div>
       </div>
