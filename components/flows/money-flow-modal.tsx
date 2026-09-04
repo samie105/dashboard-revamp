@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
 import { recededClass, useIsTopModal } from "@/components/ui/modal-stack"
+import { PanelErrorBoundary } from "@/components/ui/panel-error-boundary"
 import { Segmented, type SegmentedOption } from "@/components/ui/system"
 import { BuySellClient } from "@/components/buy-sell/buy-sell-client"
 import { HyperliquidFundingClient } from "@/components/fund/hyperliquid-funding-client"
@@ -467,14 +468,17 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
               // sits in an even margin rather than a wide one and a thin one.
               "max-h-[calc(100dvh-2rem)]",
 
-              // The chooser is the exception: it is two rows, and a 680px slab
-              // holding them would be mostly empty air on any screen. It isn't
-              // a flow, so nothing can resize under the user there.
+              // The chooser and the receive step are the exceptions. Neither
+              // is a flow — nothing steps, so nothing can resize under the
+              // user — and a 680px slab holding them is either mostly empty
+              // air (the chooser) or slightly too short, which is worse: the
+              // receive panel was a hair over and every deposit ended in a
+              // scroll to reach the address it exists to show.
               //
-              // auto → a pixel height cannot tween, so stepping from the
-              // question into a flow SNAPS. That is the deliberate trade: a
-              // snap costs one frame, an empty card costs every frame.
-              view === "choice" ? "h-auto" : "h-[680px]",
+              // auto → a pixel height cannot tween, so stepping from one of
+              // these into a flow SNAPS. That is the deliberate trade: a snap
+              // costs one frame, a wrong height costs every frame.
+              view === "choice" || view === "receive" ? "h-auto" : "h-[680px]",
 
               // WIDE for the two-pane terminal; MORPHS narrow when the active
               // panel is a single column (status, receive, setup).
@@ -578,8 +582,13 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                   closing from one of these, which is the same trade SendModal
                   already makes and the same reason: a send holds a live intent
                   and a poll, and neither may outlive the popup. */}
+              {/* Wrapped: SendFlow is the heaviest panel in the app and it is
+                  reached by a button with no other feedback, so a throw in it
+                  used to produce an empty modal and nothing to report. */}
               {open && (view === "receive" || view === "send") && (
-                <CryptoDoorPanel view={view} onClose={closeFlow} onInFlightChange={reportSendInFlight} />
+                <PanelErrorBoundary label={view === "send" ? "Send" : "Receive"} resetKey={view}>
+                  <CryptoDoorPanel view={view} onClose={closeFlow} onInFlightChange={reportSendInFlight} />
+                </PanelErrorBoundary>
               )}
 
               {/* `hidden` rather than unmounted: display:none takes the flows
@@ -587,6 +596,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                   while React keeps every panel's state, which is the whole
                   point of the stack below — a half-typed amount survives a
                   trip back to the question and out through the other door. */}
+              <PanelErrorBoundary label="This screen" resetKey={mode}>
               <div className={view === "flow" ? undefined : "hidden"}>
                 {/* Both sides of the pair stay mounted and stack in ONE grid
                     cell. Swapping is then a pure cross-fade between two
@@ -656,6 +666,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
               </div>
+              </PanelErrorBoundary>
             </div>
           </Dialog.Popup>
         </Dialog.Portal>

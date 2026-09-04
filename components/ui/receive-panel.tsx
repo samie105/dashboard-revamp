@@ -18,7 +18,6 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Copy01Icon, CheckmarkCircle01Icon, AlertCircleIcon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { Eyebrow } from "@/components/ui/system"
-import { ChoiceRow } from "@/components/ui/flow"
 import { NETWORKS, NETWORK_ICON, type WalletChain } from "@/lib/networks"
 import { useWallet } from "@/components/wallet-provider"
 
@@ -96,34 +95,67 @@ export function ReceivePanel({
   }
 
   return (
-    <div className={cn("flex flex-col gap-4", className)}>
-      {/* A one-option picker is just noise — the network is already named on
-          the address label and again in the warning. */}
+    <div className={cn("flex flex-col gap-3", className)}>
+      {/* NETWORK PICKER, as chips rather than tiles.
+          Six stacked tiles at three columns is two rows of ~68px plus an
+          eyebrow — around 170px spent on a control the user touches once, on
+          top of a QR, an address and a warning. Inside a fixed-height modal
+          that was the difference between fitting and scrolling. Chips put the
+          mark and the name on one line, so the same six choices cost about a
+          third of the height and stay one tap.
+
+          A one-option picker is still noise: the network is named on the
+          address label and again in the warning. */}
       {available.length > 1 && (
-        <div className="flex flex-col gap-2">
-          <Eyebrow>Receive on</Eyebrow>
-          <ChoiceRow
-            options={available.map((n) => ({ key: n.key, label: n.label, icon: NETWORK_ICON[n.key] }))}
-            value={key}
-            onChange={setKey}
-            columns={3}
-          />
+        <div className="flex flex-wrap gap-1.5">
+          {available.map((n) => {
+            const on = n.key === active?.key
+            return (
+              <button
+                key={n.key}
+                onClick={() => setKey(n.key)}
+                aria-pressed={on}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full py-1.5 pl-1.5 pr-3 text-[12.5px] font-medium transition-all active:scale-[0.97] motion-reduce:active:scale-100",
+                  on
+                    ? "bg-accent text-foreground ring-1 ring-foreground/[0.10]"
+                    : "bg-surface-sunken/70 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {NETWORK_ICON[n.key] ? (
+                  <img src={NETWORK_ICON[n.key]} alt="" className="h-5 w-5 rounded-full" />
+                ) : (
+                  <span className="h-5 w-5 rounded-full bg-surface-raised" />
+                )}
+                {n.label}
+              </button>
+            )
+          })}
         </div>
       )}
 
-      <div className="flex flex-col items-center gap-4 rounded-2xl bg-card px-4 py-6">
+      <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-4 py-5">
         {qr ? (
           <img
             src={qr}
             alt={`${active?.label} deposit address QR code`}
-            className="h-44 w-44 rounded-xl bg-white p-2"
+            className="h-40 w-40 rounded-xl bg-white p-2"
           />
         ) : (
-          <div className="h-44 w-44 animate-pulse rounded-xl bg-surface-sunken" />
+          <div className="h-40 w-40 animate-pulse rounded-xl bg-surface-sunken" />
         )}
 
         <div className="flex w-full flex-col gap-1.5">
-          <Eyebrow>Your {active?.label} address</Eyebrow>
+          {/* The copy affordance moved up beside the label. As its own line
+              underneath it was a permanent row of text saying what the icon
+              already says, and it doubled as the "Copied" slot — so the panel
+              carried the height whether or not anything had been copied. */}
+          <div className="flex items-baseline justify-between gap-2">
+            <Eyebrow>Your {active?.label} address</Eyebrow>
+            <span className={cn("text-[11.5px]", copied ? "text-credit" : "text-subtle")}>
+              {copied ? "Copied" : "Tap to copy"}
+            </span>
+          </div>
           <button
             onClick={() => {
               // Optional-chained through the whole call: no clipboard API
@@ -134,7 +166,7 @@ export function ReceivePanel({
                 setTimeout(() => setCopied(false), 1600)
               }).catch(() => {})
             }}
-            className="flex w-full items-center gap-2 rounded-xl bg-surface-sunken px-3 py-3 text-left transition-colors hover:bg-accent"
+            className="flex w-full items-center gap-2 rounded-xl bg-surface-sunken px-3 py-2.5 text-left transition-colors hover:bg-accent"
           >
             <span className="min-w-0 flex-1 break-all font-mono text-[12px] leading-relaxed text-muted-foreground">
               {address}
@@ -144,26 +176,20 @@ export function ReceivePanel({
               className={cn("h-4 w-4 shrink-0", copied ? "text-credit" : "text-muted-foreground/60")}
             />
           </button>
-          <span className="text-[11.5px] text-subtle">
-            {copied ? "Copied to clipboard" : "Tap the address to copy"}
-          </span>
         </div>
 
-        {/* One honest warning — the mobile screen's rule. */}
-        <div className="flex w-full items-start gap-2 rounded-xl bg-warning-chip px-3 py-2.5">
+        {/* One honest warning — the mobile screen's rule. Tightened to the
+            sentence that actually changes behaviour; the clause about the
+            right token on the wrong network was a second sentence saying the
+            same thing, and it was the line that pushed this panel over. */}
+        <div className="flex w-full items-start gap-2 rounded-xl bg-warning-chip px-3 py-2">
           <HugeiconsIcon icon={AlertCircleIcon} className="mt-px h-4 w-4 shrink-0 text-warning" />
           <p className="text-[12px] leading-relaxed text-warning">
-            {asset ? (
-              <>
-                Only send <strong>{asset} on {active?.label}</strong> to this address. Anything else
-                — a different token, or the right token on another network — may be lost permanently.
-              </>
-            ) : (
-              <>
-                Only send assets that exist on <strong>{active?.label}</strong> to this address.
-                The right token on another network may be lost permanently.
-              </>
-            )}
+            Only send{" "}
+            <strong>
+              {asset ? `${asset} on ${active?.label}` : `assets that exist on ${active?.label}`}
+            </strong>
+            . Anything else may be lost permanently.
           </p>
         </div>
 
