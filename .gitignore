@@ -43,8 +43,12 @@ next-env.d.ts
 .cursor/rules/remb-context.mdc
 .windsurf/rules/remb-context.md
 
-# Remb dynamic context (auto-generated, do not commit)
+# Agent context and memory (local to whoever is working, never shared)
 CLAUDE.md
+MEMORY.md
+memory/
+.claude/memory/
+.claude/worktrees/
 .remb/
 .gstack/
 .vercel
