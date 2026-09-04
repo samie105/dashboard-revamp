@@ -347,6 +347,14 @@ function WalletPocket({
  * unpriced asset is excluded from the total and footnoted instead.
  */
 function usdValueOf(balance: CryptoBalanceResult, index: Record<string, number> | null): number | null {
+  // WSK is mint-gated 1:1 against USD. Its value is a protocol invariant,
+  // not a market quote, so it must remain valued even when the external
+  // price feed has no WSK listing (or has not loaded yet).
+  if (balance.symbol.toUpperCase() === "WSK") {
+    if (!/^\d+$/.test(balance.amountBaseUnits) || balance.decimals < 0) return null
+    const amount = Number(balance.amountBaseUnits) / 10 ** balance.decimals
+    return Number.isFinite(amount) ? amount : null
+  }
   const price = index?.[(balance.symbol ?? "").toUpperCase()]
   if (price === undefined || !Number.isFinite(price) || price <= 0) return null
   const amount = Number(formatCryptoAmount(balance.amountBaseUnits, balance.decimals))
