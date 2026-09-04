@@ -133,6 +133,8 @@ export type ModernNetworkId =
   | "arbitrum-one"
   | "solana-mainnet-beta"
   | "sui-mainnet"
+  | "ton-mainnet"
+  | "tron-mainnet"
 
 export function isRoutable(chain: string): chain is RoutableChain {
   return (ROUTABLE_CHAINS as readonly string[]).includes(chain)
@@ -160,7 +162,7 @@ export function unavailablePairMessage(from: string, to: string): string {
   return `${fromLabel} → ${toLabel} is not available yet.`
 }
 
-export function networkIdFor(chain: RoutableChain): ModernNetworkId {
+export function networkIdFor(chain: SwapChainId): ModernNetworkId {
   switch (chain) {
     case "ethereum":
       return "ethereum-mainnet"
@@ -170,12 +172,16 @@ export function networkIdFor(chain: RoutableChain): ModernNetworkId {
       return "solana-mainnet-beta"
     case "sui":
       return "sui-mainnet"
+    case "ton":
+      return "ton-mainnet"
+    case "tron":
+      return "tron-mainnet"
   }
 }
 
 /** Which signing family a chain belongs to, for the intent the wallet approves. */
-export function familyFor(chain: RoutableChain): "evm" | "solana" | "sui" {
-  return chain === "solana" ? "solana" : chain === "sui" ? "sui" : "evm"
+export function familyFor(chain: SwapChainId): "evm" | "solana" | "sui" | "ton" | "tron" {
+  return chain === "solana" ? "solana" : chain === "sui" ? "sui" : chain === "ton" ? "ton" : chain === "tron" ? "tron" : "evm"
 }
 
 /**
@@ -203,7 +209,7 @@ export interface QuoteData {
   /** The venue the swap fills on, e.g. "1inch", "jupiter". */
   tool: string
   toolLogoURI?: string
-  executionData: { to: string; data: string; value: string; chainId: number; gasLimit?: string } | null
+  executionData: Record<string, unknown> | null
   fromToken: { chainId: number; address: string; symbol: string; decimals: number }
   toToken: { chainId: number; address: string; symbol: string; decimals: number }
 }

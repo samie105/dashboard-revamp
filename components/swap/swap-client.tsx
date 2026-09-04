@@ -54,7 +54,7 @@ import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoB
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useAuth } from "@/components/auth-provider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled, CryptoBackendError } from "@/lib/crypto-backend"
-import { signEvmIntent, signSolanaIntent, signSuiIntent } from "@/lib/crypto-wallet"
+import { signEvmIntent, signSolanaIntent, signSuiIntent, signTonIntent, signTronIntent } from "@/lib/crypto-wallet"
 import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { toBaseUnits } from "@/lib/crypto-wallet/address-validation"
@@ -75,6 +75,7 @@ import {
   routerForPair,
   unavailablePairMessage,
   tokensForChain,
+  type SwapChainId,
   type QuoteData,
 } from "./swap-model"
 
@@ -592,7 +593,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const fromSupported = SUPPORTED_SWAP_TOKENS[fromChain]?.includes(fromCoin?.symbol ?? "") ?? false
   const toSupported = SUPPORTED_SWAP_TOKENS[toChain]?.includes(toCoin?.symbol ?? "") ?? false
   const selectedRouter = routerForPair(fromChain, toChain)
-  const canQuote = fromSupported && toSupported && selectedRouter === "lifi" && isCryptoBackendEnabled
+  const canQuote = fromSupported && toSupported && !!selectedRouter && isCryptoBackendEnabled
 
   /* Simple has no slippage dial. It is not therefore unprotected: the house
      default rides on every quote and every intent it sends. */
@@ -623,7 +624,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         amount: numericFrom.toString(),
         slippage: (effectiveSlippage / 100).toString(),
       })
-      fetch(`/api/crypto/trading/spot/lifi/quote?${qs}`, { signal: controller.signal })
+      const quotePath = selectedRouter === "lifi" ? "/api/crypto/trading/spot/lifi/quote" : "/api/crypto/trading/spot/provider/quote"
+      fetch(`${quotePath}?${qs}`, { signal: controller.signal })
         .then((r) => r.json())
         .then((data) => {
           if (data.success && data.quote) {
@@ -646,7 +648,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     }, delay)
     return () => { clearTimeout(timeout); controller.abort() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromAmount, fromCoin?.symbol, toCoin?.symbol, fromChain, toChain, effectiveSlippage, numericFrom, canQuote, refreshNonce])
+  }, [fromAmount, fromCoin?.symbol, toCoin?.symbol, fromChain, toChain, effectiveSlippage, numericFrom, canQuote, refreshNonce, selectedRouter])
 
   // For non-supported pairs, fall back to client-side estimate
   React.useEffect(() => {
@@ -704,33 +706,46 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     setSwapResult(null)
     try {
       if (!user?.userId || !modernWallet.data?.id || !modernPackage.data) throw new Error("Set up your new wallet before swapping")
-      if (selectedRouter !== "lifi") throw new Error(unavailablePairMessage(fromChain, toChain))
-      if (!isRoutable(fromChain) || !isRoutable(toChain)) throw new Error(unavailablePairMessage(fromChain, toChain))
+      if (!selectedRouter) throw new Error(unavailablePairMessage(fromChain, toChain))
       if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) {
         resumeAfterUnlock.current = () => void handleSwap()
         setUnlockOpen(true)
         return
       }
-      const sourceFamily = familyFor(fromChain)
+      const sourceFamily = familyFor(fromChain as SwapChainId)
       const account = modernWallet.data.accounts.find((item) => item.chainFamily === sourceFamily && item.state === "active")
       if (!account?.id) throw new Error(`Your wallet isn't ready for ${chainMeta(fromChain).label} yet`)
       const amountBaseUnits = toBaseUnits(String(numericFrom), quoteData.fromToken.decimals)
       if (!amountBaseUnits || amountBaseUnits === "0") throw new Error("The amount is too small for this coin")
       const idempotencyKey = swapIdempotencyKey.current ?? (swapIdempotencyKey.current = crypto.randomUUID())
-      const intent = await cryptoBackendClient.createModernLifiSwapIntent({
-        sourceNetworkId: networkIdFor(fromChain),
-        destinationNetworkId: networkIdFor(toChain),
-        sellToken: quoteData.fromToken.address,
-        buyToken: quoteData.toToken.address,
-        sellAmountBaseUnits: amountBaseUnits,
-        slippagePercentage: effectiveSlippage / 100,
-        idempotencyKey,
-      })
+      const intent = selectedRouter === "lifi"
+        ? await cryptoBackendClient.createModernLifiSwapIntent({
+          sourceNetworkId: networkIdFor(fromChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet",
+          destinationNetworkId: networkIdFor(toChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet",
+          sellToken: quoteData.fromToken.address,
+          buyToken: quoteData.toToken.address,
+          sellAmountBaseUnits: amountBaseUnits,
+          slippagePercentage: effectiveSlippage / 100,
+          idempotencyKey,
+        })
+        : await cryptoBackendClient.createModernProviderSwapIntent({
+          sourceNetworkId: networkIdFor(fromChain as SwapChainId) as "ton-mainnet" | "tron-mainnet",
+          destinationNetworkId: networkIdFor(toChain as SwapChainId) as "ton-mainnet" | "tron-mainnet",
+          sellToken: quoteData.fromToken.address,
+          buyToken: quoteData.toToken.address,
+          sellAmountBaseUnits: amountBaseUnits,
+          slippagePercentage: effectiveSlippage / 100,
+          idempotencyKey,
+        })
       const signed = sourceFamily === "solana"
         ? await signSolanaIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
         : sourceFamily === "sui"
           ? await signSuiIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
-          : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
+          : sourceFamily === "ton"
+            ? await signTonIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
+            : sourceFamily === "tron"
+              ? await signTronIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
+              : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
       const submitted = await cryptoBackendClient.submitIntent(intent.id, signed)
       setSwapResult({ success: true, status: "PENDING", txHash: submitted.txHash })
       swapIdempotencyKey.current = null
