@@ -4,8 +4,8 @@
  * Live WMNA market state + the user's MNA/WMNA holdings, via the app's
  * server-side Solana route. Refreshes every 60s while mounted; balances
  * ride along whenever the custodial Solana address is known and valid
- * (the dev bypass's fake address is filtered out server-side and just
- * yields balances: null).
+ * (a malformed address is filtered out server-side and just yields
+ * balances: null).
  */
 
 import * as React from "react"

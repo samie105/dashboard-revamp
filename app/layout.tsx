@@ -61,16 +61,6 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { LayoutShell } from "@/components/layout-shell"
 import { VividVoiceProvider } from "@/components/vivid-provider"
 import { LocalClerkConfigurationNotice } from "@/components/auth/local-clerk-configuration-notice"
-import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
-
-// Under the dev bypass, ClerkProvider must not mount at all: clerk-js boots in
-// the browser with the production, domain-locked key and floods the console
-// with origin/403 errors it can never resolve on localhost. The server seams
-// are already mocked, and AuthProvider skips Clerk's hooks when the flag is on.
-function MaybeClerk({ children }: { children: React.ReactNode }) {
-  if (DEV_AUTH_BYPASS) return <>{children}</>
-  return <ClerkProvider signInUrl="/login" signUpUrl="/register">{children}</ClerkProvider>
-}
 
 export default function RootLayout({
   children,
@@ -84,7 +74,7 @@ export default function RootLayout({
     // with a primary that was this very app. `useUser().isLoaded` never flipped
     // true and every visit hung on "Verifying identity…". Satellite config
     // belongs only on academy/vision/arcade, which point back here.
-    <MaybeClerk>
+    <ClerkProvider signInUrl="/login" signUpUrl="/register">
       <html
         lang="en"
         suppressHydrationWarning
@@ -123,6 +113,6 @@ export default function RootLayout({
           </ThemeProvider>
         </body>
       </html>
-    </MaybeClerk>
+    </ClerkProvider>
   )
 }

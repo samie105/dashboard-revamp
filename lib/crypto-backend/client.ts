@@ -1,6 +1,4 @@
 import { CryptoBackendError } from "./errors"
-import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
-import { devMockFetch } from "@/lib/dev-mock-fetch"
 import type {
   CryptoBalance,
   CryptoBalanceSnapshot,
@@ -507,11 +505,4 @@ export class CryptoBackendClient {
   }
 }
 
-// Dev-only bypass (see lib/dev-auth-bypass.ts): answer from the in-browser
-// mock instead of the proxy route. The mock is stateful and the route is
-// serverless once deployed, so a round trip could — and did — land on an
-// instance that had never heard of the wallet. Keeping the state in the tab
-// that owns it removes the failure mode rather than narrowing it.
-export const cryptoBackendClient = new CryptoBackendClient(
-  DEV_AUTH_BYPASS && typeof window !== "undefined" ? { fetcher: devMockFetch } : {},
-)
+export const cryptoBackendClient = new CryptoBackendClient()

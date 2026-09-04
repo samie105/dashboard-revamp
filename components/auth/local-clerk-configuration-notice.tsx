@@ -2,8 +2,6 @@
 
 import { useSyncExternalStore } from "react"
 
-import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
-
 export function LocalClerkConfigurationNotice() {
   const isLocalhost = useSyncExternalStore(
     () => () => undefined,
@@ -14,9 +12,6 @@ export function LocalClerkConfigurationNotice() {
   const isProductionKey = publishableKey.startsWith("pk_live_")
   const isMissingKey = publishableKey.length === 0
 
-  // Under the dev bypass Clerk is deliberately not mounted, so the key being
-  // production-only is expected — the notice would only mislead.
-  if (DEV_AUTH_BYPASS) return null
   if (!isLocalhost || (!isProductionKey && !isMissingKey)) return null
 
   return (

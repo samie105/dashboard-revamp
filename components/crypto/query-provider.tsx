@@ -1,20 +1,11 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useUser as useClerkUser } from "@clerk/nextjs"
+import { useUser } from "@clerk/nextjs"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import { CryptoBackendError } from "@/lib/crypto-backend"
 import { clearUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
-import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
-
-// Under the dev bypass ClerkProvider isn't mounted (see app/layout.tsx), so
-// Clerk's useUser would throw. The pick is a module-level constant — the same
-// implementation runs on every render, so the rules of hooks hold. The mock
-// user never changes identity, so the cache-clearing effect below stays inert.
-const useUser = DEV_AUTH_BYPASS
-  ? () => ({ user: { id: DEV_BYPASS_USER.userId }, isLoaded: true })
-  : useClerkUser
 
 export function CryptoQueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

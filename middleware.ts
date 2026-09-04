@@ -1,6 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
 import { NextResponse } from "next/server"
-import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 
 const isProduction = process.env.NODE_ENV === "production"
 const LOGIN_URL = isProduction
@@ -33,7 +32,7 @@ const isWebhookRoute = createRouteMatcher([
   "/api/webhooks(.*)",
 ])
 
-const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
+export default clerkMiddleware(async (auth, req) => {
   // Skip auth for webhook routes (called by external services)
   if (isWebhookRoute(req)) {
     return NextResponse.next()
@@ -75,14 +74,6 @@ const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
     }
   }
 })
-
-// Under the dev bypass, clerkMiddleware() must never wrap the request: with a
-// domain-locked production key it dead-ends every route at /login before the
-// handler's own checks could run. Every request waves through — the mocked
-// server seams answer downstream. (Inert outside development builds.)
-export default DEV_AUTH_BYPASS
-  ? () => NextResponse.next()
-  : clerkAuthMiddleware
 
 export const config = {
   matcher: [
