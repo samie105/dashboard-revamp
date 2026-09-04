@@ -50,6 +50,7 @@ import { networkMetaFor } from "@/lib/crypto-backend/network-meta"
 import { usd } from "@/lib/num"
 import { WelcomeGuide } from "@/components/welcome-guide"
 import { missingChainFamilies } from "./WalletChainProvisioningPanel"
+import { NETWORK_ICON } from "@/lib/networks"
 
 const PAGE = "flex flex-col gap-6 p-4 md:p-6 lg:p-8"
 const SUBTITLE = "Only you can open this wallet"
@@ -176,6 +177,8 @@ type WalletCardData = {
   /** Network brand hue for chain cards; absent = the gold WorldStreet card. */
   hue?: string
   symbol?: string
+  icon?: string
+  balanceAmount?: string
   networksLabel?: string
 }
 
@@ -276,13 +279,21 @@ function WalletPocket({
               ) : null}
               <span className="relative flex w-full items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2">
-                  {card.symbol ? <CoinAvatar symbol={card.symbol} size="sm" className="h-[18px] w-[18px] shrink-0" /> : null}
+                  {card.symbol ? <CoinAvatar symbol={card.symbol} src={card.icon} size="sm" className="h-[18px] w-[18px] shrink-0" /> : null}
                   <span className={`truncate text-[12px] font-semibold tracking-[0.01em] transition-colors ${active ? "text-white" : "text-white/85"}`}>
                     {card.label}
                   </span>
                 </span>
                 <span className="shrink-0 text-[12px] font-semibold tabular-nums text-white/65">
-                  {card.value !== undefined ? (hidden ? AMOUNT_MASK : usd(card.value)) : "—"}
+                  {card.value !== undefined
+                    ? hidden
+                      ? AMOUNT_MASK
+                      : usd(card.value)
+                    : card.balanceAmount !== undefined
+                      ? hidden
+                        ? AMOUNT_MASK
+                        : `${card.balanceAmount} ${card.symbol ?? ""}`
+                      : "—"}
                 </span>
               </span>
             </button>
@@ -490,7 +501,7 @@ export function ModernWalletPage() {
     const rows = balances.balances.map((balance) => ({
       key: `${balance.accountId}:${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`,
       symbol: balance.symbol,
-      logo: balance.logo,
+      logo: balance.logo ?? NETWORK_ICON[networkMetaFor(balance.networkId, networks.data)?.key ?? ""],
       subtitle: balance.networkName,
       amount: formatCryptoAmount(balance.amountBaseUnits, balance.decimals),
       depositAsset: balance.symbol,
@@ -560,6 +571,14 @@ export function ModernWalletPage() {
         address: account.canonicalAddress,
         hue: meta?.hue,
         symbol: meta?.nativeSymbol ?? account.chainFamily,
+        icon: meta ? NETWORK_ICON[meta.key] : undefined,
+        balanceAmount: (() => {
+          const networkIds = new Set(familyNetworks.map((network) => network.id))
+          const holding = balances.balances.find(
+            (balance) => balance.accountId === account.id && networkIds.has(balance.networkId),
+          )
+          return holding ? formatCryptoAmount(holding.amountBaseUnits, holding.decimals) : undefined
+        })(),
         networksLabel: familyNetworks.map((network) => network.name).join(" · ") || account.state,
       }
     })
@@ -817,7 +836,7 @@ export function ModernWalletPage() {
                       </>
                     ) : (
                       <>
-                        <CoinAvatar symbol={activeCard.symbol ?? ""} size="lg" className="h-6 w-6 shrink-0" />
+                        <CoinAvatar symbol={activeCard.symbol ?? ""} src={activeCard.icon} size="lg" className="h-6 w-6 shrink-0" />
                         <span className="truncate text-[13px] font-semibold tracking-[0.02em] text-white/90">{activeCard.label}</span>
                       </>
                     )}
