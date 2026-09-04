@@ -25,8 +25,8 @@ export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 export const MNA_DECIMALS = 6
 export const WMNA_DECIMALS = 6
 
-/** Loose base58 shape check — enough to refuse malformed addresses and
- *  garbage input before an RPC round-trip. */
+/** Loose base58 shape check — enough to refuse the dev bypass's fake
+ *  addresses and garbage input before an RPC round-trip. */
 export function looksLikeSolanaAddress(s: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s)
 }
