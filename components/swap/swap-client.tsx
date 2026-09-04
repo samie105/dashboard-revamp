@@ -1189,25 +1189,28 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         )}
       </div>
 
-      {isSimple ? (
-        /* One column, centred, nothing beside it. The calm version of this
-           screen is as much about what is NOT in the periphery as about what
-           the ticket drops. */
-        <div className="mx-auto flex w-full max-w-[520px] flex-col gap-4">
+      {/* ONE PAGE SHAPE IN BOTH MODES.
+          Simple used to collapse this into a single 520px column centred with
+          nothing beside it, on the theory that the calm version is as much
+          about an empty periphery as about what the ticket drops. In practice
+          pressing Simple rebuilt the page around you — the sidebar vanished,
+          the column jumped to the middle and narrowed — and it read as having
+          been sent somewhere else rather than as the same screen showing less.
+          Owner call, 2026-09-04: the toggle changes the TICKET, not the page.
+
+          What still differs is what belongs to Pro rather than to the layout:
+          the rate chart (gated by `view.rateChart`) and the chain rail above.
+          Their absence leaves the shape alone — the ticket keeps its place and
+          history keeps its column. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          {view.rateChart && <SwapRateChart fromCoin={fromCoin} toCoin={toCoin} />}
           {ticket}
+        </div>
+        <div className="flex flex-col gap-4">
           <SwapHistory />
         </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]">
-          <div className="flex min-w-0 flex-col gap-4">
-            {view.rateChart && <SwapRateChart fromCoin={fromCoin} toCoin={toCoin} />}
-            {ticket}
-          </div>
-          <div className="flex flex-col gap-4">
-            <SwapHistory />
-          </div>
-        </div>
-      )}
+      </div>
 
       {overlays}
     </>
