@@ -240,17 +240,18 @@ The checked-out chain repository still contains older MANNA/MNA terminology in p
 - A rejected or failed transaction is not shown as confirmed.
 - Existing send flows are not changed for other chains.
 
-## Phase 8 — Optional bridge, swap, and EVM compatibility gates
+## Phase 8 — USDC bridge gate (Ethereum/Arbitrum → Intertrain)
 
 This phase is deliberately separate from adding Intertrain as a wallet chain.
 
 ### Work
 
 - Do not route LI.FI, Jupiter, 0x, Hyperliquid, or existing swap flows to Intertrain automatically.
-- Confirm whether Intertrain mainnet’s EVM compatibility layer is enabled, stable, and supported by the intended router.
+- Do not add an Intertrain EVM wallet layer: Ethereum and Arbitrum remain the existing EVM source accounts.
+- Keep the intended lane limited to USDC on Ethereum/Arbitrum credited as USDC on native Intertrain.
 - Confirm chain ID 4683, RPC method coverage, gas semantics, token standards, and wallet-provider behavior.
 - Obtain explicit bridge contract addresses, token addresses, trust assumptions, reserve controls, finality requirements, and incident procedures.
-- Add bridge/swap support only behind separate capability flags and feature gates.
+- Add bridge support only behind separate capability flags and feature gates.
 - Add route-specific simulation and slippage protections.
 - Keep the Intertrain native account family separate from any future Intertrain-EVM account representation unless the chain specification explicitly guarantees identity equivalence.
 
