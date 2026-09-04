@@ -168,6 +168,66 @@ export async function unlockWalletWithPassphrase(
   }
 }
 
+/**
+ * Links an already-registered passkey to the wallet when its credential exists
+ * on the server but its encrypted DEK envelope was never committed. This is
+ * the cross-device bootstrap path for synced iCloud/Android passkeys.
+ */
+export async function adoptExistingWalletPasskeyWithRecovery(
+  userId: string,
+  walletId: string,
+  packageValue: CryptoWalletPackageDocument,
+  recoverySecret: string,
+  client: CryptoBackendClient = cryptoBackendClient,
+) {
+  const secret = fromBase64Url(recoverySecret)
+  const existingRecovery = packageEnvelopes(packageValue).find((candidate) => candidate.purpose === "recovery")
+  if (!existingRecovery) {
+    secret.fill(0)
+    throw new Error("No recovery envelope is configured")
+  }
+
+  const dek = await unwrapRecoveryDek(existingRecovery, secret)
+  try {
+    const authentication = await authenticateWalletPasskey(client)
+    if (!authentication.prfOutput) throw new Error("This passkey does not support secure wallet-key wrapping on this device")
+
+    const wallet = await client.getWallet()
+    const envelopeId = crypto.randomUUID()
+    const aad = `worldstreet:passkey:${wallet.id}:${envelopeId}`
+    const wrapped = await wrapDek(dek, await derivePrfWrappingKey(authentication.prfOutput), aad)
+    const nextPackage = {
+      format: packageValue.format,
+      version: wallet.version + 1,
+      baseVersion: wallet.version,
+      walletId: wallet.id,
+      securityVersion: Math.max(wallet.securityVersion, packageValue.securityVersion),
+      accounts: packageValue.accounts,
+      envelopes: [
+        ...packageEnvelopes(packageValue),
+        {
+          envelopeId,
+          purpose: "passkey",
+          methodVersion: 1,
+          credentialId: authentication.credentialId,
+          wrappedDek: wrapped.wrappedDek,
+          iv: wrapped.iv,
+          aad,
+          keyDerivationMetadata: { kind: "webauthn-prf-sha256", version: 1, salt: toBase64Url(PASSKEY_PRF_SALT) },
+        },
+      ],
+    }
+
+    const committed = await client.commitWalletPackage(nextPackage, authentication.walletAuthorizationToken)
+    await saveEncryptedWalletPackage(userId, walletId, committed)
+    setUnlockedWalletState(userId, walletId, dek)
+    return { package: committed, walletAuthorizationToken: authentication.walletAuthorizationToken, credentialId: authentication.credentialId }
+  } finally {
+    wipeBytes(dek)
+    secret.fill(0)
+  }
+}
+
 export async function unlockWalletWithPin(userId: string, walletId: string, packageValue: CryptoWalletPackageDocument, pin: string) {
   validatePin(pin)
   const attemptKey = `${userId}:${walletId}`

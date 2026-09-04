@@ -23,6 +23,7 @@ import {
   setWalletPin,
   unlockWalletWithRecoverySecret,
   authorizeWalletWithRecoverySecret,
+  adoptExistingWalletPasskeyWithRecovery,
   addWalletChains,
 } from "@/lib/crypto-wallet/wallet-security"
 import { clearUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
@@ -62,6 +63,11 @@ export function useWalletSecurity(walletId?: string) {
   const unlockWithPassphrase = useCallback(async (packageValue: CryptoWalletPackageDocument, passphrase: string) => {
     if (!walletId) throw new Error("A wallet ID is required to unlock the wallet")
     return unlockWalletWithPassphrase(userId, walletId, packageValue, passphrase)
+  }, [userId, walletId])
+
+  const adoptPasskeyWithRecovery = useCallback(async (packageValue: CryptoWalletPackageDocument, recoverySecret: string) => {
+    if (!walletId) throw new Error("A wallet ID is required to link a passkey")
+    return adoptExistingWalletPasskeyWithRecovery(userId, walletId, packageValue, recoverySecret)
   }, [userId, walletId])
 
   const unlockWithPin = useCallback(async (packageValue: CryptoWalletPackageDocument, pin: string) => {
@@ -180,6 +186,7 @@ export function useWalletSecurity(walletId?: string) {
     registerPasskey,
     authenticatePasskey,
     unlockWithPassphrase,
+    adoptPasskeyWithRecovery,
     unlockWithPin,
     setPin,
     authorizeWithRecovery,

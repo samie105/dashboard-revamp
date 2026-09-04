@@ -136,6 +136,7 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked, action }: {
   const [newPassphraseConfirmation, setNewPassphraseConfirmation] = useState("")
   const [busy, setBusy] = useState(false)
   const [unlockError, setUnlockError] = useState<unknown>(null)
+  const [needsPasskeyAdoption, setNeedsPasskeyAdoption] = useState(false)
 
   // Land on whichever tab this wallet can actually use — a passphrase-less
   // (recovery-only) wallet opens straight to Recovery secret.
@@ -159,6 +160,7 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked, action }: {
     if (!next) {
       clearSecrets()
       setUnlockError(null)
+      setNeedsPasskeyAdoption(false)
     }
     onOpenChange(next)
   }
@@ -212,6 +214,19 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked, action }: {
     setUnlockError(null)
     try {
       await security.authenticatePasskey()
+      handleUnlocked()
+    } catch (cause) {
+      setNeedsPasskeyAdoption(cause instanceof Error && cause.message === "No passkey wallet envelope is configured")
+      setUnlockError(cause)
+    } finally { setBusy(false) }
+  }
+
+  async function adoptPasskey() {
+    if (!packageValue || busy || !recoverySecret) return
+    setBusy(true)
+    setUnlockError(null)
+    try {
+      await security.adoptPasskeyWithRecovery(packageValue, recoverySecret)
       handleUnlocked()
     } catch (cause) { setUnlockError(cause) } finally { setBusy(false) }
   }
@@ -343,6 +358,15 @@ export function WalletUnlockDialog({ open, onOpenChange, onUnlocked, action }: {
                 <button type="button" onClick={() => void unlockWithPasskey()} disabled={busy} className={CTA_CLASS}>
                   {busy ? "Waiting for passkey…" : "Unlock with passkey"}
                 </button>
+                {needsPasskeyAdoption ? (
+                  <div className="flex flex-col gap-3 rounded-2xl bg-surface-sunken/70 p-3.5 ring-1 ring-border/40">
+                    <p className="text-[12.5px] leading-relaxed text-muted-foreground">This passkey is registered but is not linked to this wallet on this device yet. Authenticate it once with Face ID, then enter your recovery secret to link it securely.</p>
+                    <SecretField id="wallet-passkey-adoption-recovery" label="Recovery secret" value={recoverySecret} onChange={setRecoverySecret} placeholder="Enter your recovery secret" autoComplete="off" />
+                    <button type="button" onClick={() => void adoptPasskey()} disabled={busy || !recoverySecret} className={CTA_CLASS}>
+                      {busy ? "Linking passkey…" : "Link passkey to wallet"}
+                    </button>
+                  </div>
+                ) : null}
               </>
             ) : (
               <p className="rounded-xl bg-surface-sunken/70 px-3.5 py-3 text-[13px] leading-relaxed text-muted-foreground">No passkey is enrolled for this wallet on the server yet. Register one from Security, then return here.</p>
