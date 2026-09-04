@@ -6,6 +6,7 @@
 export const COIN_IMAGES: Record<string, string> = {
   BTC: "https://coin-images.coingecko.com/coins/images/1/small/bitcoin.png",
   ETH: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png",
+  WSK: "/intertrain/wsk.svg",
   SOL: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png",
   TRX: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png",
   TON: "https://coin-images.coingecko.com/coins/images/17980/small/ton_symbol.png",

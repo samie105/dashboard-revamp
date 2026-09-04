@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="WorldStreet Kash">
+  <defs>
+    <linearGradient id="g" x1="18" y1="14" x2="108" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffe27a"/>
+      <stop offset=".48" stop-color="#f5b700"/>
+      <stop offset="1" stop-color="#a66b00"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="61" fill="#17130a" stroke="#f5b700" stroke-width="4"/>
+  <path fill="url(#g)" d="M26 30h16l8 35 10-35h9l10 35 8-35h16l-15 68H78L64 58 50 98H41L26 30Z"/>
+  <path fill="#fff1b0" d="M46 103h36v7H46z" opacity=".9"/>
+</svg>

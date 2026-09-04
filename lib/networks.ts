@@ -107,5 +107,7 @@ export const NETWORK_ICON: Record<string, string> = {
   sui: "https://coin-images.coingecko.com/coins/images/26375/small/sui-ocean-square.png",
   ton: "https://coin-images.coingecko.com/coins/images/17980/small/photo_2024-09-10_17.09.00.jpeg",
   tron: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png",
+  // Prefer the canonical IPFS asset; CoinAvatar falls back to the bundled
+  // WSK mark when a public gateway is unavailable.
   intertrain: "https://ipfs.io/ipfs/bafkreicjmwxhgwcvpldndx3ybxjncngmlqnesgzxn6a4pkivhaqpznabxq",
 }
