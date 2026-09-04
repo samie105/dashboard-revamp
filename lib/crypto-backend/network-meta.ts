@@ -10,6 +10,7 @@ const BACKEND_NETWORK_KEY: Record<string, string> = {
   "sui-mainnet": "sui",
   "ton-mainnet": "ton",
   "tron-mainnet": "tron",
+  "intertrain-mainnet": "intertrain",
 }
 
 const CHAIN_ID_KEY: Record<number, string> = { 1: "ethereum", 42161: "arbitrum" }
@@ -23,6 +24,7 @@ export function networkMetaFor(backendNetworkId: string, networks?: CryptoNetwor
     else if (live?.family === "sui") key = "sui"
     else if (live?.family === "ton") key = "ton"
     else if (live?.family === "tron") key = "tron"
+    else if (live?.family === "intertrain") key = "intertrain"
   }
   return key ? NETWORKS.find((n) => n.key === key) ?? null : null
 }

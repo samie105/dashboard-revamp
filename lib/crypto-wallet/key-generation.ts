@@ -6,11 +6,13 @@ import { WalletContractV4 } from "@ton/ton"
 import TronWeb from "tronweb"
 import { Buffer } from "buffer"
 import nacl from "tweetnacl"
+import { sha256 } from "@noble/hashes/sha2"
+import { bech32m } from "@scure/base"
 
 import { fromBase64Url, randomBytes, toBase64Url, utf8 } from "./encoding"
 
 export type GeneratedWalletKey = {
-  family: "evm" | "solana" | "sui" | "ton" | "tron"
+  family: "evm" | "solana" | "sui" | "ton" | "tron" | "intertrain"
   algorithm: "secp256k1" | "ed25519"
   keyType: "private-key"
   secretKey: Uint8Array
@@ -85,12 +87,35 @@ export function generateTronKey(): GeneratedWalletKey {
   }
 }
 
+/** Intertrain mainnet uses an ed25519 account encoded as a bech32m `mna1...`
+ * address. Keep the protocol domain and version byte aligned with the chain;
+ * WSK is the asset name, not a replacement for the address namespace. */
+export function generateIntertrainKey(): GeneratedWalletKey {
+  const secretKey = randomBytes(32)
+  const keypair = nacl.sign.keyPair.fromSeed(secretKey)
+  const domain = utf8("MNA/address/v1")
+  const digestInput = new Uint8Array(domain.length + keypair.publicKey.length)
+  digestInput.set(domain)
+  digestInput.set(keypair.publicKey, domain.length)
+  const addressBytes = new Uint8Array([1, ...sha256(digestInput).slice(0, 20)])
+  const canonicalAddress = bech32m.encode("mna", bech32m.toWords(addressBytes), 90)
+  return {
+    family: "intertrain",
+    algorithm: "ed25519",
+    keyType: "private-key",
+    secretKey,
+    publicKey: toBase64Url(keypair.publicKey),
+    canonicalAddress,
+  }
+}
+
 export function generateAccountKey(family: string): GeneratedWalletKey {
   if (family === "evm") return generateEvmKey()
   if (family === "solana") return generateSolanaKey()
   if (family === "sui") return generateSuiKey()
   if (family === "ton") return generateTonKey()
   if (family === "tron") return generateTronKey()
+  if (family === "intertrain") return generateIntertrainKey()
   throw new Error(`Unsupported wallet family: ${family}`)
 }
 

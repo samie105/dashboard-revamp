@@ -15,8 +15,8 @@ import { CardHeader, CardShell } from "@/components/ui/system"
 import { AnnouncementBanner } from "@/components/ui/flow"
 import { SectionMessage } from "@/components/crypto/primitives"
 
-const REQUESTED_FAMILIES = ["evm", "solana", "sui", "ton", "tron"] as const
-const FAMILY_LABELS: Record<string, string> = { evm: "Ethereum + Arbitrum", solana: "Solana", sui: "Sui", ton: "TON", tron: "TRON" }
+const REQUESTED_FAMILIES = ["evm", "solana", "sui", "ton", "tron", "intertrain"] as const
+const FAMILY_LABELS: Record<string, string> = { evm: "Ethereum + Arbitrum", solana: "Solana", sui: "Sui", ton: "TON", tron: "TRON", intertrain: "Intertrain (WSK)" }
 
 /** The networks this wallet could have but doesn't. Exported because the
  *  wallet page needs the same answer to decide whether to mark its Security

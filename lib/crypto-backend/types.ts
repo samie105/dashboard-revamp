@@ -12,7 +12,7 @@ export interface CryptoWallet {
 export interface CryptoWalletAccount {
   id: string
   walletId: string
-  chainFamily: "evm" | "solana" | "sui" | "ton" | "tron" | string
+  chainFamily: "evm" | "solana" | "sui" | "ton" | "tron" | "intertrain" | string
   keyAlgorithm: string
   keyType: string
   state: string
@@ -37,6 +37,14 @@ export interface CryptoNetwork {
   cluster?: string
   nativeAsset: string
   capabilities: Record<string, boolean> & { balance?: boolean }
+  metadata?: {
+    protocolChainId?: string
+    rpcUrl?: string
+    explorerUrl?: string
+    nativeAssetName?: string
+    nativeAssetDecimals?: number
+    [key: string]: unknown
+  }
 }
 
 export interface CryptoAssetReference {

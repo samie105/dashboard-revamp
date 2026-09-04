@@ -59,6 +59,7 @@ const FAMILY_LABEL: Record<string, string> = {
   sui: "Sui",
   ton: "TON",
   tron: "Tron",
+  intertrain: "Intertrain (WSK)",
 }
 
 /** Gradient stroke for the glass address cards — brand gold dissolving

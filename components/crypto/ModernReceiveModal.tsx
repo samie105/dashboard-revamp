@@ -23,7 +23,7 @@ import { useCryptoContext } from "@/components/crypto/CryptoProvider"
 import type { WalletChain } from "@/lib/networks"
 
 const FAMILY_TO_CHAIN: Record<string, WalletChain> = {
-  evm: "ethereum", solana: "solana", sui: "sui", ton: "ton", tron: "tron",
+  evm: "ethereum", solana: "solana", sui: "sui", ton: "ton", tron: "tron", intertrain: "intertrain",
 }
 
 export function ModernReceiveModal({ open, onOpenChange, asset = null }: {

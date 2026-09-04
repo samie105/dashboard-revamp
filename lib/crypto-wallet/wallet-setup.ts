@@ -25,7 +25,7 @@ import { setUnlockedWalletState } from "./unlock-state"
 export type WalletSetupStage = "account" | "keys" | "encrypt" | "commit"
 
 type SetupOptions = {
-  chainFamilies?: Array<"evm" | "solana" | "sui" | "ton" | "tron">
+  chainFamilies?: Array<"evm" | "solana" | "sui" | "ton" | "tron" | "intertrain">
   unlockTtlMs?: number
   walletPassphrase?: string
   authorizeWallet?: () => Promise<WalletAuthorizationResult>

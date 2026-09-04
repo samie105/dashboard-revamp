@@ -448,7 +448,10 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
   const MASK = "$••••••"
   // All six receivable networks. Arbitrum reuses the Ethereum address, exactly
   // as the mobile registry does — 6 networks, 5 wallet keys.
-  const WALLETS = NETWORKS.map((n) => ({
+  // This legacy dashboard card only knows the legacy provider address map.
+  // Intertrain is modern-wallet-only until an Intertrain account is appended;
+  // do not render a blank tile or an undefined image here.
+  const WALLETS = NETWORKS.filter((n) => Boolean(addresses?.[n.chain])).map((n) => ({
     key: n.key,
     label: n.label,
     addr: addresses?.[n.chain] ?? "",
@@ -910,7 +913,7 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               <Eyebrow>Networks</Eyebrow>
               {!needsWalletSetup && (
                 <span className="hidden text-[12px] tabular-nums text-muted-foreground lg:block">
-                  {activeAssetCount} assets · {NETWORKS.length} networks
+                  {activeAssetCount} assets · {WALLETS.length} networks
                 </span>
               )}
             </div>

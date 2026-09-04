@@ -308,7 +308,7 @@ export async function addWalletChains(
   const wallet = await client.getWallet()
   const networks = await client.listNetworks()
   const existingFamilies = new Set((packageValue.accounts as Array<Record<string, unknown>>).map((account) => String(account.family)))
-  const requestedFamilies = ["evm", "solana", "sui", "ton", "tron"] as const
+  const requestedFamilies = ["evm", "solana", "sui", "ton", "tron", "intertrain"] as const
   const missingFamilies = requestedFamilies.filter((family) => !existingFamilies.has(family))
   if (missingFamilies.length === 0) return packageValue
 

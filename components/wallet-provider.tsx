@@ -33,6 +33,8 @@ export interface WalletAddresses {
   sui: string
   ton: string
   tron: string
+  /** Populated only by the modern wallet; legacy providers do not own WSK. */
+  intertrain?: string
 }
 
 export interface TradingWallet {

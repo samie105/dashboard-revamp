@@ -11,7 +11,7 @@
  */
 
 /** The wallet-record chains we actually hold keys on. */
-export type WalletChain = "ethereum" | "solana" | "sui" | "ton" | "tron"
+export type WalletChain = "ethereum" | "solana" | "sui" | "ton" | "tron" | "intertrain"
 
 export type NetworkMeta = {
   key: string
@@ -86,6 +86,16 @@ export const NETWORKS: NetworkMeta[] = [
     explorerName: "Tronscan",
     explorerUrl: (a) => `https://tronscan.org/#/address/${a}`,
     txUrl: (h) => `https://tronscan.org/#/transaction/${h}`,
+  },
+  {
+    key: "intertrain",
+    label: "Intertrain",
+    chain: "intertrain",
+    nativeSymbol: "WSK",
+    hue: "#F5B700",
+    explorerName: "Intertrain Explorer",
+    explorerUrl: (a) => `https://explorer.intertrain.online/address/${a}`,
+    txUrl: (h) => `https://explorer.intertrain.online/tx/${h}`,
   },
 ]
 

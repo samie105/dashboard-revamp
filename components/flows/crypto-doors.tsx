@@ -38,6 +38,7 @@ const FAMILY_TO_CHAIN: Record<string, WalletChain> = {
   sui: "sui",
   ton: "ton",
   tron: "tron",
+  intertrain: "intertrain",
 }
 
 export type CryptoDoorView = "receive" | "send"
