@@ -55,6 +55,7 @@ import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useAuth } from "@/components/auth-provider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled, CryptoBackendError } from "@/lib/crypto-backend"
 import { signEvmIntent, signSolanaIntent, signSuiIntent } from "@/lib/crypto-wallet"
+import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { toBaseUnits } from "@/lib/crypto-wallet/address-validation"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
@@ -71,6 +72,8 @@ import {
   familyFor,
   isRoutable,
   networkIdFor,
+  routerForPair,
+  unavailablePairMessage,
   tokensForChain,
   type QuoteData,
 } from "./swap-model"
@@ -588,8 +591,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   // Can this pair be quoted and executed at all?
   const fromSupported = SUPPORTED_SWAP_TOKENS[fromChain]?.includes(fromCoin?.symbol ?? "") ?? false
   const toSupported = SUPPORTED_SWAP_TOKENS[toChain]?.includes(toCoin?.symbol ?? "") ?? false
-  const routable = isRoutable(fromChain) && isRoutable(toChain)
-  const canQuote = fromSupported && toSupported && routable && isCryptoBackendEnabled
+  const selectedRouter = routerForPair(fromChain, toChain)
+  const canQuote = fromSupported && toSupported && selectedRouter === "lifi" && isCryptoBackendEnabled
 
   /* Simple has no slippage dial. It is not therefore unprotected: the house
      default rides on every quote and every intent it sends. */
@@ -701,7 +704,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     setSwapResult(null)
     try {
       if (!user?.userId || !modernWallet.data?.id || !modernPackage.data) throw new Error("Set up your new wallet before swapping")
-      if (!isRoutable(fromChain) || !isRoutable(toChain)) throw new Error("This pair isn't available yet")
+      if (selectedRouter !== "lifi") throw new Error(unavailablePairMessage(fromChain, toChain))
+      if (!isRoutable(fromChain) || !isRoutable(toChain)) throw new Error(unavailablePairMessage(fromChain, toChain))
       if (!getUnlockedWalletState(user.userId, modernWallet.data.id)) {
         resumeAfterUnlock.current = () => void handleSwap()
         setUnlockOpen(true)
@@ -732,14 +736,12 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
       swapIdempotencyKey.current = null
       setFromAmount(""); setQuoteData(null); setQuotedAt(null)
     } catch (error) {
-      const message = error instanceof CryptoBackendError && error.code === "INSUFFICIENT_FUNDS"
-        ? "Not enough SOL to cover this swap and its fee. Top up SOL, then get a fresh price."
-        : error instanceof Error ? error.message : "Swap failed"
+      const message = formatWalletActionError(error, fromChain, fromCoin?.symbol)
       setSwapResult({ success: false, error: message })
     } finally {
       setSwapLoading(false)
     }
-  }, [quoteData, swapLoading, numericFrom, effectiveSlippage, user, modernWallet.data, modernPackage.data, fromChain, toChain])
+  }, [quoteData, swapLoading, numericFrom, effectiveSlippage, user, modernWallet.data, modernPackage.data, fromChain, toChain, fromCoin, selectedRouter])
 
   function flipPair() {
     const tmpCoin = fromCoin
@@ -769,7 +771,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     }
   }
 
-  const insufficientBalance = numericFrom > 0 && fromCoinBalance > 0 && numericFrom > fromCoinBalance
+  const insufficientBalance = numericFrom > 0 && numericFrom > fromCoinBalance
   // Unsupported pairs have no execution path — the button must say so, not
   // sit enabled doing nothing on click.
   const canSwap = numericFrom > 0 && !!fromCoin && !!toCoin && !quoteLoading && !swapLoading && !insufficientBalance && canQuote && !!quoteData?.executionData
@@ -780,7 +782,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
      our plumbing and not about their money. */
   const buttonText = React.useMemo(() => {
     if (!fromCoin || !toCoin) return "Choose two coins"
-    if (!canQuote) return "This pair isn't available yet"
+    if (!canQuote) return unavailablePairMessage(fromChain, toChain)
     if (!fromAmount || numericFrom <= 0) return "Enter an amount"
     if (insufficientBalance) return isSimple ? `Not enough ${fromCoin.symbol}` : "Insufficient balance"
     if (swapLoading) return "Confirming…"
@@ -788,7 +790,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     if (quoteError) return isSimple ? "Price unavailable right now" : "Quote unavailable"
     if (!quoteData?.executionData) return isSimple ? "No price available right now" : "No route found"
     return "Swap"
-  }, [fromCoin, toCoin, fromAmount, numericFrom, loadingFirstQuote, swapLoading, insufficientBalance, quoteError, canQuote, quoteData, isSimple])
+  }, [fromCoin, toCoin, fromAmount, numericFrom, loadingFirstQuote, swapLoading, insufficientBalance, quoteError, canQuote, quoteData, isSimple, fromChain, toChain])
 
   /* ── The pay block ─────────────────────────────────────────────────── */
 
