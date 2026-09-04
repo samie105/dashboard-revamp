@@ -4,7 +4,7 @@ import { useState } from "react"
 
 import { useWalletSecurity } from "@/hooks/crypto/useWalletSecurity"
 
-export function PasskeyButton({ mode = "authenticate", walletId, onAction, disabled = false }: { mode?: "register" | "authenticate"; walletId?: string; onAction?: () => Promise<unknown>; disabled?: boolean }) {
+export function PasskeyButton({ mode = "authenticate", walletId, onAction, onSuccess, disabled = false }: { mode?: "register" | "authenticate"; walletId?: string; onAction?: () => Promise<unknown>; onSuccess?: (result: unknown) => void; disabled?: boolean }) {
   const security = useWalletSecurity(walletId)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -13,8 +13,8 @@ export function PasskeyButton({ mode = "authenticate", walletId, onAction, disab
     setBusy(true)
     setError(null)
     try {
-      if (mode === "register") await (onAction ? onAction() : security.registerPasskey())
-      else await security.authenticatePasskey()
+      const result = mode === "register" ? await (onAction ? onAction() : security.registerPasskey()) : await security.authenticatePasskey()
+      onSuccess?.(result)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Passkey ceremony failed")
     } finally {

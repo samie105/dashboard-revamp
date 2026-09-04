@@ -235,7 +235,11 @@ export function CryptoSecurityPanel({
             walletId={walletId}
             disabled={!recoverySecret}
             onAction={() => security.replacePasskey(packageValue, recoverySecret)}
+            onSuccess={() => setSuccess("Passkey registered successfully. This wallet can now be unlocked with that passkey.")}
           />
+          <button type="button" onClick={() => { security.clear(); setSuccess("Wallet locked on this device. The next wallet action will require a passkey, PIN, or passphrase.") }} className="inline-flex min-h-11 items-center self-start rounded-full bg-surface-sunken px-4 text-[12px] font-semibold transition-colors hover:bg-accent">
+            Lock wallet now
+          </button>
           <button type="button" onClick={() => void setupTradingAgent()} disabled={busy || !recoverySecret} className="inline-flex min-h-11 items-center self-start rounded-full bg-surface-sunken px-4 text-[12px] font-semibold transition-colors hover:bg-accent disabled:opacity-50">
             {busy ? "Approving agent…" : "Enable delegated trading"}
           </button>
