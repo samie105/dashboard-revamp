@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest"
 import { toBaseUnits, validateAddress, validateAmount } from "@/lib/crypto-wallet/address-validation"
+import { generateIntertrainKey } from "@/lib/crypto-wallet/key-generation"
 
 describe("validateAddress", () => {
+  it("accepts Intertrain mainnet addresses and rejects another prefix", () => {
+    const address = generateIntertrainKey().canonicalAddress
+    expect(validateAddress("intertrain", address).ok).toBe(true)
+    expect(validateAddress("intertrain", address.replace(/^mna1/, "sui1")).ok).toBe(false)
+  })
   it("accepts a checksummed EVM address and rejects a truncated one", () => {
     expect(validateAddress("evm", "0xaf88d065e77c8cC2239327C5EDb3A432268e5831").ok).toBe(true)
     expect(validateAddress("evm", "0xaf88d065").ok).toBe(false)

@@ -34,10 +34,13 @@ export function WalletChainProvisioningPanel({
   walletId,
   packageValue,
   accounts,
+  familiesToAdd,
 }: {
   walletId: string
   packageValue: CryptoWalletPackageDocument
   accounts: CryptoWalletAccount[]
+  /** Optional rollout scope used by the Intertrain onboarding prompt. */
+  familiesToAdd?: readonly string[]
 }) {
   const security = useWalletSecurity(walletId)
   const [passphrase, setPassphrase] = useState("")
@@ -48,7 +51,11 @@ export function WalletChainProvisioningPanel({
   const [formOpen, setFormOpen] = useState(false)
   const passphraseId = useId()
   const recoverySecretId = useId()
-  const missingFamilies = useMemo(() => missingChainFamilies(accounts), [accounts])
+  const missingFamilies = useMemo(() => {
+    const existing = new Set(accounts.map((account) => account.chainFamily))
+    const requested = familiesToAdd ?? REQUESTED_FAMILIES
+    return requested.filter((family) => !existing.has(family))
+  }, [accounts, familiesToAdd])
 
   if (missingFamilies.length === 0) return null
 

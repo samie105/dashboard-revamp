@@ -1,5 +1,6 @@
 import { isAddress } from "viem"
 import bs58 from "bs58"
+import { bech32m } from "@scure/base"
 
 export type AddressCheck = { ok: true } | { ok: false; problem: string }
 
@@ -32,6 +33,17 @@ export function validateAddress(family: string, address: string): AddressCheck {
       return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(trimmed)
         ? { ok: true }
         : { ok: false, problem: "Tron addresses start with T and are 34 characters." }
+    case "intertrain": {
+      try {
+        const decoded = bech32m.decode(trimmed as `${string}1${string}`, 90)
+        const bytes = bech32m.fromWords(decoded.words)
+        return decoded.prefix === "mna" && bytes.length === 21 && bytes[0] === 1
+          ? { ok: true }
+          : { ok: false, problem: "Intertrain addresses must be valid mna1 mainnet addresses." }
+      } catch {
+        return { ok: false, problem: "Intertrain addresses must be valid mna1 mainnet addresses." }
+      }
+    }
     default:
       // Unknown family: be permissive locally, let the backend's validation rule.
       return trimmed.length >= 16 ? { ok: true } : { ok: false, problem: "Unrecognized address format." }

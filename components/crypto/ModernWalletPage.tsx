@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type ComponentType, type CSSProperties } from "react"
+import { useEffect, useMemo, useState, type ComponentType, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, CheckmarkCircle02Icon, Copy01Icon, EyeIcon, HelpCircleIcon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
@@ -13,6 +13,7 @@ import { WalletSetupFlow } from "@/components/crypto/WalletSetupFlow"
 import { WalletSkeleton } from "@/components/crypto/WalletSkeleton"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { WalletSecurityModal } from "@/components/crypto/WalletSecurityModal"
+import { IntertrainAddModal } from "@/components/crypto/IntertrainAddModal"
 import { SendModal } from "@/components/crypto/SendModal"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { InlineNotice, UnavailablePanel } from "@/components/ui/flow"
@@ -391,6 +392,8 @@ export function ModernWalletPage() {
   const [helpSignal, setHelpSignal] = useState(0)
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
+  const [securityInitialView, setSecurityInitialView] = useState<"menu" | "networks">("menu")
+  const [intertrainPromptOpen, setIntertrainPromptOpen] = useState(false)
   const [sendOpen, setSendOpen] = useState(false)
   // True while the setup ceremony owns the page. Creation flips `hasWallet`
   // true the instant it succeeds, so without this the finished wallet would
@@ -584,6 +587,13 @@ export function ModernWalletPage() {
   // would ever find it on their own — so the Security verb wears a dot when
   // there is something in there worth opening.
   const networksToAdd = wallet.data ? missingChainFamilies(wallet.data.accounts).length : 0
+  const hasIntertrainAccount = Boolean(wallet.data?.accounts.some((account) => account.chainFamily === "intertrain"))
+
+  useEffect(() => {
+    if (!wallet.data || !packageQuery.data || setupCeremony || hasIntertrainAccount) return
+    if (typeof window !== "undefined" && window.sessionStorage.getItem("worldstreet:intertrain-prompt-dismissed") === "1") return
+    setIntertrainPromptOpen(true)
+  }, [wallet.data, packageQuery.data, setupCeremony, hasIntertrainAccount])
 
   const heroStats = useMemo(() => {
     const pricedNetworks = new Set(balances.balances.map((balance) => balance.networkId))
@@ -936,7 +946,7 @@ export function ModernWalletPage() {
               <RoundAction
                 icon={SecurityGlyph}
                 label="Security"
-                onClick={() => setSecurityOpen(true)}
+                onClick={() => { setSecurityInitialView("menu"); setSecurityOpen(true) }}
                 dot={networksToAdd > 0}
               />
             </div>
@@ -1151,6 +1161,23 @@ export function ModernWalletPage() {
           packageValue={packageQuery.data}
           accounts={wallet.data.accounts}
           networksToAdd={networksToAdd}
+          initialView={securityInitialView}
+          familiesToAdd={securityInitialView === "networks" ? ["intertrain"] : undefined}
+        />
+      ) : null}
+      {wallet.data && packageQuery.data ? (
+        <IntertrainAddModal
+          open={intertrainPromptOpen}
+          onOpenChange={(open) => {
+            setIntertrainPromptOpen(open)
+            if (!open && typeof window !== "undefined") window.sessionStorage.setItem("worldstreet:intertrain-prompt-dismissed", "1")
+          }}
+          onAdd={() => {
+            setIntertrainPromptOpen(false)
+            setSecurityInitialView("networks")
+            setSecurityOpen(true)
+          }}
+          onLearnMore={() => window.open("https://intertrain.online", "_blank", "noopener,noreferrer")}
         />
       ) : null}
     </div>

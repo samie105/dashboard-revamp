@@ -154,6 +154,8 @@ export function WalletSecurityModal({
   packageValue,
   accounts,
   networksToAdd,
+  initialView = "menu",
+  familiesToAdd,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -162,17 +164,22 @@ export function WalletSecurityModal({
   accounts: CryptoWalletAccount[]
   /** How many networks the provisioning panel would offer. 0 hides the row. */
   networksToAdd: number
+  initialView?: View
+  familiesToAdd?: readonly string[]
 }) {
-  const [view, setView] = useState<View>("menu")
+  const [view, setView] = useState<View>(initialView)
 
   // Back to the menu on close, but only once the modal is fully gone —
   // resetting while it animates out would swap the pane under the user's
   // eyes on the way down.
   useEffect(() => {
-    if (open) return
-    const id = setTimeout(() => setView("menu"), 220)
+    if (open) {
+      setView(initialView)
+      return
+    }
+    const id = setTimeout(() => setView(initialView), 220)
     return () => clearTimeout(id)
-  }, [open])
+  }, [open, initialView])
 
   /* Every row is listed outright. "Add new networks" and "Move an account to
      another app" used to sit behind a "Show advanced options" disclosure for
@@ -248,6 +255,7 @@ export function WalletSecurityModal({
                     walletId={walletId}
                     packageValue={packageValue}
                     accounts={accounts}
+                    familiesToAdd={familiesToAdd}
                   />
                 )}
               </div>
