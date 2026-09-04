@@ -52,7 +52,6 @@ import { ArrowLeft01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
-import { backdropHiddenClass, useOwnsBackdrop } from "@/components/ui/modal-stack"
 import { PanelErrorBoundary } from "@/components/ui/panel-error-boundary"
 import { Segmented, type SegmentedOption } from "@/components/ui/system"
 import { BuySellClient } from "@/components/buy-sell/buy-sell-client"
@@ -166,10 +165,6 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
   // `open` gates the dialog; `mode` and `view` survive the close so the panel
   // keeps its content while the exit transition plays instead of going blank.
   const [open, setOpen] = React.useState(false)
-  /* This provider wraps the app and its Dialog.Root is always rendered, so the
-     registry has to be told when the dialog is actually open — otherwise this
-     modal would own the frost forever. See components/ui/modal-stack.ts. */
-  const backdrop = backdropHiddenClass(useOwnsBackdrop(open))
   const [mode, setMode] = React.useState<FlowMode>("buy")
   const [view, setView] = React.useState<FlowView>("flow")
   // Which chooser this journey came through, or null when a caller named the
@@ -406,7 +401,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
         <Dialog.Portal>
           {/* Verbatim, no local additions: the frost behind this modal is the
               frost behind every modal. See components/ui/modal-surface.ts. */}
-          <Dialog.Backdrop className={cn(MODAL_BACKDROP, backdrop)} />
+          <Dialog.Backdrop className={MODAL_BACKDROP} />
 
           {/* Backlight — a direction-coloured bloom BEHIND the glass, so the
               modal reads as lit from the money's side of the wall. The wrapper

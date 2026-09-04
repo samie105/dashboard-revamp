@@ -5,7 +5,6 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
 import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
-import { backdropHiddenClass, useOwnsBackdrop } from "@/components/ui/modal-stack"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Button } from "@/components/ui/button"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -51,15 +50,10 @@ function ResponsiveModalContent({
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & { showCloseButton?: boolean }) {
-  /* Only the top dialog paints a frost — two stacked backdrops compose to a
-     muddy 0.70 and blur twice. The popup itself is never hidden by this; see
-     components/ui/modal-stack.ts for why that rule exists. */
-  const backdrop = backdropHiddenClass(useOwnsBackdrop())
-
   return (
     <DialogPrimitive.Portal>
       {/* Overlay / backdrop — the app-wide frost. */}
-      <DialogPrimitive.Backdrop className={cn(MODAL_BACKDROP, backdrop)} />
+      <DialogPrimitive.Backdrop className={MODAL_BACKDROP} />
 
       {/* Popup — a centred card at every width. This component is the
           REFERENCE IMPLEMENTATION of the house modal: it holds nothing of its
