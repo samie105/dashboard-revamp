@@ -65,6 +65,12 @@ export const SUPPORTED_SWAP_TOKENS: Record<string, string[]> = {
   tron: ["TRX", "USDT", "USDC"],
 }
 
+/** Return only assets that belong to the selected chain. */
+export function tokensForChain<T extends { symbol: string }>(chain: string, coins: readonly T[]): T[] {
+  const supported = new Set((SUPPORTED_SWAP_TOKENS[chain] ?? []).map((symbol) => symbol.toUpperCase()))
+  return coins.filter((coin) => supported.has(coin.symbol.toUpperCase()))
+}
+
 /**
  * The chains a swap can actually execute on.
  *

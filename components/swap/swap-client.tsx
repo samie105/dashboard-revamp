@@ -71,6 +71,7 @@ import {
   familyFor,
   isRoutable,
   networkIdFor,
+  tokensForChain,
   type QuoteData,
 } from "./swap-model"
 
@@ -513,6 +514,25 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const [quoteError, setQuoteError] = React.useState<string | null>(null)
   const [swapLoading, setSwapLoading] = React.useState(false)
   const [swapResult, setSwapResult] = React.useState<{ success: boolean; txHash?: string; error?: string; status?: string } | null>(null)
+
+  // A token belongs to the chain selected beside it. Keep this derived rather
+  // than passing the global market list to both dialogs; otherwise BTC/ETH/etc.
+  // can appear under a chain where the asset cannot be signed or routed.
+  const fromCoins = React.useMemo(() => tokensForChain(fromChain, available), [fromChain, available])
+  const toCoins = React.useMemo(() => tokensForChain(toChain, available), [toChain, available])
+
+  React.useEffect(() => {
+    if (fromCoin && !fromCoins.some((coin) => coin.symbol.toUpperCase() === fromCoin.symbol.toUpperCase())) {
+      setFromCoin(fromCoins[0] ?? null)
+      setFromAmount("")
+    }
+  }, [fromCoin, fromCoins])
+
+  React.useEffect(() => {
+    if (toCoin && !toCoins.some((coin) => coin.symbol.toUpperCase() === toCoin.symbol.toUpperCase())) {
+      setToCoin(toCoins.find((coin) => coin.symbol !== fromCoin?.symbol) ?? null)
+    }
+  }, [toCoin, toCoins, fromCoin?.symbol])
 
   /* The price clock. `quotedAt` is when the live quote landed; bumping
      `refreshNonce` is how anything — the countdown running out, or the trader
@@ -1117,14 +1137,14 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
       <TokenSelectModal
         open={showFromModal}
         onClose={() => setShowFromModal(false)}
-        coins={available}
+        coins={fromCoins}
         onSelect={setFromCoin}
         exclude={toCoin?.symbol}
       />
       <TokenSelectModal
         open={showToModal}
         onClose={() => setShowToModal(false)}
-        coins={available}
+        coins={toCoins}
         onSelect={setToCoin}
         exclude={fromCoin?.symbol}
       />
