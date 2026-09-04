@@ -62,7 +62,9 @@ function decodeAddress(value: string, label: string): number[] {
     const decoded = bech32m.decode(value as `${string}1${string}`, 90)
     const bytes = bech32m.fromWords(decoded.words)
     if (decoded.prefix !== "mna" || bytes.length !== 21 || bytes[0] !== 1) throw new Error()
-    return [...bytes.slice(1)]
+    // Address is a tuple struct over [u8; 21] in worldstreet-chain. Postcard
+    // signs the version byte too; do not reduce it to the 20-byte body.
+    return [...bytes]
   } catch {
     throw new Error(`Invalid Intertrain ${label} address`)
   }
@@ -73,18 +75,13 @@ function validateAddress(value: string) { decodeAddress(value, "recipient") }
 function varint(value: number | bigint): number[] {
   let current = BigInt(value)
   if (current < BigInt(0)) throw new Error("Invalid negative Intertrain integer")
-  // postcard's varint encoding (the chain's canonical serde format): small
-  // values are inline; larger values use a width marker followed by LE bytes.
-  if (current <= BigInt(250)) return [Number(current)]
-  if (current <= BigInt("65535")) return [251, ...leBytes(current, 2)]
-  if (current <= BigInt("4294967295")) return [252, ...leBytes(current, 4)]
-  if (current <= BigInt("18446744073709551615")) return [253, ...leBytes(current, 8)]
-  return [254, ...leBytes(current, 16)]
-}
-
-function leBytes(value: bigint, width: number): number[] {
   const out: number[] = []
-  for (let i = 0; i < width; i += 1) out.push(Number((value >> BigInt(i * 8)) & BigInt(255)))
+  do {
+    let byte = Number(current & BigInt(0x7f))
+    current >>= BigInt(7)
+    if (current !== BigInt(0)) byte |= 0x80
+    out.push(byte)
+  } while (current !== BigInt(0))
   return out
 }
 
