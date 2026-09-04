@@ -24,7 +24,10 @@ export async function signTronIntent(
     const privateKey = bytesToHex(secret)
     const derived = TronWeb.address.fromPrivateKey(privateKey)
     if (!derived || derived !== unsigned.from) throw new Error("Local key does not match the intent account")
-    const tron = new TronWeb({ fullHost: "https://nile.trongrid.io" })
+    // LI.FI returns a mainnet transaction. Signing is local, but using the
+    // mainnet provider keeps TronWeb's address/transaction handling aligned
+    // with the network being signed.
+    const tron = new TronWeb({ fullHost: "https://api.trongrid.io" })
     const signed = await tron.trx.sign(transaction as never, privateKey)
     return JSON.stringify(signed)
   } finally {

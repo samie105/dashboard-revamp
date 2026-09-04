@@ -4,7 +4,7 @@ import { routerForPair, unavailablePairMessage } from "./swap-model"
 describe("swap route capability", () => {
   it("keeps TON/Solana out of the LI.FI quote path", () => {
     expect(routerForPair("ton", "solana")).toBeNull()
-    expect(unavailablePairMessage("ton", "solana")).toMatch(/TON has no executable route/i)
+    expect(unavailablePairMessage("ton", "solana")).toMatch(/TON swaps are not supported/i)
   })
 
   it("recognises the existing LI.FI lane", () => {
@@ -12,8 +12,8 @@ describe("swap route capability", () => {
   })
 
   it("does not confuse chain visibility with an executable route", () => {
-    expect(routerForPair("ton", "ton")).toBe("omniston")
-    expect(routerForPair("tron", "solana")).toBe("0x")
+    expect(routerForPair("ton", "ton")).toBeNull()
+    expect(routerForPair("tron", "solana")).toBe("lifi")
     expect(routerForPair("ton", "tron")).toBeNull()
   })
 })

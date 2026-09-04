@@ -120,12 +120,10 @@ export function tokensForChain<T extends { symbol: string }>(chain: string, coin
 /**
  * The chains a swap can actually execute on.
  *
- * Ton and Tron are in CHAINS because balances are shown for them, not because
- * a swap can run there yet. Keeping the two lists separate is what lets the
- * ticket show someone their TRX and still tell the truth about what it can do
- * with it.
+ * TON is intentionally excluded because the configured swap router does not
+ * support it. TRON is included because LI.FI supports TRON routes.
  */
-export const ROUTABLE_CHAINS = ["ethereum", "arbitrum", "solana", "sui"] as const
+export const ROUTABLE_CHAINS = ["ethereum", "arbitrum", "solana", "sui", "tron"] as const
 export type RoutableChain = (typeof ROUTABLE_CHAINS)[number]
 
 export type ModernNetworkId =
@@ -143,22 +141,18 @@ export function isRoutable(chain: string): chain is RoutableChain {
 export type SwapRouterId = "lifi" | "0x" | "omniston" | null
 
 /**
- * UI capability must match an executable backend route. Chain visibility is
- * deliberately broader than this list: TON and TRON can be selected to view
- * their assets, but they must never be sent through the LI.FI-only quote path.
+ * UI capability must match an executable backend route. TON remains visible
+ * for balances, but it must never be sent through the LI.FI quote path.
  */
 export function routerForPair(from: string, to: string): SwapRouterId {
   if (isRoutable(from) && isRoutable(to)) return "lifi"
-  if (from === "ton" && to === "ton") return "omniston"
-  if ((from === "tron" || to === "tron") && ["ethereum", "arbitrum", "solana", "tron"].includes(from) && ["ethereum", "arbitrum", "solana", "tron"].includes(to)) return "0x"
   return null
 }
 
 export function unavailablePairMessage(from: string, to: string): string {
   const fromLabel = chainMeta(from).label
   const toLabel = chainMeta(to).label
-  if (from === "ton" || to === "ton") return `${fromLabel} → ${toLabel} is not available yet. TON has no executable route to this chain.`
-  if (from === "tron" || to === "tron") return `${fromLabel} → ${toLabel} is not available yet. TRON routing is not enabled for this pair.`
+  if (from === "ton" || to === "ton") return `${fromLabel} → ${toLabel} is not available yet. TON swaps are not supported.`
   return `${fromLabel} → ${toLabel} is not available yet.`
 }
 

@@ -391,8 +391,8 @@ export class CryptoBackendClient {
   }
 
   async createModernLifiSwapIntent(input: {
-    sourceNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet"
-    destinationNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet"
+    sourceNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet"
+    destinationNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet"
     sellToken: string
     buyToken: string
     sellAmountBaseUnits: string

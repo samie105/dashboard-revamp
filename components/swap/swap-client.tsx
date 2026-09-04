@@ -720,8 +720,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
       const idempotencyKey = swapIdempotencyKey.current ?? (swapIdempotencyKey.current = crypto.randomUUID())
       const intent = selectedRouter === "lifi"
         ? await cryptoBackendClient.createModernLifiSwapIntent({
-          sourceNetworkId: networkIdFor(fromChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet",
-          destinationNetworkId: networkIdFor(toChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet",
+          sourceNetworkId: networkIdFor(fromChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet",
+          destinationNetworkId: networkIdFor(toChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet",
           sellToken: quoteData.fromToken.address,
           buyToken: quoteData.toToken.address,
           sellAmountBaseUnits: amountBaseUnits,
