@@ -405,8 +405,8 @@ export class CryptoBackendClient {
   }
 
   async createModernProviderSwapIntent(input: {
-    sourceNetworkId: "ton-mainnet" | "tron-mainnet"
-    destinationNetworkId: "ton-mainnet" | "tron-mainnet"
+    sourceNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "ton-mainnet" | "tron-mainnet"
+    destinationNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "ton-mainnet" | "tron-mainnet"
     sellToken: string
     buyToken: string
     sellAmountBaseUnits: string
