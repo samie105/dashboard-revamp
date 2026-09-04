@@ -30,8 +30,14 @@ export async function signIntertrainIntent(
     const expectedPublicKey = toBase64Url(keypair.publicKey)
     if (expectedPublicKey !== String(payload.publicKey)) throw new Error("Local key does not match the intent account")
     validateAddress(String(payload.recipient))
+    // Older intents omitted `payload.from` even though the canonical sender
+    // lives on the unsigned transaction envelope. Accept both during the
+    // rollout; new backend intents include the field for schema parity.
+    const sender = String(payload.from ?? unsigned.from)
+    if (sender !== String(unsigned.from)) throw new Error("Intertrain sender does not match the reviewed intent")
+    const signingPayload = { ...payload, from: sender }
     if (String(payload.recipient) !== String(unsigned.to)) throw new Error("Intertrain recipient does not match the intent")
-    const signature = nacl.sign.detached(signingBytes(payload), keypair.secretKey)
+    const signature = nacl.sign.detached(signingBytes(signingPayload), keypair.secretKey)
     return JSON.stringify({ unsigned: payload, signature: toHex(signature) })
   } finally {
     wipeBytes(secret)
