@@ -27,6 +27,7 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^trading\/hyperliquid\/markets$/,
     /^trading\/hyperliquid\/account$/,
     /^trading\/hyperliquid\/intents\/[^/]+$/,
+    /^bridge\/intertrain\/usdc\/status$/,
   ],
   POST: [
     /^wallets$/,
@@ -60,6 +61,7 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^trading\/hyperliquid\/deposit\/intents$/,
     /^trading\/hyperliquid\/intents$/,
     /^trading\/hyperliquid\/intents\/[^/]+\/submit$/,
+    /^bridge\/intertrain\/usdc\/intents$/,
   ],
 }
 

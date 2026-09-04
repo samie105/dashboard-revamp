@@ -91,6 +91,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Spot Trading", description: "Multi-chain DEX trading", url: "/trade", icon: Exchange01Icon },
       { name: "Futures", description: "Perpetual contracts", url: "/trade?market=futures", icon: Chart01Icon, badge: "Live" },
       { name: "Swap", description: "One-tap conversion", url: "/swap", icon: RepeatIcon },
+      { name: "Bridge", description: "Arbitrum USDC to Intertrain", url: "/bridge", icon: RepeatIcon },
     ],
   },
   {

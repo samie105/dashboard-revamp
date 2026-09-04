@@ -319,6 +319,14 @@ export class CryptoBackendClient {
     }, { signal })
   }
 
+  async getIntertrainUsdcBridgeStatus(signal?: AbortSignal) {
+    return this.request<{ enabled: boolean; available: boolean; sourceNetworks: string[]; destinationNetwork: string; asset: string; reason?: string; paused?: boolean }>("/bridge/intertrain/usdc/status", {}, { signal })
+  }
+
+  async createIntertrainUsdcBridgeIntents(input: { accountId: string; amount: string; idempotencyKey?: string }, signal?: AbortSignal) {
+    return this.request<{ intents: CryptoTransactionIntent[] }>("/bridge/intertrain/usdc/intents", { method: "POST", body: JSON.stringify(input) }, { signal })
+  }
+
   async listHyperliquidAgents(signal?: AbortSignal) {
     return this.request<HyperliquidTradingAgent[]>("/trading/hyperliquid/agents", {}, { signal })
   }
