@@ -7,7 +7,7 @@ describe("canonical swap assets", () => {
   })
 
   it("keeps native assets scoped to their chain", () => {
-    expect(swapAssetForToken("ton", "TON")?.assetId).toBe("ton-mainnet:TON:native")
+    expect(swapAssetForToken("ton", "TON")).toBeUndefined()
     expect(swapAssetForToken("tron", "TRX")?.assetId).toBe("tron-mainnet:TRX:native")
   })
 })

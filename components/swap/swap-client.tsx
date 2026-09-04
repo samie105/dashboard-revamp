@@ -54,7 +54,7 @@ import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoB
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useAuth } from "@/components/auth-provider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled, CryptoBackendError } from "@/lib/crypto-backend"
-import { signEvmIntent, signSolanaIntent, signSuiIntent, signTonIntent, signTronIntent } from "@/lib/crypto-wallet"
+import { signEvmIntent, signSolanaIntent, signSuiIntent, signTronIntent } from "@/lib/crypto-wallet"
 import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { toBaseUnits } from "@/lib/crypto-wallet/address-validation"
@@ -718,32 +718,20 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
       const amountBaseUnits = toBaseUnits(String(numericFrom), quoteData.fromToken.decimals)
       if (!amountBaseUnits || amountBaseUnits === "0") throw new Error("The amount is too small for this coin")
       const idempotencyKey = swapIdempotencyKey.current ?? (swapIdempotencyKey.current = crypto.randomUUID())
-      const intent = selectedRouter === "lifi"
-        ? await cryptoBackendClient.createModernLifiSwapIntent({
-          sourceNetworkId: networkIdFor(fromChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet",
-          destinationNetworkId: networkIdFor(toChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet",
-          sellToken: quoteData.fromToken.address,
-          buyToken: quoteData.toToken.address,
-          sellAmountBaseUnits: amountBaseUnits,
-          slippagePercentage: effectiveSlippage / 100,
-          idempotencyKey,
-        })
-        : await cryptoBackendClient.createModernProviderSwapIntent({
-          sourceNetworkId: networkIdFor(fromChain as SwapChainId) as "ton-mainnet" | "tron-mainnet",
-          destinationNetworkId: networkIdFor(toChain as SwapChainId) as "ton-mainnet" | "tron-mainnet",
-          sellToken: quoteData.fromToken.address,
-          buyToken: quoteData.toToken.address,
-          sellAmountBaseUnits: amountBaseUnits,
-          slippagePercentage: effectiveSlippage / 100,
-          idempotencyKey,
-        })
+      const intent = await cryptoBackendClient.createModernLifiSwapIntent({
+        sourceNetworkId: networkIdFor(fromChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet",
+        destinationNetworkId: networkIdFor(toChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet",
+        sellToken: quoteData.fromToken.address,
+        buyToken: quoteData.toToken.address,
+        sellAmountBaseUnits: amountBaseUnits,
+        slippagePercentage: effectiveSlippage / 100,
+        idempotencyKey,
+      })
       const signed = sourceFamily === "solana"
         ? await signSolanaIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
         : sourceFamily === "sui"
           ? await signSuiIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
-          : sourceFamily === "ton"
-            ? await signTonIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
-            : sourceFamily === "tron"
+          : sourceFamily === "tron"
               ? await signTronIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
               : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
       const submitted = await cryptoBackendClient.submitIntent(intent.id, signed)

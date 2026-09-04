@@ -8,7 +8,7 @@
  * someone to add a token to only one of them.
  */
 
-export type SwapChainId = "ethereum" | "arbitrum" | "solana" | "sui" | "ton" | "tron"
+export type SwapChainId = "ethereum" | "arbitrum" | "solana" | "sui" | "tron"
 
 export type SwapChain = {
   id: SwapChainId
@@ -21,7 +21,6 @@ export const CHAINS: readonly SwapChain[] = [
   { id: "arbitrum", label: "Arbitrum", icon: "https://coin-images.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg" },
   { id: "solana", label: "Solana", icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
   { id: "sui", label: "Sui", icon: "https://coin-images.coingecko.com/coins/images/26375/small/sui_asset.jpeg" },
-  { id: "ton", label: "Ton", icon: "https://coin-images.coingecko.com/coins/images/17980/small/toncoin.png" },
   { id: "tron", label: "Tron", icon: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png" },
 ]
 
@@ -44,7 +43,6 @@ export const BALANCE_NETWORK_ID: Record<string, string> = {
   arbitrum: "arbitrum-one",
   solana: "solana-mainnet-beta",
   sui: "sui-mainnet",
-  ton: "ton-mainnet",
   tron: "tron-mainnet",
 }
 
@@ -61,7 +59,6 @@ export const SUPPORTED_SWAP_TOKENS: Record<string, string[]> = {
   arbitrum: ["ETH", "USDT", "USDC"],
   solana: ["SOL", "USDC", "USDT"],
   sui: ["SUI", "USDC", "USDT"],
-  ton: ["TON", "USDT", "USDC"],
   tron: ["TRX", "USDT", "USDC"],
 }
 
@@ -98,8 +95,6 @@ export const SWAP_ASSETS: readonly SwapAsset[] = [
   tokenAsset("solana", "USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", 6),
   tokenAsset("solana", "USDT", "Es9vMFrzaCERmJfrF4H2FYD4QfTQJw5u9M8S1jJfV8", 6),
   nativeAsset("sui", "SUI", 9),
-  nativeAsset("ton", "TON", 9),
-  tokenAsset("ton", "USDT", "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs", 6),
   nativeAsset("tron", "TRX", 6),
   tokenAsset("tron", "USDT", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", 6),
 ]
@@ -131,14 +126,13 @@ export type ModernNetworkId =
   | "arbitrum-one"
   | "solana-mainnet-beta"
   | "sui-mainnet"
-  | "ton-mainnet"
   | "tron-mainnet"
 
 export function isRoutable(chain: string): chain is RoutableChain {
   return (ROUTABLE_CHAINS as readonly string[]).includes(chain)
 }
 
-export type SwapRouterId = "lifi" | "0x" | "omniston" | null
+export type SwapRouterId = "lifi" | null
 
 /**
  * UI capability must match an executable backend route. TON remains visible
@@ -152,7 +146,6 @@ export function routerForPair(from: string, to: string): SwapRouterId {
 export function unavailablePairMessage(from: string, to: string): string {
   const fromLabel = chainMeta(from).label
   const toLabel = chainMeta(to).label
-  if (from === "ton" || to === "ton") return `${fromLabel} → ${toLabel} is not available yet. TON swaps are not supported.`
   return `${fromLabel} → ${toLabel} is not available yet.`
 }
 
@@ -166,16 +159,14 @@ export function networkIdFor(chain: SwapChainId): ModernNetworkId {
       return "solana-mainnet-beta"
     case "sui":
       return "sui-mainnet"
-    case "ton":
-      return "ton-mainnet"
     case "tron":
       return "tron-mainnet"
   }
 }
 
 /** Which signing family a chain belongs to, for the intent the wallet approves. */
-export function familyFor(chain: SwapChainId): "evm" | "solana" | "sui" | "ton" | "tron" {
-  return chain === "solana" ? "solana" : chain === "sui" ? "sui" : chain === "ton" ? "ton" : chain === "tron" ? "tron" : "evm"
+export function familyFor(chain: SwapChainId): "evm" | "solana" | "sui" | "tron" {
+  return chain === "solana" ? "solana" : chain === "sui" ? "sui" : chain === "tron" ? "tron" : "evm"
 }
 
 /**
