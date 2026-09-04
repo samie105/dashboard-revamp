@@ -52,7 +52,7 @@ import { ArrowLeft01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
-import { recededClass, useIsTopModal } from "@/components/ui/modal-stack"
+import { backdropHiddenClass, useOwnsBackdrop } from "@/components/ui/modal-stack"
 import { PanelErrorBoundary } from "@/components/ui/panel-error-boundary"
 import { Segmented, type SegmentedOption } from "@/components/ui/system"
 import { BuySellClient } from "@/components/buy-sell/buy-sell-client"
@@ -167,9 +167,9 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
   // keeps its content while the exit transition plays instead of going blank.
   const [open, setOpen] = React.useState(false)
   /* This provider wraps the app and its Dialog.Root is always rendered, so the
-     stack has to be told when the dialog is actually open — otherwise this
-     modal would occupy the top slot forever. See components/ui/modal-stack.ts. */
-  const receded = recededClass(useIsTopModal(open))
+     registry has to be told when the dialog is actually open — otherwise this
+     modal would own the frost forever. See components/ui/modal-stack.ts. */
+  const backdrop = backdropHiddenClass(useOwnsBackdrop(open))
   const [mode, setMode] = React.useState<FlowMode>("buy")
   const [view, setView] = React.useState<FlowView>("flow")
   // Which chooser this journey came through, or null when a caller named the
@@ -406,7 +406,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
         <Dialog.Portal>
           {/* Verbatim, no local additions: the frost behind this modal is the
               frost behind every modal. See components/ui/modal-surface.ts. */}
-          <Dialog.Backdrop className={cn(MODAL_BACKDROP, receded)} />
+          <Dialog.Backdrop className={cn(MODAL_BACKDROP, backdrop)} />
 
           {/* Backlight — a direction-coloured bloom BEHIND the glass, so the
               modal reads as lit from the money's side of the wall. The wrapper
@@ -419,10 +419,7 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
           {!isMobile && (
             <div
               aria-hidden
-              className={cn(
-                "ws-modal-glow pointer-events-none fixed left-1/2 top-1/2 z-50 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2",
-                receded,
-              )}
+              className="ws-modal-glow pointer-events-none fixed left-1/2 top-1/2 z-50 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2"
             >
               {(["in", "out"] as const).map((d) => (
                 <div
@@ -499,10 +496,6 @@ export function MoneyFlowProvider({ children }: { children: React.ReactNode }) {
               // transition-all, which would also try to interpolate every
               // property MODAL_SURFACE's entrance and exit animations touch.
               "transition-[max-width] duration-300 ease-out",
-
-              // Out of sight while something is stacked on top — the flow's
-              // state is still here, it just isn't the thing being asked.
-              receded,
             )}
           >
             {/* Gold rim shimmer — a faint standing stroke with a slow glint

@@ -1,66 +1,63 @@
 "use client"
 
 /**
- * One modal on screen at a time.
+ * One frost, however many dialogs are open.
  *
- * Several flows interrupt themselves to ask for something: the deposit ticket
- * needs the wallet unlocked, the send review needs a fresh verification, the
- * swap needs a PIN before it will sign. Each of those opens
- * `WalletUnlockDialog` while its own modal is still open, and the result was
- * two cards stacked with the lower one showing round the edges of the upper,
- * under two backdrops — so the frost doubled and the whole screen went muddy.
- * It reads as a mistake even though every individual modal is correct.
+ * When a flow interrupts itself to ask for something — the deposit ticket
+ * needs the wallet unlocked, the send review needs a fresh verification — two
+ * dialogs are open at once, and each Base UI dialog draws its own backdrop.
+ * Two `bg-black/45` layers compose to about 0.70 and two `backdrop-blur-md`
+ * passes stack, so the page behind goes muddy and the whole screen reads as a
+ * mistake even though every individual modal is correct.
  *
- * Closing the lower modal first is not an option: it owns the flow's state
- * (the amount typed, the network picked, the intent already created), and the
- * unlock exists precisely so the interrupted action can RESUME. Unmounting it
- * would throw away the thing the user is in the middle of.
+ * So only the top dialog paints a backdrop. The ones below suppress theirs and
+ * are otherwise untouched.
  *
- * So the lower modal stays mounted and stops being drawn. This registry tracks
- * which modals are open, in the order they opened, and tells each one whether
- * it is the top. Anything below the top renders `invisible` — still in the
- * DOM, state intact, but painting nothing, taking no clicks, and out of both
- * the accessibility tree and the tab order, which is what `visibility: hidden`
- * buys over an opacity fade. Its backdrop hides with it, so exactly one frost
- * is on screen however deep the stack goes.
+ * ── Why this does NOT hide the modals underneath ──────────────────────────
+ * It used to. The lower dialog rendered `invisible`, which gave a true
+ * one-at-a-time stack and looked right — until it didn't. Any bookkeeping
+ * error, any dialog that legitimately opened and stayed open off-screen, and
+ * the mechanism hides a modal the user is actively trying to open. That
+ * failure is indistinguishable from a dead button, it was intermittent, and it
+ * cost real debugging time twice: the withdraw flow and the dashboard's
+ * overflow menu both "stopped opening".
  *
- * MOUNT IS OPEN, for most callers. Base UI unmounts `Dialog.Portal` when a
- * dialog closes and nothing in this app passes `keepMounted`, so registering
- * on mount tracks open/closed exactly and no component has to thread an `open`
- * prop down to its content. `MoneyFlowProvider` is the exception and says so.
+ * The rule that replaced it: this registry may only ever REMOVE decoration,
+ * never hide content. Worst case now, if the stack is ever wrong, a dialog
+ * renders without a frost behind it — cosmetic, self-evident, and not a
+ * blocked user. Correctness of what's on screen outranks the polish of what's
+ * behind it.
  */
 
 import * as React from "react"
 
-/* ── The decision, as pure functions ──────────────────────────────────────
-   Kept separate from the store so the ordering rules can be asserted without
-   mounting React — the same reason lib/dashboard-cards.ts exists. */
+/* ── The decision, as pure functions ──────────────────────────────────── */
 
-/** The layer that should be drawn: the most recently opened one. */
+/** The dialog that should paint the backdrop: the most recently opened one. */
 export function topLayer<T>(stack: readonly T[]): T | undefined {
   return stack.length > 0 ? stack[stack.length - 1] : undefined
 }
 
 /**
- * Should `id` draw, given the currently open layers?
+ * Should `id` paint its backdrop?
  *
- * An id that is not in the stack draws. That is not a fallback — it is the
- * first commit of a modal that has mounted but whose layout effect has not run
- * yet, and answering "no" there would open every modal with a hidden frame.
+ * An id that is not in the stack paints. That is the first commit of a dialog
+ * that has mounted but whose layout effect has not run yet, and answering "no"
+ * would open every modal with one un-frosted frame.
  */
-export function shouldDraw<T>(stack: readonly T[], id: T): boolean {
+export function shouldPaintBackdrop<T>(stack: readonly T[], id: T): boolean {
   if (!stack.includes(id)) return true
   return topLayer(stack) === id
 }
 
-/** `visibility: hidden` for every layer below the top, nothing for the top. */
-export function recededClass(isTop: boolean): string {
-  return isTop ? "" : "invisible pointer-events-none"
+/** Suppresses a backdrop. Applied to the BACKDROP only — never to a popup. */
+export function backdropHiddenClass(paints: boolean): string {
+  return paints ? "" : "hidden"
 }
 
 /* ── The store ────────────────────────────────────────────────────────── */
 
-/** Open modals, oldest first. The last one is the one the user can see. */
+/** Open dialogs, oldest first. The last one owns the frost. */
 let stack: symbol[] = []
 const listeners = new Set<() => void>()
 
@@ -79,25 +76,22 @@ function snapshot() {
   return stack
 }
 
-/** Test seam: the stack is module state, so a test has to be able to reset it. */
-export function resetModalStack() {
-  stack = []
-  emit()
-}
+/** Server render has no open dialogs, and the snapshot must be referentially
+ *  stable or useSyncExternalStore re-renders forever. */
+const EMPTY: readonly symbol[] = []
 
 /**
- * Whether this modal is the top of the stack, and so the one to draw.
+ * Whether this dialog owns the backdrop.
  *
  * Call it from the component that renders the popup. It registers for as long
  * as that component is mounted, which is the whole story for anything built on
- * `ResponsiveModalContent`.
+ * `ResponsiveModalContent` — Base UI unmounts the portal on close.
  *
  * @param open Pass this only when the calling component OUTLIVES its own
  *   dialog. `MoneyFlowProvider` wraps the app and renders its `Dialog.Root`
- *   unconditionally, so without it that modal would hold the top slot forever
- *   and every later modal would think something was above it.
+ *   unconditionally, so without it that dialog would hold the frost forever.
  */
-export function useIsTopModal(open = true): boolean {
+export function useOwnsBackdrop(open = true): boolean {
   /* One identity per instance. A ref rather than `useId` because the value has
      to be stable across re-renders AND unique per mount, and it is only ever
      compared by identity. */
@@ -105,8 +99,8 @@ export function useIsTopModal(open = true): boolean {
   if (idRef.current === null) idRef.current = Symbol("modal-layer")
   const id = idRef.current
 
-  /* Layout effect, not effect: this runs before the browser paints, so a modal
-     opening on top of another never gets a frame where both are drawn. */
+  /* Layout effect, not effect: this runs before the browser paints, so a
+     dialog opening on top of another never shows a doubled frost for a frame. */
   React.useLayoutEffect(() => {
     if (!open) return
     stack = [...stack, id]
@@ -119,13 +113,6 @@ export function useIsTopModal(open = true): boolean {
 
   const current = React.useSyncExternalStore(subscribe, snapshot, () => EMPTY)
 
-  /* A closed dialog draws nothing, so the answer cannot matter — but it must
-     not be `false`, or a caller applying the class unconditionally would hide
-     content that is outside the dialog. */
   if (!open) return true
-  return shouldDraw(current, id)
+  return shouldPaintBackdrop(current, id)
 }
-
-/** Server render has no open modals, and the snapshot must be referentially
- *  stable or useSyncExternalStore re-renders forever. */
-const EMPTY: readonly symbol[] = []

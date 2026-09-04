@@ -5,7 +5,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
 import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
-import { recededClass, useIsTopModal } from "@/components/ui/modal-stack"
+import { backdropHiddenClass, useOwnsBackdrop } from "@/components/ui/modal-stack"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Button } from "@/components/ui/button"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -51,17 +51,15 @@ function ResponsiveModalContent({
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & { showCloseButton?: boolean }) {
-  /* One modal on screen at a time. When a flow opens the unlock dialog over
-     its own ticket, this one recedes rather than closing — its state is the
-     flow the user is in the middle of. See components/ui/modal-stack.ts. */
-  const isTop = useIsTopModal()
-  const receded = recededClass(isTop)
+  /* Only the top dialog paints a frost — two stacked backdrops compose to a
+     muddy 0.70 and blur twice. The popup itself is never hidden by this; see
+     components/ui/modal-stack.ts for why that rule exists. */
+  const backdrop = backdropHiddenClass(useOwnsBackdrop())
 
   return (
     <DialogPrimitive.Portal>
-      {/* Overlay / backdrop — the app-wide frost. Hidden along with the card
-          it belongs to, so two stacked modals never double the frost. */}
-      <DialogPrimitive.Backdrop className={cn(MODAL_BACKDROP, receded)} />
+      {/* Overlay / backdrop — the app-wide frost. */}
+      <DialogPrimitive.Backdrop className={cn(MODAL_BACKDROP, backdrop)} />
 
       {/* Popup — a centred card at every width. This component is the
           REFERENCE IMPLEMENTATION of the house modal: it holds nothing of its
@@ -80,8 +78,7 @@ function ResponsiveModalContent({
              title and the primary action end up off both ends of it. */
           "sm:max-w-sm",
           "flex max-h-[calc(100dvh-2rem)] flex-col gap-4 overflow-y-auto overscroll-contain p-4",
-          className,
-          receded
+          className
         )}
         {...props}
       >

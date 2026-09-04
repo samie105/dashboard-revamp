@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { cn } from "@/lib/utils"
 import {
   Copy01Icon,
   CoinsSwapIcon,
@@ -850,9 +851,18 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
           </div>
           )}
 
-          {/* Action rail — two verbs and an overflow, no sideways scroll. */}
+          {/* Action rail.
+              On a phone: two verbs and an overflow, because four would either
+              scroll sideways or shrink past a comfortable tap target.
+              From `sm` there is room for all four, and hiding Swap and Trade
+              behind a menu on a screen with space for them just adds a click
+              to reach something that was never in the way. So the overflow
+              button is mobile-only and the extra actions come inline. */}
           <div data-onboarding="dash-actions" className="flex items-stretch gap-2">
-            {PRIMARY_ACTIONS.map((a) => {
+            {[...PRIMARY_ACTIONS, ...MORE_ACTIONS].map((a, index) => {
+              /* Below sm only the two primary verbs are on the rail; the rest
+                 live in the sheet behind the ⋯ button. */
+              const secondary = index >= PRIMARY_ACTIONS.length
               const inner = (
                 <>
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/[0.14]">
@@ -861,8 +871,10 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
                   <span className="text-[15px] font-bold">{a.label}</span>
                 </>
               )
-              const cls =
-                "ws-card-glass flex min-h-14 flex-1 items-center justify-center gap-2.5 rounded-2xl bg-card/60 px-3 ring-1 ring-border/40 transition-all hover:bg-accent/70 active:scale-[0.97] motion-reduce:active:scale-100 sm:flex-none sm:px-5"
+              const cls = cn(
+                "ws-card-glass min-h-14 flex-1 items-center justify-center gap-2.5 rounded-2xl bg-card/60 px-3 ring-1 ring-border/40 transition-all hover:bg-accent/70 active:scale-[0.97] motion-reduce:active:scale-100 sm:flex-none sm:px-5",
+                secondary ? "hidden sm:flex" : "flex",
+              )
               return a.href ? (
                 <Link key={a.label} href={a.href} className={cls} data-vivid-target={a.vivid} data-vivid-label={a.vividLabel}>
                   {inner}
@@ -879,7 +891,10 @@ export function WalletCard({ coins, prices, error }: WalletCardProps) {
               aria-label="More actions"
               data-vivid-target="dash-more-actions"
               data-vivid-label="Open the rest of the dashboard actions"
-              className="ws-card-glass flex min-h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-card/60 ring-1 ring-border/40 transition-all hover:bg-accent/70 active:scale-[0.97] motion-reduce:active:scale-100"
+              /* Mobile only — from `sm` its contents are on the rail itself,
+                 so the button would open a sheet listing what is already
+                 on screen beside it. */
+              className="ws-card-glass flex min-h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-card/60 ring-1 ring-border/40 transition-all hover:bg-accent/70 active:scale-[0.97] motion-reduce:active:scale-100 sm:hidden"
             >
               <HugeiconsIcon icon={MoreHorizontalIcon} className="h-5 w-5 text-muted-foreground" />
             </button>
