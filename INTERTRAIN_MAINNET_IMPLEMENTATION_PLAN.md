@@ -16,7 +16,7 @@ Intertrain mainnet values currently supplied by the chain repository:
 | RPC | `https://rpc.intertrain.online/rpc` |
 | Explorer | `https://explorer.intertrain.online` |
 | Native asset | WorldStreet Kash (`WSK`) |
-| Native decimals | Must be read from the updated mainnet `chain_info`/asset registry; do not infer it from the old MNA implementation |
+| Native decimals | `6` (verified from live mainnet `chain_info`) |
 | Address format | Intertrain `mna1...` address |
 | Environment | `mainnet` |
 
@@ -38,7 +38,7 @@ The checked-out chain repository still contains older MANNA/MNA terminology in p
 
 - Confirm the live mainnet health response and record the returned protocol chain ID.
 - Confirm `chain_info`, `account_get`, `asset_list`, and `transaction_status` response shapes against the mainnet RPC.
-- Confirm the canonical WorldStreet Kash decimals on mainnet from the live RPC. Do not reuse the old devnet MNA six-decimal assumption.
+- Confirm the canonical WorldStreet Kash decimals on mainnet from the live RPC. The current mainnet value is `6`; do not infer it from unrelated EVM metadata.
 - Confirm the canonical address derivation and address encoding used by the mainnet node.
 - Confirm whether mainnet uses the native transaction format already implemented by the local SDK or a versioned production format.
 - Confirm the explorer’s address and transaction URL formats.
@@ -62,6 +62,7 @@ The checked-out chain repository still contains older MANNA/MNA terminology in p
   - protocol chain ID metadata `intertrain-1`
   - EVM chain ID metadata `4683` if the backend model supports it
   - native asset `WSK`
+  - native decimals metadata `6`
   - balance and native-transfer capabilities only until the adapter is complete
   - an RPC provider key such as `INTERTRAIN_MAINNET_RPC_URLS`
 - Add the mainnet RPC configuration to the environment schema with a safe production default only if the deployment policy allows compiled public endpoints. Prefer an environment value in production.
@@ -110,7 +111,7 @@ The checked-out chain repository still contains older MANNA/MNA terminology in p
 
 - Confirm the canonical mainnet signed transaction schema from the chain implementation.
 - Add address validation for `mna1...` addresses, including checksum and network-prefix validation.
-- Add exact decimal-to-base-unit conversion using the verified WSK mainnet precision.
+- Add exact decimal-to-base-unit conversion using six WSK mainnet decimals.
 - Add `buildTransfer` to construct an unsigned transaction containing:
   - `intertrain-1`
   - sender address
@@ -266,7 +267,7 @@ This phase is deliberately separate from adding Intertrain as a wallet chain.
 - Mainnet network seed and environment gating.
 - Intertrain address encoding/decoding and checksum rejection.
 - Mainnet chain ID rejection for `worldstreet-devnet-1` payloads.
-- WSK decimal conversion using the verified mainnet precision, including zero, tiny, maximum safe UI values, and invalid precision.
+- WSK decimal conversion using six mainnet decimals, including zero, tiny, maximum safe UI values, and invalid precision.
 - RPC response parsing and error normalization.
 - Provider timeout/failover behavior.
 - Additive wallet package merge:
