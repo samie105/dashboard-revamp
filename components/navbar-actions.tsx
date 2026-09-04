@@ -9,7 +9,6 @@ import {
   Notification01Icon,
   Cancel01Icon,
   Exchange01Icon,
-  Activity01Icon,
   ArrowRight01Icon,
   Megaphone01Icon,
 } from "@hugeicons/core-free-icons"
@@ -320,19 +319,15 @@ export function NavbarActions() {
                     </button>
                   </div>
                   <div className="h-px bg-border/20 mb-2" />
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-1 mb-1 block">Wallets</span>
+                  {/* ONE WALLET. This listed "Spot Wallet", "Futures Wallet"
+                      and "Funding" alongside it, which named three BALANCES —
+                      places money sits inside the trading account — as though
+                      they were wallets you could hold. There is one wallet;
+                      Spot and Futures are what it can be traded through, and
+                      they have their own screens. No section heading either:
+                      a category label over a single row, under a panel already
+                      titled "Wallet", is three words for one destination. */}
                   <div className="flex flex-col gap-0.5">
-                    {([
-                      { label: "Spot Wallet", href: "/portfolio", icon: Wallet01Icon },
-                      { label: "Futures Wallet", href: "/trade?market=futures", icon: Activity01Icon },
-                      { label: "Funding", href: "/fund", icon: Wallet01Icon },
-                    ] as const).map(w =>
-                        <a key={w.label} href={w.href} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors group/link">
-                          <HugeiconsIcon icon={w.icon} className="h-3.5 w-3.5 text-primary" />
-                          <span className="flex-1 font-medium">{w.label}</span>
-                          <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 opacity-0 -translate-x-1 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all" />
-                        </a>
-                    )}
                     <Link href="/wallet/modern" className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors group/link">
                       <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-primary" />
                       <span className="flex-1 font-medium">Worldstreet Wallet</span>
