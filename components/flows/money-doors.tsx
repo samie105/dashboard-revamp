@@ -19,12 +19,14 @@
  * /sell routes still land straight on a flow. The chooser only exists for the
  * dashboard's two ambiguous buttons.
  *
- * ── The directions are NOT symmetric, on purpose ──────────────────────────
- * Deposit asks the question; withdraw currently does not, because only one of
- * its two doors is open (see CASH_WITHDRAWALS_CLOSED below). A chooser with a
- * single row is a dead click dressed up as a decision, so the modal walks
- * straight through it. Please don't "restore" the missing row for tidiness —
- * the asymmetry is telling the truth about how many ways out there are.
+ * ── Neither direction asks the question right now ─────────────────────────
+ * Both choosers are down to a single door while the Dollar Account routes are
+ * shut (see CASH_DEPOSITS_CLOSED and CASH_WITHDRAWALS_CLOSED below). A chooser
+ * with one row is a dead click dressed up as a decision, so the modal walks
+ * straight through to the door that is open. Please don't "restore" the
+ * missing rows for tidiness — the count is telling the truth about how many
+ * ways in and out there actually are, and it is what makes re-opening them a
+ * one-line change.
  */
 
 import * as React from "react"
@@ -77,6 +79,31 @@ type Door = {
  * open cash flow still reaches it. This shuts a door, not a room.
  */
 export const CASH_WITHDRAWALS_CLOSED: boolean = true
+
+/**
+ * Cash deposits are closed, for the mirror-image reason.
+ *
+ * "From your Dollar Account" promises to move money out of the custodial
+ * dollar balance and into the trading account. The bank rails behind that are
+ * not working yet, so the door was making a promise the product cannot keep —
+ * and worse, the slot behind it currently renders the Hyperliquid funding
+ * panel, which asks about an Arbitrum wallet address and a futures account.
+ * Someone answering "from my Dollar Account" was being shown a completely
+ * different transfer. Owner call, 2026-09-04: shut the door.
+ *
+ * Shutting it rather than rewiring it is deliberate. The panel behind it is
+ * not a broken version of this flow, it is a different flow that belongs
+ * somewhere else, and pointing this door at `FundClient` again would restore a
+ * route the bank rails still cannot settle.
+ *
+ * TO RE-OPEN: set this to false — but check what the "fund" slot renders
+ * first. Today it is HyperliquidFundingClient, which is not what this door
+ * says it does.
+ *
+ * NOT affected: openFlow("fund"), the /fund route, and the Futures card's own
+ * "Add funds" button. This shuts a door, not a room.
+ */
+export const CASH_DEPOSITS_CLOSED: boolean = true
 
 /**
  * The copy is the product here. "From your Dollar Account" and "From crypto"
@@ -137,10 +164,8 @@ const HEADINGS: Record<MoneyDirection, { title: string; subtitle: string }> = {
  */
 export function doorsFor(direction: MoneyDirection): readonly Door[] {
   const doors = ALL_DOORS[direction]
-  if (direction === "withdraw" && CASH_WITHDRAWALS_CLOSED) {
-    return doors.filter((door) => door.key !== "cash")
-  }
-  return doors
+  const cashShut = direction === "withdraw" ? CASH_WITHDRAWALS_CLOSED : CASH_DEPOSITS_CLOSED
+  return cashShut ? doors.filter((door) => door.key !== "cash") : doors
 }
 
 export function DoorChooser({

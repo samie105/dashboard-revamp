@@ -69,13 +69,13 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
   const validAmount = Number.isFinite(amountValue) && amountValue > 0
   const balance = accountQuery.data?.balances?.perpsWithdrawableUsdc ?? 0
   const blocker = !isCryptoBackendEnabled
-    ? "Modern wallet backend is not enabled"
+    ? "Wallet service is unavailable"
     : !wallet.data
-      ? "Create your modern wallet first"
+      ? "Set up your wallet first"
       : !evmAccount
-        ? "Your modern wallet has no active EVM account"
+        ? "Your wallet isn’t ready for this yet"
         : !packageQuery.data
-          ? "Preparing your modern wallet"
+          ? "Getting your wallet ready…"
         : !isDeposit && accountQuery.isLoading
           ? "Loading your Futures balance"
         : !isDeposit && accountQuery.isError
@@ -89,7 +89,12 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
               : null
 
   React.useEffect(() => onInFlightChange?.(busy), [busy, onInFlightChange])
-  React.useEffect(() => onCompactChange?.(false), [onCompactChange])
+  /* COMPACT. This is one column — a heading, an amount, three rows and a
+     button. Reporting `false` asked the money-flow modal for the width it
+     keeps for the two-pane trading terminal (md:max-w-2xl), so a narrow form
+     was stretched across 42rem with its labels at one edge and its values at
+     the other. */
+  React.useEffect(() => onCompactChange?.(true), [onCompactChange])
 
   React.useEffect(() => {
     if (!isDeposit) return
@@ -101,7 +106,7 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
         setPendingDeposit(parsed.intents)
         setDepositStage(parsed.stage ?? 0)
         if (typeof parsed.amount === "number") setAmount(String(parsed.amount))
-        setMessage("A Hyperliquid deposit is already prepared. Resume it to finish the remaining step.")
+        setMessage("You have a transfer already started. Resume it to finish the last step.")
       }
     } catch {
       clearPendingFlow("hyperliquid-deposit")
@@ -117,7 +122,7 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
       if (parsed.intentId) {
         setWithdrawalIntentId(parsed.intentId)
         if (typeof parsed.amount === "number") setAmount(String(parsed.amount))
-        setSuccess("Your Hyperliquid withdrawal was submitted. We are checking for settlement.")
+        setSuccess("Your transfer was sent. We’re checking for it to settle.")
       }
     } catch {
       clearPendingFlow("hyperliquid-withdrawal")
@@ -140,7 +145,7 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
           amount: Math.round(amountValue * 1_000_000) / 1_000_000,
           idempotencyKey: crypto.randomUUID(),
         })).intents
-        if (prepared.length !== 2) throw new Error("The backend returned an incomplete Hyperliquid deposit")
+        if (prepared.length !== 2) throw new Error("We couldn’t prepare that transfer. Nothing has moved — try again.")
         const start = pendingDeposit ? depositStage : 0
         setPendingDeposit(prepared)
         for (let index = start; index < prepared.length; index++) {
@@ -155,7 +160,7 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
         clearPendingFlow("hyperliquid-deposit")
         setPendingDeposit(null)
         setDepositStage(0)
-        setSuccess(`${amountValue.toLocaleString()} USDC deposit submitted to Hyperliquid. It may take a moment to arrive.`)
+        setSuccess(`${amountValue.toLocaleString()} USDC is on its way to your Futures account. It may take a moment to arrive.`)
       } else {
         const intent = await cryptoBackendClient.createHyperliquidIntent({
           type: "withdraw3",
@@ -167,48 +172,64 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
         await cryptoBackendClient.submitHyperliquidIntent(intent.id, signatures)
         setWithdrawalIntentId(intent.id)
         savePendingFlow("hyperliquid-withdrawal", JSON.stringify({ intentId: intent.id, amount: amountValue }))
-        setSuccess(`${amountValue.toLocaleString()} USDC withdrawal submitted to ${destination?.slice(0, 6)}…${destination?.slice(-4)}. Waiting for settlement.`)
+        setSuccess(`${amountValue.toLocaleString()} USDC is on its way to your wallet (${destination?.slice(0, 6)}…${destination?.slice(-4)}). Waiting for it to settle.`)
       }
       setAmount("")
       await queryClient.invalidateQueries({ queryKey: ["crypto", "hyperliquid", "account", user.userId] })
       await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.balanceSnapshot(user.userId) })
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The Hyperliquid transfer could not be submitted.")
+      setMessage(error instanceof Error ? error.message : "That transfer couldn’t be sent. Nothing has moved.")
     } finally {
       setBusy(false)
     }
   }
 
+  /* WHERE THE MONEY GOES, in the two words the user thinks in. The rows used
+     to read "Arbitrum → Hyperliquid", a wallet in hex and "Futures account",
+     which names the rails rather than the accounts: someone moving money into
+     their own futures balance was being shown a venue they never chose and an
+     address they never typed. From and To answer the only question the screen
+     raises. The address stays as its own row, quieter, because it IS worth
+     being able to check — it just isn't the headline. */
+  const shortAddress = destination ? `${destination.slice(0, 6)}…${destination.slice(-4)}` : null
   const content = (
     <div className="flex flex-col gap-4">
-      <div className="rounded-2xl bg-surface-sunken/60 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
+      <p className="text-[13px] leading-relaxed text-muted-foreground">
         {isDeposit
-          ? "Deposit USDC from your modern wallet on Arbitrum into your Hyperliquid Futures account."
-          : "Withdraw available USDC from Hyperliquid Futures to your modern wallet on Arbitrum."}
-      </div>
+          ? "Move USDC out of your wallet and into your Futures account, ready to trade with."
+          : "Move USDC out of your Futures account and back into your wallet."}
+      </p>
       <AmountField value={amount} onChange={setAmount} unit="USDC" disabled={busy || Boolean(pendingDeposit)} hint={isDeposit ? "Minimum deposit: $5" : `Withdrawable: $${balance.toFixed(2)}`} />
       <DetailPanel rows={[
-        { label: "Network", value: isDeposit ? "Arbitrum → Hyperliquid" : "Hyperliquid → Arbitrum" },
-        { label: "Wallet", value: destination ? `${destination.slice(0, 8)}…${destination.slice(-6)}` : "Modern EVM wallet" },
-        ...(isDeposit ? [{ label: "Destination", value: "Futures account" }] : []),
+        { label: "From", value: isDeposit ? "Your wallet" : "Futures account" },
+        { label: "To", value: isDeposit ? "Futures account" : "Your wallet" },
+        ...(shortAddress ? [{ label: "Wallet address", value: shortAddress }] : []),
       ]} />
       {isDeposit && (busy || pendingDeposit) && !success && (
         <div className="rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] text-muted-foreground">
-          {depositStage === 0 ? "Preparing the Arbitrum approval…" : depositStage === 1 ? "Approval submitted. Sending USDC to Hyperliquid…" : "Deposit submitted. Waiting for Hyperliquid to credit Futures."}
+          {depositStage === 0 ? "Getting your wallet ready…" : depositStage === 1 ? "Approved. Sending your USDC…" : "Sent. Waiting for it to land in Futures."}
         </div>
       )}
       {message && <InlineNotice tone="error">{message}</InlineNotice>}
-      {!isDeposit && withdrawalIntentId && withdrawalQuery.data?.status === "failed" && <InlineNotice tone="error">Hyperliquid reported that this withdrawal failed. Your Futures balance was not settled.</InlineNotice>}
-      {!isDeposit && withdrawalIntentId && withdrawalQuery.data?.status === "submitted" && <div className="rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] text-muted-foreground">Withdrawal relayed to Hyperliquid. The Arbitrum balance will update after settlement.</div>}
-      {!isDeposit && accountQuery.isError && <InlineNotice tone="warning">We can’t verify the latest Futures balance right now. Nothing will be submitted until it is available.</InlineNotice>}
+      {!isDeposit && withdrawalIntentId && withdrawalQuery.data?.status === "failed" && <InlineNotice tone="error">That withdrawal didn’t go through. Nothing left your Futures account.</InlineNotice>}
+      {!isDeposit && withdrawalIntentId && withdrawalQuery.data?.status === "submitted" && <div className="rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] text-muted-foreground">On its way. Your wallet balance updates once it settles.</div>}
+      {!isDeposit && accountQuery.isError && <InlineNotice tone="warning">We can’t check your Futures balance right now. Nothing will be sent until we can.</InlineNotice>}
       {success && <InlineNotice className="bg-credit-chip text-credit">{success}</InlineNotice>}
-      <FlowCta label={busy ? "Signing and submitting…" : blocker ?? (pendingDeposit ? "Resume deposit" : isDeposit ? "Deposit to Hyperliquid" : "Withdraw from Hyperliquid")} onClick={() => void submit()} disabled={Boolean(blocker) || busy} busy={busy} />
+      <FlowCta label={busy ? "Sending…" : blocker ?? (pendingDeposit ? "Resume transfer" : isDeposit ? "Add to Futures" : "Move to wallet")} onClick={() => void submit()} disabled={Boolean(blocker) || busy} busy={busy} />
     </div>
   )
 
   return (
     <>
-      {variant === "modal" ? content : <FlowShell><PageHeader title={isDeposit ? "Deposit to Hyperliquid" : "Withdraw from Hyperliquid"} subtitle="Modern wallet only · Hyperliquid mainnet" back="/" className="mb-5" />{content}</FlowShell>}
+      {/* The modal variant gets the same column padding BuySellClient and
+          FundClient use for their modal bodies. Without it this panel ran
+          flush to the popup's edges while its siblings sat inset, which is
+          what made one modal look like two different designs. */}
+      {variant === "modal" ? (
+        <div className="flex flex-1 flex-col p-4 sm:p-5">{content}</div>
+      ) : (
+        <FlowShell><PageHeader title={isDeposit ? "Add to Futures" : "Move to wallet"} subtitle={isDeposit ? "From your Worldstreet wallet" : "Back into your Worldstreet wallet"} back="/" className="mb-5" />{content}</FlowShell>
+      )}
       <WalletUnlockDialog action="hyperliquid-deposit" open={unlockOpen} onOpenChange={setUnlockOpen} onUnlocked={() => { const action = resume.current; resume.current = null; action?.() }} />
       {onDismiss && success && <button type="button" onClick={onDismiss} className="sr-only">Done</button>}
     </>
