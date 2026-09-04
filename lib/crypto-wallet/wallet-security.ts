@@ -407,9 +407,11 @@ export async function replaceWalletPasskeyWithRecovery(
       walletId: wallet.id,
       securityVersion: Math.max(wallet.securityVersion, packageValue.securityVersion),
       accounts: packageValue.accounts,
-      // Replace unusable passkey envelopes while retaining the recovery path.
+      // Append this credential while retaining every existing passkey and the
+      // recovery path. A wallet may have passkeys on multiple devices and
+      // platforms (iCloud, Android, macOS, Windows, or a security key).
       envelopes: [
-        ...packageEnvelopes(packageValue).filter((candidate) => candidate.purpose !== "passkey"),
+        ...packageEnvelopes(packageValue),
         {
           envelopeId,
           purpose: "passkey",

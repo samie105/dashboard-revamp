@@ -229,7 +229,7 @@ export function CryptoSecurityPanel({
 
         <div className="flex flex-col gap-2 border-b border-border/20 pb-3.5">
           <span className="text-[12.5px] font-medium text-muted-foreground">Passkey and biometric unlock</span>
-          <p className="text-[12px] leading-relaxed text-muted-foreground">Add a device passkey to unlock this same wallet with Face ID, Touch ID, Windows Hello, or a security key. Your recovery path remains available.</p>
+          <p className="text-[12px] leading-relaxed text-muted-foreground">Add a passkey to unlock this same wallet with Face ID, Touch ID, Windows Hello, Android, iCloud Keychain, or a security key. You can register multiple passkeys; your recovery path remains available.</p>
           <PasskeyButton
             mode="register"
             walletId={walletId}
