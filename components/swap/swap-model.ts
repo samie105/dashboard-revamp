@@ -65,6 +65,52 @@ export const SUPPORTED_SWAP_TOKENS: Record<string, string[]> = {
   tron: ["TRX", "USDT", "USDC"],
 }
 
+export type SwapAsset = {
+  networkId: string
+  chain: SwapChainId
+  symbol: string
+  kind: "native" | "token"
+  /** Contract, mint, or chain-native sentinel. Never identify a token by symbol alone. */
+  address: string
+  decimals: number
+  assetId: string
+}
+
+const nativeAsset = (chain: SwapChainId, symbol: string, decimals: number): SwapAsset => {
+  const networkId = BALANCE_NETWORK_ID[chain]
+  return { networkId, chain, symbol, kind: "native", address: "native", decimals, assetId: `${networkId}:${symbol}:native` }
+}
+
+const tokenAsset = (chain: SwapChainId, symbol: string, address: string, decimals: number): SwapAsset => {
+  const networkId = BALANCE_NETWORK_ID[chain]
+  return { networkId, chain, symbol, kind: "token", address, decimals, assetId: `${networkId}:${symbol}:${address.toLowerCase()}` }
+}
+
+/** Canonical chain-scoped identities shared by the swap UI and provider adapters. */
+export const SWAP_ASSETS: readonly SwapAsset[] = [
+  nativeAsset("ethereum", "ETH", 18),
+  tokenAsset("ethereum", "USDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6),
+  tokenAsset("ethereum", "USDT", "0xdAC17F958D2ee523a2206206994597C13D831ec7", 6),
+  nativeAsset("arbitrum", "ETH", 18),
+  tokenAsset("arbitrum", "USDC", "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", 6),
+  tokenAsset("arbitrum", "USDT", "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9", 6),
+  nativeAsset("solana", "SOL", 9),
+  tokenAsset("solana", "USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", 6),
+  tokenAsset("solana", "USDT", "Es9vMFrzaCERmJfrF4H2FYD4QfTQJw5u9M8S1jJfV8", 6),
+  nativeAsset("sui", "SUI", 9),
+  nativeAsset("ton", "TON", 9),
+  tokenAsset("ton", "USDT", "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs", 6),
+  nativeAsset("tron", "TRX", 6),
+  tokenAsset("tron", "USDT", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", 6),
+]
+
+const SWAP_ASSET_BY_KEY = new Map(SWAP_ASSETS.map((asset) => [`${asset.networkId}:${asset.symbol.toUpperCase()}`, asset]))
+
+export function swapAssetForToken(chain: string, symbol: string): SwapAsset | undefined {
+  const networkId = BALANCE_NETWORK_ID[chain]
+  return networkId ? SWAP_ASSET_BY_KEY.get(`${networkId}:${symbol.toUpperCase()}`) : undefined
+}
+
 /** Return only assets that belong to the selected chain. */
 export function tokensForChain<T extends { symbol: string }>(chain: string, coins: readonly T[]): T[] {
   const supported = new Set((SUPPORTED_SWAP_TOKENS[chain] ?? []).map((symbol) => symbol.toUpperCase()))
