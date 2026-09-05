@@ -18,6 +18,7 @@ import { signSuiIntent } from "@/lib/crypto-wallet/sui-signing"
 import { signTonIntent } from "@/lib/crypto-wallet/ton-signing"
 import { signTronIntent } from "@/lib/crypto-wallet/tron-signing"
 import { signIntertrainIntent } from "@/lib/crypto-wallet/intertrain-signing"
+import { signBitcoinIntent } from "@/lib/crypto-wallet/bitcoin-signing"
 
 type TransferInput = {
   accountId: string
@@ -149,6 +150,8 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
               ? await signTronIntent(userId, walletId, packageValue, intent, String(intent.accountId))
               : intent.chainFamily === "intertrain"
                 ? await signIntertrainIntent(userId, walletId, packageValue, intent, String(intent.accountId))
+              : intent.chainFamily === "bitcoin"
+                ? await signBitcoinIntent(userId, walletId, packageValue, intent, String(intent.accountId))
               : await signEvmIntent(userId, walletId, packageValue, intent, String(intent.accountId))
       return cryptoBackendClient.submitIntent(intentId, signed)
     },

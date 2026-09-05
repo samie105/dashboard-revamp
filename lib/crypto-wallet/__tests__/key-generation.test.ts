@@ -10,6 +10,7 @@ import {
   generateSuiKey,
   generateTonKey,
   generateTronKey,
+  generateBitcoinKey,
   signEd25519Message,
 } from "../key-generation"
 import { fromBase64Url, utf8 } from "../encoding"
@@ -23,7 +24,7 @@ import { fromBase64Url, utf8 } from "../encoding"
  * a "is it a string" check and lose everyone's money.
  */
 
-const FAMILIES = ["evm", "solana", "sui", "ton", "tron"] as const
+const FAMILIES = ["evm", "solana", "sui", "ton", "tron", "bitcoin"] as const
 
 describe("generateAccountKey", () => {
   it.each(FAMILIES)("produces a complete %s key", (family) => {
@@ -44,7 +45,7 @@ describe("generateAccountKey", () => {
   })
 
   it("rejects an unknown family rather than inventing one", () => {
-    expect(() => generateAccountKey("bitcoin")).toThrow(/Unsupported wallet family/)
+    expect(() => generateAccountKey("unknown")).toThrow(/Unsupported wallet family/)
   })
 })
 
@@ -85,6 +86,13 @@ describe("per-family key shapes", () => {
     const key = generateTronKey()
     expect(key.secretKey).toHaveLength(32)
     expect(key.canonicalAddress).toMatch(/^T[1-9A-HJ-NP-Za-km-z]{33}$/)
+    expect(key.algorithm).toBe("secp256k1")
+  })
+
+  it("gives a Bitcoin key with a native SegWit address", () => {
+    const key = generateBitcoinKey()
+    expect(key.secretKey).toHaveLength(32)
+    expect(key.canonicalAddress).toMatch(/^bc1q/)
     expect(key.algorithm).toBe("secp256k1")
   })
 })

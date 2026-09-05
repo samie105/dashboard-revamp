@@ -28,6 +28,7 @@ export interface PrivyWallets {
 }
 
 export interface WalletAddresses {
+  bitcoin?: string
   ethereum: string
   solana: string
   sui: string

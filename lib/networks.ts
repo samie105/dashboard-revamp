@@ -11,7 +11,7 @@
  */
 
 /** The wallet-record chains we actually hold keys on. */
-export type WalletChain = "ethereum" | "solana" | "sui" | "ton" | "tron" | "intertrain"
+export type WalletChain = "ethereum" | "solana" | "sui" | "ton" | "tron" | "bitcoin" | "intertrain"
 
 export type NetworkMeta = {
   key: string
@@ -27,6 +27,7 @@ export type NetworkMeta = {
 }
 
 export const NETWORKS: NetworkMeta[] = [
+  { key: "bitcoin", label: "Bitcoin", chain: "bitcoin", nativeSymbol: "BTC", hue: "#F7931A", explorerName: "Mempool", explorerUrl: (a) => `https://mempool.space/address/${a}`, txUrl: (h) => `https://mempool.space/tx/${h}` },
   {
     key: "ethereum",
     label: "Ethereum",
@@ -101,6 +102,7 @@ export const NETWORKS: NetworkMeta[] = [
 
 /** CoinGecko marks for the native coin of each network. */
 export const NETWORK_ICON: Record<string, string> = {
+  bitcoin: "https://coin-images.coingecko.com/coins/images/1/small/bitcoin.png",
   ethereum: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png",
   arbitrum: "https://coin-images.coingecko.com/coins/images/16547/small/arb.jpg",
   solana: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png",

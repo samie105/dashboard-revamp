@@ -8,11 +8,13 @@ import { Buffer } from "buffer"
 import nacl from "tweetnacl"
 import { sha256 } from "@noble/hashes/sha2"
 import { bech32m } from "@scure/base"
+import * as btc from "@scure/btc-signer"
+import { secp256k1 } from "@noble/curves/secp256k1.js"
 
 import { fromBase64Url, randomBytes, toBase64Url, utf8 } from "./encoding"
 
 export type GeneratedWalletKey = {
-  family: "evm" | "solana" | "sui" | "ton" | "tron" | "intertrain"
+  family: "evm" | "solana" | "sui" | "ton" | "tron" | "bitcoin" | "intertrain"
   algorithm: "secp256k1" | "ed25519"
   keyType: "private-key"
   secretKey: Uint8Array
@@ -87,6 +89,14 @@ export function generateTronKey(): GeneratedWalletKey {
   }
 }
 
+export function generateBitcoinKey(): GeneratedWalletKey {
+  const secretKey = btc.utils.randomPrivateKeyBytes()
+  const publicKey = secp256k1.getPublicKey(secretKey, true)
+  const payment = btc.p2wpkh(publicKey, btc.NETWORK)
+  if (!payment.address) throw new Error("Bitcoin address generation failed")
+  return { family: "bitcoin", algorithm: "secp256k1", keyType: "private-key", secretKey, publicKey: toBase64Url(publicKey), canonicalAddress: payment.address }
+}
+
 /** Intertrain mainnet uses an ed25519 account encoded as a bech32m `mna1...`
  * address. Keep the protocol domain and version byte aligned with the chain;
  * WSK is the asset name, not a replacement for the address namespace. */
@@ -115,6 +125,7 @@ export function generateAccountKey(family: string): GeneratedWalletKey {
   if (family === "sui") return generateSuiKey()
   if (family === "ton") return generateTonKey()
   if (family === "tron") return generateTronKey()
+  if (family === "bitcoin") return generateBitcoinKey()
   if (family === "intertrain") return generateIntertrainKey()
   throw new Error(`Unsupported wallet family: ${family}`)
 }

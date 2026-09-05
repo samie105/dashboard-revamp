@@ -25,7 +25,7 @@ import { setUnlockedWalletState } from "./unlock-state"
 export type WalletSetupStage = "account" | "keys" | "encrypt" | "commit"
 
 type SetupOptions = {
-  chainFamilies?: Array<"evm" | "solana" | "sui" | "ton" | "tron" | "intertrain">
+  chainFamilies?: Array<"evm" | "solana" | "sui" | "ton" | "tron" | "bitcoin" | "intertrain">
   unlockTtlMs?: number
   walletPassphrase?: string
   authorizeWallet?: () => Promise<WalletAuthorizationResult>
@@ -60,7 +60,7 @@ export async function createSelfCustodialWallet(
     throw new Error(`Choose a wallet passphrase with at least ${MIN_WALLET_PASSPHRASE_LENGTH} characters`)
   }
 
-  const chainFamilies = options.chainFamilies ?? ["evm", "solana", "sui", "ton", "tron"]
+  const chainFamilies = options.chainFamilies ?? ["evm", "solana", "sui", "ton", "tron", "bitcoin"]
   const stage = options.onStage ?? (() => {})
   let wallet: CryptoWallet
 
@@ -98,7 +98,7 @@ export async function createSelfCustodialWallet(
   const networks = await cryptoBackendClient.listNetworks()
   const preparedAccounts = await Promise.all(
     chainFamilies.map((chainFamily) =>
-      cryptoBackendClient.prepareAccount({ chainFamily, keyAlgorithm: chainFamily === "evm" || chainFamily === "tron" ? "secp256k1" : "ed25519", keyType: "private-key" }),
+      cryptoBackendClient.prepareAccount({ chainFamily, keyAlgorithm: chainFamily === "evm" || chainFamily === "tron" || chainFamily === "bitcoin" ? "secp256k1" : "ed25519", keyType: "private-key" }),
     ),
   )
   stage("keys")

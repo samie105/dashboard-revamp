@@ -8,7 +8,7 @@
  * someone to add a token to only one of them.
  */
 
-export type SwapChainId = "ethereum" | "arbitrum" | "solana" | "sui" | "tron"
+export type SwapChainId = "ethereum" | "arbitrum" | "solana" | "sui" | "tron" | "bitcoin"
 
 export type SwapChain = {
   id: SwapChainId
@@ -17,6 +17,7 @@ export type SwapChain = {
 }
 
 export const CHAINS: readonly SwapChain[] = [
+  { id: "bitcoin", label: "Bitcoin", icon: "https://coin-images.coingecko.com/coins/images/1/small/bitcoin.png" },
   { id: "ethereum", label: "Ethereum", icon: "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png" },
   { id: "arbitrum", label: "Arbitrum", icon: "https://coin-images.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg" },
   { id: "solana", label: "Solana", icon: "https://coin-images.coingecko.com/coins/images/4128/small/solana.png" },
@@ -44,6 +45,7 @@ export const BALANCE_NETWORK_ID: Record<string, string> = {
   solana: "solana-mainnet-beta",
   sui: "sui-mainnet",
   tron: "tron-mainnet",
+  bitcoin: "bitcoin-mainnet",
 }
 
 /**
@@ -55,6 +57,7 @@ export const BALANCE_NETWORK_ID: Record<string, string> = {
  * an amount into a pair that can never fill.
  */
 export const SUPPORTED_SWAP_TOKENS: Record<string, string[]> = {
+  bitcoin: ["BTC"],
   ethereum: ["ETH", "USDT", "USDC"],
   arbitrum: ["ETH", "USDT", "USDC"],
   solana: ["SOL", "USDC", "USDT"],
@@ -85,6 +88,7 @@ const tokenAsset = (chain: SwapChainId, symbol: string, address: string, decimal
 
 /** Canonical chain-scoped identities shared by the swap UI and provider adapters. */
 export const SWAP_ASSETS: readonly SwapAsset[] = [
+  nativeAsset("bitcoin", "BTC", 8),
   nativeAsset("ethereum", "ETH", 18),
   tokenAsset("ethereum", "USDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6),
   tokenAsset("ethereum", "USDT", "0xdAC17F958D2ee523a2206206994597C13D831ec7", 6),
@@ -118,7 +122,7 @@ export function tokensForChain<T extends { symbol: string }>(chain: string, coin
  * TON is intentionally excluded because the configured swap router does not
  * support it. TRON is included because LI.FI supports TRON routes.
  */
-export const ROUTABLE_CHAINS = ["ethereum", "arbitrum", "solana", "sui", "tron"] as const
+export const ROUTABLE_CHAINS = ["ethereum", "arbitrum", "solana", "sui", "tron", "bitcoin"] as const
 export type RoutableChain = (typeof ROUTABLE_CHAINS)[number]
 
 export type ModernNetworkId =
@@ -127,6 +131,7 @@ export type ModernNetworkId =
   | "solana-mainnet-beta"
   | "sui-mainnet"
   | "tron-mainnet"
+  | "bitcoin-mainnet"
 
 export function isRoutable(chain: string): chain is RoutableChain {
   return (ROUTABLE_CHAINS as readonly string[]).includes(chain)
@@ -161,12 +166,14 @@ export function networkIdFor(chain: SwapChainId): ModernNetworkId {
       return "sui-mainnet"
     case "tron":
       return "tron-mainnet"
+    case "bitcoin":
+      return "bitcoin-mainnet"
   }
 }
 
 /** Which signing family a chain belongs to, for the intent the wallet approves. */
-export function familyFor(chain: SwapChainId): "evm" | "solana" | "sui" | "tron" {
-  return chain === "solana" ? "solana" : chain === "sui" ? "sui" : chain === "tron" ? "tron" : "evm"
+export function familyFor(chain: SwapChainId): "evm" | "solana" | "sui" | "tron" | "bitcoin" {
+  return chain === "solana" ? "solana" : chain === "sui" ? "sui" : chain === "tron" ? "tron" : chain === "bitcoin" ? "bitcoin" : "evm"
 }
 
 /**

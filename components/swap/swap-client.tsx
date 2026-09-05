@@ -54,7 +54,7 @@ import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoB
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useAuth } from "@/components/auth-provider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled, CryptoBackendError } from "@/lib/crypto-backend"
-import { signEvmIntent, signSolanaIntent, signSuiIntent, signTronIntent } from "@/lib/crypto-wallet"
+import { signBitcoinIntent, signEvmIntent, signSolanaIntent, signSuiIntent, signTronIntent } from "@/lib/crypto-wallet"
 import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { toBaseUnits } from "@/lib/crypto-wallet/address-validation"
@@ -719,8 +719,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
       if (!amountBaseUnits || amountBaseUnits === "0") throw new Error("The amount is too small for this coin")
       const idempotencyKey = swapIdempotencyKey.current ?? (swapIdempotencyKey.current = crypto.randomUUID())
       const intent = await cryptoBackendClient.createModernLifiSwapIntent({
-        sourceNetworkId: networkIdFor(fromChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet",
-        destinationNetworkId: networkIdFor(toChain as SwapChainId) as "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet",
+        sourceNetworkId: networkIdFor(fromChain as SwapChainId),
+        destinationNetworkId: networkIdFor(toChain as SwapChainId),
         sellToken: quoteData.fromToken.address,
         buyToken: quoteData.toToken.address,
         sellAmountBaseUnits: amountBaseUnits,
@@ -733,7 +733,9 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
           ? await signSuiIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
           : sourceFamily === "tron"
               ? await signTronIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
-              : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
+              : sourceFamily === "bitcoin"
+                ? await signBitcoinIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
+                : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
       const submitted = await cryptoBackendClient.submitIntent(intent.id, signed)
       setSwapResult({ success: true, status: "PENDING", txHash: submitted.txHash })
       swapIdempotencyKey.current = null

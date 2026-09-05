@@ -1,6 +1,7 @@
 import { isAddress } from "viem"
 import bs58 from "bs58"
 import { bech32m } from "@scure/base"
+import * as btc from "@scure/btc-signer"
 
 export type AddressCheck = { ok: true } | { ok: false; problem: string }
 
@@ -8,6 +9,8 @@ export function validateAddress(family: string, address: string): AddressCheck {
   const trimmed = address.trim()
   if (!trimmed) return { ok: false, problem: "Enter a destination address." }
   switch (family) {
+    case "bitcoin":
+      try { btc.Address(btc.NETWORK).decode(trimmed); return { ok: true } } catch { return { ok: false, problem: "That doesn't look like a valid Bitcoin address." } }
     case "evm":
       return isAddress(trimmed, { strict: false })
         ? { ok: true }

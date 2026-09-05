@@ -308,7 +308,7 @@ export async function addWalletChains(
   const wallet = await client.getWallet()
   const networks = await client.listNetworks()
   const existingFamilies = new Set((packageValue.accounts as Array<Record<string, unknown>>).map((account) => String(account.family)))
-  const requestedFamilies = ["evm", "solana", "sui", "ton", "tron", "intertrain"] as const
+  const requestedFamilies = ["evm", "solana", "sui", "ton", "tron", "bitcoin", "intertrain"] as const
   const missingFamilies = requestedFamilies.filter((family) => !existingFamilies.has(family))
   if (missingFamilies.length === 0) return packageValue
 
@@ -317,7 +317,7 @@ export async function addWalletChains(
     const preparedAccounts = await Promise.all(missingFamilies.map(async (family) => {
       const account = await client.prepareAccount({
         chainFamily: family,
-        keyAlgorithm: family === "evm" || family === "tron" ? "secp256k1" : "ed25519",
+        keyAlgorithm: family === "evm" || family === "tron" || family === "bitcoin" ? "secp256k1" : "ed25519",
         keyType: "private-key",
       })
       const key = generateAccountKey(family)
