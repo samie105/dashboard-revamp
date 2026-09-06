@@ -203,6 +203,20 @@ function quoteOf(m: HlSpotMarket | HlFuturesMarket | undefined) {
 }
 
 /**
+ * A ticker is presentation only: USDC has multiple contract/mint addresses,
+ * and long-tail Solana tokens often arrive without metadata. Balance matching
+ * must therefore prefer the registry's exact on-chain identifier and only
+ * fall back to the symbol for legacy rows that have no address.
+ */
+function assetAddressOf(market: HlSpotMarket | undefined, side: Side, symbol: string): string | null {
+  if (!market) return null
+  const address = side === "buy"
+    ? (market.sellToken ?? market.inputMint)
+    : (market.buyToken ?? market.outputMint)
+  return address && address !== "native" ? address : null
+}
+
+/**
  * A modern futures order that has been built by the backend and is waiting on
  * the user's explicit approval (spec §9). The ticket fields are frozen here so
  * the review screen — and the outcome it produces — describe the order the
@@ -913,10 +927,17 @@ export function TradeClient() {
       return null
     const networkId = "networkId" in current ? current.networkId : undefined
     if (!networkId) return null
+    const spendAddress = assetAddressOf(
+      market === "spot" ? current as HlSpotMarket : undefined,
+      side,
+      spentSymbol,
+    )
     const rows = modernBalances.filter(
       (b) =>
-        b.symbol.toUpperCase() === spentSymbol.toUpperCase() &&
-        b.networkId === networkId
+        b.networkId === networkId &&
+        (spendAddress
+          ? b.asset.identifier.toLowerCase() === spendAddress.toLowerCase()
+          : b.symbol.toUpperCase() === spentSymbol.toUpperCase())
     )
     // A snapshot that hasn't arrived is not a zero balance. Say nothing until
     // it has: "avail 0.00" against a funded wallet is worse than no figure.
@@ -1030,11 +1051,13 @@ export function TradeClient() {
     const networkId = "networkId" in current ? current.networkId : undefined
     if (!networkId) return []
     const quote = quoteOf(current)
-    const holding = (sym: string): number | null => {
+    const holding = (sym: string, address: string | null): number | null => {
       const rows = modernBalances.filter(
         (b) =>
-          b.symbol.toUpperCase() === sym.toUpperCase() &&
-          b.networkId === networkId
+          b.networkId === networkId &&
+          (address
+            ? b.asset.identifier.toLowerCase() === address.toLowerCase()
+            : b.symbol.toUpperCase() === sym.toUpperCase())
       )
       if (rows.length === 0 && balancesLoading) return null
       return rows.reduce(
@@ -1043,8 +1066,9 @@ export function TradeClient() {
         0
       )
     }
-    const base = holding(current.symbol)
-    const quoteHeld = holding(quote)
+    const spotCurrent = current as HlSpotMarket
+    const base = holding(current.symbol, assetAddressOf(spotCurrent, "sell", current.symbol))
+    const quoteHeld = holding(quote, assetAddressOf(spotCurrent, "buy", quote))
     return [
       {
         symbol: current.symbol,
