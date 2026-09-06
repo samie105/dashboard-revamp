@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/system"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
 import { formatCryptoAmount, useCryptoBalances, type CryptoBalanceResult } from "@/hooks/crypto/useCryptoBalances"
+import { COIN_IMAGES } from "@/lib/coin-images"
 import { useUsdChangeIndex } from "@/hooks/crypto/useUsdIndex"
 import { useCryptoNetworks } from "@/hooks/crypto/useCryptoNetworks"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
@@ -517,7 +518,9 @@ export function ModernWalletPage() {
     const rows = balances.balances.map((balance) => ({
       key: `${balance.accountId}:${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`,
       symbol: balance.symbol,
-      logo: balance.logo ?? NETWORK_ICON[networkMetaFor(balance.networkId, networks.data)?.key ?? ""],
+      // Token art wins over the network mark. A token balance (for example
+      // TRUMP on Solana) is not the same thing as the chain it lives on.
+      logo: balance.logo ?? COIN_IMAGES[balance.symbol.toUpperCase()] ?? NETWORK_ICON[networkMetaFor(balance.networkId, networks.data)?.key ?? ""],
       subtitle: balance.networkName,
       amount: formatCryptoAmount(balance.amountBaseUnits, balance.decimals),
       depositAsset: balance.symbol,
