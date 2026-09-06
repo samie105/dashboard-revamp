@@ -1235,7 +1235,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         onClose={() => setShowFromModal(false)}
         coins={fromCoins}
         onSelect={setFromCoin}
-        exclude={toCoin?.symbol}
+        exclude={fromChain === toChain ? toCoin?.symbol : undefined}
         chain={fromChain}
       />
       <TokenSelectModal
@@ -1243,7 +1243,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         onClose={() => setShowToModal(false)}
         coins={toCoins}
         onSelect={setToCoin}
-        exclude={fromCoin?.symbol}
+        exclude={fromChain === toChain ? fromCoin?.symbol : undefined}
         chain={toChain}
       />
     </>
