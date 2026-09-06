@@ -13,9 +13,22 @@ export async function signBitcoinIntent(userId: string, walletId: string, packag
   try {
     const address = btc.p2wpkh(secp256k1.getPublicKey(secret, true), btc.NETWORK).address
     if (address !== unsigned.from) throw new Error("Local key does not match the Bitcoin intent account")
-    const transaction = btc.Transaction.fromPSBT(Buffer.from(psbt, "base64"))
-    transaction.sign(secret)
+    const transaction = btc.Transaction.fromPSBT(Buffer.from(psbt, "base64"), {
+      strictPrevoutValidation: true,
+      allowUnknownOutputs: false,
+    })
+    const reviewedUnsigned = new Uint8Array(transaction.unsignedTx)
+    const ownerScript = btc.p2wpkh(secp256k1.getPublicKey(secret, true), btc.NETWORK).script
+    for (let index = 0; index < transaction.inputsLength; index++) {
+      const input = transaction.getInput(index)
+      if (!input.witnessUtxo || input.witnessUtxo.script.length !== ownerScript.length || !input.witnessUtxo.script.every((value, offset) => value === ownerScript[offset])) {
+        throw new Error(`Bitcoin intent input ${index} is not owned by the wallet account`)
+      }
+      if (input.sighashType !== undefined && input.sighashType !== 0 && input.sighashType !== 1) throw new Error(`Bitcoin intent input ${index} uses an unsupported sighash mode`)
+    }
+    transaction.sign(secret, [btc.SigHash.DEFAULT])
     transaction.finalize()
+    if (!reviewedUnsigned.every((value, index) => value === transaction.unsignedTx[index]) || reviewedUnsigned.length !== transaction.unsignedTx.length) throw new Error("Bitcoin transaction changed while signing")
     return hex.encode(transaction.extract())
   } finally { wipeBytes(secret) }
 }

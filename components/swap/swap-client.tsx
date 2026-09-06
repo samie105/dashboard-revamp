@@ -73,11 +73,19 @@ import {
   isRoutable,
   networkIdFor,
   routerForPair,
+  swapAssetForToken,
   unavailablePairMessage,
   tokensForChain,
   type SwapChainId,
   type QuoteData,
 } from "./swap-model"
+
+/** Convert a calculated token quantity back to the precision the chain can represent. */
+function canonicalTokenAmount(amount: number, decimals: number): string {
+  if (!Number.isFinite(amount) || amount <= 0) return "0"
+  const fixed = amount.toFixed(decimals)
+  return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
+}
 
 /* ── Token Select Modal ── */
 function TokenSelectModal({
@@ -616,12 +624,14 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     setQuoteError(null)
     const controller = new AbortController()
     const timeout = setTimeout(() => {
-      const qs = new URLSearchParams({
-        fromChain,
-        toChain,
-        fromToken: fromCoin.symbol,
-        toToken: toCoin.symbol,
-        amount: numericFrom.toString(),
+        const sourceAsset = swapAssetForToken(fromChain, fromCoin.symbol)
+        const quotedAmount = sourceAsset ? canonicalTokenAmount(numericFrom, sourceAsset.decimals) : numericFrom.toString()
+        const qs = new URLSearchParams({
+          fromChain,
+          toChain,
+          fromToken: fromCoin.symbol,
+          toToken: toCoin.symbol,
+          amount: quotedAmount,
         slippage: (effectiveSlippage / 100).toString(),
       })
       const quotePath = selectedRouter === "lifi" ? "/api/crypto/trading/spot/lifi/quote" : "/api/crypto/trading/spot/provider/quote"
@@ -715,7 +725,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
       const sourceFamily = familyFor(fromChain as SwapChainId)
       const account = modernWallet.data.accounts.find((item) => item.chainFamily === sourceFamily && item.state === "active")
       if (!account?.id) throw new Error(`Your wallet isn't ready for ${chainMeta(fromChain).label} yet`)
-      const amountBaseUnits = toBaseUnits(String(numericFrom), quoteData.fromToken.decimals)
+      const amountBaseUnits = toBaseUnits(canonicalTokenAmount(numericFrom, quoteData.fromToken.decimals), quoteData.fromToken.decimals)
       if (!amountBaseUnits || amountBaseUnits === "0") throw new Error("The amount is too small for this coin")
       const idempotencyKey = swapIdempotencyKey.current ?? (swapIdempotencyKey.current = crypto.randomUUID())
       const intent = await cryptoBackendClient.createModernLifiSwapIntent({
