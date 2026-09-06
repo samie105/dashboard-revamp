@@ -520,7 +520,9 @@ export function ModernWalletPage() {
       symbol: balance.symbol,
       // Token art wins over the network mark. A token balance (for example
       // TRUMP on Solana) is not the same thing as the chain it lives on.
-      logo: balance.logo ?? COIN_IMAGES[balance.symbol.toUpperCase()] ?? NETWORK_ICON[networkMetaFor(balance.networkId, networks.data)?.key ?? ""],
+      logo: balance.logo
+        ?? (balance.asset.kind === "token" ? COIN_IMAGES[balance.symbol.toUpperCase()] : undefined)
+        ?? NETWORK_ICON[networkMetaFor(balance.networkId, networks.data)?.key ?? ""],
       subtitle: balance.networkName,
       amount: formatCryptoAmount(balance.amountBaseUnits, balance.decimals),
       depositAsset: balance.symbol,
