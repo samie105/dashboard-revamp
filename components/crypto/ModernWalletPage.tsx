@@ -347,6 +347,14 @@ function WalletPocket({
  * unpriced asset is excluded from the total and footnoted instead.
  */
 function usdValueOf(balance: CryptoBalanceResult, index: Record<string, number> | null): number | null {
+  // Stablecoins are worth one dollar by contract. They must not disappear
+  // from the wallet total merely because the optional market-price request is
+  // delayed, rate-limited, or returned without a stablecoin symbol.
+  const stable = ["USDC", "USDT", "USDC.E", "USDT.E"].includes(balance.symbol.toUpperCase())
+  if (stable) {
+    const amount = Number(formatCryptoAmount(balance.amountBaseUnits, balance.decimals))
+    return Number.isFinite(amount) ? amount : null
+  }
   // WSK is mint-gated 1:1 against USD. Its value is a protocol invariant,
   // not a market quote, so it must remain valued even when the external
   // price feed has no WSK listing (or has not loaded yet).
