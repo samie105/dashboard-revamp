@@ -66,6 +66,7 @@ const CHAIN_FAILURES: readonly [RegExp, string][] = [
   [/InsufficientFundsForRent|insufficient lamports|rent[- ]exempt/i, "Insufficient funds for gas"],
   [/insufficient funds for gas|gas required exceeds/i, "Insufficient funds for gas"],
   [/custom.*6024|0x1788/i, "Insufficient SOL or token balance for this trade"],
+  [/InvalidAccountData/i, "This swap route used an incompatible token account. Refresh the quote and try again"],
   [/InsufficientFunds|insufficient balance|0x1\b/i, "Insufficient balance for this transfer"],
   [/SlippageToleranceExceeded|0x1771/i, "The price moved too far before this could execute"],
   [/BlockhashNotFound|blockhash/i, "The network moved on before this was submitted — try again"],
