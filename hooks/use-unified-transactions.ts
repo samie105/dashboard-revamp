@@ -10,6 +10,8 @@ import {
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
 import type { CryptoTransactionRecord } from "@/lib/crypto-backend"
+import { describeLedgerRecord } from "@/lib/ledger-rows"
+import { useSpotRegistry } from "@/hooks/useSpotRegistry"
 import { modernDataEnabled } from "@/lib/wallet-mode"
 import type {
   UnifiedTransaction,
@@ -53,21 +55,36 @@ function mapCryptoStatus(status: string): UnifiedTransaction["status"] {
   return "pending"
 }
 
-function mapCryptoTransaction(transaction: CryptoTransactionRecord): UnifiedTransaction {
+function mapCryptoTransaction(transaction: CryptoTransactionRecord, registry: ReturnType<typeof useSpotRegistry>): UnifiedTransaction {
+  const described = describeLedgerRecord(transaction, registry)
+  const summary = transaction.summary ?? {}
+  const action = typeof summary.action === "string" ? summary.action : "transfer"
+  const isSwap = action === "spot-swap" || action === "jupiter-swap"
   const asset = transaction.assetSummary
-  const amount = typeof transaction.amount === "number" ? transaction.amount : 0
+  const fallbackAmount = Number(summary.amount ?? transaction.amount ?? 0)
+  const amount = described?.amountText ? Number(described.amountText.split(" ")[0].replaceAll(",", "")) : (Number.isFinite(fallbackAmount) ? fallbackAmount : 0)
+  const token = described?.symbol || (isSwap ? String(summary.buyToken ?? asset?.identifier ?? "Unknown") : asset?.identifier ?? "Unknown")
   return {
     id: transaction.id,
-    type: "transfer",
-    subType: "send",
+    type: isSwap ? "swap" : "transfer",
+    subType: isSwap ? "spot" : "send",
     amount,
-    token: asset?.identifier ?? "Unknown",
+    token,
     chain: transaction.networkId ?? transaction.chainFamily,
     status: mapCryptoStatus(transaction.status),
     fromAddress: transaction.fromAddress,
     toAddress: transaction.toAddress,
     txHash: transaction.txHash,
     direction: "outgoing",
+    ...(isSwap ? {
+      fromToken: typeof summary.sellToken === "string" ? summary.sellToken : undefined,
+      toToken: typeof summary.buyToken === "string" ? summary.buyToken : undefined,
+      // The backend stores this as the received token's base units. Keep the
+      // row honest until both sides have independently known precision.
+      toAmount: undefined,
+      fromChain: transaction.networkId ?? transaction.chainFamily,
+      toChain: typeof summary.destinationNetworkId === "string" ? summary.destinationNetworkId : transaction.networkId ?? transaction.chainFamily,
+    } : {}),
     createdAt: transaction.createdAt ?? transaction.submittedAt ?? new Date(0).toISOString(),
     completedAt: transaction.confirmedAt,
   }
@@ -103,6 +120,7 @@ export function useUnifiedTransactions(
   const userId = user?.userId ?? "anonymous"
   const backendEnabled =
     modernDataEnabled({ modernEnabled: isCryptoBackendEnabled, mode }) && isLoaded && isSignedIn
+  const registry = useSpotRegistry(backendEnabled)
 
   const [transactions, setTransactions] = useState<UnifiedTransaction[]>([])
   const [stats, setStats] = useState<TransactionStats | null>(null)
@@ -234,7 +252,7 @@ export function useUnifiedTransactions(
   }, [backendEnabled, cryptoQuery, fetchTransactions])
 
   const backendTransactions = (cryptoQuery.data ?? [])
-    .map(mapCryptoTransaction)
+    .map((transaction) => mapCryptoTransaction(transaction, registry))
     .filter((transaction) => matchesCryptoFilters(transaction, filters))
   const visibleTransactions = backendEnabled ? backendTransactions : transactions
 

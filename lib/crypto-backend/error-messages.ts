@@ -65,7 +65,8 @@ export function existingOperationIdFrom(error: unknown): string | null {
 const CHAIN_FAILURES: readonly [RegExp, string][] = [
   [/InsufficientFundsForRent|insufficient lamports|rent[- ]exempt/i, "Insufficient funds for gas"],
   [/insufficient funds for gas|gas required exceeds/i, "Insufficient funds for gas"],
-  [/InsufficientFunds|insufficient balance|0x1/i, "Insufficient balance for this transfer"],
+  [/custom.*6024|0x1788/i, "Insufficient SOL or token balance for this trade"],
+  [/InsufficientFunds|insufficient balance|0x1\b/i, "Insufficient balance for this transfer"],
   [/SlippageToleranceExceeded|0x1771/i, "The price moved too far before this could execute"],
   [/BlockhashNotFound|blockhash/i, "The network moved on before this was submitted — try again"],
   [/AccountNotFound|could not find account/i, "That account doesn't exist on this network yet"],
@@ -151,6 +152,8 @@ export function describeCryptoError(error: unknown): CryptoErrorDescription {
         return { title: "Quote expired", message: "This quote ran out before you confirmed. Get a fresh one — nothing was sent.", action: "new-intent", requestId }
       case "DUPLICATE_REQUEST":
         return { title: "Already in progress", message: "This request was already submitted — showing the existing operation.", action: "view-existing", requestId }
+      case "SIMULATION_FAILED":
+        return { title: "Trade could not be simulated", message: humanizeErrorMessage(error.message), action: "retry", requestId }
       case "PROXY_DISABLED":
         return { title: "Wallet service disabled", message: "The new wallet is switched off right now. Try again later.", action: "none", requestId }
       case "CRYPTO_BACKEND_UNREACHABLE":

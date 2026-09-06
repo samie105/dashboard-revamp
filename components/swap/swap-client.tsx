@@ -51,6 +51,9 @@ import { cn } from "@/lib/utils"
 import { num, qty, usd } from "@/lib/num"
 import type { CoinData } from "@/lib/actions"
 import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
+import { useLedgerRecords } from "@/hooks/useLedgerRecords"
+import { useSpotRegistry } from "@/hooks/useSpotRegistry"
+import { describeLedgerRecord } from "@/lib/ledger-rows"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useAuth } from "@/components/auth-provider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled, CryptoBackendError } from "@/lib/crypto-backend"
@@ -230,6 +233,7 @@ interface SwapTx {
   fromToken?: string
   toToken?: string
   amount: number
+  amountText?: string
   toAmount?: string
   fromChain?: string
   toChain?: string
@@ -239,26 +243,32 @@ interface SwapTx {
 }
 
 function SwapHistory() {
-  const [swaps, setSwaps] = React.useState<SwapTx[]>([])
-  const [loading, setLoading] = React.useState(true)
-
-  React.useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const res = await fetch("/api/transactions/unified?type=swap&limit=10")
-        if (!res.ok) throw new Error("Failed to fetch")
-        const data = await res.json()
-        if (!cancelled) setSwaps(data.transactions ?? [])
-      } catch {
-        // silent — show empty state
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
+  const { records, loading } = useLedgerRecords(50)
+  const registry = useSpotRegistry()
+  const swaps = React.useMemo<SwapTx[]>(() => records.flatMap((record) => {
+    const summary = record.summary ?? {}
+    if (summary.action !== "spot-swap" && summary.action !== "jupiter-swap") return []
+    const asset = summary.asset && typeof summary.asset === "object" ? summary.asset as Record<string, unknown> : {}
+    const text = (value: unknown) => typeof value === "string" && value ? value : undefined
+    const described = describeLedgerRecord(record, registry)
+    const amount = Number(summary.amount ?? 0)
+    return [{
+      id: record.id,
+      token: text(asset.identifier),
+      fromToken: text(summary.sellToken),
+      toToken: text(summary.buyToken),
+      amount: Number.isFinite(amount) ? amount : 0,
+      amountText: described?.amountText ?? undefined,
+      // `summary.amount` is the received token's base-unit amount. The
+      // precision-aware ledger description already formats it; showing the
+      // raw value here would make a small swap look like millions of tokens.
+      toAmount: undefined,
+      fromChain: record.networkId,
+      toChain: record.networkId,
+      status: record.status === "confirmed" ? "completed" : record.status,
+      createdAt: record.submittedAt ?? record.createdAt ?? new Date().toISOString(),
+    }]
+  }), [records, registry])
 
   /* Status washes match the transactions page: one vocabulary for state across
      the product, rather than a per-screen palette. */
@@ -342,7 +352,7 @@ function SwapHistory() {
 
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <span className="text-[13px] font-semibold tabular-nums">
-                    {qty(tx.amount)}
+                    {tx.amountText ?? (Number.isFinite(tx.amount) && tx.amount > 0 ? qty(tx.amount) : "Amount unavailable")}
                     {received !== null ? ` → ${qty(received)}` : ""}
                   </span>
                   <span
