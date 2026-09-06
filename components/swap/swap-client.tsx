@@ -41,6 +41,7 @@ import {
 
 import { CardShell, CardHeader, EmptyState, SkeletonRows, PageHeader, Segmented } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
+import { COIN_IMAGES } from "@/lib/coin-images"
 import { ModeSwitch } from "@/components/ui/mode-switch"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/error-state"
@@ -77,10 +78,12 @@ import {
   networkIdFor,
   routerForPair,
   swapAssetForToken,
+  SWAP_ASSETS,
   unavailablePairMessage,
   tokensForChain,
   type SwapChainId,
   type QuoteData,
+  fromBaseUnits,
 } from "./swap-model"
 
 /** Convert a calculated token quantity back to the precision the chain can represent. */
@@ -242,6 +245,15 @@ interface SwapTx {
   createdAt: string
 }
 
+function historicalSwapAsset(networkId: string | undefined, identifier: string | undefined) {
+  if (!networkId || !identifier) return undefined
+  const normalized = identifier.toLowerCase()
+  return SWAP_ASSETS.find((asset) => asset.networkId === networkId && asset.address.toLowerCase() === normalized)
+    ?? (networkId === "solana-mainnet-beta" && (identifier === "So11111111111111111111111111111111111111112" || identifier === "11111111111111111111111111111111")
+      ? SWAP_ASSETS.find((asset) => asset.networkId === networkId && asset.symbol === "SOL")
+      : undefined)
+}
+
 function SwapHistory() {
   const { records, loading } = useLedgerRecords(50)
   const registry = useSpotRegistry()
@@ -251,14 +263,17 @@ function SwapHistory() {
     const asset = summary.asset && typeof summary.asset === "object" ? summary.asset as Record<string, unknown> : {}
     const text = (value: unknown) => typeof value === "string" && value ? value : undefined
     const described = describeLedgerRecord(record, registry)
+    const buyAsset = historicalSwapAsset(record.networkId, text(summary.buyToken) ?? text(asset.identifier))
+    const sellAsset = historicalSwapAsset(record.networkId, text(summary.sellToken))
     const amount = Number(summary.amount ?? 0)
     return [{
       id: record.id,
-      token: text(asset.identifier),
-      fromToken: text(summary.sellToken),
-      toToken: text(summary.buyToken),
+      token: buyAsset?.symbol ?? text(asset.symbol) ?? text(asset.identifier),
+      fromToken: sellAsset?.symbol ?? text(summary.sellToken),
+      toToken: buyAsset?.symbol ?? text(summary.buyToken),
       amount: Number.isFinite(amount) ? amount : 0,
-      amountText: described?.amountText ?? undefined,
+      amountText: described?.amountText
+        ?? (buyAsset ? `${fromBaseUnits(text(summary.amount), buyAsset.decimals)?.toLocaleString(undefined, { maximumFractionDigits: 6 }) ?? "Amount unavailable"} ${buyAsset.symbol}` : undefined),
       // `summary.amount` is the received token's base-unit amount. The
       // precision-aware ledger description already formats it; showing the
       // raw value here would make a small swap look like millions of tokens.
@@ -468,7 +483,26 @@ function shortTransactionHash(hash?: string) {
 }
 
 export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
-  const available = React.useMemo(() => coins.filter((c) => c.price > 0), [coins])
+  const available = React.useMemo(() => {
+    const result = coins.filter((coin) => coin.price > 0)
+    const symbols = new Set(result.map((coin) => coin.symbol.toUpperCase()))
+    for (const asset of SWAP_ASSETS) {
+      if (symbols.has(asset.symbol.toUpperCase())) continue
+      symbols.add(asset.symbol.toUpperCase())
+      result.push({
+        id: asset.assetId,
+        symbol: asset.symbol,
+        name: asset.symbol,
+        price: prices[asset.symbol] ?? 0,
+        change24h: 0,
+        marketCap: 0,
+        volume24h: 0,
+        image: COIN_IMAGES[asset.symbol] ?? "",
+        ...(asset.kind === "token" ? { contractAddress: asset.address } : {}),
+      })
+    }
+    return result
+  }, [coins, prices])
   const sharedUiMode = useUiMode()
 
   /**
@@ -627,8 +661,11 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     if (!fromCoin) return 0
     const networkId = BALANCE_NETWORK_ID[fromChain]
     if (!networkId) return 0
+    const asset = swapAssetForToken(fromChain, fromCoin.symbol)
     return modernBalances
-      .filter((b) => b.symbol.toUpperCase() === fromCoin.symbol.toUpperCase() && b.networkId === networkId)
+      .filter((b) => b.networkId === networkId && (asset?.address && asset.address !== "native"
+        ? b.asset.identifier.toLowerCase() === asset.address.toLowerCase()
+        : b.symbol.toUpperCase() === fromCoin.symbol.toUpperCase()))
       .reduce((sum, b) => sum + Number(formatCryptoAmount(b.amountBaseUnits, b.decimals, 12)), 0)
   }, [modernBalances, fromCoin, fromChain])
 

@@ -946,12 +946,26 @@ export function TradeClient() {
     staleTime: 15_000,
     refetchInterval: 20_000,
   })
-  const spotBalances = exactSpotBalances.data
-    ? exactSpotBalances.data.map((balance) => ({
-        ...balance,
-        networkId: spotBalanceRequest?.networkId ?? "",
-      }))
-    : modernBalances
+  const spotBalances = React.useMemo(() => {
+    if (!exactSpotBalances.data || !spotBalanceRequest) return modernBalances
+    const exact = exactSpotBalances.data.map((balance) => ({
+      ...balance,
+      networkId: spotBalanceRequest.networkId,
+    }))
+    const exactByAsset = new Map(exact.map((balance) => [balance.asset.identifier.toLowerCase(), balance]))
+    const merged = modernBalances.map((balance) => {
+      const direct = balance.networkId === spotBalanceRequest.networkId
+        ? exactByAsset.get(balance.asset.identifier.toLowerCase())
+        : undefined
+      // A direct provider read that returns an empty/zero row must not erase a
+      // known non-zero aggregate balance; this is how transient RPC/indexer
+      // gaps previously made funded SOL/USDC display as zero in spot.
+      if (direct && (direct.amountBaseUnits !== "0" || balance.amountBaseUnits === "0")) return direct
+      return balance
+    })
+    const existing = new Set(merged.map((balance) => `${balance.networkId}:${balance.asset.identifier.toLowerCase()}`))
+    return [...merged, ...exact.filter((balance) => !existing.has(`${balance.networkId}:${balance.asset.identifier.toLowerCase()}`))]
+  }, [exactSpotBalances.data, modernBalances, spotBalanceRequest])
   const spendable = React.useMemo(() => {
     if (!(usingModern && market === "spot") || !current || !spentSymbol)
       return null
