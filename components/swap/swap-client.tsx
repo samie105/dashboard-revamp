@@ -87,6 +87,19 @@ function canonicalTokenAmount(amount: number, decimals: number): string {
   return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
 }
 
+function tokenIdentifier(chain: string, coin: CoinData): string {
+  const assetAddress = swapAssetForToken(chain, coin.symbol)?.address
+  return coin.contractAddress ?? (assetAddress && assetAddress !== "native" ? assetAddress : coin.symbol)
+}
+
+function looksLikeTokenIdentifier(chain: string, value: string): boolean {
+  if (chain === "ethereum" || chain === "arbitrum") return /^0x[0-9a-fA-F]{40}$/.test(value)
+  if (chain === "solana") return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value)
+  if (chain === "sui") return /^0x[0-9a-fA-F]{64}$/.test(value)
+  if (chain === "tron") return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(value)
+  return false
+}
+
 /* ── Token Select Modal ── */
 function TokenSelectModal({
   open,
@@ -94,12 +107,14 @@ function TokenSelectModal({
   coins,
   onSelect,
   exclude,
+  chain,
 }: {
   open: boolean
   onClose: () => void
   coins: CoinData[]
   onSelect: (coin: CoinData) => void
   exclude?: string
+  chain: string
 }) {
   const [search, setSearch] = React.useState("")
   const ref = React.useRef<HTMLDivElement>(null)
@@ -124,6 +139,8 @@ function TokenSelectModal({
     const q = search.toLowerCase()
     return c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
   })
+  const customAddress = search.trim()
+  const canUseCustomAddress = looksLikeTokenIdentifier(chain, customAddress)
 
   const popular = ["BTC", "ETH", "SOL", "USDT", "USDC", "XRP"]
 
@@ -169,6 +186,14 @@ function TokenSelectModal({
 
           {/* Token list */}
           <div className="max-h-64 overflow-y-auto">
+            {canUseCustomAddress && !coins.some((coin) => tokenIdentifier(chain, coin).toLowerCase() === customAddress.toLowerCase()) && (
+              <button
+                onClick={() => { onSelect({ id: customAddress, symbol: `${customAddress.slice(0, 6)}…${customAddress.slice(-4)}`, name: "Custom token", price: 0, change24h: 0, marketCap: 0, volume24h: 0, image: "", contractAddress: customAddress }); onClose() }}
+                className="mb-2 w-full rounded-lg border border-primary/30 bg-primary/10 px-3 py-3 text-left text-sm"
+              >
+                Use token address<br /><span className="text-xs text-muted-foreground">{customAddress}</span>
+              </button>
+            )}
             {filtered.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">No coins match that</p>
             ) : (
@@ -473,7 +498,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   const view = React.useMemo(() => swapView(mode), [mode])
 
   const { user } = useAuth()
-  const { balances: modernBalances } = useCryptoBalances()
+  const { balances: modernBalances, refresh: refreshBalances } = useCryptoBalances()
   const modernWallet = useCryptoWalletState()
   const modernPackage = useQuery({
     queryKey: cryptoQueryKeys.walletPackage(user?.userId ?? "anonymous"),
@@ -530,8 +555,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   // A token belongs to the chain selected beside it. Keep this derived rather
   // than passing the global market list to both dialogs; otherwise BTC/ETH/etc.
   // can appear under a chain where the asset cannot be signed or routed.
-  const fromCoins = React.useMemo(() => tokensForChain(fromChain, available), [fromChain, available])
-  const toCoins = React.useMemo(() => tokensForChain(toChain, available), [toChain, available])
+  const fromCoins = React.useMemo(() => [...tokensForChain(fromChain, available), ...(fromCoin?.contractAddress ? [fromCoin] : [])], [fromChain, available, fromCoin])
+  const toCoins = React.useMemo(() => [...tokensForChain(toChain, available), ...(toCoin?.contractAddress ? [toCoin] : [])], [toChain, available, toCoin])
 
   React.useEffect(() => {
     if (fromCoin && !fromCoins.some((coin) => coin.symbol.toUpperCase() === fromCoin.symbol.toUpperCase())) {
@@ -598,8 +623,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
   }, [modernBalances, fromCoin, fromChain])
 
   // Can this pair be quoted and executed at all?
-  const fromSupported = SUPPORTED_SWAP_TOKENS[fromChain]?.includes(fromCoin?.symbol ?? "") ?? false
-  const toSupported = SUPPORTED_SWAP_TOKENS[toChain]?.includes(toCoin?.symbol ?? "") ?? false
+  const fromSupported = (SUPPORTED_SWAP_TOKENS[fromChain]?.includes(fromCoin?.symbol ?? "") ?? false) || Boolean(fromCoin?.contractAddress)
+  const toSupported = (SUPPORTED_SWAP_TOKENS[toChain]?.includes(toCoin?.symbol ?? "") ?? false) || Boolean(toCoin?.contractAddress)
   const selectedRouter = routerForPair(fromChain, toChain)
   const canQuote = fromSupported && toSupported && !!selectedRouter && isCryptoBackendEnabled
 
@@ -629,8 +654,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         const qs = new URLSearchParams({
           fromChain,
           toChain,
-          fromToken: fromCoin.symbol,
-          toToken: toCoin.symbol,
+          fromToken: tokenIdentifier(fromChain, fromCoin),
+          toToken: tokenIdentifier(toChain, toCoin),
           amount: quotedAmount,
         slippage: (effectiveSlippage / 100).toString(),
       })
@@ -748,6 +773,13 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                 : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
       const submitted = await cryptoBackendClient.submitIntent(intent.id, signed)
       setSwapResult({ success: true, status: "PENDING", txHash: submitted.txHash })
+      // Balance snapshots are intentionally cached between explicit refreshes.
+      // Refresh immediately after broadcast, then retry while the chain/provider
+      // catches up so a newly bought token appears without a page reload.
+      void refreshBalances()
+      for (const delay of [2_000, 5_000, 10_000]) {
+        window.setTimeout(() => { void refreshBalances() }, delay)
+      }
       swapIdempotencyKey.current = null
       setFromAmount(""); setQuoteData(null); setQuotedAt(null)
     } catch (error) {
@@ -756,7 +788,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
     } finally {
       setSwapLoading(false)
     }
-  }, [quoteData, swapLoading, numericFrom, effectiveSlippage, user, modernWallet.data, modernPackage.data, fromChain, toChain, fromCoin, selectedRouter])
+  }, [quoteData, swapLoading, numericFrom, effectiveSlippage, user, modernWallet.data, modernPackage.data, fromChain, toChain, fromCoin, selectedRouter, refreshBalances])
 
   function flipPair() {
     const tmpCoin = fromCoin
@@ -1157,6 +1189,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         coins={fromCoins}
         onSelect={setFromCoin}
         exclude={toCoin?.symbol}
+        chain={fromChain}
       />
       <TokenSelectModal
         open={showToModal}
@@ -1164,6 +1197,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         coins={toCoins}
         onSelect={setToCoin}
         exclude={fromCoin?.symbol}
+        chain={toChain}
       />
     </>
   )

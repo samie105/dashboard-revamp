@@ -20,6 +20,7 @@ export interface CoinData {
   szDecimals?: number
   /** Internal Hyperliquid spot coin name (e.g. "PURR/USDC", "@107") */
   hlName?: string
+  contractAddress?: string
 }
 
 export interface PricesResponse {
