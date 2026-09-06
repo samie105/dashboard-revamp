@@ -922,6 +922,36 @@ export function TradeClient() {
      that answers "how much can I sell?" was never on screen. */
   const { balances: modernBalances, isLoading: balancesLoading } =
     useCryptoBalances()
+  const spotBalanceRequest = React.useMemo(() => {
+    if (!(usingModern && market === "spot") || !current || !("networkId" in current)) return null
+    const spot = current as HlSpotMarket
+    if (!spot.networkId) return null
+    const assets = [spot.buyToken ?? spot.outputMint, spot.sellToken ?? spot.inputMint]
+      .filter((asset): asset is string => typeof asset === "string" && asset !== "native")
+    const account = modernWallet.data?.accounts.find((item) =>
+      item.addresses?.some((address) => address.networkId === spot.networkId),
+    )
+    if (!account || assets.length === 0) return null
+    return { accountId: account.id, networkId: spot.networkId, assets: [...new Set(assets)] }
+  }, [usingModern, market, current, modernWallet.data])
+  const exactSpotBalances = useQuery({
+    queryKey: ["crypto", "spot-balances", spotBalanceRequest],
+    queryFn: ({ signal }) => cryptoBackendClient.listBalances(
+      spotBalanceRequest!.accountId,
+      spotBalanceRequest!.networkId,
+      spotBalanceRequest!.assets,
+      signal,
+    ),
+    enabled: Boolean(spotBalanceRequest),
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+  })
+  const spotBalances = exactSpotBalances.data
+    ? exactSpotBalances.data.map((balance) => ({
+        ...balance,
+        networkId: spotBalanceRequest?.networkId ?? "",
+      }))
+    : modernBalances
   const spendable = React.useMemo(() => {
     if (!(usingModern && market === "spot") || !current || !spentSymbol)
       return null
@@ -932,7 +962,7 @@ export function TradeClient() {
       side,
       spentSymbol,
     )
-    const rows = modernBalances.filter(
+    const rows = spotBalances.filter(
       (b) =>
         b.networkId === networkId &&
         (spendAddress
@@ -941,15 +971,16 @@ export function TradeClient() {
     )
     // A snapshot that hasn't arrived is not a zero balance. Say nothing until
     // it has: "avail 0.00" against a funded wallet is worse than no figure.
-    if (rows.length === 0 && balancesLoading) return null
+    if (rows.length === 0 && (balancesLoading || exactSpotBalances.isLoading)) return null
     return rows.reduce(
       (sum, b) =>
         sum + Number(formatCryptoAmount(b.amountBaseUnits, b.decimals, 12)),
       0
     )
   }, [
-    modernBalances,
+    spotBalances,
     balancesLoading,
+    exactSpotBalances.isLoading,
     usingModern,
     market,
     current,
@@ -1052,14 +1083,14 @@ export function TradeClient() {
     if (!networkId) return []
     const quote = quoteOf(current)
     const holding = (sym: string, address: string | null): number | null => {
-      const rows = modernBalances.filter(
+      const rows = spotBalances.filter(
         (b) =>
           b.networkId === networkId &&
           (address
             ? b.asset.identifier.toLowerCase() === address.toLowerCase()
             : b.symbol.toUpperCase() === sym.toUpperCase())
       )
-      if (rows.length === 0 && balancesLoading) return null
+      if (rows.length === 0 && (balancesLoading || exactSpotBalances.isLoading)) return null
       return rows.reduce(
         (sum, b) =>
           sum + Number(formatCryptoAmount(b.amountBaseUnits, b.decimals, 12)),
@@ -1083,7 +1114,7 @@ export function TradeClient() {
         valueUsd: quoteHeld !== null && sizesLikeUsd(quote) ? quoteHeld : null,
       },
     ]
-  }, [usingModern, market, current, modernBalances, balancesLoading, price])
+  }, [usingModern, market, current, spotBalances, balancesLoading, exactSpotBalances.isLoading, price])
 
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's
