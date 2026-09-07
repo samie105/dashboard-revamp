@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { resolveOrder } from "@/components/trade/orders-panel"
+import { describeLedgerRecord } from "@/lib/ledger-rows"
 import { addressKey, type RegistryRow, type SpotRegistry } from "@/hooks/useSpotRegistry"
 import type { SpotOrder } from "@/hooks/useSpotOrders"
 
@@ -59,6 +60,21 @@ function order(over: Partial<SpotOrder>): SpotOrder {
 }
 
 describe("resolveOrder", () => {
+  it("does not interpret cross-chain ETH proceeds as Solana USDC", () => {
+    const row = resolveOrder(order({ sellToken: WSOL, buyToken: "0x0000000000000000000000000000000000000000", destinationNetworkId: "arbitrum-one", amount: "197012154171152" }), registry)
+    expect(row.unit).toBe("ETH")
+    expect(row.size).toBeCloseTo(0.000197012, 9)
+    expect(row.valueUsd).toBeNull()
+    const activity = describeLedgerRecord({ id: "test", networkId: SOLANA, status: "confirmed", summary: { action: "spot-swap", sellToken: WSOL, buyToken: "0x0000000000000000000000000000000000000000", destinationNetworkId: "arbitrum-one", amount: "197012154171152" } }, registry)
+    expect(activity?.amountText).toContain("ETH")
+    expect(activity?.valueUsd).toBeNull()
+    expect(activity?.amountText).not.toContain("197,012")
+  })
+  it("does not borrow quote precision for an unidentified received token", () => {
+    const row = resolveOrder(order({ sellToken: WSOL, buyToken: "unknown", amount: "197012154171152" }), registry)
+    expect(row.size).toBeNull()
+    expect(row.valueUsd).toBeNull()
+  })
   it("reads a buy from the token received", () => {
     const row = resolveOrder(
       order({ sellToken: USDC, buyToken: TRUMP, amount: "442194" }),

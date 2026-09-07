@@ -39,6 +39,7 @@ export type SpotOrder = {
   /** Ledger status, reconciled from the chain by the backend. */
   status: string
   networkId: string
+  destinationNetworkId?: string
   txHash: string
   createdAt: string | null
   /** Token spent and token received, as addresses. */
@@ -85,6 +86,7 @@ export function useSpotOrders(enabled = true) {
         // the chain, which is the only thing that knows whether this settled.
         status: String(record.status ?? "unknown"),
         networkId: String(record.networkId ?? ""),
+        destinationNetworkId: str(summary.destinationNetworkId) ?? undefined,
         txHash: String(record.txHash ?? ""),
         createdAt: str(record.submittedAt) ?? str(record.createdAt),
         sellToken: str(summary.sellToken),

@@ -79,17 +79,18 @@ export function describeLedgerRecord(
     createdAt: str(record.submittedAt) ?? str(record.createdAt),
   }
 
-  const lookup = (address: string | null) => {
-    const native = nativeTokenFor(networkId, address)
+  const lookup = (address: string | null, chain = networkId) => {
+    const native = nativeTokenFor(chain, address)
     const key = native?.wrapped ?? address
-    const market = key ? registry.byAddress.get(addressKey(networkId, key)) : undefined
+    const market = key ? registry.byAddress.get(addressKey(chain, key)) : undefined
     return { native, market }
   }
 
   if (SWAP_ACTIONS.has(action)) {
     const buyToken = str(summary.buyToken) ?? str(asRecord(summary.asset).identifier)
     const sellToken = str(summary.sellToken)
-    const bought = lookup(buyToken)
+    const destination = str(summary.destinationNetworkId) ?? networkId
+    const bought = lookup(buyToken, destination)
     const sold = bought.market || bought.native ? { native: null, market: undefined } : lookup(sellToken)
 
     const isBuy = Boolean(bought.market || bought.native)
@@ -99,7 +100,9 @@ export function describeLedgerRecord(
 
     // Precision belongs to the token RECEIVED, which is the base on a buy and
     // the quote on a sell.
-    const decimals = bought.native?.decimals ?? (isBuy ? market?.baseDecimals : market?.quoteDecimals)
+    const quoteMatches = destination === networkId && buyToken && market?.quoteAddress &&
+      addressKey(destination, buyToken) === addressKey(destination, market.quoteAddress)
+    const decimals = bought.native?.decimals ?? (isBuy ? bought.market?.baseDecimals : quoteMatches ? market?.quoteDecimals : undefined)
     const unit = bought.native?.symbol ?? (isBuy ? market?.symbol : market?.quote) ?? ""
     const rawAmount = str(summary.amount)
 
@@ -108,7 +111,7 @@ export function describeLedgerRecord(
     }
     const size = Number(formatCryptoAmount(rawAmount, decimals, 9))
     // A sell's proceeds are already dollars — every quote is a stablecoin.
-    const valueUsd = isBuy ? (market && market.price > 0 ? size * market.price : null) : size
+    const valueUsd = isBuy ? (bought.market && bought.market.price > 0 ? size * bought.market.price : null) : ["USDC", "USDT", "DAI", "USDC.E"].includes(unit) ? size : null
     return {
       ...base,
       kind: "trade",

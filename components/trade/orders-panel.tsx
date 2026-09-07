@@ -139,15 +139,17 @@ export function resolveOrder(order: SpotOrder, registry: SpotRegistry): Resolved
      the registry lists the WRAPPED market. Translate before looking up, and
      keep the native symbol and precision for display — a SOL trade should say
      SOL, not wSOL, and certainly not `1111…1111`. */
-  const buyNative = nativeTokenFor(order.networkId, order.buyToken)
+  const destination = order.destinationNetworkId ?? order.networkId
+  const buyNative = nativeTokenFor(destination, order.buyToken)
   const sellNative = nativeTokenFor(order.networkId, order.sellToken)
   const lookup = (address: string | null, native: ReturnType<typeof nativeTokenFor>) => {
     const key = native?.wrapped ?? address
     return key ? registry.byAddress.get(addressKey(order.networkId, key)) : undefined
   }
 
-  const bought = lookup(order.buyToken, buyNative)
-  const sold = bought ? undefined : lookup(order.sellToken, sellNative)
+  const boughtKey = buyNative?.wrapped ?? order.buyToken
+  const bought = boughtKey ? registry.byAddress.get(addressKey(destination, boughtKey)) : undefined
+  const sold = bought || buyNative ? undefined : lookup(order.sellToken, sellNative)
   const market = bought ?? sold
 
   /* A side is known the moment either leg is identified — and a native leg
@@ -170,10 +172,13 @@ export function resolveOrder(order: SpotOrder, registry: SpotRegistry): Resolved
   const receivedNative = buyNative
   const decimals =
     receivedNative?.decimals ??
-    (side === "buy" ? market?.baseDecimals : market?.quoteDecimals)
+    (side === "buy" ? bought?.baseDecimals :
+      destination === order.networkId && market?.quoteAddress && order.buyToken &&
+      addressKey(destination, market.quoteAddress) === addressKey(destination, order.buyToken)
+        ? market.quoteDecimals : undefined)
   const unit =
     receivedNative?.symbol ??
-    (side === "buy" ? market?.symbol : market?.quote) ??
+    (side === "buy" ? bought?.symbol : decimals !== undefined ? market?.quote : undefined) ??
     ""
 
   if (decimals === undefined || !order.amount) {
@@ -186,10 +191,10 @@ export function resolveOrder(order: SpotOrder, registry: SpotRegistry): Resolved
      leg is the wrapped market: wSOL and SOL are the same price. */
   const valueUsd =
     side === "buy"
-      ? market && market.price > 0
-        ? size * market.price
+      ? bought && bought.price > 0
+        ? size * bought.price
         : null
-      : size
+      : ["USDC", "USDT", "DAI", "USDC.E"].includes(unit) ? size : null
   return { order, symbol, icon, side, size, unit, valueUsd }
 }
 
