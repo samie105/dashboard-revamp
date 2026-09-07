@@ -935,7 +935,7 @@ export function TradeClient() {
     return { accountId: account.id, networkId: spot.networkId, assets: [...new Set(assets)] }
   }, [usingModern, market, current, modernWallet.data])
   const exactSpotBalances = useQuery({
-    queryKey: ["crypto", "spot-balances", spotBalanceRequest],
+    queryKey: ["crypto", "spot-balances", spotBalanceRequest, side, ticketOpen],
     queryFn: ({ signal }) => cryptoBackendClient.listBalances(
       spotBalanceRequest!.accountId,
       spotBalanceRequest!.networkId,
@@ -943,8 +943,11 @@ export function TradeClient() {
       signal,
     ),
     enabled: Boolean(spotBalanceRequest),
-    staleTime: 15_000,
-    refetchInterval: 20_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   })
   const spotBalances = React.useMemo(() => {
     if (!exactSpotBalances.data || !spotBalanceRequest) return modernBalances
@@ -957,10 +960,9 @@ export function TradeClient() {
       const direct = balance.networkId === spotBalanceRequest.networkId
         ? exactByAsset.get(balance.asset.identifier.toLowerCase())
         : undefined
-      // A direct provider read that returns an empty/zero row must not erase a
-      // known non-zero aggregate balance; this is how transient RPC/indexer
-      // gaps previously made funded SOL/USDC display as zero in spot.
-      if (direct && (direct.amountBaseUnits !== "0" || balance.amountBaseUnits === "0")) return direct
+      // A successful live read is authoritative, including a zero balance
+      // after a sale. Missing rows still retain the snapshot fallback.
+      if (direct) return direct
       return balance
     })
     const existing = new Set(merged.map((balance) => `${balance.networkId}:${balance.asset.identifier.toLowerCase()}`))
