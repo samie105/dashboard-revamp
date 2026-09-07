@@ -545,7 +545,7 @@ export function ModernWalletPage() {
       row.relative = row.value !== null && top > 0 ? (row.value / top) * 100 : null
     })
     return rows
-  }, [balances.balances, usdIndex, totalUsd])
+  }, [balances.balances, networks.data, usdIndex, totalUsd])
 
   // Portfolio allocation by asset for the strip above the balance rows —
   // top four assets named, everything else folded into "Other".

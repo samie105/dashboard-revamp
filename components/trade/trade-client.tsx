@@ -928,15 +928,27 @@ export function TradeClient() {
     if (!(usingModern && market === "spot") || !current || !("networkId" in current)) return null
     const spot = current as HlSpotMarket
     if (!spot.networkId) return null
-    const assets = spotBalanceAssets(spot)
     const account = modernWallet.data?.accounts.find((item) =>
       item.addresses?.some((address) => address.networkId === spot.networkId),
     )
     if (!account) return null
-    return { accountId: account.id, networkId: spot.networkId, assets: [...new Set(assets)] }
+    // The ticket must see every token held on this chain, not only the two
+    // identifiers currently shown by the market row. This also avoids a
+    // partial provider response making Buy and Sell disagree about the same
+    // wallet. The backend performs one chain-specific discovery read here.
+    // Keep discovery enabled for indexed providers, but also send the pair's
+    // concrete token identifiers so a plain JSON-RPC provider can still read
+    // the balances with balanceOf/getParsedTokenAccountsByOwner.
+    return {
+      accountId: account.id,
+      networkId: spot.networkId,
+      assets: [...new Set(["*", ...spotBalanceAssets(spot)])],
+    }
   }, [usingModern, market, current, modernWallet.data])
   const exactSpotBalances = useQuery({
-    queryKey: ["crypto", "spot-balances", spotBalanceRequest, side, ticketOpen],
+    // Balance data belongs to the opened pair, not to the Buy/Sell tab. One
+    // shared query keeps both tabs on the same fresh RPC result.
+    queryKey: ["crypto", "spot-balances", spotBalanceRequest, ticketOpen],
     queryFn: ({ signal }) => cryptoBackendClient.listBalances(
       spotBalanceRequest!.accountId,
       spotBalanceRequest!.networkId,
