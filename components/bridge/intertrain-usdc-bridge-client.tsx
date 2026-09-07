@@ -6,6 +6,7 @@ import { useAuth } from "@/components/auth-provider"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { CryptoBackendError } from "@/lib/crypto-backend"
 import { signEvmIntent } from "@/lib/crypto-wallet"
 import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
@@ -25,21 +26,31 @@ export function IntertrainUsdcBridgeClient() {
     if (!getUnlockedWalletState(user.userId, wallet.data.id)) { resume.current = () => void submit(); setUnlock(true); return }
     setBusy(true); setNotice(null)
     try {
-      const idempotencyKey = crypto.randomUUID()
+      let idempotencyKey = crypto.randomUUID()
       let completed = false
-      for (let attempt = 0; attempt < 2 && !completed; attempt += 1) {
-        const { intents } = await cryptoBackendClient.createIntertrainUsdcBridgeIntents({ accountId: account.id, amount, idempotencyKey })
-        if (intents.length === 0) throw new Error("The bridge returned no transaction intent")
-        let approvalSubmitted = false
-        for (const intent of intents) {
-          const signed = await signEvmIntent(user.userId, wallet.data.id, pkg.data, intent, account.id)
-          await cryptoBackendClient.submitIntent(intent.id, signed)
-          approvalSubmitted ||= String(intent.normalizedSummary?.action) === "bridge-approve"
+      for (let recoveryAttempt = 0; recoveryAttempt < 2 && !completed; recoveryAttempt += 1) {
+        try {
+          const { intents } = await cryptoBackendClient.createIntertrainUsdcBridgeIntents({ accountId: account.id, amount, idempotencyKey })
+          if (intents.length === 0) throw new Error("The bridge returned no transaction intent")
+          let approvalSubmitted = false
+          for (const intent of intents) {
+            const signed = await signEvmIntent(user.userId, wallet.data.id, pkg.data, intent, account.id)
+            await cryptoBackendClient.submitIntent(intent.id, signed)
+            approvalSubmitted ||= String(intent.normalizedSummary?.action) === "bridge-approve"
+          }
+          if (approvalSubmitted) {
+            setNotice("USDC approval submitted. Waiting for Arbitrum confirmation before depositing…")
+            await new Promise((resolve) => setTimeout(resolve, 4_000))
+          } else completed = true
+        } catch (error) {
+          const recoverable = error instanceof CryptoBackendError && ["NONCE_STALE", "FEE_TOO_LOW"].includes(error.code)
+          if (!recoverable || recoveryAttempt === 1) throw error
+          // The signed intent cannot be edited. Prepare a new intent with a
+          // fresh idempotency key so the backend re-reads nonce, allowance,
+          // and fees before asking the user to sign again.
+          idempotencyKey = crypto.randomUUID()
+          setNotice("Arbitrum state changed while preparing the bridge. Refreshing the transaction…")
         }
-        if (approvalSubmitted) {
-          setNotice("USDC approval submitted. Waiting for Arbitrum confirmation before depositing…")
-          await new Promise((resolve) => setTimeout(resolve, 4_000))
-        } else completed = true
       }
       if (!completed) throw new Error("The USDC approval was submitted but has not confirmed yet. Try again after it is mined.")
       setAmount(""); setNotice("USDC deposit submitted. WSK will appear after Arbitrum finality and Intertrain consensus minting."); await qc.invalidateQueries({ queryKey: cryptoQueryKeys.balanceSnapshot(user.userId) })
