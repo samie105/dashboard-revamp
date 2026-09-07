@@ -19,6 +19,7 @@ export function formatWalletActionError(error: unknown, chain?: string, asset?: 
   const text = `${raw} ${details}`.toLowerCase()
   const fee = feeAsset[chain ?? ""]
   if (code === "INSUFFICIENT_ALLOWANCE" || text.includes("allowance")) return `Approve enough ${asset ?? "tokens"} first, wait for confirmation, then try again.`
+  if (code === "FEE_TOO_LOW" || /max fee per gas less than block base fee|transaction underpriced/i.test(text)) return "The network fee changed before submission. Refresh and try again."
   if (code === "INSUFFICIENT_FUNDS" || /insufficient funds|insufficient balance|not enough .*gas|insufficient lamports|exceeds balance|max fee per gas less than block base fee/.test(text)) {
     const reportedAsset = typeof errorDetails?.asset === "string" ? errorDetails.asset : undefined
     if (reportedAsset && reportedAsset.toUpperCase() === fee) return `Not enough ${fee} to pay the network fee. Add ${fee} and try again.`
