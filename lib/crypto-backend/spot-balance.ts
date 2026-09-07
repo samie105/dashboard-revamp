@@ -55,8 +55,10 @@ export function spotBalanceRows(
       ? balance.asset.identifier.toLowerCase() === identifier.toLowerCase()
       : balance.symbol.toUpperCase() === symbol.toUpperCase()
   })
-  // If both native and wrapped rows exist, the native row is the wallet's
-  // spendable balance for a native market; never add the same coin twice.
-  const native = candidates.filter((balance) => balance.asset.kind === "native")
-  return native.length > 0 ? native : candidates
+  // Native and wrapped balances are different on-chain accounts, but they
+  // represent the same spot asset. A Jupiter fill can credit wSOL while the
+  // wallet already holds native SOL; dropping either row makes the displayed
+  // balance wrong. Keep both rows so callers can sum them without losing the
+  // original token identifier needed for routing.
+  return candidates
 }

@@ -14,12 +14,14 @@ describe("spot balance identity", () => {
     expect(spotBalanceAssets(solMarket as HlSpotMarket)).toEqual([solMarket.inputMint])
   })
 
-  it("matches a route's wrapped SOL identifier to the native SOL row", () => {
+  it("matches a route's wrapped SOL identifier to both native and wrapped SOL", () => {
     const rows = spotBalanceRows([
       { networkId: solMarket.networkId, asset: { kind: "native", identifier: "SOL" }, amountBaseUnits: "4395000", decimals: 9, symbol: "SOL" },
+      { networkId: solMarket.networkId, asset: { kind: "token", identifier: solMarket.outputMint }, amountBaseUnits: "9610512", decimals: 9, symbol: "wSOL" },
     ], solMarket.networkId, "SOL", solMarket.outputMint)
-    expect(rows).toHaveLength(1)
+    expect(rows).toHaveLength(2)
     expect(rows[0]?.amountBaseUnits).toBe("4395000")
+    expect(rows[1]?.amountBaseUnits).toBe("9610512")
   })
 
   it("keeps same-symbol assets isolated by their on-chain identifier", () => {
