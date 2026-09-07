@@ -121,6 +121,11 @@ import { TokenIdentity } from "@/components/trade/token-identity"
 import { noteRecentMarket } from "@/hooks/useMarketPrefs"
 import { loadSpotMarkets } from "@/lib/spot-markets"
 import { nativeTokenFor } from "@/lib/native-token"
+import {
+  spotAssetAddress,
+  spotBalanceAssets,
+  spotBalanceRows,
+} from "@/lib/crypto-backend/spot-balance"
 import { chainLabel } from "@/lib/spot-market-search"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
@@ -208,12 +213,9 @@ function quoteOf(m: HlSpotMarket | HlFuturesMarket | undefined) {
  * must therefore prefer the registry's exact on-chain identifier and only
  * fall back to the symbol for legacy rows that have no address.
  */
-function assetAddressOf(market: HlSpotMarket | undefined, side: Side, symbol: string): string | null {
+function assetAddressOf(market: HlSpotMarket | undefined, side: Side, _symbol: string): string | null {
   if (!market) return null
-  const address = side === "buy"
-    ? (market.sellToken ?? market.inputMint)
-    : (market.buyToken ?? market.outputMint)
-  return address && address !== "native" ? address : null
+  return spotAssetAddress(market, side)
 }
 
 /**
@@ -926,12 +928,11 @@ export function TradeClient() {
     if (!(usingModern && market === "spot") || !current || !("networkId" in current)) return null
     const spot = current as HlSpotMarket
     if (!spot.networkId) return null
-    const assets = [spot.buyToken ?? spot.outputMint, spot.sellToken ?? spot.inputMint]
-      .filter((asset): asset is string => typeof asset === "string" && asset !== "native")
+    const assets = spotBalanceAssets(spot)
     const account = modernWallet.data?.accounts.find((item) =>
       item.addresses?.some((address) => address.networkId === spot.networkId),
     )
-    if (!account || assets.length === 0) return null
+    if (!account) return null
     return { accountId: account.id, networkId: spot.networkId, assets: [...new Set(assets)] }
   }, [usingModern, market, current, modernWallet.data])
   const exactSpotBalances = useQuery({
@@ -978,13 +979,12 @@ export function TradeClient() {
       side,
       spentSymbol,
     )
-    const rows = spotBalances.filter(
-      (b) =>
-        b.networkId === networkId &&
-        (spendAddress
-          ? b.asset.identifier.toLowerCase() === spendAddress.toLowerCase()
-          : b.symbol.toUpperCase() === spentSymbol.toUpperCase())
-    )
+    // Do not expose the snapshot's old zero while the per-market RPC read is
+    // still in flight. That was the visible failure mode on funded wallets:
+    // the ticket rendered immediately, then kept the snapshot row instead of
+    // waiting for the chain-specific result.
+    if (spotBalanceRequest && !exactSpotBalances.data && exactSpotBalances.isFetching) return null
+    const rows = spotBalanceRows(spotBalances, networkId, spentSymbol, spendAddress)
     // A snapshot that hasn't arrived is not a zero balance. Say nothing until
     // it has: "avail 0.00" against a funded wallet is worse than no figure.
     if (rows.length === 0 && (balancesLoading || exactSpotBalances.isLoading)) return null
@@ -997,6 +997,9 @@ export function TradeClient() {
     spotBalances,
     balancesLoading,
     exactSpotBalances.isLoading,
+    exactSpotBalances.isFetching,
+    exactSpotBalances.data,
+    spotBalanceRequest,
     usingModern,
     market,
     current,
@@ -1099,13 +1102,8 @@ export function TradeClient() {
     if (!networkId) return []
     const quote = quoteOf(current)
     const holding = (sym: string, address: string | null): number | null => {
-      const rows = spotBalances.filter(
-        (b) =>
-          b.networkId === networkId &&
-          (address
-            ? b.asset.identifier.toLowerCase() === address.toLowerCase()
-            : b.symbol.toUpperCase() === sym.toUpperCase())
-      )
+      if (spotBalanceRequest && !exactSpotBalances.data && exactSpotBalances.isFetching) return null
+      const rows = spotBalanceRows(spotBalances, networkId, sym, address)
       if (rows.length === 0 && (balancesLoading || exactSpotBalances.isLoading)) return null
       return rows.reduce(
         (sum, b) =>
@@ -1130,7 +1128,7 @@ export function TradeClient() {
         valueUsd: quoteHeld !== null && sizesLikeUsd(quote) ? quoteHeld : null,
       },
     ]
-  }, [usingModern, market, current, spotBalances, balancesLoading, exactSpotBalances.isLoading, price])
+  }, [usingModern, market, current, spotBalances, balancesLoading, exactSpotBalances.isLoading, exactSpotBalances.isFetching, exactSpotBalances.data, spotBalanceRequest, price])
 
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's

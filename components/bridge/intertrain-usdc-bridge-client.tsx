@@ -23,7 +23,7 @@ export function IntertrainUsdcBridgeClient() {
   const destinations = wallet.data?.accounts.filter((a) => a.chainFamily === "intertrain" && a.state === "active" && a.canonicalAddress) ?? []
   const destination = destinations.find((a) => a.id === selectedDestination) ?? (destinations.length === 1 ? destinations[0] : undefined)
   const value = Number(amount); const valid = Number.isFinite(value) && value > 0
-  const blocker = !isCryptoBackendEnabled ? "Modern wallet backend is not enabled" : !wallet.data ? "Create your modern wallet first" : !account ? "Your modern wallet has no active EVM account" : status.isLoading ? "Checking bridge status…" : !status.data?.available ? status.data?.reason ?? "Bridge unavailable" : !valid ? "Enter an amount" : null
+  const blocker = !isCryptoBackendEnabled ? "Modern wallet backend is not enabled" : !wallet.data ? "Create your modern wallet first" : !account ? "Your modern wallet has no active EVM account" : destinations.length === 0 ? "Add an active Intertrain account first" : !destination ? "Select an Intertrain destination" : status.isLoading ? "Checking bridge status…" : !status.data?.available ? status.data?.reason ?? "Bridge unavailable" : !valid ? "Enter an amount" : null
   async function submit() {
     if (!destination) { setNotice("Select your Intertrain destination account first."); return }
     if (blocker || busy || !user?.userId || !wallet.data?.id || !pkg.data || !account) return
@@ -32,7 +32,7 @@ export function IntertrainUsdcBridgeClient() {
     try {
       let idempotencyKey = crypto.randomUUID()
       let completed = false
-      for (let recoveryAttempt = 0; recoveryAttempt < 2 && !completed; recoveryAttempt += 1) {
+      for (let recoveryAttempt = 0; recoveryAttempt < 4 && !completed; recoveryAttempt += 1) {
         try {
           const { intents } = await cryptoBackendClient.createIntertrainUsdcBridgeIntents({ accountId: account.id, destinationAccountId: destination.id, amount, idempotencyKey })
           if (intents.length === 0) throw new Error("The bridge returned no transaction intent")
@@ -44,21 +44,25 @@ export function IntertrainUsdcBridgeClient() {
           }
           if (approvalSubmitted) {
             setNotice("USDC approval submitted. Waiting for Arbitrum confirmation before depositing…")
-            await new Promise((resolve) => setTimeout(resolve, 4_000))
+            await new Promise((resolve) => setTimeout(resolve, 8_000))
+            idempotencyKey = crypto.randomUUID()
           } else completed = true
         } catch (error) {
-          const recoverable = error instanceof CryptoBackendError && ["NONCE_STALE", "FEE_TOO_LOW"].includes(error.code)
-          if (!recoverable || recoveryAttempt === 1) throw error
+          const recoverable = error instanceof CryptoBackendError && ["NONCE_STALE", "FEE_TOO_LOW", "BRIDGE_APPROVAL_PENDING"].includes(error.code)
+          if (!recoverable || recoveryAttempt === 3) throw error
           // The signed intent cannot be edited. Prepare a new intent with a
           // fresh idempotency key so the backend re-reads nonce, allowance,
           // and fees before asking the user to sign again.
           idempotencyKey = crypto.randomUUID()
-          setNotice("Arbitrum state changed while preparing the bridge. Refreshing the transaction…")
+          if (error instanceof CryptoBackendError && error.code === "BRIDGE_APPROVAL_PENDING") {
+            setNotice("USDC approval is still confirming on Arbitrum. Waiting before depositing…")
+            await new Promise((resolve) => setTimeout(resolve, 8_000))
+          } else setNotice("Arbitrum state changed while preparing the bridge. Refreshing the transaction…")
         }
       }
       if (!completed) throw new Error("The USDC approval was submitted but has not confirmed yet. Try again after it is mined.")
       setAmount(""); setNotice("USDC deposit submitted. WSK will appear after Arbitrum finality and Intertrain consensus minting."); await qc.invalidateQueries({ queryKey: cryptoQueryKeys.balanceSnapshot(user.userId) })
     } catch (e) { setNotice(formatWalletActionError(e, "arbitrum", "USDC")) } finally { setBusy(false) }
   }
-  return <FlowShell><PageHeader title="Bridge" subtitle="Move USDC from Arbitrum into Intertrain as WSK" back="/" className="mb-5" /><div className="mb-5"><FlowHeader direction="in" title="Arbitrum USDC → Intertrain WSK" subtitle="1 USDC = 1 WSK · modern wallet only" /></div><RouteStrip direction="in" from={{ label: "Arbitrum One", sub: "USDC" }} to={{ label: "Intertrain", sub: "WSK" }} /><div className="mt-4 space-y-4"><AmountField value={amount} onChange={setAmount} unit="USDC" hint="USDC is deposited through the verified bridge contract." maxDecimals={6} /><DetailPanel rows={[{ label: "Rate", value: "1 USDC = 1 WSK" }, { label: "Destination", value: "Your Intertrain wallet" }, { label: "Settlement", value: "After source finality" }]} />{notice && <InlineNotice tone={notice.includes("submitted") ? "warning" : "error"}>{notice}</InlineNotice>}<FlowCta label={blocker ?? `Bridge ${amount || "0"} USDC`} onClick={submit} disabled={Boolean(blocker)} busy={busy} control={{ target: "bridge-submit", describe: "Bridge USDC to Intertrain", guarded: true }} /></div><WalletUnlockDialog open={unlock} onOpenChange={setUnlock} onUnlocked={() => { setUnlock(false); resume.current?.(); resume.current = null }} action="hyperliquid-deposit" /></FlowShell>
+  return <FlowShell><PageHeader title="Bridge" subtitle="Move USDC from Arbitrum into Intertrain as WSK" back="/" className="mb-5" /><div className="mb-5"><FlowHeader direction="in" title="Arbitrum USDC → Intertrain WSK" subtitle="1 USDC = 1 WSK · modern wallet only" /></div><RouteStrip direction="in" from={{ label: "Arbitrum One", sub: "USDC" }} to={{ label: "Intertrain", sub: "WSK" }} /><div className="mt-4 space-y-4"><AmountField value={amount} onChange={setAmount} unit="USDC" hint="USDC is deposited through the verified bridge contract." maxDecimals={6} /><label className="block space-y-2"><span className="text-sm font-medium text-foreground">Receive WSK in</span><select value={destination?.id ?? ""} onChange={(event) => setSelectedDestination(event.target.value)} disabled={destinations.length === 1} className="w-full rounded-xl bg-surface-sunken px-3 py-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><option value="">Select an Intertrain account</option>{destinations.map((item) => <option key={item.id} value={item.id}>{item.canonicalAddress?.slice(0, 10)}…{item.canonicalAddress?.slice(-8)}</option>)}</select>{destination?.canonicalAddress && <span className="block truncate text-xs text-muted-foreground">{destination.canonicalAddress}</span>}</label><DetailPanel rows={[{ label: "Rate", value: "1 USDC = 1 WSK" }, { label: "Destination", value: destination ? "Selected Intertrain account" : "Select an Intertrain account" }, { label: "Settlement", value: "After source finality" }]} />{notice && <InlineNotice tone={notice.includes("submitted") ? "warning" : "error"}>{notice}</InlineNotice>}<FlowCta label={blocker ?? `Bridge ${amount || "0"} USDC`} onClick={submit} disabled={Boolean(blocker)} busy={busy} control={{ target: "bridge-submit", describe: "Bridge USDC to Intertrain", guarded: true }} /></div><WalletUnlockDialog open={unlock} onOpenChange={setUnlock} onUnlocked={() => { setUnlock(false); resume.current?.(); resume.current = null }} action="hyperliquid-deposit" /></FlowShell>
 }
