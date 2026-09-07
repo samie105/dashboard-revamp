@@ -19,9 +19,13 @@ export function IntertrainUsdcBridgeClient() {
   const status = useQuery({ queryKey: ["crypto", "intertrain-bridge", "status"], queryFn: ({ signal }) => cryptoBackendClient.getIntertrainUsdcBridgeStatus(signal), refetchInterval: 30_000 })
   const pkg = useQuery({ queryKey: cryptoQueryKeys.walletPackage(user?.userId ?? "anonymous"), queryFn: () => cryptoBackendClient.getWalletPackage(), enabled: isCryptoBackendEnabled && Boolean(wallet.data?.id), staleTime: 60_000 })
   const account = wallet.data?.accounts.find((a) => a.chainFamily === "evm" && a.state === "active")
+  const [selectedDestination, setSelectedDestination] = React.useState("")
+  const destinations = wallet.data?.accounts.filter((a) => a.chainFamily === "intertrain" && a.state === "active" && a.canonicalAddress) ?? []
+  const destination = destinations.find((a) => a.id === selectedDestination) ?? (destinations.length === 1 ? destinations[0] : undefined)
   const value = Number(amount); const valid = Number.isFinite(value) && value > 0
   const blocker = !isCryptoBackendEnabled ? "Modern wallet backend is not enabled" : !wallet.data ? "Create your modern wallet first" : !account ? "Your modern wallet has no active EVM account" : status.isLoading ? "Checking bridge status…" : !status.data?.available ? status.data?.reason ?? "Bridge unavailable" : !valid ? "Enter an amount" : null
   async function submit() {
+    if (!destination) { setNotice("Select your Intertrain destination account first."); return }
     if (blocker || busy || !user?.userId || !wallet.data?.id || !pkg.data || !account) return
     if (!getUnlockedWalletState(user.userId, wallet.data.id)) { resume.current = () => void submit(); setUnlock(true); return }
     setBusy(true); setNotice(null)
@@ -30,7 +34,7 @@ export function IntertrainUsdcBridgeClient() {
       let completed = false
       for (let recoveryAttempt = 0; recoveryAttempt < 2 && !completed; recoveryAttempt += 1) {
         try {
-          const { intents } = await cryptoBackendClient.createIntertrainUsdcBridgeIntents({ accountId: account.id, amount, idempotencyKey })
+          const { intents } = await cryptoBackendClient.createIntertrainUsdcBridgeIntents({ accountId: account.id, destinationAccountId: destination.id, amount, idempotencyKey })
           if (intents.length === 0) throw new Error("The bridge returned no transaction intent")
           let approvalSubmitted = false
           for (const intent of intents) {
