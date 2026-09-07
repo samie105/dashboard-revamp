@@ -536,11 +536,17 @@ export function CandleChart({
     if (!source || !seriesRef.current) return
     const controller = new AbortController()
     let cancelled = false
-    let first = true
     setState("loading")
     setAvailable(INTERVALS)
     setHover(null)
     setLatest(null)
+    // Never leave the previous market's bars visible while the new source is
+    // loading. That made a failed request look like intermittent chart data.
+    candlesRef.current = []
+    seriesRef.current.setData([])
+    areaRef.current?.setData([])
+    volumeRef.current?.setData([])
+    paintMa(false)
     const palette = readPalette()
 
     const load = async () => {
@@ -553,19 +559,13 @@ export function CandleChart({
         onSourceRef.current?.(payload.source)
         if (payload.intervals?.length) setAvailable(payload.intervals)
         if (candles.length === 0) {
-          // Only claim "no data" on the FIRST answer. A later empty response
-          // is an upstream wobble, and blanking a chart the user is reading
-          // is worse than leaving the last bars up.
-          if (first) {
-            candlesRef.current = []
-            seriesRef.current.setData([])
-            areaRef.current?.setData([])
-            volumeRef.current?.setData([])
-            paintMa(false)
-            setState("empty")
-          }
+          // An empty answer is retryable. The route only caches it briefly,
+          // so the next poll can recover without a page reload. Preserve
+          // already-rendered bars during a later upstream wobble.
+          if (candlesRef.current.length === 0) setState("empty")
           return
         }
+        const hadCandles = candlesRef.current.length > 0
         candlesRef.current = candles
         // Sized from the data, not the source: the same series can be BTC or a
         // token nine decimals below a cent.
@@ -624,14 +624,13 @@ export function CandleChart({
         // poll instead of freezing at whatever it was drawn from first.
         paintMa(showMaRef.current)
         setState("ready")
-        if (first) {
-          first = false
+        if (!hadCandles) {
           fitOwedRef.current = true
           settleFit()
         }
       } catch {
         // Transient — keep whatever is already drawn.
-        if (first) setState("empty")
+        if (candlesRef.current.length === 0) setState("empty")
       }
     }
 

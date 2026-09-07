@@ -176,10 +176,10 @@ async function findPool(slug: string, token: string, signal: AbortSignal): Promi
     { headers: { accept: "application/json" }, signal },
   )
   if (!response.ok) {
-    // Cache the miss for a while: most of the catalogue has no pool, and
-    // without this every poll from every viewer re-asks — which is how a
-    // shared rate limit gets spent on questions already answered.
-    put(poolCache, key, null, 10 * 60_000)
+    // A rate limit or upstream outage is not proof that the token has no
+    // pool. Cache only a genuine 404; caching 429/5xx here made charts stay
+    // empty for ten minutes after a transient provider failure.
+    if (response.status === 404) put(poolCache, key, null, 10 * 60_000)
     return null
   }
   const body = (await response.json()) as {
@@ -315,7 +315,9 @@ export async function GET(request: Request) {
       // every poll by every viewer.
       const ttl =
         payload.candles.length === 0
-          ? 5 * 60_000
+          // Empty is often a transient provider miss. Keep request
+          // coalescing, but allow the next chart poll to retry promptly.
+          ? 10_000
           : interval === "1d"
             ? 5 * 60_000
             : 45_000
@@ -345,12 +347,13 @@ async function resolveChart(
   interval: string,
 ): Promise<Payload> {
   const empty: Payload = { candles: [], stats: null, source: null, intervals: ALL_INTERVALS }
-  const signal = AbortSignal.timeout(12_000)
   const timeframe = TIMEFRAME[interval]
 
   if (networkId && token) {
     try {
-      const priced = await fromBirdeye(networkId, token, interval, signal)
+      // Each provider gets its own budget. A slow/rate-limited first source
+      // must not consume the signal used by the fallbacks.
+      const priced = await fromBirdeye(networkId, token, interval, AbortSignal.timeout(8_000))
       if (priced) return priced
     } catch {
       // Rate limited or unreachable — the next source is not a worse answer,
@@ -360,7 +363,7 @@ async function resolveChart(
 
   if (slug && token && timeframe) {
     try {
-      const pooled = await fromPool(slug, token, interval, timeframe, signal)
+      const pooled = await fromPool(slug, token, interval, timeframe, AbortSignal.timeout(8_000))
       if (pooled) return pooled
     } catch {
       // Fall through — an upstream wobble should reach for the other source,
@@ -370,7 +373,7 @@ async function resolveChart(
 
   if (coinId) {
     try {
-      const listed = await fromCoingecko(coinId, interval, signal)
+      const listed = await fromCoingecko(coinId, interval, AbortSignal.timeout(8_000))
       if (listed) return listed
     } catch {
       /* nothing left to try */
