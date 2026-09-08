@@ -108,6 +108,11 @@ export interface CryptoTransactionIntent {
   [key: string]: unknown
 }
 
+export interface CryptoSpotIntentPlan {
+  intents: CryptoTransactionIntent[]
+  requiresApproval?: boolean
+}
+
 export interface CryptoTransactionRecord {
   id: string
   status: string

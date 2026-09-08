@@ -13,6 +13,7 @@ import type {
   CryptoNetwork,
   CryptoServiceHealth,
   CryptoTransactionIntent,
+  CryptoSpotIntentPlan,
   CryptoTransactionRecord,
   CryptoWalletPackageDocument,
   CryptoWallet,
@@ -383,11 +384,14 @@ export class CryptoBackendClient {
     sellAmountBaseUnits: string
     slippagePercentage?: number
     idempotencyKey?: string
-  }, signal?: AbortSignal): Promise<CryptoTransactionIntent> {
-    return this.request<CryptoTransactionIntent>("/trading/spot/evm/intents", {
+  }, signal?: AbortSignal): Promise<CryptoSpotIntentPlan> {
+    const result = await this.request<CryptoTransactionIntent | CryptoSpotIntentPlan>("/trading/spot/evm/intents", {
       method: "POST",
       body: JSON.stringify(input),
     }, { signal })
+    return Array.isArray((result as { intents?: unknown }).intents)
+      ? result as CryptoSpotIntentPlan
+      : { intents: [result as CryptoTransactionIntent], requiresApproval: false }
   }
 
   async createModernLifiSwapIntent(input: {
@@ -398,10 +402,13 @@ export class CryptoBackendClient {
     sellAmountBaseUnits: string
     slippagePercentage?: number
     idempotencyKey?: string
-  }, signal?: AbortSignal): Promise<CryptoTransactionIntent> {
-    return this.request<CryptoTransactionIntent>("/trading/spot/lifi/intents", {
+  }, signal?: AbortSignal): Promise<CryptoSpotIntentPlan> {
+    const result = await this.request<CryptoTransactionIntent | CryptoSpotIntentPlan>("/trading/spot/lifi/intents", {
       method: "POST", body: JSON.stringify(input),
     }, { signal })
+    return Array.isArray((result as { intents?: unknown }).intents)
+      ? result as CryptoSpotIntentPlan
+      : { intents: [result as CryptoTransactionIntent], requiresApproval: false }
   }
 
   async createModernProviderSwapIntent(input: {

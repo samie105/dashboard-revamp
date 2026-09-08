@@ -56,6 +56,8 @@ import {
   readFuturesOrderFigures,
   reduceOnlyProblem,
   type HyperliquidIntent,
+  type CryptoSpotIntentPlan,
+  type CryptoTransactionIntent,
 } from "@/lib/crypto-backend"
 import {
   buildSpotOrderPlan,
@@ -198,6 +200,19 @@ const ORDER_TYPES: readonly SegmentedOption<OrderType>[] = [
   { key: "market", label: "Market" },
   { key: "limit", label: "Limit" },
 ]
+
+async function waitForSpotApproval(intentId: string): Promise<void> {
+  const deadline = Date.now() + 90_000
+  while (Date.now() < deadline) {
+    const intent = await cryptoBackendClient.getIntent(intentId)
+    if (intent.status === "confirmed") return
+    if (["failed", "expired", "cancelled"].includes(intent.status)) {
+      throw new Error("The token approval did not complete. Refresh and try again.")
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 3_000))
+  }
+  throw new Error("The token approval is still confirming. Wait a moment, then try the trade again.")
+}
 
 /**
  * The quote asset a market is actually priced in — the registry names it per
@@ -1228,26 +1243,35 @@ export function TradeClient() {
         }
         // Solana spot goes through the same LI.FI intent route the swap
         // screen uses, not Jupiter directly (see `solanaPlan`).
-        const intent =
+        let intentPlan: CryptoSpotIntentPlan =
           plan.kind === "evm"
             ? await cryptoBackendClient.createModernSpotIntent(plan.input)
             : await cryptoBackendClient.createModernLifiSwapIntent(plan.input)
+        if (intentPlan.requiresApproval) {
+          for (const approval of intentPlan.intents) {
+            const signedApproval = await signEvmIntent(
+              user.userId,
+              walletId,
+              packageValue,
+              approval,
+              signingAccount.id,
+            )
+            await cryptoBackendClient.submitIntent(approval.id, signedApproval)
+            await waitForSpotApproval(approval.id)
+          }
+          // The quote is rebuilt after approval confirmation. This refreshes
+          // the LI.FI route and nonce instead of signing stale pre-approval
+          // calldata.
+          intentPlan = plan.kind === "evm"
+            ? await cryptoBackendClient.createModernSpotIntent(plan.input)
+            : await cryptoBackendClient.createModernLifiSwapIntent(plan.input)
+        }
+        const intent = intentPlan.intents[0]
+        if (!intent) throw new Error("The spot route returned no transaction intent")
         const signed =
           plan.kind === "evm"
-            ? await signEvmIntent(
-                user.userId,
-                walletId,
-                packageValue,
-                intent,
-                signingAccount.id
-              )
-            : await signSolanaIntent(
-                user.userId,
-                walletId,
-                packageValue,
-                intent,
-                signingAccount.id
-              )
+            ? await signEvmIntent(user.userId, walletId, packageValue, intent, signingAccount.id)
+            : await signSolanaIntent(user.userId, walletId, packageValue, intent, signingAccount.id)
         await cryptoBackendClient.submitIntent(intent.id, signed)
         // Submitted is not filled: the confirmation follows the intent poll
         // and only reads as complete once the backend says `confirmed`.

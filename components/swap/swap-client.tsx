@@ -93,6 +93,19 @@ function canonicalTokenAmount(amount: number, decimals: number): string {
   return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
 }
 
+async function waitForSwapApproval(intentId: string): Promise<void> {
+  const deadline = Date.now() + 90_000
+  while (Date.now() < deadline) {
+    const intent = await cryptoBackendClient.getIntent(intentId)
+    if (intent.status === "confirmed") return
+    if (["failed", "expired", "cancelled"].includes(intent.status)) {
+      throw new Error("The token approval did not complete. Refresh and try again.")
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 3_000))
+  }
+  throw new Error("The token approval is still confirming. Wait a moment, then try the swap again.")
+}
+
 function tokenIdentifier(chain: string, coin: CoinData): string {
   const assetAddress = swapAssetForToken(chain, coin.symbol)?.address
   return coin.contractAddress ?? (assetAddress && assetAddress !== "native" ? assetAddress : coin.symbol)
@@ -800,16 +813,37 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
       const amountBaseUnits = toBaseUnits(canonicalTokenAmount(numericFrom, quoteData.fromToken.decimals), quoteData.fromToken.decimals)
       if (!amountBaseUnits || amountBaseUnits === "0") throw new Error("The amount is too small for this coin")
       const idempotencyKey = swapIdempotencyKey.current ?? (swapIdempotencyKey.current = crypto.randomUUID())
-      const intent = await cryptoBackendClient.createModernLifiSwapIntent({
-        sourceNetworkId: networkIdFor(fromChain as SwapChainId),
-        destinationNetworkId: networkIdFor(toChain as SwapChainId),
-        sellToken: quoteData.fromToken.address,
+       let intentPlan = await cryptoBackendClient.createModernLifiSwapIntent({
+         sourceNetworkId: networkIdFor(fromChain as SwapChainId),
+         destinationNetworkId: networkIdFor(toChain as SwapChainId),
+         sellToken: quoteData.fromToken.address,
         buyToken: quoteData.toToken.address,
         sellAmountBaseUnits: amountBaseUnits,
         slippagePercentage: effectiveSlippage / 100,
-        idempotencyKey,
-      })
-      const signed = sourceFamily === "solana"
+         idempotencyKey,
+       })
+       if (intentPlan.requiresApproval) {
+         for (const approval of intentPlan.intents) {
+           if (sourceFamily !== "evm") throw new Error("This route returned an invalid EVM approval step")
+           const signedApproval = await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, approval, account.id)
+           await cryptoBackendClient.submitIntent(approval.id, signedApproval)
+           await waitForSwapApproval(approval.id)
+         }
+         // Rebuild the quote and transaction after the approval is confirmed;
+         // the original LI.FI calldata may have expired and its nonce is stale.
+         intentPlan = await cryptoBackendClient.createModernLifiSwapIntent({
+           sourceNetworkId: networkIdFor(fromChain as SwapChainId),
+           destinationNetworkId: networkIdFor(toChain as SwapChainId),
+           sellToken: quoteData.fromToken.address,
+           buyToken: quoteData.toToken.address,
+           sellAmountBaseUnits: amountBaseUnits,
+           slippagePercentage: effectiveSlippage / 100,
+           idempotencyKey,
+         })
+       }
+       const intent = intentPlan.intents[0]
+       if (!intent) throw new Error("The swap route returned no transaction intent")
+       const signed = sourceFamily === "solana"
         ? await signSolanaIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
         : sourceFamily === "sui"
           ? await signSuiIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
