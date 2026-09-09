@@ -7,6 +7,7 @@ import {
   SystemProgram,
 } from "@solana/web3.js"
 import type { PrivyClient } from "@privy-io/node"
+import type { AuthorizationContext } from "./authorization"
 
 /**
  * Send SOL to an address using Privy's RPC with gas sponsorship
@@ -15,7 +16,7 @@ export async function sendSol(
   walletId: string,
   toAddress: string,
   amountInSol: string,
-  clerkJwt: string | null,
+  authorizationContext: AuthorizationContext | null,
   client: PrivyClient = privyClient,
 ) {
   try {
@@ -33,7 +34,7 @@ export async function sendSol(
       toAddress,
     )
 
-    if (!clerkJwt) {
+    if (!authorizationContext) {
       throw new Error("No authorization context available - JWT required")
     }
 
@@ -75,9 +76,7 @@ export async function sendSol(
         encoding: "base64",
         transaction: serialized,
       },
-      authorization_context: {
-        user_jwts: [clerkJwt],
-      },
+      authorization_context: authorizationContext,
     })
 
     const signature = result.data?.hash

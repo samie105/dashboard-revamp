@@ -8,6 +8,7 @@ import { sendSui } from "@/lib/privy/sui"
 import { sendTon } from "@/lib/privy/ton"
 import { sendTrx } from "@/lib/privy/tron"
 import { getPrivyClient } from "@/lib/privy/client"
+import { createAuthorizationContext } from "@/lib/privy/authorization"
 
 type ChainType = "ethereum" | "solana" | "sui" | "ton" | "tron"
 
@@ -85,6 +86,10 @@ export async function POST(request: NextRequest) {
 
     const walletId = userWallet.wallets[chain].walletId
     const client = getPrivyClient(userWallet.privy_type ?? 0)
+    const authorizationContext = await createAuthorizationContext(
+      token,
+      userWallet.privy_type ?? 0,
+    )
 
     let result
     switch (chain) {
@@ -95,7 +100,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
         }
-        result = await sendEth(walletId, to, amount, token, client)
+        result = await sendEth(walletId, to, amount, authorizationContext, client)
         return NextResponse.json({
           success: true,
           chain: "ethereum",
@@ -111,7 +116,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
         }
-        result = await sendSol(walletId, to, amount, token, client)
+        result = await sendSol(walletId, to, amount, authorizationContext, client)
         return NextResponse.json({
           success: true,
           chain: "solana",
@@ -127,7 +132,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
         }
-        result = await sendSui(walletId, to, amount, token, client)
+        result = await sendSui(walletId, to, amount, authorizationContext, client)
         return NextResponse.json({
           success: true,
           chain: "sui",
@@ -159,7 +164,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
         }
-        result = await sendTrx(walletId, to, amount, token, client)
+        result = await sendTrx(walletId, to, amount, authorizationContext, client)
         return NextResponse.json({
           success: true,
           chain: "tron",

@@ -1,5 +1,6 @@
 import { privyClient } from "./client"
 import type { PrivyClient } from "@privy-io/node"
+import type { AuthorizationContext } from "./authorization"
 
 export interface TronTransactionParams {
   to: string
@@ -15,7 +16,7 @@ export interface TronTransactionParams {
 export async function sendTronTransaction(
   walletId: string,
   params: TronTransactionParams,
-  clerkJwt: string,
+  authorizationContext: AuthorizationContext,
   client: PrivyClient = privyClient,
 ) {
   const wallet = await client.wallets().get(walletId)
@@ -24,7 +25,7 @@ export async function sendTronTransaction(
     method: "tron_sendTransaction",
     chain_type: "tron",
     params,
-    authorization_context: { user_jwts: [clerkJwt] },
+    authorization_context: authorizationContext,
   })
 
   return {
@@ -40,7 +41,7 @@ export async function sendTrx(
   walletId: string,
   toAddress: string,
   amountInTrx: string,
-  clerkJwt: string,
+  authorizationContext: AuthorizationContext,
   client?: PrivyClient,
 ) {
   const sun = Math.floor(parseFloat(amountInTrx) * 1e6)
@@ -51,7 +52,7 @@ export async function sendTrx(
       to: toAddress,
       amount: sun,
     },
-    clerkJwt,
+    authorizationContext,
     client,
   )
 }

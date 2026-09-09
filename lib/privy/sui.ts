@@ -1,6 +1,7 @@
 import { privyClient } from "./client"
 import type { PrivyClient } from "@privy-io/node"
 import { publicKeyFromRawBytes } from "@mysten/sui/verify"
+import type { AuthorizationContext } from "./authorization"
 
 export interface SuiTransactionParams {
   to: string
@@ -54,7 +55,7 @@ async function getUserKey(clerkJwt: string): Promise<string> {
 export async function sendSuiTransaction(
   walletId: string,
   params: SuiTransactionParams,
-  clerkJwt: string,
+  authorizationContext: AuthorizationContext,
   client: PrivyClient = privyClient,
 ) {
   try {
@@ -69,8 +70,6 @@ export async function sendSuiTransaction(
       "to",
       params.to,
     )
-
-    const authorizationContext = { user_jwts: [clerkJwt] }
 
     const { SuiClient, getFullnodeUrl } = await import(
       "@mysten/sui.js/client"
@@ -163,7 +162,7 @@ export async function sendSui(
   walletId: string,
   toAddress: string,
   amountInSui: string,
-  clerkJwt: string,
+  authorizationContext: AuthorizationContext,
   client?: PrivyClient,
 ) {
   const mist = Math.floor(parseFloat(amountInSui) * 1e9)
@@ -174,7 +173,7 @@ export async function sendSui(
       to: toAddress,
       amount: mist,
     },
-    clerkJwt,
+    authorizationContext,
     client,
   )
 }

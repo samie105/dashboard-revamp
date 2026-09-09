@@ -3,6 +3,7 @@ import { privyClient } from "./client"
 import { shouldSponsor } from "./sponsorship"
 import { mainnet, arbitrum, polygon, optimism, bsc, base } from "viem/chains"
 import type { PrivyClient } from "@privy-io/node"
+import type { AuthorizationContext } from "./authorization"
 
 export interface EthereumTransactionParams {
   to: string
@@ -69,7 +70,7 @@ function sanitizePrivyError(error: unknown): string {
 export async function sendEthereumTransaction(
   walletId: string,
   params: EthereumTransactionParams,
-  clerkJwt: string | null,
+  authorizationContext: AuthorizationContext | null,
   client: PrivyClient = privyClient,
 ) {
   try {
@@ -85,7 +86,7 @@ export async function sendEthereumTransaction(
       params.to,
     )
 
-    if (!clerkJwt)
+    if (!authorizationContext)
       throw new Error("No authorization context available - JWT required")
 
     const chainId = params.chain_id || 1
@@ -110,9 +111,7 @@ export async function sendEthereumTransaction(
           ...(params.nonce !== undefined ? { nonce: params.nonce } : {}),
         },
       },
-      authorization_context: {
-        user_jwts: [clerkJwt],
-      },
+      authorization_context: authorizationContext,
     })
 
     const hash = result.data?.hash
@@ -135,7 +134,7 @@ export async function sendEth(
   walletId: string,
   toAddress: string,
   amountInEth: string,
-  clerkJwt: string | null,
+  authorizationContext: AuthorizationContext | null,
   client?: PrivyClient,
 ) {
   const valueInWei = BigInt(Math.floor(parseFloat(amountInEth) * 1e18))
@@ -146,7 +145,7 @@ export async function sendEth(
       value: valueInWei,
       chain_id: 1,
     },
-    clerkJwt,
+    authorizationContext,
     client,
   )
 }

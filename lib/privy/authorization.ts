@@ -14,9 +14,14 @@ export interface AuthorizationContext {
  * Call Privy's authenticate endpoint with a Clerk JWT to get
  * a per-session authorization key for wallet operations.
  */
-async function getUserAuthKey(clerkJwt: string): Promise<string> {
-  const appId = process.env.PRIVY_APP_ID
-  const appSecret = process.env.PRIVY_APP_SECRET
+async function getUserAuthKey(clerkJwt: string, privyType = 0): Promise<string> {
+  const credentials: Record<number, [string | undefined, string | undefined]> = {
+    0: [process.env.PRIVY_APP_ID, process.env.PRIVY_APP_SECRET],
+    1: [process.env.NEW_PRIVY_APP_ID, process.env.NEW_PRIVY_APP_SECRET],
+    2: [process.env.THIRD_PRIVY_APP_ID, process.env.THIRD_PRIVY_APP_SECRET],
+    3: [process.env.FOURTH_PRIVY_APP_ID, process.env.FOURTH_PRIVY_APP_SECRET],
+  }
+  const [appId, appSecret] = credentials[privyType] ?? credentials[0]
 
   if (!appId || !appSecret) {
     throw new Error("PRIVY_APP_ID or PRIVY_APP_SECRET is not set")
@@ -65,8 +70,9 @@ async function getUserAuthKey(clerkJwt: string): Promise<string> {
  */
 export async function createAuthorizationContext(
   clerkJwt: string,
+  privyType = 0,
 ): Promise<AuthorizationContext> {
-  const userKey = await getUserAuthKey(clerkJwt)
+  const userKey = await getUserAuthKey(clerkJwt, privyType)
   return {
     authorization_private_keys: [userKey],
   }

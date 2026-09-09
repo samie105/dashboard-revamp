@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb"
 import { getPrivyClient } from "@/lib/privy/client"
 import { UserWallet } from "@/models/UserWallet"
 import { shouldSponsor } from "@/lib/privy/sponsorship"
+import { createAuthorizationContext } from "@/lib/privy/authorization"
 import { Connection, PublicKey, Transaction } from "@solana/web3.js"
 import {
   getAssociatedTokenAddress,
@@ -136,6 +137,7 @@ export async function POST(request: NextRequest) {
       .toString("base64")
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const authorizationContext = await createAuthorizationContext(clerkJwt, userWallet.privy_type ?? 0)
     const result = await (getPrivyClient(userWallet.privy_type ?? 0).wallets() as any).rpc(walletId, {
       method: "signAndSendTransaction",
       caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
@@ -145,9 +147,7 @@ export async function POST(request: NextRequest) {
         encoding: "base64",
         transaction: serialized,
       },
-      authorization_context: {
-        user_jwts: [clerkJwt],
-      },
+      authorization_context: authorizationContext,
     })
 
     const signature = result.data?.hash

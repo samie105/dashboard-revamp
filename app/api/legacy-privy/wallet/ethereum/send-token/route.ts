@@ -6,6 +6,7 @@ import { sendEthereumTransaction } from "@/lib/privy/ethereum"
 import { UserWallet } from "@/models/UserWallet"
 import { connectDB } from "@/lib/mongodb"
 import { getPrivyClient } from "@/lib/privy/client"
+import { createAuthorizationContext } from "@/lib/privy/authorization"
 
 const ERC20_ABI = [{ name: "decimals", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] }, { name: "transfer", type: "function", stateMutability: "nonpayable", inputs: [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ type: "bool" }] }] as const
 
@@ -35,7 +36,8 @@ export async function POST(request: NextRequest) {
     const wallet = record?.wallets?.ethereum
     if (!wallet?.walletId) return NextResponse.json({ error: "Ethereum wallet not found" }, { status: 404 })
     const data = encodeFunctionData({ abi: ERC20_ABI, functionName: "transfer", args: [to as `0x${string}`, rawAmount] })
-    const result = await sendEthereumTransaction(wallet.walletId, { to: tokenAddress, data, chain_id: chainId }, jwt, getPrivyClient(record?.privy_type ?? 0))
+    const authorizationContext = await createAuthorizationContext(jwt, record?.privy_type ?? 0)
+    const result = await sendEthereumTransaction(wallet.walletId, { to: tokenAddress, data, chain_id: chainId }, authorizationContext, getPrivyClient(record?.privy_type ?? 0))
     return NextResponse.json({ success: true, transactionHash: result.transactionHash, status: result.status })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to send token" }, { status: 500 })
