@@ -54,15 +54,19 @@ function LegacyPrivyLinkInner({ children }: { children: React.ReactNode }) {
   const { getToken, user: clerkUser } = useAuth()
   const pendingLink = React.useRef<PendingLink | null>(null)
   const linking = React.useRef(false)
+  const clerkAuthenticated = Boolean(clerkUser)
+  const getExternalJwt = React.useCallback(async () => {
+    return (await getToken()) ?? undefined
+  }, [getToken])
 
   // Clerk is the primary login system. Sync its JWT into Privy instead of
   // opening Privy's email login modal (which is intentionally disabled in the
   // current Privy app configuration).
   const { state: jwtState } = useSubscribeToJwtAuthWithFlag({
-    isAuthenticated: Boolean(clerkUser),
-    isLoading: !clerkUser,
-    enabled: Boolean(clerkUser),
-    getExternalJwt: async () => (await getToken()) ?? undefined,
+    isAuthenticated: clerkAuthenticated,
+    isLoading: !clerkAuthenticated,
+    enabled: clerkAuthenticated,
+    getExternalJwt,
   })
 
   const linkCurrentClerkUser = React.useCallback(async () => {
