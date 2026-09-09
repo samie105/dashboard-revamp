@@ -10,6 +10,7 @@ import {
   cryptoQueryKeys,
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
+import { BALANCE_POLL_INTERVAL_MS, BALANCE_RETRY_DELAYS_MS, fetchCachedBalanceSnapshot } from "@/lib/crypto-backend/balance-cache"
 import { modernDataEnabled } from "@/lib/wallet-mode"
 
 export interface TokenBalance {
@@ -39,7 +40,7 @@ function formatBalance(amountBaseUnits: string, decimals: number) {
   return Number.isFinite(amount) ? amount : 0
 }
 
-async function fetchCryptoBalances(signal?: AbortSignal, forceRefresh = false): Promise<TokenBalance[]> {
+async function fetchCryptoBalances(userId: string, signal?: AbortSignal, forceRefresh = false): Promise<TokenBalance[]> {
   let wallet
   try {
     wallet = await cryptoBackendClient.getWallet(signal)
@@ -51,7 +52,7 @@ async function fetchCryptoBalances(signal?: AbortSignal, forceRefresh = false): 
     throw error
   }
 
-  const snapshot = await cryptoBackendClient.listBalanceSnapshot(forceRefresh, signal)
+  const snapshot = await fetchCachedBalanceSnapshot(userId, forceRefresh, signal)
 
   return snapshot.results.flatMap(({ networkId, networkName, accountId, balances }) =>
     balances.map((balance) => ({
@@ -100,14 +101,18 @@ export function useWalletBalances(refreshInterval = 0): UseWalletBalancesReturn 
 
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => (backendEnabled ? fetchCryptoBalances(signal) : fetchLegacyBalances(signal)),
+    queryFn: ({ signal }) => (backendEnabled ? fetchCryptoBalances(userId, signal) : fetchLegacyBalances(signal)),
     enabled: isLoaded && isSignedIn,
-    staleTime: backendEnabled ? 5 * 60_000 : 60_000,
+    staleTime: backendEnabled ? BALANCE_POLL_INTERVAL_MS : 60_000,
     gcTime: 30 * 60_000,
-    refetchInterval: backendEnabled ? false : (refreshInterval > 0 ? refreshInterval : false),
+    refetchInterval: backendEnabled ? BALANCE_POLL_INTERVAL_MS : (refreshInterval > 0 ? refreshInterval : false),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    retry: 1,
+    retry: (failureCount, error) => {
+      if (error instanceof CryptoBackendError && [401, 403, 404].includes(error.status)) return false
+      return failureCount < BALANCE_RETRY_DELAYS_MS.length
+    },
+    retryDelay: (attemptIndex) => BALANCE_RETRY_DELAYS_MS[Math.min(attemptIndex, BALANCE_RETRY_DELAYS_MS.length - 1)],
   })
 
   return {
@@ -116,7 +121,7 @@ export function useWalletBalances(refreshInterval = 0): UseWalletBalancesReturn 
     error: query.error instanceof Error ? query.error.message : query.error ? "Failed to fetch balances" : null,
     refetch: async () => {
       if (backendEnabled) {
-        const fresh = await fetchCryptoBalances(undefined, true)
+        const fresh = await fetchCryptoBalances(userId, undefined, true)
         queryClient.setQueryData(queryKey, fresh)
         return
       }

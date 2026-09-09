@@ -4,7 +4,8 @@ import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/components/auth-provider"
-import { CryptoBackendError, cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { CryptoBackendError, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { BALANCE_POLL_INTERVAL_MS, BALANCE_RETRY_DELAYS_MS, fetchCachedBalanceSnapshot } from "@/lib/crypto-backend/balance-cache"
 import { flattenSnapshot, unavailableNetworksOf } from "@/hooks/crypto/balance-policy"
 
 export type { CryptoBalanceResult } from "@/hooks/crypto/balance-policy"
@@ -24,12 +25,13 @@ export function useCryptoBalances() {
     queryKey: cryptoQueryKeys.balanceSnapshot(userId),
     // Spec §5: reads hit the backend cache; refresh=true is reserved for the
     // explicit triggers (user refresh, post-transaction invalidation).
-    queryFn: ({ signal }) => cryptoBackendClient.listBalanceSnapshot(false, signal),
+    queryFn: ({ signal }) => fetchCachedBalanceSnapshot(userId, false, signal),
     enabled,
-    staleTime: Number.POSITIVE_INFINITY,
+    staleTime: BALANCE_POLL_INTERVAL_MS,
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    refetchInterval: BALANCE_POLL_INTERVAL_MS,
     // Keep the last snapshot on screen while refetching, but only when the
     // previous query belonged to this same user — `keepPreviousData` would
     // otherwise carry a stale user's balances into the new user's query key
@@ -37,8 +39,11 @@ export function useCryptoBalances() {
     // clear.
     placeholderData: (previousData, previousQuery) =>
       previousQuery?.queryKey.includes(userId) ? previousData : undefined,
-    retry: (failureCount, error) =>
-      failureCount < 2 && !(error instanceof CryptoBackendError && error.status < 500),
+    retry: (failureCount, error) => {
+      if (error instanceof CryptoBackendError && [401, 403, 404].includes(error.status)) return false
+      return failureCount < BALANCE_RETRY_DELAYS_MS.length
+    },
+    retryDelay: (attemptIndex) => BALANCE_RETRY_DELAYS_MS[Math.min(attemptIndex, BALANCE_RETRY_DELAYS_MS.length - 1)],
   })
 
   const refresh = React.useCallback(async () => {
@@ -46,7 +51,7 @@ export function useCryptoBalances() {
     // backend without a session and could write into the "anonymous" cache
     // slot.
     if (!enabled) return
-    const fresh = await cryptoBackendClient.listBalanceSnapshot(true)
+    const fresh = await fetchCachedBalanceSnapshot(userId, true)
     queryClient.setQueryData(cryptoQueryKeys.balanceSnapshot(userId), fresh)
   }, [enabled, queryClient, userId])
 

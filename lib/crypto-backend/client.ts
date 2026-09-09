@@ -492,6 +492,9 @@ export class CryptoBackendClient {
 
     const payload = (body ?? {}) as ErrorPayload & { data?: T }
     const requestId = response.headers.get("x-request-id") ?? payload.requestId
+    if (path.startsWith("/wallets/me/balances")) {
+      console.info("[crypto-backend] balance response", { status: response.status, requestId })
+    }
     if (!response.ok || payload.success === false) {
       if (response.status === 401 && !options._retried && typeof window !== "undefined") {
         // clerk-js refreshes the session cookie as a side effect of getToken().
