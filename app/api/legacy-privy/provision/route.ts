@@ -3,23 +3,17 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifyClerkJWT } from "@/lib/auth/clerk"
 import { pregenerateWallet } from "@/lib/wallet-actions"
 
-// Temporary, deliberately narrow allowlist for provisioning a test wallet.
-// Do not replace this with a client-provided email.
-const ALLOWED_EMAIL = "emmanuelhudson355@gmail.com"
-
 export async function POST(request: NextRequest) {
   try {
-    await verifyClerkJWT(request)
+    const { userId } = await verifyClerkJWT(request)
 
     const user = await currentUser()
-    const email = user?.emailAddresses
-      .map((address) => address.emailAddress.trim().toLowerCase())
-      .find((address) => address === ALLOWED_EMAIL)
+    const email = user?.primaryEmailAddress?.emailAddress.trim().toLowerCase()
 
     if (!email) {
       return NextResponse.json(
-        { success: false, error: "This provisioning route is not enabled for this account" },
-        { status: 403 },
+        { success: false, error: "A verified email address is required to provision a Privy wallet" },
+        { status: 400 },
       )
     }
 
@@ -41,6 +35,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       provisioned: true,
+      clerkUserId: userId,
+      privyUserId: result.privyUserId,
       addresses,
       chains: Object.keys(addresses),
     })
