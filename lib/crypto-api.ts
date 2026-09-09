@@ -419,6 +419,17 @@ export async function fetchLegacyPrivyBalances(): Promise<TokenBalance[]> {
   return res.balances
 }
 
+export type LegacyPrivyWalletSnapshot = {
+  addresses: Record<string, string>
+  wallets: Record<string, { walletId?: string; address?: string; publicKey?: string | null }>
+  privyType: number
+}
+
+export async function fetchLegacyPrivyWallet(): Promise<LegacyPrivyWalletSnapshot> {
+  assertLegacyPrivyEnabled()
+  return get<LegacyPrivyWalletSnapshot>("/api/legacy-privy/wallet")
+}
+
 /** The caller's wallet record; null when wallets haven't been created yet. */
 export async function fetchWallet(): Promise<WalletInfo | null> {
   try {

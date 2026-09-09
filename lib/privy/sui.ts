@@ -1,4 +1,5 @@
 import { privyClient } from "./client"
+import type { PrivyClient } from "@privy-io/node"
 import { publicKeyFromRawBytes } from "@mysten/sui/verify"
 
 export interface SuiTransactionParams {
@@ -54,9 +55,10 @@ export async function sendSuiTransaction(
   walletId: string,
   params: SuiTransactionParams,
   clerkJwt: string,
+  client: PrivyClient = privyClient,
 ) {
   try {
-    const wallet = await privyClient.wallets().get(walletId)
+    const wallet = await client.wallets().get(walletId)
     if (!wallet || wallet.chain_type !== "sui") {
       throw new Error("Invalid Sui wallet")
     }
@@ -68,13 +70,7 @@ export async function sendSuiTransaction(
       params.to,
     )
 
-    const userKey = await getUserKey(clerkJwt)
-
-    const authorizationContext = {
-      authorization_private_keys: [userKey],
-    }
-
-    console.log("[Privy Sui] Authorization context created with user JWT")
+    const authorizationContext = { user_jwts: [clerkJwt] }
 
     const { SuiClient, getFullnodeUrl } = await import(
       "@mysten/sui.js/client"
@@ -103,7 +99,7 @@ export async function sendSuiTransaction(
       "[Privy Sui] Transaction bytes prepared, requesting signature",
     )
 
-    const signResponse = await privyClient.wallets().rawSign(walletId, {
+    const signResponse = await client.wallets().rawSign(walletId, {
       params: {
         bytes: intentHex,
         encoding: "hex",
@@ -168,6 +164,7 @@ export async function sendSui(
   toAddress: string,
   amountInSui: string,
   clerkJwt: string,
+  client?: PrivyClient,
 ) {
   const mist = Math.floor(parseFloat(amountInSui) * 1e9)
 
@@ -178,6 +175,7 @@ export async function sendSui(
       amount: mist,
     },
     clerkJwt,
+    client,
   )
 }
 

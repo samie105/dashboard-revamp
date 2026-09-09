@@ -2,6 +2,7 @@ import { toHex } from "viem"
 import { privyClient } from "./client"
 import { shouldSponsor } from "./sponsorship"
 import { mainnet, arbitrum, polygon, optimism, bsc, base } from "viem/chains"
+import type { PrivyClient } from "@privy-io/node"
 
 export interface EthereumTransactionParams {
   to: string
@@ -69,9 +70,10 @@ export async function sendEthereumTransaction(
   walletId: string,
   params: EthereumTransactionParams,
   clerkJwt: string | null,
+  client: PrivyClient = privyClient,
 ) {
   try {
-    const wallet = await privyClient.wallets().get(walletId)
+    const wallet = await client.wallets().get(walletId)
     if (!wallet || wallet.chain_type !== "ethereum") {
       throw new Error("Invalid Ethereum wallet")
     }
@@ -93,7 +95,7 @@ export async function sendEthereumTransaction(
       `[Privy Ethereum] Execution on chain ${chainId} (Sponsor: ${sponsor}). Target: ${params.to}`,
     )
 
-    const result = await privyClient.wallets().rpc(walletId, {
+    const result = await client.wallets().rpc(walletId, {
       method: "eth_sendTransaction",
       caip2: `eip155:${chainId}`,
       chain_type: "ethereum",
@@ -134,6 +136,7 @@ export async function sendEth(
   toAddress: string,
   amountInEth: string,
   clerkJwt: string | null,
+  client?: PrivyClient,
 ) {
   const valueInWei = BigInt(Math.floor(parseFloat(amountInEth) * 1e18))
   return sendEthereumTransaction(
@@ -144,6 +147,7 @@ export async function sendEth(
       chain_id: 1,
     },
     clerkJwt,
+    client,
   )
 }
 

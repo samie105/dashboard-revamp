@@ -6,6 +6,7 @@ import {
   Transaction,
   SystemProgram,
 } from "@solana/web3.js"
+import type { PrivyClient } from "@privy-io/node"
 
 /**
  * Send SOL to an address using Privy's RPC with gas sponsorship
@@ -15,9 +16,10 @@ export async function sendSol(
   toAddress: string,
   amountInSol: string,
   clerkJwt: string | null,
+  client: PrivyClient = privyClient,
 ) {
   try {
-    const wallet = await privyClient.wallets().get(walletId)
+    const wallet = await client.wallets().get(walletId)
     if (!wallet || wallet.chain_type !== "solana") {
       throw new Error("Invalid Solana wallet")
     }
@@ -64,7 +66,7 @@ export async function sendSol(
       .toString("base64")
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (privyClient.wallets() as any).rpc(walletId, {
+    const result = await (client.wallets() as any).rpc(walletId, {
       method: "signAndSendTransaction",
       caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
       chain_type: "solana",

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
+import { getPrivyClient } from "@/lib/privy/client"
 import { UserWallet } from "@/models/UserWallet"
-import { privyClient } from "@/lib/privy/client"
 import { shouldSponsor } from "@/lib/privy/sponsorship"
 import { Connection, PublicKey, Transaction } from "@solana/web3.js"
 import {
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       .toString("base64")
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (privyClient.wallets() as any).rpc(walletId, {
+    const result = await (getPrivyClient(userWallet.privy_type ?? 0).wallets() as any).rpc(walletId, {
       method: "signAndSendTransaction",
       caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
       chain_type: "solana",

@@ -7,8 +7,23 @@ import { sendSol } from "@/lib/privy/solana"
 import { sendSui } from "@/lib/privy/sui"
 import { sendTon } from "@/lib/privy/ton"
 import { sendTrx } from "@/lib/privy/tron"
+import { getPrivyClient } from "@/lib/privy/client"
 
 type ChainType = "ethereum" | "solana" | "sui" | "ton" | "tron"
+
+export async function GET(request: NextRequest) {
+  try {
+    const { userId } = await verifyClerkJWT(request)
+    await connectDB()
+    const userWallet = await UserWallet.findOne({ clerkUserId: userId }).lean()
+    if (!userWallet) return NextResponse.json({ error: "Legacy wallet not found" }, { status: 404 })
+    const wallets = (userWallet as { wallets?: Record<string, { walletId?: string; address?: string; publicKey?: string | null }> }).wallets ?? {}
+    const addresses = Object.fromEntries(Object.entries(wallets).filter(([, wallet]) => Boolean(wallet?.address)).map(([chain, wallet]) => [chain, wallet.address as string]))
+    return NextResponse.json({ success: true, wallets, addresses, privyType: (userWallet as { privy_type?: number }).privy_type ?? 0 })
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load legacy wallet" }, { status: 500 })
+  }
+}
 
 /**
  * POST /api/privy/wallet/send
@@ -69,6 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     const walletId = userWallet.wallets[chain].walletId
+    const client = getPrivyClient(userWallet.privy_type ?? 0)
 
     let result
     switch (chain) {
@@ -79,7 +95,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
         }
-        result = await sendEth(walletId, to, amount, token)
+        result = await sendEth(walletId, to, amount, token, client)
         return NextResponse.json({
           success: true,
           chain: "ethereum",
@@ -95,7 +111,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
         }
-        result = await sendSol(walletId, to, amount, token)
+        result = await sendSol(walletId, to, amount, token, client)
         return NextResponse.json({
           success: true,
           chain: "solana",
@@ -111,7 +127,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
         }
-        result = await sendSui(walletId, to, amount, token)
+        result = await sendSui(walletId, to, amount, token, client)
         return NextResponse.json({
           success: true,
           chain: "sui",
@@ -143,7 +159,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
         }
-        result = await sendTrx(walletId, to, amount, token)
+        result = await sendTrx(walletId, to, amount, token, client)
         return NextResponse.json({
           success: true,
           chain: "tron",

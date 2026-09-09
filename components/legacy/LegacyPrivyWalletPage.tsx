@@ -3,12 +3,11 @@
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Copy01Icon, RefreshIcon, ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons"
-import { useWallet } from "@/components/wallet-provider"
 import { useAuth } from "@/components/auth-provider"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { ReceiveModal, type ReceivableAsset } from "@/components/assets/receive-modal"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
-import { fetchLegacyPrivyBalances, type TokenBalance } from "@/lib/crypto-api"
+import { fetchLegacyPrivyBalances, fetchLegacyPrivyWallet, type TokenBalance } from "@/lib/crypto-api"
 
 const labels: Record<string, string> = { ethereum: "Ethereum", arbitrum: "Arbitrum", solana: "Solana", sui: "Sui", ton: "TON", tron: "Tron" }
 const icons: Record<string, string> = { ethereum: "/ethereum.png", arbitrum: "/arb.jpg", solana: "/solana.png", sui: "/sui-ocean-square.png", ton: "/ton.png", tron: "/tron-logo.png" }
@@ -19,13 +18,22 @@ function formatAmount(value: number) {
 
 export function LegacyPrivyWalletPage() {
   const { user } = useAuth()
-  const { addresses, isLoading: walletsLoading, error: walletError, refreshWallets } = useWallet()
+  const [addresses, setAddresses] = React.useState<Record<string, string>>({})
+  const [walletsLoading, setWalletsLoading] = React.useState(true)
+  const [walletError, setWalletError] = React.useState<string | null>(null)
   const [balances, setBalances] = React.useState<TokenBalance[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [receive, setReceive] = React.useState<ReceivableAsset | undefined>()
   const [send, setSend] = React.useState<SendableAsset | undefined>()
   const [copied, setCopied] = React.useState(false)
+
+  const loadWallet = React.useCallback(async () => {
+    setWalletsLoading(true); setWalletError(null)
+    try { setAddresses((await fetchLegacyPrivyWallet()).addresses) }
+    catch (e) { setWalletError(e instanceof Error ? e.message : "Unable to load Privy addresses") }
+    finally { setWalletsLoading(false) }
+  }, [])
 
   const loadBalances = React.useCallback(async () => {
     if (!user) return
@@ -35,7 +43,7 @@ export function LegacyPrivyWalletPage() {
     finally { setLoading(false) }
   }, [user])
 
-  React.useEffect(() => { void loadBalances() }, [loadBalances])
+  React.useEffect(() => { void loadWallet(); void loadBalances() }, [loadWallet, loadBalances])
 
   const total = balances.reduce((sum, item) => sum + (Number.isFinite(item.balance) ? item.balance : 0), 0)
   async function copyAddress(address?: string) {
@@ -48,7 +56,7 @@ export function LegacyPrivyWalletPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div><p className="text-xs uppercase tracking-[0.2em] text-primary">Compatibility wallet</p><h1 className="text-3xl font-semibold">Legacy Wallet</h1><p className="mt-1 text-sm text-muted-foreground">Your original Privy wallet and its on-chain balances.</p></div>
         <div className="flex gap-2">
-          <button onClick={() => { void refreshWallets(); void loadBalances() }} className="inline-flex items-center gap-2 rounded-xl border border-border/50 px-4 py-2 text-sm"><HugeiconsIcon icon={RefreshIcon} size={16} /> Refresh</button>
+          <button onClick={() => { void loadWallet(); void loadBalances() }} className="inline-flex items-center gap-2 rounded-xl border border-border/50 px-4 py-2 text-sm"><HugeiconsIcon icon={RefreshIcon} size={16} /> Refresh</button>
           <button disabled className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground opacity-60" title="Migration handler is preserved and will be connected separately">Migrate to custom wallet</button>
         </div>
       </div>

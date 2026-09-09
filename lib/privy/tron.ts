@@ -1,4 +1,5 @@
 import { privyClient } from "./client"
+import type { PrivyClient } from "@privy-io/node"
 
 export interface TronTransactionParams {
   to: string
@@ -15,40 +16,16 @@ export async function sendTronTransaction(
   walletId: string,
   params: TronTransactionParams,
   clerkJwt: string,
+  client: PrivyClient = privyClient,
 ) {
-  const appId = process.env.PRIVY_APP_ID
-  const appSecret = process.env.PRIVY_APP_SECRET
-
-  if (!appId || !appSecret) {
-    throw new Error("PRIVY_APP_ID or PRIVY_APP_SECRET is not set")
-  }
-
-  const response = await fetch(
-    `https://api.privy.io/v1/wallets/${walletId}/rpc`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${appId}:${appSecret}`).toString("base64")}`,
-        "Content-Type": "application/json",
-        "privy-app-id": appId,
-      },
-      body: JSON.stringify({
-        method: "tron_sendTransaction",
-        chain_type: "tron",
-        params,
-        authorization_context: {
-          user_jwts: [clerkJwt],
-        },
-      }),
-    },
-  )
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Tron transaction failed: ${response.status} - ${errorText}`)
-  }
-
-  const result = await response.json()
+  const wallet = await client.wallets().get(walletId)
+  if (!wallet || wallet.chain_type !== "tron") throw new Error("Invalid Tron wallet")
+  const result = await (client.wallets() as any).rpc(walletId, {
+    method: "tron_sendTransaction",
+    chain_type: "tron",
+    params,
+    authorization_context: { user_jwts: [clerkJwt] },
+  })
 
   return {
     txid: result.data?.hash || result.data?.txid,
@@ -64,6 +41,7 @@ export async function sendTrx(
   toAddress: string,
   amountInTrx: string,
   clerkJwt: string,
+  client?: PrivyClient,
 ) {
   const sun = Math.floor(parseFloat(amountInTrx) * 1e6)
 
@@ -74,6 +52,7 @@ export async function sendTrx(
       amount: sun,
     },
     clerkJwt,
+    client,
   )
 }
 
