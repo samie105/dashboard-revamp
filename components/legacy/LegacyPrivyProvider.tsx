@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { PrivyProvider, useLinkJwtAccount, usePrivy } from "@privy-io/react-auth"
+import { PrivyProvider, useLinkJwtAccount, usePrivy, useSubscribeToJwtAuthWithFlag } from "@privy-io/react-auth"
 import { useAuth } from "@/components/auth-provider"
 
 type PendingLink = {
@@ -49,11 +49,21 @@ export function LegacyPrivyProvider({ children }: { children: React.ReactNode })
 }
 
 function LegacyPrivyLinkInner({ children }: { children: React.ReactNode }) {
-  const { ready, authenticated, login, user: privyUser } = usePrivy()
+  const { ready, authenticated, user: privyUser } = usePrivy()
   const { linkWithCustomJwt } = useLinkJwtAccount()
   const { getToken, user: clerkUser } = useAuth()
   const pendingLink = React.useRef<PendingLink | null>(null)
   const linking = React.useRef(false)
+
+  // Clerk is the primary login system. Sync its JWT into Privy instead of
+  // opening Privy's email login modal (which is intentionally disabled in the
+  // current Privy app configuration).
+  const { state: jwtState } = useSubscribeToJwtAuthWithFlag({
+    isAuthenticated: Boolean(clerkUser),
+    isLoading: !clerkUser,
+    enabled: Boolean(clerkUser),
+    getExternalJwt: async () => (await getToken()) ?? undefined,
+  })
 
   const linkCurrentClerkUser = React.useCallback(async () => {
     if (linking.current) return
@@ -74,11 +84,22 @@ function LegacyPrivyLinkInner({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const pending = pendingLink.current
-    if (!pending || !ready || !authenticated) return
+    if (!pending || !ready) return
+
+    if (!authenticated) {
+      if (jwtState.status === "error") {
+        pendingLink.current = null
+        pending.reject(jwtState.error ?? new Error("Privy could not authenticate the Clerk session."))
+      } else if (jwtState.status === "not-enabled") {
+        pendingLink.current = null
+        pending.reject(new Error("Privy JWT authentication is not enabled for this app."))
+      }
+      return
+    }
 
     pendingLink.current = null
     void linkCurrentClerkUser().then(pending.resolve, pending.reject)
-  }, [authenticated, linkCurrentClerkUser, ready])
+  }, [authenticated, jwtState, linkCurrentClerkUser, ready])
 
   const ensureLinked = React.useCallback(async () => {
     if (!ready) throw new Error("Privy is still loading. Please try again in a moment.")
@@ -90,13 +111,12 @@ function LegacyPrivyLinkInner({ children }: { children: React.ReactNode }) {
 
       await new Promise<void>((resolve, reject) => {
         pendingLink.current = { resolve, reject }
-        login()
       })
       return
     }
 
     await linkCurrentClerkUser()
-  }, [authenticated, linkCurrentClerkUser, login, ready])
+  }, [authenticated, linkCurrentClerkUser, ready])
 
   return (
     <LegacyPrivyLinkContext.Provider value={{ configured: true, ensureLinked }}>
