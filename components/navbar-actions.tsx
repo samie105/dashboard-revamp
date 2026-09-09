@@ -338,6 +338,11 @@ export function NavbarActions() {
                       <span className="flex-1 font-medium">Worldstreet Wallet</span>
                       <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 opacity-0 -translate-x-1 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all" />
                     </Link>
+                    <Link href="/wallet/legacy-privy" className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors group/link">
+                      <HugeiconsIcon icon={Wallet01Icon} className="h-3.5 w-3.5 text-amber-400" />
+                      <span className="flex-1 font-medium">Legacy Privy Wallet</span>
+                      <HugeiconsIcon icon={ArrowRight01Icon} className="h-3 w-3 opacity-0 -translate-x-1 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all" />
+                    </Link>
                   </div>
                 </div>
               )}

@@ -258,7 +258,7 @@ export async function sendNative(input: {
   amount: string
 }): Promise<SendResult> {
   assertLegacyPrivyEnabled()
-  return normalizeSend(await post<RawSend>("/api/privy/wallet/send", input))
+  return normalizeSend(await post<RawSend>("/api/legacy-privy/wallet", input))
 }
 
 /** SPL token on Solana. */
@@ -268,7 +268,7 @@ export async function sendSplToken(input: {
   mint: string
 }): Promise<SendResult> {
   assertLegacyPrivyEnabled()
-  return normalizeSend(await post<RawSend>("/api/privy/wallet/solana/send-token", input))
+  return normalizeSend(await post<RawSend>("/api/legacy-privy/wallet/solana/send-token", input))
 }
 
 /** ERC-20 on Ethereum mainnet or Arbitrum. Decimals are read on chain. */
@@ -279,7 +279,7 @@ export async function sendErc20Token(input: {
   chain?: EvmTokenChain
 }): Promise<SendResult> {
   assertLegacyPrivyEnabled()
-  return normalizeSend(await post<RawSend>("/api/privy/wallet/ethereum/send-token", input))
+  return normalizeSend(await post<RawSend>("/api/legacy-privy/wallet/ethereum/send-token", input))
 }
 
 /** TRC-20 on Tron. */
@@ -289,7 +289,7 @@ export async function sendTrc20Token(input: {
   contractAddress: string
 }): Promise<SendResult> {
   assertLegacyPrivyEnabled()
-  return normalizeSend(await post<RawSend>("/api/privy/wallet/tron/send-token", input))
+  return normalizeSend(await post<RawSend>("/api/legacy-privy/wallet/tron/send-token", input))
 }
 
 /**
@@ -322,7 +322,7 @@ export async function sendAsset(input: {
   // Native. The generic send has no arbitrum — mapping it to ethereum would
   // broadcast on mainnet instead, so refuse rather than send on the wrong chain.
   if (chain === "arbitrum") {
-    throw new CryptoApiError(400, "Sending native ETH on Arbitrum isn't supported yet.")
+    return normalizeSend(await post<RawSend>("/api/legacy-privy/wallet/ethereum/send", { ...input, chain }))
   }
   return sendNative({ chain: chain as SendChain, to, amount: amount.toString() })
 }
@@ -408,6 +408,14 @@ export function fetchPrices(): Promise<PricesResponse> {
 /** Live on-chain balances across every chain the user has a wallet on. */
 export async function fetchBalances(): Promise<TokenBalance[]> {
   const res = await get<{ balances: TokenBalance[] }>("/api/wallet/balances")
+  return res.balances
+}
+
+/** Live balances for the legacy Privy wallet. This intentionally bypasses the
+ * modern crypto-backend proxy and stays on the isolated compatibility route. */
+export async function fetchLegacyPrivyBalances(): Promise<TokenBalance[]> {
+  assertLegacyPrivyEnabled()
+  const res = await get<{ balances: TokenBalance[] }>("/api/legacy-privy/balances")
   return res.balances
 }
 
