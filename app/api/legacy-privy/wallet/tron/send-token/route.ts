@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const record = await UserWallet.findOne({ clerkUserId: userId })
     const wallet = record?.wallets?.tron
     if (!wallet?.walletId) return NextResponse.json({ error: "Tron wallet not found" }, { status: 404 })
-    const authorizationContext = await createAuthorizationContext(token, record?.privy_type ?? 0)
+    const authorizationContext = createAuthorizationContext(token)
     const result = await sendTronTransaction(wallet.walletId, { to, amount: Math.floor(numericAmount * 1e6), tokenAddress: contractAddress }, authorizationContext, getPrivyClient(record?.privy_type ?? 0))
     return NextResponse.json({ success: true, txid: result.txid, status: result.status, explorerUrl: `https://tronscan.org/#/transaction/${result.txid}` })
   } catch (error) {

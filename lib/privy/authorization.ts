@@ -11,71 +11,13 @@ export interface AuthorizationContext {
 }
 
 /**
- * Call Privy's authenticate endpoint with a Clerk JWT to get
- * a per-session authorization key for wallet operations.
+ * The Node SDK accepts the external user's JWT directly in its authorization
+ * context. It verifies the JWT and obtains the time-bound user signing key
+ * internally, which is the supported server-side flow for custom JWT auth.
  */
-async function getUserAuthKey(clerkJwt: string, privyType = 0): Promise<string> {
-  const credentials: Record<number, [string | undefined, string | undefined]> = {
-    0: [process.env.PRIVY_APP_ID, process.env.PRIVY_APP_SECRET],
-    1: [process.env.NEW_PRIVY_APP_ID, process.env.NEW_PRIVY_APP_SECRET],
-    2: [process.env.THIRD_PRIVY_APP_ID, process.env.THIRD_PRIVY_APP_SECRET],
-    3: [process.env.FOURTH_PRIVY_APP_ID, process.env.FOURTH_PRIVY_APP_SECRET],
-  }
-  const [appId, appSecret] = credentials[privyType] ?? credentials[0]
-
-  if (!appId || !appSecret) {
-    throw new Error("PRIVY_APP_ID or PRIVY_APP_SECRET is not set")
-  }
-
-  const authResponse = await fetch(
-    "https://api.privy.io/v1/wallets/authenticate",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(
-          `${appId}:${appSecret}`,
-        ).toString("base64")}`,
-        "Content-Type": "application/json",
-        "privy-app-id": appId,
-      },
-      body: JSON.stringify({
-        user_jwt: clerkJwt,
-      }),
-    },
-  )
-
-  if (!authResponse.ok) {
-    const authError = await authResponse.text()
-    console.error("[Privy Auth] Authentication failed:", authError)
-    throw new Error(
-      `Failed to authenticate with Privy: ${authResponse.status}`,
-    )
-  }
-
-  const authData = await authResponse.json()
-  const userKey = authData.authorization_key
-
-  if (!userKey) {
-    throw new Error(
-      "No authorization key returned from Privy authentication",
-    )
-  }
-
-  return userKey
-}
-
-/**
- * Create authorization context for Privy wallet operations.
- * Uses the Clerk JWT to authenticate with Privy and obtain an authorization key.
- */
-export async function createAuthorizationContext(
-  clerkJwt: string,
-  privyType = 0,
-): Promise<AuthorizationContext> {
-  const userKey = await getUserAuthKey(clerkJwt, privyType)
-  return {
-    authorization_private_keys: [userKey],
-  }
+export function createAuthorizationContext(clerkJwt: string): AuthorizationContext {
+  if (!clerkJwt) throw new Error("Missing Clerk JWT")
+  return { user_jwts: [clerkJwt] }
 }
 
 /**

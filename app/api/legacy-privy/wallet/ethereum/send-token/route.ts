@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     const wallet = record?.wallets?.ethereum
     if (!wallet?.walletId) return NextResponse.json({ error: "Ethereum wallet not found" }, { status: 404 })
     const data = encodeFunctionData({ abi: ERC20_ABI, functionName: "transfer", args: [to as `0x${string}`, rawAmount] })
-    const authorizationContext = await createAuthorizationContext(jwt, record?.privy_type ?? 0)
+    const authorizationContext = createAuthorizationContext(jwt)
     const result = await sendEthereumTransaction(wallet.walletId, { to: tokenAddress, data, chain_id: chainId }, authorizationContext, getPrivyClient(record?.privy_type ?? 0))
     return NextResponse.json({ success: true, transactionHash: result.transactionHash, status: result.status })
   } catch (error) {

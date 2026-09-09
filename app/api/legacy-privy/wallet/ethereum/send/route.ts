@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     if (!wallet?.walletId) return NextResponse.json({ error: "Ethereum wallet not found" }, { status: 404 })
     const chainId = chain === "arbitrum" ? 42161 : 1
     const value = BigInt(Math.floor(numericAmount * 1e18))
-    const authorizationContext = await createAuthorizationContext(jwt, record?.privy_type ?? 0)
+    const authorizationContext = createAuthorizationContext(jwt)
     const result = await sendEthereumTransaction(wallet.walletId, { to, value, chain_id: chainId }, authorizationContext, getPrivyClient(record?.privy_type ?? 0))
     return NextResponse.json({ success: true, transactionHash: result.transactionHash, status: result.status })
   } catch (error) {

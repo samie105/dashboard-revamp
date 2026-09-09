@@ -86,10 +86,7 @@ export async function POST(request: NextRequest) {
 
     const walletId = userWallet.wallets[chain].walletId
     const client = getPrivyClient(userWallet.privy_type ?? 0)
-    const authorizationContext = await createAuthorizationContext(
-      token,
-      userWallet.privy_type ?? 0,
-    )
+    const authorizationContext = createAuthorizationContext(token)
 
     let result
     switch (chain) {
