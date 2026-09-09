@@ -19,7 +19,7 @@ function formatAmount(value: number) {
 
 export function LegacyPrivyWalletPage() {
   const { user } = useAuth()
-  const { wallets, addresses, isLoading: walletsLoading, error: walletError, refreshWallets } = useWallet()
+  const { addresses, isLoading: walletsLoading, error: walletError, refreshWallets } = useWallet()
   const [balances, setBalances] = React.useState<TokenBalance[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -59,7 +59,8 @@ export function LegacyPrivyWalletPage() {
       <section className="rounded-2xl border border-border/40 bg-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs text-muted-foreground">Tracked balance units</p><p className="mt-1 text-3xl font-semibold">{total.toLocaleString(undefined, { maximumFractionDigits: 8 })}</p></div><span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs text-amber-500">Privy legacy</span></div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Object.entries(wallets ?? {}).map(([chain, wallet]) => wallet && <div key={chain} className="rounded-xl bg-accent/30 p-3"><div className="flex items-center gap-2"><CoinAvatar symbol={chain === "solana" ? "SOL" : chain === "tron" ? "TRX" : chain.toUpperCase()} src={icons[chain]} /><span className="font-medium">{labels[chain] ?? chain}</span></div><button onClick={() => void copyAddress(wallet.address)} className="mt-2 flex w-full items-center justify-between gap-2 text-left text-[11px] text-muted-foreground"><span className="truncate font-mono">{wallet.address}</span><HugeiconsIcon icon={Copy01Icon} size={14} /></button></div>)}
+          {Object.entries(addresses ?? {}).filter(([chain, address]) => chain !== "bitcoin" && chain !== "intertrain" && Boolean(address)).map(([chain, address]) => <div key={chain} className="rounded-xl bg-accent/30 p-3"><div className="flex items-center gap-2"><CoinAvatar symbol={chain === "solana" ? "SOL" : chain === "tron" ? "TRX" : chain.toUpperCase()} src={icons[chain]} /><span className="font-medium">{labels[chain] ?? chain}</span></div><button onClick={() => void copyAddress(address)} className="mt-2 flex w-full items-center justify-between gap-2 text-left text-[11px] text-muted-foreground"><span className="truncate font-mono">{address}</span><HugeiconsIcon icon={Copy01Icon} size={14} /></button></div>)}
+          {Object.keys(addresses ?? {}).length === 0 && <p className="text-sm text-muted-foreground">Privy addresses are still loading. Refresh to try again.</p>}
         </div>
         {copied && <p className="mt-3 text-xs text-emerald-500">Address copied.</p>}
       </section>
@@ -68,7 +69,7 @@ export function LegacyPrivyWalletPage() {
         <div className="flex items-center justify-between border-b border-border/30 px-5 py-4"><div><h2 className="font-semibold">Legacy balances</h2><p className="text-xs text-muted-foreground">Read directly from each chain RPC.</p></div><span className="text-xs text-muted-foreground">{balances.length} assets</span></div>
         {loading || walletsLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Syncing on-chain balances…</div> : balances.length === 0 ? <div className="p-8 text-center text-sm text-muted-foreground">No balances found.</div> : <div className="divide-y divide-border/20">{balances.map((item, index) => { const chain = item.chain.toLowerCase(); const address = addresses?.[chain as keyof typeof addresses]; const asset: SendableAsset = { symbol: item.symbol, name: item.name, balance: item.balance, chain: chain as SendableAsset["chain"], icon: icons[chain] ?? "", contractAddress: item.contractAddress }; return <div key={`${item.chain}-${item.symbol}-${item.contractAddress ?? index}`} className="flex flex-wrap items-center gap-3 px-5 py-4"><CoinAvatar symbol={item.symbol} src={icons[chain]} /><div className="min-w-0 flex-1"><p className="font-medium">{item.symbol}</p><p className="text-xs text-muted-foreground">{item.name} · {labels[chain] ?? item.chain}</p></div><div className="text-right"><p className="font-medium tabular-nums">{formatAmount(item.balance)}</p><p className="text-xs text-muted-foreground">{item.isNative ? "Native" : "Token"}</p></div><div className="flex gap-1"><button onClick={() => setReceive({ symbol: item.symbol, chain, icon: icons[chain] ?? "" })} className="rounded-lg p-2 hover:bg-accent" aria-label={`Receive ${item.symbol}`}><HugeiconsIcon icon={ArrowDown01Icon} size={16} /></button><button onClick={() => setSend(asset)} className="rounded-lg p-2 hover:bg-accent" aria-label={`Send ${item.symbol}`}><HugeiconsIcon icon={ArrowUp01Icon} size={16} /></button></div>{address && <span className="sr-only">{address}</span>}</div> })}</div>}
       </section>
-      <ReceiveModal open={Boolean(receive)} onClose={() => setReceive(undefined)} asset={receive} />
+      <ReceiveModal open={Boolean(receive)} onClose={() => setReceive(undefined)} asset={receive} addresses={addresses} />
       <SendModal open={Boolean(send)} onClose={() => { setSend(undefined); void loadBalances() }} asset={send} />
     </main>
   )

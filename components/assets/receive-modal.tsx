@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/responsive-modal"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { ReceivePanel } from "@/components/ui/receive-panel"
-import { NETWORKS } from "@/lib/networks"
+import { NETWORKS, type WalletChain } from "@/lib/networks"
 
 export interface ReceivableAsset {
   symbol: string
@@ -45,10 +45,12 @@ export function ReceiveModal({
   open,
   onClose,
   asset,
+  addresses,
 }: {
   open: boolean
   onClose: () => void
   asset?: ReceivableAsset
+  addresses?: Partial<Record<WalletChain, string>> | null
 }) {
   const network = asset ? NETWORKS.find((n) => n.key === asset.chain) : undefined
 
@@ -83,6 +85,7 @@ export function ReceiveModal({
           <ReceivePanel
             only={asset ? [asset.chain] : undefined}
             asset={asset ? asset.symbol : null}
+            addresses={addresses}
           />
         </div>
       </ResponsiveModalContent>
