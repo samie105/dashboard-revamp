@@ -8,6 +8,7 @@ import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { ReceiveModal, type ReceivableAsset } from "@/components/assets/receive-modal"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
 import { fetchLegacyPrivyBalances, fetchLegacyPrivyWallet, type TokenBalance } from "@/lib/crypto-api"
+import { LegacyPrivyProvider } from "@/components/legacy/LegacyPrivyProvider"
 
 const labels: Record<string, string> = { ethereum: "Ethereum", arbitrum: "Arbitrum", solana: "Solana", sui: "Sui", ton: "TON", tron: "Tron" }
 const icons: Record<string, string> = { ethereum: "/ethereum.png", arbitrum: "/arb.jpg", solana: "/solana.png", sui: "/sui-ocean-square.png", ton: "/ton.png", tron: "/tron-logo.png" }
@@ -52,6 +53,7 @@ export function LegacyPrivyWalletPage() {
   }
 
   return (
+    <LegacyPrivyProvider>
     <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 md:px-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div><p className="text-xs uppercase tracking-[0.2em] text-primary">Compatibility wallet</p><h1 className="text-3xl font-semibold">Legacy Wallet</h1><p className="mt-1 text-sm text-muted-foreground">Your original Privy wallet and its on-chain balances.</p></div>
@@ -78,7 +80,8 @@ export function LegacyPrivyWalletPage() {
         {loading || walletsLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Syncing on-chain balances…</div> : balances.length === 0 ? <div className="p-8 text-center text-sm text-muted-foreground">No balances found.</div> : <div className="divide-y divide-border/20">{balances.map((item, index) => { const chain = item.chain.toLowerCase(); const address = addresses?.[chain as keyof typeof addresses]; const asset: SendableAsset = { symbol: item.symbol, name: item.name, balance: item.balance, chain: chain as SendableAsset["chain"], icon: icons[chain] ?? "", contractAddress: item.contractAddress }; return <div key={`${item.chain}-${item.symbol}-${item.contractAddress ?? index}`} className="flex flex-wrap items-center gap-3 px-5 py-4"><CoinAvatar symbol={item.symbol} src={icons[chain]} /><div className="min-w-0 flex-1"><p className="font-medium">{item.symbol}</p><p className="text-xs text-muted-foreground">{item.name} · {labels[chain] ?? item.chain}</p></div><div className="text-right"><p className="font-medium tabular-nums">{formatAmount(item.balance)}</p><p className="text-xs text-muted-foreground">{item.isNative ? "Native" : "Token"}</p></div><div className="flex gap-1"><button onClick={() => setReceive({ symbol: item.symbol, chain, icon: icons[chain] ?? "" })} className="rounded-lg p-2 hover:bg-accent" aria-label={`Receive ${item.symbol}`}><HugeiconsIcon icon={ArrowDown01Icon} size={16} /></button><button onClick={() => setSend(asset)} className="rounded-lg p-2 hover:bg-accent" aria-label={`Send ${item.symbol}`}><HugeiconsIcon icon={ArrowUp01Icon} size={16} /></button></div>{address && <span className="sr-only">{address}</span>}</div> })}</div>}
       </section>
       <ReceiveModal open={Boolean(receive)} onClose={() => setReceive(undefined)} asset={receive} addresses={addresses} />
-      <SendModal open={Boolean(send)} onClose={() => { setSend(undefined); void loadBalances() }} asset={send} />
+      <SendModal legacyPrivy open={Boolean(send)} onClose={() => { setSend(undefined); void loadBalances() }} asset={send} />
     </main>
+    </LegacyPrivyProvider>
   )
 }

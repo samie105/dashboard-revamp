@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/responsive-modal"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { sendAsset, recordWalletTransfer } from "@/lib/crypto-api"
+import { useLegacyPrivyLink } from "@/components/legacy/LegacyPrivyProvider"
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ interface SendModalProps {
   open: boolean
   onClose: () => void
   asset?: SendableAsset
+  legacyPrivy?: boolean
 }
 
 type Step = "details" | "confirm" | "sending" | "success" | "error"
@@ -90,13 +92,14 @@ function sanitizeError(msg: string): string {
 
 // ── Component ────────────────────────────────────────────────────────────
 
-export function SendModal({ open, onClose, asset }: SendModalProps) {
+export function SendModal({ open, onClose, asset, legacyPrivy = false }: SendModalProps) {
   const [step, setStep] = React.useState<Step>("details")
   const [recipient, setRecipient] = React.useState("")
   const [amount, setAmount] = React.useState("")
   const [error, setError] = React.useState("")
   const [txHash, setTxHash] = React.useState("")
   const sendingRef = React.useRef(false)
+  const { ensureLinked, configured: legacyPrivyConfigured } = useLegacyPrivyLink()
 
   // Reset on open
   React.useEffect(() => {
@@ -155,6 +158,13 @@ export function SendModal({ open, onClose, asset }: SendModalProps) {
     setError("")
 
     try {
+      if (legacyPrivy) {
+        if (!legacyPrivyConfigured) {
+          throw new Error("Legacy Privy linking is not configured. Add NEXT_PUBLIC_PRIVY_APP_ID and redeploy the dashboard.")
+        }
+        await ensureLinked()
+      }
+
       // sendAsset picks native vs SPL/ERC-20/TRC-20 from the asset's shape.
       // This used to branch inline and only special-cased Solana, so every
       // other token fell through to a NATIVE send with its contract address

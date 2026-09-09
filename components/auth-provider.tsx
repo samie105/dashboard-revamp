@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useUser, useClerk } from "@clerk/nextjs"
+import { useUser, useClerk, useAuth as useClerkAuth } from "@clerk/nextjs"
 import { useProfile } from "@/components/profile-provider"
 import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
 
@@ -19,6 +19,7 @@ type AuthContextType = {
   isSignedIn: boolean
   isLoaded: boolean
   signOut: () => Promise<void>
+  getToken: () => Promise<string | null>
 }
 
 const AuthContext = React.createContext<AuthContextType>({
@@ -26,6 +27,7 @@ const AuthContext = React.createContext<AuthContextType>({
   isSignedIn: false,
   isLoaded: false,
   signOut: async () => {},
+  getToken: async () => null,
 })
 
 export function useAuth() {
@@ -54,6 +56,7 @@ function BypassAuthProvider({ children }: { children: React.ReactNode }) {
       isSignedIn: true,
       isLoaded: true,
       signOut: async () => {},
+      getToken: async () => null,
     }),
     [],
   )
@@ -63,6 +66,7 @@ function BypassAuthProvider({ children }: { children: React.ReactNode }) {
 
 function ClerkAuthProvider({ children }: { children: React.ReactNode }) {
   const { user, isSignedIn, isLoaded } = useUser()
+  const { getToken } = useClerkAuth()
   const { signOut: clerkSignOut } = useClerk()
   const { fetchProfile } = useProfile()
   const lastFetchedUserId = React.useRef<string | null>(null)
@@ -109,8 +113,9 @@ function ClerkAuthProvider({ children }: { children: React.ReactNode }) {
       isSignedIn: isSignedIn ?? false,
       isLoaded,
       signOut,
+      getToken,
     }),
-    [authUser, isSignedIn, isLoaded, signOut],
+    [authUser, isSignedIn, isLoaded, signOut, getToken],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
