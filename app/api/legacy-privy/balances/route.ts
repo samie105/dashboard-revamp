@@ -4,6 +4,7 @@ import { Connection, PublicKey } from "@solana/web3.js"
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token"
 import { createPublicClient, http, parseAbi, formatUnits, formatEther } from "viem"
 import { mainnet, arbitrum } from "viem/chains"
+import { TronWeb } from "tronweb"
 import { connectDB } from "@/lib/mongodb"
 import { UserWallet } from "@/models/UserWallet"
 
@@ -23,8 +24,10 @@ const ARB_RPC =
 const SUI_RPC =
   process.env.NEXT_PUBLIC_SUI_RPC_URL || "https://fullnode.mainnet.sui.io:443"
 
-const TRON_BALANCE_API =
-  process.env.TRON_BALANCE_API || "https://trading.watchup.site/api/tron/balance"
+// dRPC's Tron HTTP API is used server-side so the API key never reaches the
+// browser. Configure this as the dRPC base URL, for example:
+// https://lb.drpc.live/tron/<server-only-api-key>
+const TRON_RPC_URL = process.env.TRON_RPC_URL || "https://api.trongrid.io"
 
 // ── Token Constants ──────────────────────────────────────────────────────
 
@@ -341,15 +344,58 @@ async function fetchTonBalance(address: string): Promise<TokenBalance[]> {
   return results
 }
 
+const TRON_USDT_ADDRESS = "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj"
+const TRON_USDC_ADDRESS = "TEkxiTehnzSmSe2XqrBjG7wVrK2ibdKh4j"
+
+async function fetchTronTrc20Balance(
+  address: string,
+  contractAddress: string,
+  symbol: string,
+  name: string,
+): Promise<TokenBalance | null> {
+  try {
+    const ownerHex = TronWeb.address.toHex(address).replace(/^41/, "")
+    const result = await fetch(`${TRON_RPC_URL}/wallet/triggerconstantcontract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        owner_address: address,
+        contract_address: contractAddress,
+        function_selector: "balanceOf(address)",
+        parameter: ownerHex.padStart(64, "0"),
+        visible: true,
+      }),
+      cache: "no-store",
+    })
+    if (!result.ok) return null
+
+    const data = await result.json()
+    const raw = data.constant_result?.[0]
+    if (typeof raw !== "string" || !/^[0-9a-f]+$/i.test(raw)) return null
+
+    const balance = Number(BigInt(`0x${raw}`)) / 1e6
+    return balance > 0
+      ? { symbol, name, chain: "tron", balance, contractAddress, isNative: false }
+      : null
+  } catch (err) {
+    console.warn(`[wallet/balances] TRON ${symbol} RPC error:`, err)
+    return null
+  }
+}
+
 async function fetchTronBalances(address: string): Promise<TokenBalance[]> {
   const results: TokenBalance[] = []
   try {
-    const res = await fetch(`${TRON_BALANCE_API}/${encodeURIComponent(address)}`)
+    const res = await fetch(`${TRON_RPC_URL}/wallet/getaccount`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address, visible: true }),
+      cache: "no-store",
+    })
     if (!res.ok) return results
     const data = await res.json()
-    if (!data.success) return results
 
-    const trxBalance = parseFloat(data.trx?.balance || "0")
+    const trxBalance = Number(data.balance || 0) / 1e6
     results.push({
       symbol: "TRX",
       name: "Tron",
@@ -358,20 +404,11 @@ async function fetchTronBalances(address: string): Promise<TokenBalance[]> {
       isNative: true,
     })
 
-    // Token balances (USDT TRC-20 etc.)
-    const tokens = data.tokens || []
-    for (const token of tokens) {
-      if (token.symbol && parseFloat(token.balance || "0") > 0) {
-        results.push({
-          symbol: token.symbol,
-          name: token.name || token.symbol,
-          chain: "tron",
-          balance: parseFloat(token.balance),
-          contractAddress: token.contractAddress,
-          isNative: false,
-        })
-      }
-    }
+    const tokens = await Promise.all([
+      fetchTronTrc20Balance(address, TRON_USDT_ADDRESS, "USDT", "Tether"),
+      fetchTronTrc20Balance(address, TRON_USDC_ADDRESS, "USDC", "USD Coin"),
+    ])
+    results.push(...tokens.filter((token): token is TokenBalance => token !== null))
   } catch (err) {
     console.error("[wallet/balances] TRON fetch error:", err)
   }
