@@ -54,11 +54,39 @@ export async function sendTronTransaction(
     throw new Error("Tron RPC returned an incomplete unsigned transaction")
   }
 
+  const rawDataRecord = rawData as { contract?: unknown }
+  const contracts = Array.isArray(rawDataRecord.contract) ? rawDataRecord.contract : []
+  const firstContract = contracts[0]
+  const contractRecord = firstContract && typeof firstContract === "object"
+    ? firstContract as { parameter?: { value?: unknown }; [key: string]: unknown }
+    : undefined
+  const parameterValue = contractRecord?.parameter?.value
+  if (!contractRecord || !parameterValue || typeof parameterValue !== "object") {
+    throw new Error("Tron RPC returned an incomplete transfer contract")
+  }
+
+  // TronGrid-style APIs nest TransferContract fields under parameter.value,
+  // while Privy's tron_sendTransaction schema expects them directly on the
+  // contract object.
+  const contractWithoutParameter = Object.fromEntries(
+    Object.entries(contractRecord).filter(([key]) => key !== "parameter"),
+  )
+  const normalizedRawData = {
+    ...rawDataRecord,
+    contract: [
+      {
+        ...contractWithoutParameter,
+        ...(parameterValue as Record<string, unknown>),
+      },
+      ...contracts.slice(1),
+    ],
+  }
+
   const result = await (client.wallets() as unknown as {
     rpc: (walletId: string, payload: Record<string, unknown>) => Promise<{ data?: { hash?: string; txid?: string } }>
   }).rpc(walletId, {
     method: "tron_sendTransaction",
-    params: { raw_data: rawData },
+    params: { raw_data: normalizedRawData },
     authorization_context: authorizationContext,
   })
 
