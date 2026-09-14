@@ -88,12 +88,17 @@ async function fetchLegacyBalances(signal?: AbortSignal): Promise<TokenBalance[]
  * The legacy endpoint serves legacy-mode users even once the modern backend
  * flag is on.
  */
-export function useWalletBalances(refreshInterval = 0): UseWalletBalancesReturn {
+export function useWalletBalances(
+  refreshInterval = 0,
+  source: "selected" | "modern" = "selected",
+): UseWalletBalancesReturn {
   const { user, isLoaded, isSignedIn } = useAuth()
   const { mode } = useWalletMode()
   const userId = user?.userId ?? "anonymous"
   const backendEnabled =
-    modernDataEnabled({ modernEnabled: isCryptoBackendEnabled, mode }) && isLoaded && isSignedIn
+    source === "modern"
+      ? isCryptoBackendEnabled && isLoaded && isSignedIn
+      : modernDataEnabled({ modernEnabled: isCryptoBackendEnabled, mode }) && isLoaded && isSignedIn
   const queryClient = useQueryClient()
   const queryKey = backendEnabled
     ? cryptoQueryKeys.balances(userId)

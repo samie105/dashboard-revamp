@@ -86,9 +86,12 @@ export type PortfolioTotal = {
  *   already polls a live feed and the navbar has a slower one; passing it in
  *   keeps this hook from becoming a third poller.
  */
-export function usePortfolioTotal(prices: Record<string, number>): PortfolioTotal {
+export function usePortfolioTotal(
+  prices: Record<string, number>,
+  balanceSource: "selected" | "modern" = "selected",
+): PortfolioTotal {
   const { user, isLoaded } = useAuth()
-  const { balances: onChainBalances, isLoading } = useWalletBalances()
+  const { balances: onChainBalances, isLoading } = useWalletBalances(0, balanceSource)
   const { futuresUsd, isLoading: tradeAccountLoading } = useTradeAccount()
   const { cash, loaded: cashLoaded } = useCashBalance()
 

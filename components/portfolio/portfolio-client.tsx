@@ -817,7 +817,7 @@ export function PortfolioClient() {
     isLoading: balancesLoading,
     error,
     refetch: refetchBalances,
-  } = useWalletBalances()
+  } = useWalletBalances(0, "modern")
   const {
     total: netWorth,
     onChain: onChainTotal,
@@ -825,7 +825,7 @@ export function PortfolioClient() {
     futures: futuresBalance,
     onChainSettled,
     spotSettled,
-  } = usePortfolioTotal(prices)
+  } = usePortfolioTotal(prices, "modern")
 
   /* The perps positions table, and only the table — its account VALUE comes
      from the hook above with everything else. Still fetched while the venue is
