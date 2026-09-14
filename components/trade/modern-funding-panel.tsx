@@ -75,6 +75,7 @@ import {
 } from "@/lib/crypto-backend"
 import { signEvmIntent, signHyperliquidIntent } from "@/lib/crypto-wallet"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
+import { useCryptoBalances } from "@/hooks/crypto/useCryptoBalances"
 import {
   buildHyperliquidTransferRequest,
   exceedsFundingBalance,
@@ -91,6 +92,7 @@ const SLOW_BRIDGE =
 /** How long a bridge may run before the wait itself needs explaining. */
 const SLOW_AFTER_MS = 10 * 60_000
 const MIN_HYPERLIQUID_DEPOSIT_USDC = 5
+const ARBITRUM_USDC_ADDRESS = "0xaf88d065e77c8cc2239327c5edb3a432268e5831"
 
 /* ── The resume record ─────────────────────────────────────────────────── */
 
@@ -365,6 +367,17 @@ function DepositFlow({
   onResume,
   requestUnlock,
 }: FlowProps & { onResume: () => void }) {
+  const walletBalances = useCryptoBalances()
+  const arbitrumUsdc = React.useMemo(() => {
+    const balance = walletBalances.balances.find((item) =>
+      item.networkId === "arbitrum-one" &&
+      item.asset.kind === "token" &&
+      item.asset.identifier.toLowerCase() === ARBITRUM_USDC_ADDRESS,
+    )
+    if (!balance) return 0
+    const value = Number(balance.amountBaseUnits) / 10 ** balance.decimals
+    return Number.isFinite(value) ? value : 0
+  }, [walletBalances.balances])
   const [phase, setPhase] = React.useState<"form" | "status">("form")
   const [amount, setAmount] = React.useState("")
   const [attemptKey, setAttemptKey] = React.useState<string | null>(null)
@@ -536,7 +549,9 @@ function DepositFlow({
         ? "Enter a valid amount"
         : value < MIN_HYPERLIQUID_DEPOSIT_USDC
           ? `Minimum deposit is $${MIN_HYPERLIQUID_DEPOSIT_USDC}`
-        : null
+          : !walletBalances.isLoading && value > arbitrumUsdc
+            ? `Only ${formatUsdc(arbitrumUsdc)} USDC is available on Arbitrum`
+            : null
 
   /**
    * Signs and submits only the intents KNOWN to be un-sent, and reports what it
@@ -801,7 +816,17 @@ function DepositFlow({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            <AmountField value={amount} onChange={setAmount} unit="USDC" autoFocus={open} />
+            <AmountField
+              value={amount}
+              onChange={setAmount}
+              unit="USDC"
+              autoFocus={open}
+              hint={walletBalances.isLoading ? "Checking Arbitrum USDC balance…" : `${formatUsdc(arbitrumUsdc)} USDC available on Arbitrum`}
+            />
+            <DetailPanel rows={[
+              { label: "From", value: "Modern wallet · Arbitrum" },
+              { label: "Available", value: walletBalances.isLoading ? "Checking…" : `${formatUsdc(arbitrumUsdc)} USDC` },
+            ]} />
             <InlineNotice tone="warning">{NOT_INSTANT}</InlineNotice>
             {error ? (
               <div className="flex flex-col gap-1.5">

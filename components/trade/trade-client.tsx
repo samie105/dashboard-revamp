@@ -2647,28 +2647,12 @@ export function TradeClient() {
         <ModeSwitch className="shrink-0" />
         {/* Balances + the way back to the wallet */}
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-          {balances && (
+          {balances && market === "futures" && FUTURES_LIVE && (
             <span className="hidden text-xs text-muted-foreground tabular-nums 2xl:block">
-              Spot{" "}
+              Futures{" "}
               <span className="font-semibold text-foreground">
-                ${balances.spotUsdc.toFixed(2)}
+                ${balances.perpsWithdrawableUsdc.toFixed(2)}
               </span>
-              {/* FUTURES GATE (3/4): this readout is venue-scoped — it names
-                  the margin sitting on the perps venue, on a screen that no
-                  longer offers any way to reach that venue. Printing it would
-                  advertise a place to put money with no door in or out of it
-                  from here. The money itself is not hidden: the fund screen
-                  and the wallet both still show the figure, and both can
-                  still move it. */}
-              {FUTURES_LIVE && (
-                <>
-                  <span className="mx-1 text-subtle">·</span>
-                  Futures{" "}
-                  <span className="font-semibold text-foreground">
-                    ${balances.perpsWithdrawableUsdc.toFixed(2)}
-                  </span>
-                </>
-              )}
             </span>
           )}
           {modernFutures && walletReady && modernWallet.data && modernPackage.data && user?.userId ? (
