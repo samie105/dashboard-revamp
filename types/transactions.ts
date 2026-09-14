@@ -82,6 +82,9 @@ export interface UnifiedTransactionsResponse {
 }
 
 export interface TransactionStats {
+  valuationComplete?: boolean;
+  depositValuationComplete?: boolean;
+  withdrawalValuationComplete?: boolean;
   totalDeposits: number;
   totalWithdrawals: number;
   totalTrades: number;

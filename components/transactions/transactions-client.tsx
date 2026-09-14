@@ -344,13 +344,13 @@ export function TransactionsClient() {
     ? [
         {
           label: "Money in",
-          value: `$${fmtAmount(stats.depositVolume)}`,
+          value: stats.depositValuationComplete === false && stats.totalDeposits > 0 ? "—" : `$${fmtAmount(stats.depositVolume)}`,
           sub: `${stats.totalDeposits} deposit${stats.totalDeposits === 1 ? "" : "s"}`,
           tone: "text-credit",
         },
         {
           label: "Money out",
-          value: `$${fmtAmount(stats.withdrawalVolume)}`,
+          value: stats.withdrawalValuationComplete === false && stats.totalWithdrawals > 0 ? "—" : `$${fmtAmount(stats.withdrawalVolume)}`,
           sub: `${stats.totalWithdrawals} withdrawal${stats.totalWithdrawals === 1 ? "" : "s"}`,
           tone: "text-debit",
         },
@@ -362,9 +362,9 @@ export function TransactionsClient() {
         },
         {
           label: "Net",
-          value: `${stats.netVolume >= 0 ? "+" : "−"}$${fmtAmount(Math.abs(stats.netVolume))}`,
-          sub: "In minus out",
-          tone: stats.netVolume >= 0 ? "text-credit" : "text-debit",
+          value: stats.valuationComplete === false ? "—" : `${stats.netVolume >= 0 ? "+" : "−"}$${fmtAmount(Math.abs(stats.netVolume))}`,
+          sub: stats.valuationComplete === false ? "Waiting for asset prices" : "In minus out",
+          tone: stats.valuationComplete === false ? "text-foreground" : stats.netVolume >= 0 ? "text-credit" : "text-debit",
         },
       ]
     : null

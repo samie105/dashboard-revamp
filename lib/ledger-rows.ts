@@ -131,7 +131,7 @@ export function describeLedgerRecord(
     const { market } = lookup(identifier)
     // A native transfer names its own asset ("SOL"); a token transfer carries
     // a mint, which the registry turns into a symbol when it knows one.
-    const symbol = isNative ? (identifier ?? "") : (market?.symbol ?? shortAddress(identifier))
+    const symbol = isNative ? (identifier ?? "") : (str(asset.symbol) ?? market?.symbol ?? shortAddress(identifier))
 
     /* A transfer's amount is ALREADY a decimal in whole units — it is not
        base units like a swap's, and dividing it again would report a rounding

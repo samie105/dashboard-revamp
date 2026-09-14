@@ -11,6 +11,7 @@ import {
 import type { CryptoTransactionRecord } from "@/lib/crypto-backend"
 import { describeLedgerRecord } from "@/lib/ledger-rows"
 import { useSpotRegistry } from "@/hooks/useSpotRegistry"
+import { useUsdIndex } from "@/hooks/crypto/useUsdIndex"
 import type {
   UnifiedTransaction,
   TransactionStats,
@@ -53,7 +54,11 @@ function mapCryptoStatus(status: string): UnifiedTransaction["status"] {
   return "pending"
 }
 
-function mapCryptoTransaction(transaction: CryptoTransactionRecord, registry: ReturnType<typeof useSpotRegistry>): UnifiedTransaction {
+function mapCryptoTransaction(
+  transaction: CryptoTransactionRecord,
+  registry: ReturnType<typeof useSpotRegistry>,
+  usdPrices: Record<string, number> | null,
+): UnifiedTransaction {
   const described = describeLedgerRecord(transaction, registry)
   const summary = transaction.summary ?? {}
   const action = typeof summary.action === "string" ? summary.action : "transfer"
@@ -63,6 +68,11 @@ function mapCryptoTransaction(transaction: CryptoTransactionRecord, registry: Re
   // loading. That was the source of the huge value/P&L flash on first paint.
   const amount = described?.amountText ? Number(described.amountText.split(" ")[0].replaceAll(",", "")) : 0
   const token = described?.symbol || (isSwap ? String(summary.buyToken ?? asset?.identifier ?? "Unknown") : asset?.identifier ?? "Unknown")
+  const indexedPrice = usdPrices?.[token] ?? usdPrices?.[token.toUpperCase()] ?? usdPrices?.[token.toLowerCase()]
+  const valueUsd = described?.valueUsd ??
+    (Number.isFinite(amount) && amount > 0 && typeof indexedPrice === "number" && indexedPrice > 0
+      ? amount * indexedPrice
+      : undefined)
   return {
     id: transaction.id,
     type: isSwap ? "swap" : transaction.direction === "incoming" ? "deposit" : "transfer",
@@ -75,7 +85,7 @@ function mapCryptoTransaction(transaction: CryptoTransactionRecord, registry: Re
     toAddress: transaction.toAddress,
     txHash: transaction.txHash,
     direction: transaction.direction ?? "outgoing",
-    valueUsd: described?.valueUsd ?? undefined,
+    valueUsd: valueUsd ?? undefined,
     ...(isSwap ? {
       fromToken: typeof summary.sellToken === "string" ? summary.sellToken : undefined,
       toToken: typeof summary.buyToken === "string" ? summary.buyToken : undefined,
@@ -108,6 +118,9 @@ function getCryptoStats(transactions: UnifiedTransaction[]): TransactionStats {
   const outgoing = transactions.filter((transaction) => transaction.direction === "outgoing" && transaction.type !== "swap")
   const knownDepositVolume = deposits.reduce((total, transaction) => total + (transaction.valueUsd ?? 0), 0)
   const knownWithdrawalVolume = outgoing.reduce((total, transaction) => total + (transaction.valueUsd ?? 0), 0)
+  const depositValuationComplete = deposits.every((transaction) => transaction.valueUsd !== undefined)
+  const withdrawalValuationComplete = outgoing.every((transaction) => transaction.valueUsd !== undefined)
+  const valuationComplete = depositValuationComplete && withdrawalValuationComplete
   return {
     ...DEFAULT_STATS,
     totalDeposits: deposits.length,
@@ -117,6 +130,9 @@ function getCryptoStats(transactions: UnifiedTransaction[]): TransactionStats {
     depositVolume: knownDepositVolume,
     withdrawalVolume: knownWithdrawalVolume,
     netVolume: knownDepositVolume - knownWithdrawalVolume,
+    valuationComplete,
+    depositValuationComplete,
+    withdrawalValuationComplete,
   }
 }
 
@@ -132,6 +148,7 @@ export function useUnifiedTransactions(
   // mixed into this page; legacy -> modern arrives as a modern deposit.
   const backendEnabled = isCryptoBackendEnabled && isLoaded && isSignedIn
   const registry = useSpotRegistry(backendEnabled)
+  const usdPrices = useUsdIndex()
 
   const [transactions, setTransactions] = useState<UnifiedTransaction[]>([])
   const [stats, setStats] = useState<TransactionStats | null>(null)
@@ -282,13 +299,14 @@ export function useUnifiedTransactions(
   }, [backendEnabled, cryptoQuery, fetchTransactions])
 
   const backendTransactions = (cryptoQuery.data ?? [])
-    .map((transaction) => mapCryptoTransaction(transaction, registry))
+    .map((transaction) => mapCryptoTransaction(transaction, registry, usdPrices))
     .filter((transaction) => matchesCryptoFilters(transaction, filters))
   const visibleTransactions = backendEnabled ? backendTransactions : transactions
 
   return {
     transactions: visibleTransactions,
-    stats: backendEnabled ? getCryptoStats(visibleTransactions) : stats,
+    // Do not print a false $0 while the valuation index is still loading.
+    stats: backendEnabled ? (usdPrices === null ? null : getCryptoStats(visibleTransactions)) : stats,
     isLoading: backendEnabled ? cryptoQuery.isLoading : isLoading,
     isLoadingMore: backendEnabled ? false : isLoadingMore,
     error: backendEnabled
