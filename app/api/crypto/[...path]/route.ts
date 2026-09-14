@@ -50,6 +50,7 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^wallets\/me\/sessions\/[^/]+\/revoke$/,
     /^wallets\/me\/sessions\/revoke-all$/,
     /^transactions\/intents$/,
+    /^transactions\/sync$/,
     /^transactions\/intents\/[^/]+\/simulate$/,
     /^transactions\/intents\/[^/]+\/submit$/,
     /^sponsorship\/quote$/,

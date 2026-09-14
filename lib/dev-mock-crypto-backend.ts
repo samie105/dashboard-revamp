@@ -656,6 +656,7 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
 
   // Transactions & intents
   if (method === "GET" && path === "transactions") return json(state.transactions)
+  if (method === "POST" && path === "transactions/sync") return json({ started: true })
   if (method === "POST" && path === "transactions/intents") return createTransferIntent(await readBody())
   {
     const match = path.match(/^transactions\/intents\/([^/]+)(?:\/(simulate|submit))?$/)

@@ -142,12 +142,13 @@ export function describeLedgerRecord(
     // Our own address on both sides means moving between our accounts.
     const from = str(record.fromAddress)
     const to = str(record.toAddress)
-    const internal = Boolean(from && to && from === to)
+    const internal = record.direction === "internal" || Boolean(from && to && from === to)
+    const incoming = record.direction === "incoming"
     return {
       ...base,
       kind: "transfer",
-      label: internal ? "Moved" : "Sent",
-      direction: internal ? "neutral" : "out",
+      label: internal ? "Moved" : incoming ? "Received" : "Sent",
+      direction: internal ? "neutral" : incoming ? "in" : "out",
       symbol,
       icon: market?.icon ?? null,
       amountText,

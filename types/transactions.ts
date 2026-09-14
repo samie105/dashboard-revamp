@@ -26,6 +26,7 @@ export interface UnifiedTransaction {
 
   // Amount
   amount: number;
+  valueUsd?: number;
   token: string;     // "USDT", "ETH", "SOL", "USDC", etc.
   chain?: string;    // "solana", "ethereum", "arbitrum", etc.
 

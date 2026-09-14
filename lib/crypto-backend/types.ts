@@ -121,6 +121,7 @@ export interface CryptoTransactionRecord {
   networkId?: string
   fromAddress?: string
   toAddress?: string
+  direction?: "incoming" | "outgoing" | "internal"
   assetSummary?: CryptoAssetReference
   /**
    * The intent's `normalizedSummary`, denormalised onto the record at

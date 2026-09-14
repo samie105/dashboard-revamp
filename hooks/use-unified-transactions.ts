@@ -1,9 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/components/auth-provider"
-import { useWalletMode } from "@/components/wallet-mode-provider"
 import {
   cryptoBackendClient,
   cryptoQueryKeys,
@@ -12,7 +11,6 @@ import {
 import type { CryptoTransactionRecord } from "@/lib/crypto-backend"
 import { describeLedgerRecord } from "@/lib/ledger-rows"
 import { useSpotRegistry } from "@/hooks/useSpotRegistry"
-import { modernDataEnabled } from "@/lib/wallet-mode"
 import type {
   UnifiedTransaction,
   TransactionStats,
@@ -61,13 +59,14 @@ function mapCryptoTransaction(transaction: CryptoTransactionRecord, registry: Re
   const action = typeof summary.action === "string" ? summary.action : "transfer"
   const isSwap = action === "spot-swap" || action === "jupiter-swap"
   const asset = transaction.assetSummary
-  const fallbackAmount = Number(summary.amount ?? transaction.amount ?? 0)
-  const amount = described?.amountText ? Number(described.amountText.split(" ")[0].replaceAll(",", "")) : (Number.isFinite(fallbackAmount) ? fallbackAmount : 0)
+  // Never render an intent's base-unit amount while token precision is still
+  // loading. That was the source of the huge value/P&L flash on first paint.
+  const amount = described?.amountText ? Number(described.amountText.split(" ")[0].replaceAll(",", "")) : 0
   const token = described?.symbol || (isSwap ? String(summary.buyToken ?? asset?.identifier ?? "Unknown") : asset?.identifier ?? "Unknown")
   return {
     id: transaction.id,
-    type: isSwap ? "swap" : "transfer",
-    subType: isSwap ? "spot" : "send",
+    type: isSwap ? "swap" : transaction.direction === "incoming" ? "deposit" : "transfer",
+    subType: isSwap ? "spot" : transaction.direction === "incoming" ? "receive" : transaction.direction === "internal" ? "internal" : "send",
     amount,
     token,
     chain: transaction.networkId ?? transaction.chainFamily,
@@ -75,7 +74,8 @@ function mapCryptoTransaction(transaction: CryptoTransactionRecord, registry: Re
     fromAddress: transaction.fromAddress,
     toAddress: transaction.toAddress,
     txHash: transaction.txHash,
-    direction: "outgoing",
+    direction: transaction.direction ?? "outgoing",
+    valueUsd: described?.valueUsd ?? undefined,
     ...(isSwap ? {
       fromToken: typeof summary.sellToken === "string" ? summary.sellToken : undefined,
       toToken: typeof summary.buyToken === "string" ? summary.buyToken : undefined,
@@ -104,10 +104,19 @@ function matchesCryptoFilters(transaction: UnifiedTransaction, filters: Transact
 }
 
 function getCryptoStats(transactions: UnifiedTransaction[]): TransactionStats {
+  const deposits = transactions.filter((transaction) => transaction.type === "deposit")
+  const outgoing = transactions.filter((transaction) => transaction.direction === "outgoing" && transaction.type !== "swap")
+  const knownDepositVolume = deposits.reduce((total, transaction) => total + (transaction.valueUsd ?? 0), 0)
+  const knownWithdrawalVolume = outgoing.reduce((total, transaction) => total + (transaction.valueUsd ?? 0), 0)
   return {
     ...DEFAULT_STATS,
-    totalTransfers: transactions.length,
-    netVolume: transactions.reduce((total, transaction) => total + transaction.amount, 0),
+    totalDeposits: deposits.length,
+    totalWithdrawals: outgoing.length,
+    totalSwaps: transactions.filter((transaction) => transaction.type === "swap").length,
+    totalTransfers: transactions.filter((transaction) => transaction.type === "transfer").length,
+    depositVolume: knownDepositVolume,
+    withdrawalVolume: knownWithdrawalVolume,
+    netVolume: knownDepositVolume - knownWithdrawalVolume,
   }
 }
 
@@ -116,10 +125,12 @@ export function useUnifiedTransactions(
 ): UseUnifiedTransactionsReturn {
   const { pollInterval = 30000 } = options
   const { user, isLoaded, isSignedIn } = useAuth()
-  const { mode } = useWalletMode()
+  const queryClient = useQueryClient()
   const userId = user?.userId ?? "anonymous"
-  const backendEnabled =
-    modernDataEnabled({ modernEnabled: isCryptoBackendEnabled, mode }) && isLoaded && isSignedIn
+  // Transaction history belongs to the modern wallet ledger regardless of
+  // which wallet UI the user last opened. Legacy outgoing activity is never
+  // mixed into this page; legacy -> modern arrives as a modern deposit.
+  const backendEnabled = isCryptoBackendEnabled && isLoaded && isSignedIn
   const registry = useSpotRegistry(backendEnabled)
 
   const [transactions, setTransactions] = useState<UnifiedTransaction[]>([])
@@ -138,7 +149,26 @@ export function useUnifiedTransactions(
     queryKey: cryptoQueryKeys.transactions(userId, filters),
     queryFn: ({ signal }) => cryptoBackendClient.listTransactions(filters.limit || 30, signal),
     enabled: backendEnabled,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    placeholderData: keepPreviousData,
   })
+
+  const syncMutation = useMutation({
+    mutationFn: () => cryptoBackendClient.syncTransactions(),
+    onSuccess: () => {
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: [...cryptoQueryKeys.all, "transactions", userId] })
+      }, 5_000)
+    },
+  })
+
+  useEffect(() => {
+    if (!backendEnabled || syncMutation.isPending) return
+    syncMutation.mutate()
+    // The backend has its own per-user lock and 15-second cooldown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendEnabled, userId])
 
   const buildUrl = useCallback(
     (cursor?: string) => {

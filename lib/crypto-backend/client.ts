@@ -320,6 +320,10 @@ export class CryptoBackendClient {
     }, { signal })
   }
 
+  async syncTransactions(signal?: AbortSignal): Promise<{ started: boolean }> {
+    return this.request<{ started: boolean }>("/transactions/sync", { method: "POST" }, { signal })
+  }
+
   async getIntertrainUsdcBridgeStatus(signal?: AbortSignal) {
     return this.request<{ enabled: boolean; available: boolean; sourceNetworks: string[]; destinationNetwork: string; asset: string; reason?: string; paused?: boolean }>("/bridge/intertrain/usdc/status", {}, { signal })
   }
