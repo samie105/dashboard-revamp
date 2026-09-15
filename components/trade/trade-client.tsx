@@ -485,6 +485,13 @@ export function TradeClient() {
   // the order that was actually built, not whatever the form says later.
   const [futuresReview, setFuturesReview] =
     React.useState<FuturesReview | null>(null)
+  // Bumped every time the review is (re)opened or dismissed. confirmFuturesOrder
+  // captures the value at its start and checks it again before writing its
+  // result: without this, a slow confirm call (Hyperliquid latency, a retry)
+  // can resolve after the user has already backed out and opened a DIFFERENT
+  // review, stamping that unrelated screen with a stale error or outcome even
+  // though the original order actually went through.
+  const reviewGenerationRef = React.useRef(0)
   const [error, setError] = React.useState<string | null>(null)
   const [busyKey, setBusyKey] = React.useState<string | null>(null)
   // Mobile-only view state: which pane sits under the chart, and whether the
@@ -733,6 +740,7 @@ export function TradeClient() {
     // A review holds an intent priced for one contract. It is discarded rather
     // than carried: an unsigned intent expires on its own, and confirming a
     // stale one would trade the pair the user just left.
+    reviewGenerationRef.current += 1
     setFuturesReview(null)
     setReduceOnly(false)
     setError(null)
@@ -1320,6 +1328,7 @@ export function TradeClient() {
         idempotencyKey: crypto.randomUUID(),
         ...(activeHyperliquidAgent ? { agentAddress: activeHyperliquidAgent.agentAddress } : {}),
       })
+      reviewGenerationRef.current += 1
       setFuturesReview({
         intent,
         symbol: current.symbol,
@@ -1356,6 +1365,8 @@ export function TradeClient() {
   async function confirmFuturesOrder() {
     const review = futuresReview
     if (!review || submitting) return
+    const myGeneration = reviewGenerationRef.current
+    const stale = () => reviewGenerationRef.current !== myGeneration
     setSubmitting(true)
     setError(null)
     setOutcome(null)
@@ -1394,12 +1405,25 @@ export function TradeClient() {
       const status = result?.response?.data?.statuses?.[0] as
         | Record<string, unknown>
         | undefined
+      // Hyperliquid returns HTTP 200 with success:true at our own API layer
+      // even when a per-step order was rejected — the rejection lands here as
+      // {error: "..."} instead of {filled: ...} or {resting: ...}. Treating
+      // every response as a success hid real rejections behind a fake
+      // "order placed" outcome.
+      if (status && "error" in status) {
+        throw new Error(String(status.error))
+      }
       const filled =
         status && "filled" in status
           ? (status.filled as Record<string, unknown>)
           : undefined
       const resting = status && "resting" in status
       const figures = readFuturesOrderFigures(review.intent.summary)
+      // A slow confirm can resolve after the user backed out and opened a
+      // different review; writing this result into that unrelated screen is
+      // worse than dropping it, since the order already succeeded or failed
+      // on its own regardless of what's on screen now.
+      if (stale()) return
       setOutcome({
         success: true,
         symbol: review.symbol,
@@ -1415,6 +1439,7 @@ export function TradeClient() {
       setFuturesReview(null)
       refreshAccount()
     } catch (e) {
+      if (stale()) return
       setError(
         e instanceof CryptoApiError
           ? e.message
@@ -1423,7 +1448,9 @@ export function TradeClient() {
             : "Order failed. Try again."
       )
     } finally {
-      setSubmitting(false)
+      // A stale call's own spinner state is meaningless once the user has
+      // moved to a different review, which manages its own submitting flag.
+      if (!stale()) setSubmitting(false)
     }
   }
 
@@ -1758,6 +1785,7 @@ export function TradeClient() {
       </button>
       <button
         onClick={() => {
+          reviewGenerationRef.current += 1
           setFuturesReview(null)
           setError(null)
         }}
