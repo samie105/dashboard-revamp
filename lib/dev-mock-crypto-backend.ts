@@ -734,7 +734,7 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
     return json(intent)
   }
   if (method === "GET" && path === "trading/hyperliquid/markets") {
-    return json({ venue: "Hyperliquid", environment: "mainnet", futures: HL_FUTURES, spot: [], spotVenue: "worldstreet-spot-router", minOrderUsd: 0 })
+    return json({ venue: "Hyperliquid", environment: "mainnet", futures: HL_FUTURES, spot: [], spotVenue: "worldstreet-spot-router", minOrderUsd: 10 })
   }
   if (method === "GET" && path === "trading/hyperliquid/account") {
     if (!state.pkg) return jsonError("WALLET_NOT_FOUND", "No wallet exists for this user yet", 404)

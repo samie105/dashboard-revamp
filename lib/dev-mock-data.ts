@@ -210,7 +210,7 @@ const hlMarkets: HlMarkets = {
     { symbol: "DOGE", price: 0.2385, maxLeverage: 10 },
     { symbol: "HYPE", price: 44.2, maxLeverage: 5 },
   ],
-  minOrderUsd: 0,
+  minOrderUsd: 10,
 }
 
 // ── Transactions ────────────────────────────────────────────────────────────

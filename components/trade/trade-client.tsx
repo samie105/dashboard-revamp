@@ -918,7 +918,7 @@ export function TradeClient() {
     return null
   }, [market, entryRef, tp, sl, side])
 
-  const minOrder = markets?.minOrderUsd ?? 0
+  const minOrder = markets?.minOrderUsd ?? 10
 
   // Pre-submit gating (spec §8). The plan is built from the registry row the
   // user is looking at, at the size they could place at minimum, so an
