@@ -47,10 +47,13 @@ import { useWalletBalances } from "@/hooks/useWalletBalances"
    coincidence — see the comment on the hook itself. */
 import { usePortfolioTotal } from "@/hooks/usePortfolioTotal"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
+import { useHyperliquidFills } from "@/hooks/useHyperliquidFills"
 import { useAuth } from "@/components/auth-provider"
 import { getSpotBalances, getSpotPositions, getTokenPrices } from "@/lib/trade-adapter"
 import type { LedgerBalance, PositionInfo } from "@/lib/trade-adapter"
 import { fetchPrices, type Coin } from "@/lib/crypto-api"
+import { useCryptoContext } from "@/components/crypto/CryptoProvider"
+import type { WalletChain } from "@/lib/networks"
 import { SendModal, type SendableAsset } from "@/components/assets/send-modal"
 import { ReceiveModal, type ReceivableAsset } from "@/components/assets/receive-modal"
 import { Watchlist, INITIAL_WATCHLIST } from "@/components/portfolio/watchlist"
@@ -831,6 +834,31 @@ export function PortfolioClient() {
      from the hook above with everything else. Still fetched while the venue is
      shut so the section below stays type-checked; see FUTURES_CLOSED. */
   const { positions: hlPositions, loading: hlPositionsLoading } = useHyperliquidPositions()
+  /* Closed trades and their realized P&L — the thing Open Positions can never
+     show, since a closed position isn't a position any more. */
+  const { fills: hlFills, isLoading: hlFillsLoading } = useHyperliquidFills()
+  const hlUnrealizedPnl = hlPositions.reduce((sum, p) => sum + numOr(p.unrealizedPnl, 0), 0)
+  const hlRealizedPnl = hlFills.reduce((sum, f) => sum + f.closedPnl, 0)
+  const hlClosedFills = hlFills.filter((f) => f.closedPnl !== 0)
+
+  // Receive must always resolve the modern (self-custodial) wallet's own
+  // addresses, never the legacy Privy wallet-provider's — ReceivePanel falls
+  // back to the latter when no `addresses` prop is given, which is why the
+  // receive flow here used to claim a chain wasn't provisioned even when the
+  // modern wallet plainly held a key on it. Same chain-family mapping
+  // ModernReceiveModal already uses.
+  const { wallet: modernWallet } = useCryptoContext()
+  const modernAddresses = React.useMemo(() => {
+    const FAMILY_TO_CHAIN: Record<string, WalletChain> = {
+      evm: "ethereum", solana: "solana", sui: "sui", ton: "ton", tron: "tron", intertrain: "intertrain",
+    }
+    const map: Partial<Record<WalletChain, string>> = {}
+    for (const account of modernWallet.data?.accounts ?? []) {
+      const chain = FAMILY_TO_CHAIN[account.chainFamily]
+      if (chain && account.canonicalAddress) map[chain] = account.canonicalAddress
+    }
+    return map
+  }, [modernWallet.data])
 
   /* The spot account in detail: what is free, what is committed to orders, and
      which coins those positions are in. The hook hands back one figure for the
@@ -2005,6 +2033,109 @@ export function PortfolioClient() {
           </div>
         )}
 
+        {/* ═══ FUTURES TAB: P&L summary + closed trade history ═══ */}
+        {/* GATE - same treatment as Open Positions above: stands down while
+            futures is closed, verbatim otherwise. TO RE-OPEN: nothing extra
+            needed, this already reads !FUTURES_CLOSED. */}
+        {activeView === "futures" && !FUTURES_CLOSED && (
+          <div className="flex flex-col">
+            <div className="mx-4 h-px bg-border/30" />
+            <div className="grid grid-cols-2 gap-3 p-4">
+              <div className="rounded-xl bg-accent/30 p-3">
+                <p className="text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
+                  Unrealized P&amp;L
+                </p>
+                <p className={`mt-1 text-lg font-semibold tabular-nums ${hlUnrealizedPnl >= 0 ? "text-credit" : "text-debit"}`}>
+                  {hlUnrealizedPnl >= 0 ? "+" : ""}${hlUnrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-[10px] text-muted-foreground/70">Across {hlPositions.length} open position{hlPositions.length === 1 ? "" : "s"}</p>
+              </div>
+              <div className="rounded-xl bg-accent/30 p-3">
+                <p className="text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
+                  Realized P&amp;L
+                </p>
+                <p className={`mt-1 text-lg font-semibold tabular-nums ${hlRealizedPnl >= 0 ? "text-credit" : "text-debit"}`}>
+                  {hlRealizedPnl >= 0 ? "+" : ""}${hlRealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-[10px] text-muted-foreground/70">From {hlClosedFills.length} closed trade{hlClosedFills.length === 1 ? "" : "s"}</p>
+              </div>
+            </div>
+
+            <div className="mx-4 h-px bg-border/30" />
+            <div className="flex items-center gap-2 p-4 pb-2">
+              <HugeiconsIcon icon={ChartLineData01Icon} className="h-4 w-4 text-amber-500" />
+              <h3 className="text-[15px] font-semibold leading-tight">Trade History</h3>
+            </div>
+
+            {hlFillsLoading ? (
+              <div className="flex flex-col items-center justify-center py-14">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+                <p className="mt-2 text-xs text-muted-foreground">Loading trade history...</p>
+              </div>
+            ) : hlClosedFills.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-14">
+                <HugeiconsIcon icon={ChartLineData01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
+                <p className="text-xs font-medium text-muted-foreground">No closed trades yet</p>
+                <p className="text-[10px] text-muted-foreground/70">Trades that close or reduce a position appear here with their realized P&amp;L</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-t border-border/20 text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
+                      <th className="px-4 py-2 text-left font-medium">Contract</th>
+                      <th className="px-4 py-2 text-left font-medium hidden sm:table-cell">Direction</th>
+                      <th className="px-4 py-2 text-right font-medium">Price</th>
+                      <th className="px-4 py-2 text-right font-medium">Size</th>
+                      <th className="px-4 py-2 text-right font-medium hidden md:table-cell">Fee</th>
+                      <th className="px-4 py-2 text-right font-medium">Realized P&amp;L</th>
+                      <th className="px-4 py-2 text-right font-medium hidden sm:table-cell">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {hlClosedFills.map((f) => {
+                      const isProfit = f.closedPnl >= 0
+                      return (
+                        <tr key={`${f.oid}-${f.tid}`} className="transition-colors hover:bg-accent/30">
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              {getCoinImage(f.symbol) ? (
+                                <img
+                                  src={getCoinImage(f.symbol)}
+                                  alt={f.symbol}
+                                  className="h-6 w-6 shrink-0 rounded-full object-contain"
+                                  onError={(e) => { (e.target as HTMLImageElement).src = coinFallback(f.symbol) }}
+                                />
+                              ) : null}
+                              <span className="font-medium">{f.symbol}-PERP</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground hidden sm:table-cell">{f.direction || (f.side === "buy" ? "Buy" : "Sell")}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums">
+                            ${f.price.toLocaleString(undefined, { maximumFractionDigits: f.price < 1 ? 6 : 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right tabular-nums">
+                            {f.size.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden md:table-cell">
+                            ${f.fee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                          </td>
+                          <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${isProfit ? "text-credit" : "text-debit"}`}>
+                            {isProfit ? "+" : ""}${f.closedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
+                            {f.timestamp ? new Date(f.timestamp).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ═══ Futures Markets (below positions, Futures tab only) ═══ */}
         {/* GATE - futures is not open yet, so the panel above stands in for
             this section. `&& !FUTURES_CLOSED` is the ONLY change here;
@@ -2121,7 +2252,7 @@ export function PortfolioClient() {
       {/* Keep the asset on close: clearing it in the same tick unmounts the
           modal's content before the exit animation can play it out. */}
       <SendModal open={sendModal.open} onClose={() => setSendModal((m) => ({ ...m, open: false }))} asset={sendModal.asset} />
-      <ReceiveModal open={receiveModal.open} onClose={() => setReceiveModal((m) => ({ ...m, open: false }))} asset={receiveModal.asset} />
+      <ReceiveModal open={receiveModal.open} onClose={() => setReceiveModal((m) => ({ ...m, open: false }))} asset={receiveModal.asset} addresses={modernAddresses} />
     </div>
   )
 }

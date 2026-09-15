@@ -628,12 +628,42 @@ export type HlCloseOutcome = {
   error?: string
 }
 
+// `/api/trade/*` was the pre-migration path this file's own header comment
+// still names; the crypto backend never implemented it (see
+// worldstreet-crypto-backend/docs/HYPERLIQUID-MODERN-WALLET-TRADING-MIGRATION.md),
+// so every read through it 404s and every dependent hook silently falls back
+// to an empty account — the portfolio page showing no positions or P&L
+// regardless of what's actually open. The real, currently-implemented routes
+// are the same ones components/trade/trade-client.tsx already calls through
+// cryptoBackendClient, and HlMarkets/HlAccount below already match their
+// response shape exactly.
 export function fetchHlMarkets(): Promise<HlMarkets> {
-  return get<HlMarkets>("/api/trade/markets")
+  return get<HlMarkets>("/api/crypto/trading/hyperliquid/markets")
 }
 
 export function fetchHlAccount(): Promise<HlAccount> {
-  return get<HlAccount>("/api/trade/account")
+  return get<HlAccount>("/api/crypto/trading/hyperliquid/account")
+}
+
+/** One Hyperliquid execution. closedPnl is 0 unless this fill closed or
+ *  reduced an existing position — that's what separates a completed trade
+ *  from an order that only opened or added to one. */
+export type HlFill = {
+  oid: number
+  tid: string
+  symbol: string
+  side: "buy" | "sell"
+  price: number
+  size: number
+  direction: string
+  closedPnl: number
+  fee: number
+  feeToken: string
+  timestamp: number
+}
+
+export function fetchHlFills(): Promise<{ fills: HlFill[] }> {
+  return get<{ fills: HlFill[] }>("/api/crypto/trading/hyperliquid/fills")
 }
 
 export function placeSpotOrder(input: {
