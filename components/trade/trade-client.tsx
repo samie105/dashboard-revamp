@@ -2385,7 +2385,6 @@ export function TradeClient() {
                 data-vivid-target="trade-take-profit"
                 data-vivid-label="Take profit trigger price (optional)"
                 aria-label="Take profit trigger price"
-                placeholder="Optional"
                 className={cn(fieldClass, "focus:ring-credit/40")}
               />
             </label>
@@ -2402,7 +2401,6 @@ export function TradeClient() {
                 data-vivid-target="trade-stop-loss"
                 data-vivid-label="Stop loss trigger price (optional)"
                 aria-label="Stop loss trigger price"
-                placeholder="Optional"
                 className={cn(fieldClass, "focus:ring-debit/40")}
               />
             </label>
