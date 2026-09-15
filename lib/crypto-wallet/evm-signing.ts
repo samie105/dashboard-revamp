@@ -102,7 +102,7 @@ export async function signSponsoredEvmOperation(
       const request = signatureRequest as Record<string, unknown>
       let signature: string
 
-      if (request.type === "eth_signAuthorization") {
+      if (request.type === "eth_signAuthorization" || request.type === "eip7702Auth") {
         const authData = item.data
         if (!authData || typeof authData !== "object") throw new Error("Alchemy returned an invalid EIP-7702 authorization")
         const auth = authData as Record<string, unknown>
