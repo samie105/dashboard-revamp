@@ -22,7 +22,8 @@ function fmt(n: number, dp = 2) {
   return n.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })
 }
 
-function fmtPx(p: number) {
+function fmtPx(p: number | null | undefined) {
+  if (p === null || p === undefined || !Number.isFinite(p)) return "—"
   return p.toLocaleString(undefined, { maximumFractionDigits: p < 1 ? 6 : 2 })
 }
 
