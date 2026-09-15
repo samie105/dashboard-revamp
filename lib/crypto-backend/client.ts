@@ -271,7 +271,7 @@ export class CryptoBackendClient {
   async quoteSponsorship(input: {
     accountId: string
     networkId: string
-    operation: "native-transfer" | "token-transfer" | "contract-call"
+    operation: "native-transfer" | "token-transfer" | "contract-call" | "hyperliquid-deposit"
     intentId?: string
   }, signal?: AbortSignal): Promise<SponsorshipOperation> {
     return this.request<SponsorshipOperation>("/sponsorship/quote", {
@@ -446,7 +446,7 @@ export class CryptoBackendClient {
   }
 
   async createHyperliquidDepositIntents(input: { amount: number; idempotencyKey?: string }, signal?: AbortSignal) {
-    return this.request<{ networkId: string; amount: number; intents: CryptoTransactionIntent[] }>("/trading/hyperliquid/deposit/intents", {
+    return this.request<{ networkId: string; amount: number; intents: CryptoTransactionIntent[]; sponsorship: SponsorshipOperation }>("/trading/hyperliquid/deposit/intents", {
       method: "POST", body: JSON.stringify(input),
     }, { signal })
   }

@@ -4,6 +4,7 @@ import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
 import { signEvmIntent, signHyperliquidIntent } from "@/lib/crypto-wallet"
+import { signSponsoredEvmOperation } from "@/lib/crypto-wallet/evm-signing"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { useAuth } from "@/components/auth-provider"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
@@ -136,22 +137,28 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
     setSuccess(null)
     try {
       if (isDeposit) {
-        const prepared = pendingDeposit ?? (await cryptoBackendClient.createHyperliquidDepositIntents({
+        const created = pendingDeposit ? null : await cryptoBackendClient.createHyperliquidDepositIntents({
           amount: Math.round(amountValue * 1_000_000) / 1_000_000,
           idempotencyKey: crypto.randomUUID(),
-        })).intents
-        if (prepared.length !== 2) throw new Error("The backend returned an incomplete Hyperliquid deposit")
+        })
+        const prepared = pendingDeposit ?? created?.intents ?? []
+        if (prepared.length !== 1) throw new Error("The backend returned an incomplete sponsored Hyperliquid deposit")
         const start = pendingDeposit ? depositStage : 0
         setPendingDeposit(prepared)
-        for (let index = start; index < prepared.length; index++) {
-          const intent = prepared[index]
-          setDepositStage(index as 0 | 1 | 2)
-          savePendingFlow("hyperliquid-deposit", JSON.stringify({ intents: prepared, amount: amountValue, stage: index }), Date.now())
-          const signed = await signEvmIntent(user.userId, wallet.data.id, packageQuery.data, intent, evmAccount.id)
-          await cryptoBackendClient.submitIntent(intent.id, signed)
-          setDepositStage((index + 1) as 0 | 1 | 2)
-          savePendingFlow("hyperliquid-deposit", JSON.stringify({ intents: prepared, amount: amountValue, stage: index + 1 }), Date.now())
-        }
+        const intent = prepared[0]
+        setDepositStage(start as 0 | 1 | 2)
+        savePendingFlow("hyperliquid-deposit", JSON.stringify({ intents: prepared, amount: amountValue, stage: start }), Date.now())
+        const sponsorship = created?.sponsorship ?? await cryptoBackendClient.quoteSponsorship({
+          accountId: evmAccount.id,
+          networkId: "arbitrum-one",
+          operation: "hyperliquid-deposit",
+          intentId: intent.id,
+        })
+        if (!sponsorship.signingPayload) throw new Error("The Hyperliquid gas sponsor did not return a signing request")
+        const signed = await signSponsoredEvmOperation(user.userId, wallet.data.id, packageQuery.data, sponsorship.signingPayload, evmAccount.id)
+        await cryptoBackendClient.submitSponsorship(sponsorship.id, signed)
+        setDepositStage(1)
+        savePendingFlow("hyperliquid-deposit", JSON.stringify({ intents: prepared, amount: amountValue, stage: 1 }), Date.now())
         clearPendingFlow("hyperliquid-deposit")
         setPendingDeposit(null)
         setDepositStage(0)

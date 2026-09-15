@@ -72,8 +72,10 @@ import {
   type CryptoWalletDetails,
   type CryptoWalletPackageDocument,
   type HyperliquidAccount,
+  type SponsorshipOperation,
 } from "@/lib/crypto-backend"
 import { signEvmIntent, signHyperliquidIntent } from "@/lib/crypto-wallet"
+import { signSponsoredEvmOperation } from "@/lib/crypto-wallet/evm-signing"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { useCryptoBalances } from "@/hooks/crypto/useCryptoBalances"
 import {
@@ -181,7 +183,7 @@ const DEAD_STATUSES = new Set(["failed", "expired"])
  *  it, so signing it is the thing that was missing. `signed` belongs here: it
  *  sits before `submitted` in the backend's own ordering, and EVM signing is
  *  deterministic, so re-signing yields the identical raw transaction. */
-const RESIGNABLE_STATUSES = new Set(["created", "simulated", "validated", "signed"])
+const RESIGNABLE_STATUSES = new Set(["created", "simulated", "validated", "awaiting_signature", "signed"])
 
 /** Known to be on their way. Skipped — as is EVERY status in none of the three
  *  sets, which is the whole point (see above). */
@@ -561,8 +563,22 @@ function DepositFlow({
    * status this build has never heard of. A retry that signs nothing is a valid
    * outcome here, not a silent no-op: `retryAttempt` turns it into a sentence.
    */
-  async function submitPending(intents: CryptoTransactionIntent[]) {
+  async function submitPending(intents: CryptoTransactionIntent[], preparedSponsorship?: SponsorshipOperation) {
     if (!evm) throw new Error("Your wallet doesn't have an active account for this network yet")
+    if (intents.length === 1) {
+      const intent = intents[0]
+      const sponsorship = preparedSponsorship ?? await cryptoBackendClient.quoteSponsorship({
+        accountId: evm.id,
+        networkId: "arbitrum-one",
+        operation: "hyperliquid-deposit",
+        intentId: intent.id,
+      })
+      if (!sponsorship.signingPayload) throw new Error("The Hyperliquid gas sponsor did not return a signing request")
+      const signed = await signSponsoredEvmOperation(userId, wallet.id, packageValue, sponsorship.signingPayload, evm.id)
+      await cryptoBackendClient.submitSponsorship(sponsorship.id, signed)
+      setSubmittedIds((current) => (current.includes(intent.id) ? current : [...current, intent.id]))
+      return { signedCount: 1, skippedUnknown: 0 }
+    }
     let signedCount = 0
     let skippedUnknown = 0
     for (const intent of intents) {
@@ -603,12 +619,14 @@ function DepositFlow({
     setError(null)
     setDuplicateWithoutId(false)
     let created: CryptoTransactionIntent[]
+    let preparedSponsorship: SponsorshipOperation | undefined
     try {
       const result = await cryptoBackendClient.createHyperliquidDepositIntents({
         amount: amountValue,
         idempotencyKey: key,
       })
       created = result.intents
+      preparedSponsorship = result.sponsorship
     } catch (cause) {
       // No intents means nothing is in flight: the form is the only honest
       // screen, and it's where the error can still be acted on.
@@ -636,7 +654,7 @@ function DepositFlow({
       amountValue,
     )
     try {
-      await submitPending(created)
+      await submitPending(created, preparedSponsorship)
     } catch (cause) {
       setError(cause)
     } finally {
