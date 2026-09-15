@@ -499,6 +499,10 @@ export function TradeClient() {
   const [mobilePane, setMobilePane] = React.useState<
     "book" | "positions" | "orders"
   >("book")
+  // Spot has no book/positions toggle — the squeezed strip is Orders or
+  // nothing — so its full-screen view is its own boolean rather than a
+  // mode of mobilePane.
+  const [spotOrdersOpen, setSpotOrdersOpen] = React.useState(false)
   const [ticketOpen, setTicketOpen] = React.useState(false)
   // Load failures are tracked apart from order errors: an unreachable account
   // must never be mistaken for an account that exists but isn't set up.
@@ -2851,7 +2855,20 @@ export function TradeClient() {
               they get in the always-on desktop rail. */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card lg:hidden">
             {market === "spot" ? (
-              <OrdersPanel showTabs={view.orderTabs} className="min-h-0 flex-1" />
+              /* Same problem as futures had: a full order history table has
+                 no readable room left under the chart. Opens full-screen
+                 instead, same as Positions/Orders there. */
+              <button
+                type="button"
+                onClick={() => setSpotOrdersOpen(true)}
+                className="flex min-h-0 flex-1 items-center justify-between px-4 text-left transition-colors hover:bg-accent/30"
+              >
+                <span className="text-[13px] font-semibold">Orders</span>
+                <HugeiconsIcon
+                  icon={ArrowLeft01Icon}
+                  className="h-4 w-4 rotate-180 text-subtle"
+                />
+              </button>
             ) : (
               <>
                 {/* Separated by FILL, not a hairline: the strip sits on the
@@ -2934,6 +2951,26 @@ export function TradeClient() {
               hideTabs
               tab={mobilePane === "orders" ? "orders" : "positions"}
             />
+          </div>
+        )}
+
+        {/* Full-screen Orders on mobile spot — same treatment as futures'
+            Positions/Orders above, and for the same reason: the order
+            history table has no readable room left under the chart. */}
+        {market === "spot" && spotOrdersOpen && (
+          <div className="fixed inset-0 z-40 flex flex-col bg-background lg:hidden">
+            <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
+              <button
+                type="button"
+                onClick={() => setSpotOrdersOpen(false)}
+                aria-label="Back to chart"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-sunken transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+              >
+                <HugeiconsIcon icon={ArrowLeft01Icon} className="h-4 w-4" />
+              </button>
+              <span className="text-[13px] font-semibold">Orders</span>
+            </div>
+            <OrdersPanel showTabs={view.orderTabs} className="min-h-0 flex-1" />
           </div>
         )}
 
