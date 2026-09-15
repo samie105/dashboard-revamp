@@ -106,12 +106,14 @@ export async function signSponsoredEvmOperation(
         const authData = item.data
         if (!authData || typeof authData !== "object") throw new Error("Alchemy returned an invalid EIP-7702 authorization")
         const auth = authData as Record<string, unknown>
-        if (typeof auth.address !== "string" || auth.chainId === undefined || auth.nonce === undefined) {
+        // chainId is a sibling of `data` on the item, not inside it.
+        const authChainId = auth.chainId ?? item.chainId
+        if (typeof auth.address !== "string" || authChainId === undefined || auth.nonce === undefined) {
           throw new Error("Alchemy returned an incomplete EIP-7702 authorization")
         }
         const signedAuthorization = await account.signAuthorization({
           address: auth.address as `0x${string}`,
-          chainId: Number(auth.chainId),
+          chainId: Number(authChainId),
           nonce: Number(auth.nonce),
         })
         signature = serializeSignature(signedAuthorization)
