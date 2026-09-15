@@ -2848,7 +2848,9 @@ export function TradeClient() {
               endless scroll — the chart above never leaves the screen.
               On spot there is only one pane, so there is no tab bar: a
               Segmented offering a single choice is a control that does
-              nothing. */}
+              nothing. Positions/Orders open full-screen rather than
+              squeezed into this strip's leftover height — the same room
+              they get in the always-on desktop rail. */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card lg:hidden">
             {market === "spot" ? (
               <OrdersPanel showTabs={view.orderTabs} className="min-h-0 flex-1" />
@@ -2878,31 +2880,64 @@ export function TradeClient() {
                     ]}
                   />
                 </div>
-                {mobilePane === "book" ? (
-                  <OrderBook
-                    book={book}
-                    lastTick={lastTick}
-                    onPickPrice={(p) => {
-                      pickPrice(p)
-                      setTicketOpen(true)
-                    }}
-                    className="min-h-0 flex-1"
-                  />
-                ) : (
-                  <PositionsPanel
-                    account={account}
-                    busyKey={busyKey}
-                    onClosePosition={handleClose}
-                    onCancelOrder={handleCancel}
-                    className="min-h-0 flex-1"
-                    hideTabs
-                    tab={mobilePane === "orders" ? "orders" : "positions"}
-                  />
-                )}
+                <OrderBook
+                  book={book}
+                  lastTick={lastTick}
+                  onPickPrice={(p) => {
+                    pickPrice(p)
+                    setTicketOpen(true)
+                  }}
+                  className="min-h-0 flex-1"
+                />
               </>
             )}
           </div>
         </div>
+
+        {/* Full-screen Positions/Orders on mobile (spec: match the room the
+            desktop rail gives them, not the sliver left under the chart).
+            `lg:hidden` — from lg up these live in the always-on pane above
+            and this overlay must not exist there. */}
+        {market === "futures" && mobilePane !== "book" && (
+          <div className="fixed inset-0 z-40 flex flex-col bg-background lg:hidden">
+            <div className="scrollbar-none flex shrink-0 items-center gap-2 border-b border-border/60 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
+              <button
+                type="button"
+                onClick={() => setMobilePane("book")}
+                aria-label="Back to order book"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-sunken transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+              >
+                <HugeiconsIcon icon={ArrowLeft01Icon} className="h-4 w-4" />
+              </button>
+              <Segmented
+                size="sm"
+                value={mobilePane === "orders" ? "orders" : "positions"}
+                onChange={setMobilePane}
+                options={[
+                  {
+                    key: "positions" as const,
+                    label: positionCount
+                      ? `Positions · ${positionCount}`
+                      : "Positions",
+                  },
+                  {
+                    key: "orders" as const,
+                    label: orderCount ? `Orders · ${orderCount}` : "Orders",
+                  },
+                ]}
+              />
+            </div>
+            <PositionsPanel
+              account={account}
+              busyKey={busyKey}
+              onClosePosition={handleClose}
+              onCancelOrder={handleCancel}
+              className="min-h-0 flex-1"
+              hideTabs
+              tab={mobilePane === "orders" ? "orders" : "positions"}
+            />
+          </div>
+        )}
 
         {/* Order book rail */}
         {market === "futures" && (
