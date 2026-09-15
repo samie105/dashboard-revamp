@@ -1094,7 +1094,10 @@ export function TradeClient() {
       : null
   // The house minimum is denominated in USD, so it is only a bound on a USD
   // amount. In token units the builder's own dust check is the real floor.
-  const amountSufficient = inTokenUnit ? amt > 0 : amt >= minOrder
+  // Futures orders are exempt: the backend rounds a sub-$10 order UP to
+  // Hyperliquid's minimum notional rather than rejecting it, so gating
+  // submission here would block orders that would actually succeed.
+  const amountSufficient = inTokenUnit || modernFutures ? amt > 0 : amt >= minOrder
   const canSubmit =
     !submitting &&
     !!current &&
@@ -2269,9 +2272,12 @@ export function TradeClient() {
             </div>
           ) : (
             !inTokenUnit &&
+            amt > 0 &&
             amt < minOrder && (
               <p className="px-1 text-[11.5px] text-subtle">
-                Minimum order {fmtMin(minOrder)}
+                {modernFutures
+                  ? `Rounded up to Hyperliquid's ${fmtMin(minOrder)} minimum`
+                  : `Minimum order ${fmtMin(minOrder)}`}
               </p>
             )
           )}
