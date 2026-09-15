@@ -183,10 +183,6 @@ type OrderType = "market" | "limit"
  */
 const FUTURES_LIVE: boolean = true
 
-/* Retained while the market toggle is withdrawn — this and `setMarketTab`
-   below are the restoration point for futures, and rewriting them later is
-   strictly worse than leaving them here. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const MARKET_TABS: readonly SegmentedOption<Market>[] = [
   { key: "spot", label: "Spot" },
   // When this toggle is restored the Futures tab comes back visible AND
@@ -1175,7 +1171,6 @@ export function TradeClient() {
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's
   // default and the sync effect below writes it back to the URL.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function setMarketTab(m: Market) {
     // FUTURES GATE (1/4): futures is not open, so the press is ANSWERED rather
     // than followed. Nothing navigates: the URL never gains `market=futures`,
@@ -2660,17 +2655,16 @@ export function TradeClient() {
         </div>
         <span className="hidden h-6 w-px bg-border/40 sm:block" />
 
-        {/* Market toggle — WITHDRAWN while futures is closed.
-            A tab whose only outcome is a "not open yet" notice is a control
-            that exists to disappoint. Everything behind it is intact — the
-            `market` state, the futures ticket, the positions drawer, the
-            gate below — so restoring this element is the whole change when
-            the venue opens.
-            When it comes back it comes back as the house `Segmented`, with
-            `options={MARKET_TABS}`, `onChange={setMarketTab}` and the phone
-            padding trim `[&_button]:px-2.5 sm:[&_button]:px-3.5` — that trim
-            bought ~25px, which was the difference between this row wrapping
-            and not on the commonest widths. */}
+        {/* Market toggle. The phone padding trim below bought ~25px, which
+            was the difference between this row wrapping and not on the
+            commonest widths. */}
+        <Segmented
+          size="sm"
+          value={market}
+          onChange={setMarketTab}
+          options={MARKET_TABS}
+          className="shrink-0 [&_button]:px-2.5 sm:[&_button]:px-3.5"
+        />
 
         {/* Simple / Pro. Same control and same place in the reading order as
            on the wallet: beside the screen's own identity, not buried in a
