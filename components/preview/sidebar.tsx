@@ -117,7 +117,7 @@ const GROUPS: Group[] = [
       { name: "Futures", url: "/trade?market=futures", icon: Chart01Icon, badge: "Live" },
       { name: "Margin Trading", url: "#", icon: BalanceScaleIcon, soon: true },
       { name: "Binary Trading", url: "#", icon: Timer01Icon, soon: true },
-      { name: "Swap", url: "/swap", icon: RepeatIcon },
+      { name: "Swap", url: PREVIEW_ROUTES.swap, icon: RepeatIcon },
       { name: "Bridge", url: "/bridge", icon: Activity01Icon },
     ],
   },

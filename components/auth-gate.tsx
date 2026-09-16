@@ -14,6 +14,7 @@ const PUBLIC_ROUTES = [
   "/transactions-unauth",
   "/markets-unauth",
   "/trade-unauth",
+  "/swap-unauth",
 ]
 const LOGIN_URL =
   process.env.NODE_ENV === "production"

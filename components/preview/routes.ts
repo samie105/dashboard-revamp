@@ -14,6 +14,7 @@ export const PREVIEW_ROUTES = {
   transactions: "/transactions-unauth",
   markets: "/markets-unauth",
   trade: "/trade-unauth",
+  swap: "/swap-unauth",
 } as const
 
 export const PREVIEW_PATHS: string[] = Object.values(PREVIEW_ROUTES)
