@@ -8,11 +8,14 @@
  * and `useTradeAccount`, valuations from the price feed the hero already
  * polls, and the chain split from `usePortfolioTotal`.
  *
- * The preview version of this row carried a Fear & Greed dial and a monthly
- * traded-volume chart. Neither ships here, and that is deliberate — the
- * backend serves no sentiment index and no volume aggregate, so both would
- * have to be invented. A dashboard that shows one made-up figure among three
- * real ones teaches people not to trust the other three.
+ * The last two read `/insights` on the crypto backend, which is there to
+ * serve exactly these and nothing else. Until that endpoint is deployed the
+ * request 404s and both cards simply do not render — no skeleton stuck
+ * forever, no zeroes standing in for figures nobody has.
+ *
+ * The activity card counts TRANSACTIONS, not dollars, because that is what
+ * the service can state exactly; see the endpoint's own header for why a USD
+ * figure there would have been a guess wearing a decimal point.
  */
 
 import * as React from "react"
@@ -28,8 +31,52 @@ import { useTradeAccount } from "@/hooks/useTradeAccount"
 import { usePortfolioTotal } from "@/hooks/usePortfolioTotal"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
 import { fetchPrices } from "@/lib/crypto-api"
+import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { MoodGauge, VolumeBars } from "@/components/ui/charts"
 import { chainLabel } from "@/lib/spot-market-search"
 import type { CoinData } from "@/lib/actions"
+
+type InsightsPayload = Awaited<ReturnType<typeof cryptoBackendClient.getInsights>>
+
+/**
+ * `/insights`, or null.
+ *
+ * Null covers both "not deployed yet" and "failed", and the two are treated
+ * the same on purpose: from the dashboard's point of view there is no figure
+ * either way, and a card that cannot state a number should not be on screen
+ * arguing about why.
+ */
+function useInsights(): { data: InsightsPayload | null; loading: boolean } {
+  const [data, setData] = React.useState<InsightsPayload | null>(null)
+  const [loading, setLoading] = React.useState(isCryptoBackendEnabled)
+
+  React.useEffect(() => {
+    if (!isCryptoBackendEnabled) return
+    const controller = new AbortController()
+    cryptoBackendClient
+      .getInsights(6, controller.signal)
+      .then((value) => setData(value))
+      .catch(() => {
+        /* Deliberately silent. A 404 here is the expected state before the
+           backend carrying this route is deployed. */
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    return () => controller.abort()
+  }, [])
+
+  return { data, loading }
+}
+
+/** "2026-09" → "SEP". The chart's own axis, so it never has to ship labels. */
+function monthLabel(key: string): string {
+  const [year, month] = key.split("-").map(Number)
+  if (!year || !month) return key
+  return new Date(Date.UTC(year, month - 1, 1))
+    .toLocaleString("en-US", { month: "short", timeZone: "UTC" })
+    .toUpperCase()
+}
 
 function usd(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -147,9 +194,20 @@ export function DashboardInsights({ coins }: { coins: CoinData[] }) {
 
   const top = ranked.rows[0]
   const loading = !onChainSettled
+  const { data: served } = useInsights()
+
+  const activityBars = React.useMemo(() => {
+    const months = served?.activity.months
+    if (!months?.length) return null
+    // A row of six empty bars is not a chart of nothing, it is a chart that
+    // says nothing. The card only earns its place once there is one move in
+    // the window.
+    if (!months.some((m) => m.total > 0)) return null
+    return months.map((m) => ({ month: monthLabel(m.month), value: m.total }))
+  }, [served])
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {/* ── Top holding ─────────────────────────────────────────────────── */}
       <CardShell className={CARD_HUE}>
         <CardHeader title="Top holding" subtitle="Your largest single position" />
@@ -330,6 +388,49 @@ export function DashboardInsights({ coins }: { coins: CoinData[] }) {
           </div>
         )}
       </CardShell>
+
+      {/* ── Your activity ──────────────────────────────────────────────────
+          Counts, not dollars. `/insights` explains at length why the figure
+          it can state exactly is the one it states. */}
+      {activityBars && (
+        <CardShell className={CARD_HUE}>
+          <CardHeader
+            title="Your activity"
+            subtitle={`${served!.activity.total} transaction${served!.activity.total === 1 ? "" : "s"} · last 6 months`}
+          />
+          <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
+            <span className="font-display text-[26px] font-light leading-none tabular-nums">
+              {served!.activity.total}
+            </span>
+            <div className="h-[104px]">
+              <VolumeBars
+                data={activityBars}
+                format={(v) => `${v}`}
+              />
+            </div>
+          </div>
+        </CardShell>
+      )}
+
+      {/* ── Market mood ────────────────────────────────────────────────────
+          Absent rather than zeroed when the upstream is down: a dial resting
+          on 0 reads as "Extreme Fear", which is a market call nobody made. */}
+      {served?.fearGreed && (
+        <CardShell className={CARD_HUE}>
+          <CardHeader title="Market mood" subtitle="Fear &amp; Greed index" />
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 pb-4">
+            <MoodGauge score={served.fearGreed.value} />
+            {served.fearGreed.classification && (
+              <span className="rounded-full bg-foreground/[0.07] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                {served.fearGreed.classification}
+              </span>
+            )}
+            <span className="text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/60">
+              Source · alternative.me
+            </span>
+          </div>
+        </CardShell>
+      )}
     </div>
   )
 }

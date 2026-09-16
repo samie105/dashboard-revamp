@@ -77,6 +77,30 @@ export class CryptoBackendClient {
     return this.request<CryptoWalletDetails>("/wallets/me", {}, { signal })
   }
 
+  /** The dashboard's Insights strip: monthly activity counts, and the market
+   *  Fear & Greed reading. `fearGreed` is null when that upstream is down —
+   *  the whole response still succeeds. */
+  async getInsights(months?: number, signal?: AbortSignal) {
+    const query = months === undefined ? "" : `?months=${months}`
+    return this.request<{
+      activity: {
+        months: Array<{
+          month: string
+          total: number
+          sent: number
+          received: number
+          swapped: number
+          bridged: number
+          failed: number
+        }>
+        total: number
+        from: string | null
+        to: string | null
+      }
+      fearGreed: { value: number; classification: string; recordedAt: string } | null
+    }>(`/insights${query}`, {}, { signal })
+  }
+
   async listNetworks(signal?: AbortSignal): Promise<CryptoNetwork[]> {
     return this.request<CryptoNetwork[]>("/networks", {}, { signal })
   }

@@ -1,58 +1,93 @@
 "use client"
 
+/**
+ * The rail.
+ *
+ * This is the treatment previewed at /dashboard-unauth, folded back into the
+ * real sidebar as that preview's header always said it should be. What changed
+ * from the old rail:
+ *
+ *  · NO icon chip per row. Every glyph used to sit on a rounded-square fill,
+ *    which at twenty-odd rows read as twenty buttons stacked in a column. Bare
+ *    glyphs let the LABELS carry the list.
+ *  · The active row is TINTED, not grey. A neutral fill says "hovered"; gold
+ *    fading out to the right says "you are here" — and gold meaning active
+ *    state is exactly what the system reserves it for.
+ *  · Section eyebrows are plain text, not collapse toggles. The rail is short
+ *    enough not to need folding, and the chevrons added an affordance per
+ *    group that nobody was asking for.
+ *  · Ecosystem links sit below a rule as a quieter footnote rather than as a
+ *    group of equal weight to Overview.
+ *  · Venues that do not exist yet LIST but do not link — dimmed, not
+ *    pressable, marked "Soon". Listing them as live links would send someone
+ *    to a 404; leaving them out would hide a roadmap people already look for.
+ *
+ * Kept from the old rail because they are app behaviour, not styling: the
+ * spot-registry prefetch on Trade hover, the Vivid AI live dot, and
+ * <SidebarRail> for the drag-to-collapse edge.
+ */
+
 import * as React from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useVividOptional } from "@worldstreet/vivid-voice"
-import gsap from "gsap"
 import { cn } from "@/lib/utils"
 import { prefetchSpotMarkets } from "@/lib/spot-markets"
+import { useAuth } from "@/components/auth-provider"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Activity01Icon,
-  Exchange01Icon,
-  ChartCandlestickIcon,
-  File01Icon,
-  DashboardSquare01Icon,
-  RepeatIcon,
-  Shield01Icon,
-  Chart01Icon,
-  UserIcon,
-  UserGroup02Icon,
-  Wallet01Icon,
-  ArrowDown01Icon,
-  Store01Icon,
+  Award01Icon,
+  BalanceScaleIcon,
   BarChartIcon,
   Book01Icon,
+  BotIcon,
   Brain01Icon,
-  Video01Icon,
-  DollarCircleIcon,
-  Rocket01Icon,
-  EyeIcon,
-  GameController01Icon,
+  Chart01Icon,
+  ChartCandlestickIcon,
   ChartUpIcon,
+  Coins01Icon,
+  DashboardSquare01Icon,
+  DollarCircleIcon,
+  Exchange01Icon,
+  EyeIcon,
+  File01Icon,
+  GameController01Icon,
+  GiftIcon,
+  HelpCircleIcon,
   LinkSquare02Icon,
+  Notification03Icon,
+  PieChartIcon,
+  RepeatIcon,
+  Rocket01Icon,
+  Settings02Icon,
+  Shield01Icon,
+  Store01Icon,
+  Timer01Icon,
+  UserGroup02Icon,
+  UserIcon,
+  UserMultipleIcon,
+  Video01Icon,
+  Wallet01Icon,
 } from "@hugeicons/core-free-icons"
 
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
+  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  useSidebar,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar"
 
 // ── Navigation data ──────────────────────────────────────────────────────
 
 interface NavItem {
   name: string
-  description: string
   url: string
   icon: typeof Activity01Icon
   badge?: string
@@ -64,60 +99,82 @@ interface NavItem {
 
 interface NavGroup {
   label: string
-  icon: typeof Activity01Icon
   items: NavItem[]
 }
 
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    icon: DashboardSquare01Icon,
     items: [
-      { name: "Dashboard", description: "Account snapshot", url: "/", icon: DashboardSquare01Icon },
+      { name: "Dashboard", url: "/", icon: DashboardSquare01Icon },
       // Points at /wallet/modern, not /wallet: on the production branch
       // /wallet is still the legacy wallet, and this row means the new one.
-      { name: "Wallet", description: "Your Worldstreet wallet", url: "/wallet/modern", icon: Wallet01Icon },
+      { name: "Wallet", url: "/wallet/modern", icon: Wallet01Icon },
       // Assets merged into Portfolio: the two rows led to the same money in
       // two shapes, so there is one row and one page. `/assets` redirects.
-      { name: "Portfolio", description: "Everything you own", url: "/portfolio", icon: ChartCandlestickIcon },
-      { name: "Transactions", description: "History and receipts", url: "/transactions", icon: File01Icon },
+      { name: "Portfolio", url: "/portfolio", icon: ChartCandlestickIcon },
+      { name: "Transactions", url: "/transactions", icon: File01Icon },
     ],
   },
   {
     label: "Trading",
-    icon: Activity01Icon,
     items: [
-      { name: "Markets", description: "Full market screener", url: "/trading/markets", icon: BarChartIcon },
-      { name: "Spot Trading", description: "Multi-chain DEX trading", url: "/trade", icon: Exchange01Icon },
-      { name: "Futures", description: "Perpetual contracts", url: "/trade?market=futures", icon: Chart01Icon, badge: "Live" },
-      { name: "Swap", description: "One-tap conversion", url: "/swap", icon: RepeatIcon },
-      { name: "Bridge", description: "Arbitrum USDC to Intertrain", url: "/bridge", icon: RepeatIcon },
+      { name: "Markets", url: "/trading/markets", icon: BarChartIcon },
+      { name: "Spot Trading", url: "/trade", icon: Exchange01Icon },
+      { name: "Futures", url: "/trade?market=futures", icon: Chart01Icon, badge: "Live" },
+      { name: "Margin Trading", url: "#", icon: BalanceScaleIcon, soon: true },
+      { name: "Binary Trading", url: "#", icon: Timer01Icon, soon: true },
+      { name: "Swap", url: "/swap", icon: RepeatIcon },
+      { name: "Bridge", url: "/bridge", icon: Activity01Icon },
+    ],
+  },
+  {
+    label: "Automate",
+    items: [
+      { name: "Copy Trading", url: "#", icon: UserMultipleIcon, soon: true },
+      { name: "Trading Bots", url: "#", icon: BotIcon, soon: true },
+    ],
+  },
+  {
+    label: "Earn",
+    items: [
+      { name: "Staking", url: "#", icon: Coins01Icon, soon: true },
+      { name: "Launchpad", url: "#", icon: Rocket01Icon, soon: true },
+      { name: "Investments", url: "#", icon: PieChartIcon, soon: true },
+      { name: "Airdrops", url: "#", icon: GiftIcon, soon: true },
+      { name: "Rewards", url: "#", icon: Award01Icon, soon: true },
     ],
   },
   {
     label: "Account",
-    icon: UserIcon,
     items: [
-      { name: "Profile", description: "Personal details", url: "/profile", icon: UserIcon },
-      { name: "Security", description: "2FA and password", url: "/security", icon: Shield01Icon },
-      { name: "Verification", description: "KYC Status", url: "https://www.worldstreetgold.com/verification", icon: File01Icon },
+      { name: "Profile", url: "/profile", icon: UserIcon },
+      { name: "Security", url: "/security", icon: Shield01Icon },
+      { name: "Verification", url: "https://www.worldstreetgold.com/verification", icon: File01Icon },
     ],
   },
-  {
-    label: "Worldstreet",
-    icon: Rocket01Icon,
-    items: [
-      { name: "Store", description: "Official merchandise", url: "https://shop.worldstreetgold.com", icon: Store01Icon },
-      { name: "Academy", description: "Learn trading & crypto", url: "https://academy.worldstreetgold.com", icon: Book01Icon },
-      { name: "Social", description: "Community hub", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon },
-      { name: "Xstream", description: "Live streaming", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
-      { name: "Forex Trading", description: "Currency pairs", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
-      { name: "Vivid AI", description: "AI-powered insights", url: "/vivid", icon: Brain01Icon },
-      { name: "Vision", description: "Vision broadcast", url: "https://vision.worldstreetgold.com", icon: EyeIcon },
-      { name: "Arcade", description: "Games", url: "https://arcade.worldstreetgold.com", icon: GameController01Icon },
-      { name: "Prediction", description: "Prediction markets", url: "https://prediction.worldstreetgold.com", icon: ChartUpIcon },
-    ],
-  },
+]
+
+/** The ecosystem rail — other Worldstreet properties. A footnote, not a peer
+ *  of the groups above, so it renders below a rule and one step dimmer. */
+const ECOSYSTEM: NavItem[] = [
+  { name: "Store", url: "https://shop.worldstreetgold.com", icon: Store01Icon },
+  { name: "Academy", url: "https://academy.worldstreetgold.com", icon: Book01Icon },
+  { name: "Social", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon },
+  { name: "Xstream", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
+  { name: "Forex Trading", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
+  { name: "Vivid AI", url: "/vivid", icon: Brain01Icon },
+  { name: "Vision", url: "https://vision.worldstreetgold.com", icon: EyeIcon },
+  { name: "Arcade", url: "https://arcade.worldstreetgold.com", icon: GameController01Icon },
+  { name: "Prediction", url: "https://prediction.worldstreetgold.com", icon: ChartUpIcon },
+]
+
+/** The tray above the user card. None of these have a screen yet, so all three
+ *  list as "Soon" rather than as links to nowhere. */
+const UTILITY: NavItem[] = [
+  { name: "Settings", url: "#", icon: Settings02Icon, soon: true },
+  { name: "Support", url: "#", icon: HelpCircleIcon, soon: true },
+  { name: "Notifications", url: "#", icon: Notification03Icon, soon: true },
 ]
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -127,69 +184,113 @@ function isExternal(url: string) {
 }
 
 function isActiveRoute(pathname: string, url: string) {
-  if (isExternal(url)) return false
+  if (isExternal(url) || url === "#") return false
   if (url === "/") return pathname === "/"
-  return pathname === url || pathname.startsWith(`${url}/`)
+  // Query-string rows (Futures) point at a page another row already owns, so
+  // matching on the path alone would light both. Compare the path only, and
+  // let the row without a query win.
+  const [path, query] = url.split("?")
+  if (query) return false
+  return pathname === path || pathname.startsWith(`${path}/`)
 }
 
-/**
- * One row height, one icon size, one gap — every nav row in the rail shares
- * these so the left edge reads as a single column instead of five.
- */
-const ROW = "h-9 gap-3 rounded-xl px-2.5 text-[13.5px] [&_svg]:size-[18px]"
-
-// ── Section eyebrow ──────────────────────────────────────────────────────
-
-function SectionLabel({
-  children,
-  active,
-  open,
-  onToggle,
-}: {
-  children: React.ReactNode
-  active?: boolean
-  open: boolean
-  onToggle: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors",
-        active ? "text-primary" : "text-muted-foreground/70 hover:text-foreground",
-      )}
-    >
-      <span className="flex-1 text-left">{children}</span>
-      <HugeiconsIcon
-        icon={ArrowDown01Icon}
-        className={cn(
-          "size-3.5 shrink-0 text-muted-foreground/40 transition-transform duration-200",
-          open && "rotate-180",
-        )}
-      />
-    </button>
-  )
-}
-
-// ── Nav row ──────────────────────────────────────────────────────────────
+/* The active fill: gold at the left edge, gone by 78%. A flat tint reads as a
+   pressed button; a fade reads as light falling from the marker. */
+const ACTIVE_FILL =
+  "bg-[linear-gradient(90deg,color-mix(in_oklab,var(--primary)_17%,transparent)_0%,color-mix(in_oklab,var(--primary)_6%,transparent)_45%,transparent_78%)]"
 
 function NavRow({
   item,
-  isActive,
+  active,
   collapsed,
-  /** Products rail rows are a footnote: no icon chip, dimmer by default. */
+  /** Ecosystem rows are a footnote: dimmer by default. */
   muted,
   trailing,
 }: {
   item: NavItem
-  isActive: boolean
+  active: boolean
   collapsed: boolean
   muted?: boolean
   trailing?: React.ReactNode
 }) {
   const ext = isExternal(item.url)
+
+  const inner = (
+    <>
+      {/* The marker. It is the only gold SHAPE in the rail, which is what lets
+          a glance find the current row without reading a single label. */}
+      {active && !collapsed && (
+        <span
+          aria-hidden
+          className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
+        />
+      )}
+      <HugeiconsIcon
+        icon={item.icon}
+        className={cn(
+          "size-[18px] shrink-0",
+          item.soon
+            ? "text-muted-foreground/35"
+            : active
+              ? "text-primary"
+              : muted
+                ? "text-muted-foreground/70"
+                : "text-muted-foreground",
+        )}
+      />
+      {!collapsed && (
+        <>
+          <span className="flex-1 truncate">{item.name}</span>
+          {trailing}
+          {ext && (
+            <HugeiconsIcon icon={LinkSquare02Icon} className="size-3 shrink-0 text-muted-foreground/35" />
+          )}
+          {item.soon && (
+            /* Neutral, never gold. Gold means brand, primary action and
+               ACTIVE state; a row that cannot be reached is the opposite of
+               all three, and a gold "Soon" chip is the single fastest way to
+               make an unbuilt feature look like the one to click. */
+            <span className="shrink-0 rounded-md bg-foreground/[0.07] px-1.5 py-px text-[10px] font-bold uppercase leading-[1.4] tracking-[0.04em] text-muted-foreground/70">
+              Soon
+            </span>
+          )}
+          {item.badge && !item.soon && (
+            /* Outlined, not filled: a status marker sits beside the label, it
+               does not compete with the active row's own gold. */
+            <span className="shrink-0 rounded-md border border-primary/40 px-1.5 py-px text-[10px] font-bold uppercase leading-[1.4] tracking-[0.04em] text-primary">
+              {item.badge}
+            </span>
+          )}
+        </>
+      )}
+    </>
+  )
+
+  const cls = cn(
+    // ws-icon-mono: these glyphs are single-colour by design (their tone IS
+    // the state), so they opt out of the global two-tone gold treatment.
+    "ws-icon-mono relative flex h-9 w-full items-center gap-3 rounded-xl px-2.5 text-[13.5px] transition-colors duration-150",
+    collapsed && "justify-center px-0",
+    item.soon
+      // Legible enough to read as a real destination, plainly not pressable.
+      // No hover fill, no pointer — the row must not pretend to respond.
+      ? "cursor-not-allowed text-muted-foreground/45"
+      : active
+        ? cn(ACTIVE_FILL, "font-medium text-foreground")
+        : muted
+          ? "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+          : "text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground",
+  )
+
+  if (item.soon) {
+    return (
+      <SidebarMenuItem>
+        <span aria-disabled="true" title={`${item.name} — coming soon`} className={cls}>
+          {inner}
+        </span>
+      </SidebarMenuItem>
+    )
+  }
 
   return (
     <SidebarMenuItem
@@ -198,193 +299,38 @@ function NavRow({
       // between the market rail opening full and opening as skeletons.
       onPointerEnter={item.url === "/trade" ? prefetchSpotMarkets : undefined}
     >
-      <SidebarMenuButton
-        tooltip={collapsed ? item.name : item.description || item.name}
-        isActive={isActive}
-        render={
-          item.soon ? (
-            <span aria-disabled title="Futures is not open yet" />
-          ) : ext ? (
-            <a href={item.url} target="_blank" rel="noopener noreferrer" />
-          ) : (
-            <Link href={item.url} />
-          )
-        }
-        className={cn(
-          ROW,
-          "relative transition-colors duration-150 data-[active=true]:bg-transparent",
-          collapsed && "justify-center px-0",
-          isActive
-            ? "bg-foreground/[0.06] font-medium text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
-            : muted
-              ? "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
-              : "text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground",
-        )}
-      >
-        {muted ? (
-          <HugeiconsIcon
-            icon={item.icon}
-            className={cn("shrink-0", isActive ? "text-primary" : "text-muted-foreground/80")}
-          />
-        ) : (
-          <span
-            className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-[9px] transition-colors",
-              isActive ? "bg-primary/[0.18]" : "bg-foreground/[0.05]",
-            )}
-          >
-            <HugeiconsIcon
-              icon={item.icon}
-              className={cn("shrink-0", isActive ? "text-primary" : "text-muted-foreground")}
-            />
-          </span>
-        )}
-
-        {!collapsed && (
-          <>
-            <span className="flex-1 truncate">{item.name}</span>
-            {trailing}
-            {ext && (
-              <HugeiconsIcon
-                icon={LinkSquare02Icon}
-                className="shrink-0 text-muted-foreground/35 [&_svg]:size-3"
-              />
-            )}
-            {item.badge && (
-              <span
-                className={cn(
-                  "rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-none",
-                  // A "Soon" marker must not wear gold: gold means active or
-                  // primary in this system, and this is the opposite.
-                  item.soon
-                    ? "bg-foreground/[0.08] text-muted-foreground"
-                    : "bg-primary/12 text-primary",
-                )}
-              >
-                {item.badge}
-              </span>
-            )}
-          </>
-        )}
-
-        {/* Active marker — a gold tick on the rail's edge, the one place gold
-            carries "you are here". */}
-        {isActive && !collapsed && (
-          <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
-        )}
-      </SidebarMenuButton>
+      {ext ? (
+        <a href={item.url} target="_blank" rel="noopener noreferrer" title={item.name} className={cls}>
+          {inner}
+        </a>
+      ) : (
+        <Link href={item.url} title={item.name} aria-current={active ? "page" : undefined} className={cls}>
+          {inner}
+        </Link>
+      )}
     </SidebarMenuItem>
   )
 }
 
-// ── Collapsible Nav Group ────────────────────────────────────────────────
-
-function CollapsibleNavGroup({
-  group,
-  pathname,
-  isCollapsed,
-  muted,
-  itemActive,
-  itemTrailing,
-}: {
-  group: NavGroup
-  pathname: string
-  isCollapsed: boolean
-  /** Footnote rows (the products rail): bare icon, dimmer resting state. */
-  muted?: boolean
-  /** Overrides "is this row lit" for rows with their own liveness (Vivid). */
-  itemActive?: (item: NavItem) => boolean
-  itemTrailing?: (item: NavItem) => React.ReactNode
-}) {
-  const isRowActive = (item: NavItem) =>
-    itemActive ? itemActive(item) : isActiveRoute(pathname, item.url)
-  const hasActive = group.items.some(isRowActive)
-  // Open by default — a rail of collapsed labels reads as dead space, and
-  // every section here is short enough to live on screen at once.
-  const [open, setOpen] = React.useState(true)
-  const contentRef = React.useRef<HTMLDivElement>(null)
-
-  // auto-expand when a child becomes active
-  React.useEffect(() => {
-    if (hasActive && !open) setOpen(true)
-  }, [hasActive]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // GSAP expand/collapse animation
-  React.useEffect(() => {
-    const el = contentRef.current
-    if (!el) return
-    if (open) {
-      gsap.set(el, { display: "block", overflow: "hidden" })
-      gsap.fromTo(
-        el,
-        { height: 0, opacity: 0 },
-        { height: "auto", opacity: 1, duration: 0.25, ease: "power2.out" },
-      )
-      gsap.fromTo(
-        el.children[0]?.children ?? [],
-        { x: -6, opacity: 0 },
-        { x: 0, opacity: 1, duration: 0.2, stagger: 0.03, ease: "power2.out", delay: 0.05 },
-      )
-    } else {
-      gsap.to(el, {
-        height: 0,
-        opacity: 0,
-        duration: 0.2,
-        ease: "power2.in",
-        onComplete: () => {
-          gsap.set(el, { display: "none" })
-        },
-      })
-    }
-  }, [open])
-
-  if (isCollapsed) {
-    return (
-      <>
-        {group.items.map((item) => (
-          <NavRow
-            key={item.name}
-            item={item}
-            isActive={isRowActive(item)}
-            collapsed
-            muted={muted}
-            trailing={itemTrailing?.(item)}
-          />
-        ))}
-      </>
-    )
+function Eyebrow({ children, collapsed }: { children: React.ReactNode; collapsed: boolean }) {
+  if (collapsed) {
+    // Collapsed, a label would be a truncated smudge. A rule keeps the
+    // grouping without pretending to be readable.
+    return <span aria-hidden className="mx-auto my-2 block h-px w-5 bg-border/60" />
   }
-
   return (
-    <div className="flex flex-col">
-      <SectionLabel active={hasActive} open={open} onToggle={() => setOpen((v) => !v)}>
-        {group.label}
-      </SectionLabel>
-
-      <div ref={contentRef} style={{ display: open ? "block" : "none" }}>
-        <SidebarMenu className="gap-0.5">
-          {group.items.map((item) => (
-            <NavRow
-              key={item.name}
-              item={item}
-              isActive={isRowActive(item)}
-              collapsed={false}
-              muted={muted}
-              trailing={itemTrailing?.(item)}
-            />
-          ))}
-        </SidebarMenu>
-      </div>
-    </div>
+    <span className="block px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60">
+      {children}
+    </span>
   )
 }
-
-// ── Main Sidebar ─────────────────────────────────────────────────────────
 
 export function AppSidebar() {
   const pathname = usePathname()
   const { state } = useSidebar()
-  const isCollapsed = state === "collapsed"
+  const collapsed = state === "collapsed"
+  const { user } = useAuth()
+
   const _vivid = useVividOptional()
   const vividState = _vivid?.state ?? "idle"
   const vividIsActive = vividState !== "idle" && vividState !== "error"
@@ -399,8 +345,10 @@ export function AppSidebar() {
     error: "bg-red-400",
   }
 
-  const productGroup = NAV_GROUPS[NAV_GROUPS.length - 1]
-  const navGroups = NAV_GROUPS.slice(0, -1)
+  const displayName = user
+    ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader"
+    : "Trader"
+  const initial = displayName.charAt(0).toUpperCase()
 
   return (
     <Sidebar
@@ -411,8 +359,8 @@ export function AppSidebar() {
          atmosphere only — it never sits behind text. */
       className="py-4 pl-4 pr-1 [&_[data-slot=sidebar-inner]]:relative [&_[data-slot=sidebar-inner]]:overflow-hidden [&_[data-slot=sidebar-inner]]:rounded-[22px] [&_[data-slot=sidebar-inner]]:border [&_[data-slot=sidebar-inner]]:border-border/60 [&_[data-slot=sidebar-inner]]:bg-sidebar/58 dark:[&_[data-slot=sidebar-inner]]:bg-sidebar/28 [&_[data-slot=sidebar-inner]]:shadow-[0_8px_32px_-12px_rgb(0_0_0/0.28)] [&_[data-slot=sidebar-inner]]:ring-0 [&_[data-slot=sidebar-inner]]:backdrop-blur-2xl [&_[data-slot=sidebar-inner]]:backdrop-saturate-150"
     >
-      {/* Ambient wash — warm gold bloom at the crown falling into the stone,
-          the desktop-only gradient. Behind everything, never interactive. */}
+      {/* Ambient wash — warm gold bloom at the crown falling into the stone.
+          Behind everything, never interactive. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(125%_78%_at_8%_0%,var(--sidebar-glow)_0%,transparent_68%)]"
@@ -424,13 +372,13 @@ export function AppSidebar() {
 
       {/* Header — the ecosystem lockup, identical to Academy's: gold W mark
           26px + "WorldStreet" Poppins SemiBold 15 + gold app eyebrow. */}
-      <SidebarHeader className="gap-0 px-2.5 pb-3 pt-4">
-        <div className={cn("flex items-center gap-2.5", isCollapsed && "justify-center")}>
+      <SidebarHeader className="gap-0 px-2.5 pb-2 pt-4">
+        <div className={cn("flex items-center gap-2.5", collapsed && "justify-center")}>
           <Link
             href="/"
             className={cn(
               "flex min-w-0 flex-1 items-center gap-2.5 rounded-xl outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-ring",
-              isCollapsed && "flex-none justify-center",
+              collapsed && "flex-none justify-center",
             )}
           >
             <Image
@@ -441,7 +389,7 @@ export function AppSidebar() {
               className="h-[26px] w-[26px] shrink-0 object-contain"
               priority
             />
-            {!isCollapsed && (
+            {!collapsed && (
               <span className="grid min-w-0 flex-1 text-left leading-tight">
                 <span className="truncate font-display text-[15px] font-semibold tracking-[-0.01em]">
                   WorldStreet
@@ -452,44 +400,97 @@ export function AppSidebar() {
               </span>
             )}
           </Link>
-          {!isCollapsed && (
+          {!collapsed && (
             <SidebarTrigger className="size-7 shrink-0 rounded-lg text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground" />
           )}
         </div>
-        {isCollapsed && (
+        {collapsed && (
           <SidebarTrigger className="mx-auto mt-2 size-7 shrink-0 rounded-lg text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground" />
         )}
       </SidebarHeader>
 
-      <SidebarContent className="gap-0 px-2.5 pb-4 pt-1">
-        {navGroups.map((group) => (
-          <SidebarGroup key={group.label} className="px-0 py-2">
-            <CollapsibleNavGroup group={group} pathname={pathname} isCollapsed={isCollapsed} />
-          </SidebarGroup>
+      <SidebarContent className="slim-scroll gap-0 px-2.5 pb-4">
+        {NAV_GROUPS.map((group) => (
+          <React.Fragment key={group.label}>
+            <Eyebrow collapsed={collapsed}>{group.label}</Eyebrow>
+            <SidebarMenu className="gap-0.5">
+              {group.items.map((item) => (
+                <NavRow
+                  key={item.name}
+                  item={item}
+                  active={isActiveRoute(pathname, item.url)}
+                  collapsed={collapsed}
+                />
+              ))}
+            </SidebarMenu>
+          </React.Fragment>
         ))}
 
-        {/* Products rail — the rest of the ecosystem, one compact row each.
-            Collapsible like every other section: it's the longest group and
-            the least-used, so it's the one people most want to fold away. */}
-        <SidebarGroup className="px-0 py-2">
-          <CollapsibleNavGroup
-            group={productGroup}
-            pathname={pathname}
-            isCollapsed={isCollapsed}
-            muted
-            itemActive={(item) =>
-              isActiveRoute(pathname, item.url) || (item.name === "Vivid AI" && vividIsActive)
-            }
-            itemTrailing={(item) =>
-              item.name === "Vivid AI" && vividIsActive ? (
-                <span
-                  className={cn("inline-block size-1.5 shrink-0 rounded-full", VIVID_DOT[vividState])}
-                />
-              ) : undefined
-            }
-          />
-        </SidebarGroup>
+        {/* Everything below this rule leaves this app, so it looks like it
+            does. */}
+        <span aria-hidden className="mx-2.5 my-3 block h-px bg-border/50" />
+
+        <SidebarMenu className="gap-0.5">
+          {ECOSYSTEM.map((item) => (
+            <NavRow
+              key={item.name}
+              item={item}
+              active={
+                isActiveRoute(pathname, item.url) || (item.name === "Vivid AI" && vividIsActive)
+              }
+              collapsed={collapsed}
+              muted
+              trailing={
+                item.name === "Vivid AI" && vividIsActive ? (
+                  <span className={cn("inline-block size-1.5 shrink-0 rounded-full", VIVID_DOT[vividState])} />
+                ) : undefined
+              }
+            />
+          ))}
+        </SidebarMenu>
+
+        <span aria-hidden className="mx-2.5 my-3 block h-px bg-border/50" />
+
+        <SidebarMenu className="gap-0.5">
+          {UTILITY.map((item) => (
+            <NavRow key={item.name} item={item} active={false} collapsed={collapsed} />
+          ))}
+        </SidebarMenu>
       </SidebarContent>
+
+      <SidebarFooter className="bg-sidebar/80 px-2.5 pb-4 pt-0 backdrop-blur-xl">
+        <span aria-hidden className="mb-2 block h-px bg-border/50" />
+        <Link
+          href="/profile"
+          className={cn(
+            "flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-foreground/[0.04]",
+            collapsed && "justify-center px-0",
+          )}
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/[0.15] text-[13px] font-semibold text-primary">
+            {user?.imageUrl ? (
+              <Image
+                src={user.imageUrl}
+                alt=""
+                width={32}
+                height={32}
+                className="size-8 object-cover"
+                unoptimized
+              />
+            ) : (
+              initial
+            )}
+          </span>
+          {!collapsed && (
+            <span className="grid min-w-0 flex-1 text-left leading-tight">
+              <span className="truncate text-[13px] font-medium">{displayName}</span>
+              <span className="truncate text-[11px] text-muted-foreground">
+                {user?.email || "Your account"}
+              </span>
+            </span>
+          )}
+        </Link>
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )
