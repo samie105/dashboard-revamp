@@ -409,6 +409,33 @@ input[type="range"]::-moz-range-track {
   .spark-fill, .spark-dot { animation: none; opacity: 1; }
 }
 
+/* ── Ticker tape — the markets strip ───────────────────────────────────────
+   The row's children are rendered TWICE and the track slides exactly one
+   copy's width, so the loop has no seam and no JS runs per frame. Width comes
+   from the content, so the duration is set inline per instance.
+
+   It stops on hover (you cannot read a moving price you are trying to click)
+   and under prefers-reduced-motion, where a scrolling strip in peripheral
+   vision is exactly the kind of motion that causes trouble. */
+@keyframes ws-ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.ws-ticker-track {
+  animation: ws-ticker var(--ticker-duration, 60s) linear infinite;
+  will-change: transform;
+}
+.ws-ticker:hover .ws-ticker-track,
+.ws-ticker:focus-within .ws-ticker-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-ticker-track { animation: none; }
+  /* Without the animation the doubled content is dead weight, so the strip
+     becomes an ordinary horizontally scrollable row instead. */
+  .ws-ticker { overflow-x: auto; }
+}
+
 /* ── Modal grammar — every popup in the app shares one entrance.
    Backdrop: deep frost (bg-black/45 + blur) fading in. Centered dialogs
    pop with a slight spring overshoot; bottom sheets slide up on a long

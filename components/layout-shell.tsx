@@ -4,6 +4,8 @@ import * as React from "react"
 import { usePathname } from "next/navigation"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { PreviewSidebar } from "@/components/preview/sidebar"
+import { PREVIEW_ROUTES, PREVIEW_PATHS } from "@/components/preview/routes"
 import { Navbar } from "@/components/navbar"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { IncomingCallProvider } from "@/components/community/incoming-call-provider"
@@ -13,8 +15,11 @@ import { LiquidGlassPointer } from "@/components/liquid-glass"
 import { prefetchSpotMarkets } from "@/lib/spot-markets"
 import { MigrationNoticePopup } from "@/components/crypto/MigrationNotice"
 
-/** Routes that render full-bleed (no sidebar / top-nav / navbar). */
-const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
+/** Routes that render full-bleed (no sidebar / top-nav / navbar).
+ *  The trading preview joins them for the same reason /trade is here: the
+ *  market rail, the chart and the book need the width, and a nav rail beside
+ *  a four-column workspace leaves the chart as the narrowest panel. */
+const FULL_BLEED_ROUTES = ["/trade", "/trade-unauth", "/vivid"]
 const AUTH_ROUTES = ["/login", "/register"]
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
@@ -52,7 +57,16 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   // must live HERE, under the z-10 content layer, so the translucent sidebar
   // and navbar blur it through — inside <main> it could never reach behind
   // the rail.
-  const isDashboard = pathname === "/" || pathname === "/wallet/modern"
+  // The *-unauth previews lead with the same Balance hero as the pages they
+  // redesign, so they get the same atmosphere.
+  const isPreview = PREVIEW_PATHS.includes(pathname)
+  // The atmosphere belongs to pages that LEAD with a balance hero. The
+  // transactions preview leads with a table, so it stays out of the list.
+  const isDashboard =
+    pathname === "/" ||
+    pathname === "/wallet/modern" ||
+    pathname === PREVIEW_ROUTES.dashboard ||
+    pathname === PREVIEW_ROUTES.wallet
 
   if (isFullBleed) {
     return (
@@ -104,9 +118,12 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
           )}
           <div className="relative z-10 flex flex-1 overflow-hidden">
             <SidebarProvider>
-              {/* Sidebar hidden on mobile — bottom nav replaces it */}
+              {/* Sidebar hidden on mobile — bottom nav replaces it.
+                  The dashboard design preview renders its OWN rail so the
+                  live app's navigation cannot shift under people who are
+                  using it; see components/dashboard-unauth/preview-sidebar. */}
               <div className="hidden md:flex">
-                <AppSidebar />
+                {isPreview ? <PreviewSidebar /> : <AppSidebar />}
               </div>
               <div className="flex flex-1 flex-col w-full overflow-hidden">
                 <Navbar />

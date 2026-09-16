@@ -4,7 +4,17 @@ import * as React from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
 
-const PUBLIC_ROUTES = ["/login", "/register"]
+// Kept in step with `isPublicRoute` in middleware.ts. The *-unauth routes are
+// the dummy-data design previews — no session, no wallet, nothing to gate.
+const PUBLIC_ROUTES = [
+  "/login",
+  "/register",
+  "/dashboard-unauth",
+  "/wallet-unauth",
+  "/transactions-unauth",
+  "/markets-unauth",
+  "/trade-unauth",
+]
 const LOGIN_URL =
   process.env.NODE_ENV === "production"
     ? "https://www.worldstreetgold.com/login"

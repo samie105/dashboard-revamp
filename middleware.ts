@@ -7,10 +7,24 @@ const LOGIN_URL = isProduction
   ? "https://www.worldstreetgold.com/login"
   : "/login"
 
-// Routes that don't require authentication
+// Routes that don't require authentication.
+//
+// The *-unauth routes are DESIGN PREVIEWS: redesigned
+// screens rendered entirely from the dummy data under components/*-unauth/.
+// They touch no wallet, no ledger and no market feed, so there is nothing
+// behind them to protect, and they are deliberately reachable without a
+// session so the layouts can be reviewed and shared. Both are noindex'd (see
+// each page's metadata). AuthGate carries matching entries — the two lists
+// have to agree, or the middleware waves the request through and the gate
+// then bounces it to /login on the client.
 const isPublicRoute = createRouteMatcher([
   "/login(.*)",
   "/register(.*)",
+  "/dashboard-unauth",
+  "/wallet-unauth",
+  "/transactions-unauth",
+  "/markets-unauth",
+  "/trade-unauth",
 ])
 
 // The crypto backend's health/readiness probes are public by design. They are
