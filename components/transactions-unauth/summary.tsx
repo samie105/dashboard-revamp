@@ -17,7 +17,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { CardShell } from "@/components/ui/system"
-import { CARD_HUE } from "@/components/preview/surface"
+import { CARD_HUE } from "@/components/ui/surface"
 import { NET_USD, SUMMARY, formatUSD } from "@/components/transactions-unauth/tx-data"
 
 type Cell = {

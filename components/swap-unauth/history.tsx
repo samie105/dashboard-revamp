@@ -23,7 +23,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowRight01Icon, LinkSquare02Icon } from "@hugeicons/core-free-icons"
 import { CardShell, CardHeader, EmptyState, Segmented } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { CARD_HUE } from "@/components/preview/surface"
+import { CARD_HUE } from "@/components/ui/surface"
 import {
   SWAPS,
   SWAP_STATS,

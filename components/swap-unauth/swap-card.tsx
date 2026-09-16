@@ -29,7 +29,7 @@ import {
 import { cn } from "@/lib/utils"
 import { CardShell, Eyebrow } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { HERO_HUE } from "@/components/preview/surface"
+import { HERO_HUE } from "@/components/ui/surface"
 import {
   QUOTE_TTL_SECONDS,
   SLIPPAGE_OPTIONS,

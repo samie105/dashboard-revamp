@@ -11,8 +11,8 @@ import { Tick02Icon, Cancel01Icon, ArrowRight01Icon } from "@hugeicons/core-free
 import { cn } from "@/lib/utils"
 import { CardShell, CardHeader, WeightBar } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { CARD_HUE } from "@/components/preview/surface"
-import { MiniSpark, MoodGauge, ScoreRing, VolumeBars } from "@/components/preview/charts"
+import { CARD_HUE } from "@/components/ui/surface"
+import { MiniSpark, MoodGauge, ScoreRing, VolumeBars } from "@/components/ui/charts"
 import {
   HOLDINGS,
   HOLDINGS_TOTAL,

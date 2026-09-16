@@ -197,6 +197,21 @@ export function useAccountHistory(accounts: AccountSpec[]) {
           }
         : { today: null, week: null, month: null }
 
-    return { sparkSeries, changes, loading }
+    /* The total curve, exported rather than thrown away.
+     *
+     * `totalRaw` is already the thing the Today / 7d / 30d percentages are
+     * computed from, so a chart drawn from it cannot disagree with the
+     * figures printed beside it. Recomputing the same sum in the component
+     * would be a second copy of this arithmetic, which is exactly the
+     * two-figures-that-disagree problem `usePortfolioTotal` exists to stop.
+     *
+     * Resampled onto the same point count the per-account sparks use, so
+     * every curve on the screen is the same width. */
+    const totalSeries =
+      totalLen >= 2
+        ? Array.from({ length: SPARK_POINTS }, (_, i) => sampleAt(totalRaw, i, SPARK_POINTS))
+        : totalRaw
+
+    return { sparkSeries, totalSeries, changes, loading }
   }, [accounts, priceSeries, symbols])
 }

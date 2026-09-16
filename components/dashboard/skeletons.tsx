@@ -15,43 +15,62 @@ import { Skeleton } from "@/components/ui/skeleton"
 export function WalletCardSkeleton() {
   return (
     <div className="flex flex-col gap-4">
-      {/* Greeting — one line: "Good morning, Dev · Wednesday, Sep 2". */}
-      <Skeleton className="h-4 w-64 max-w-full" />
-
-      {/* Hero — eyebrow, the figure, and what it covers. */}
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-3 w-36 max-w-[60%]" />
-        <Skeleton className="h-11 w-[min(17rem,78%)]" />
-        <Skeleton className="h-3 w-56 max-w-full" />
-      </div>
-
-      {/* Account cards. */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-3 rounded-2xl bg-card p-4">
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-7 w-32 max-w-[70%]" />
-            <Skeleton className="h-8 w-full" />
-            <div className="flex items-center justify-between gap-3">
-              <Skeleton className="h-2.5 w-24 max-w-[50%]" />
-              <Skeleton className="h-2.5 w-10 shrink-0" />
+      {/* Reshaped for the two-pane hero. A loading state has to have the SHAPE
+          of what is coming — the old one drew a vertical stack and the card it
+          stood in for is now a single pane split left/right, so it jolted the
+          layout the moment data landed. */}
+      <div className="overflow-hidden rounded-2xl bg-card">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          {/* Left: name, date, eyebrow, the figure, the cash chip, cards. */}
+          <div className="flex flex-col gap-5 p-5 lg:p-6">
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-5 w-40 max-w-[60%]" />
+              <Skeleton className="h-3 w-56 max-w-full" />
+            </div>
+            <div className="flex flex-col gap-2.5">
+              <Skeleton className="h-3 w-36 max-w-[55%]" />
+              <Skeleton className="h-12 w-[min(15rem,75%)]" />
+              <Skeleton className="h-7 w-44 max-w-[70%] rounded-full" />
+            </div>
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="flex flex-col gap-2 p-3">
+                  <Skeleton className="h-2.5 w-14" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-2.5 w-24 max-w-full" />
+                </div>
+              ))}
             </div>
           </div>
-        ))}
+
+          {/* Right: the two toggles, then the chart. */}
+          <div className="flex flex-col gap-4 border-t border-border/40 p-5 lg:border-l lg:border-t-0 lg:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <Skeleton className="h-8 w-48 max-w-[60%] rounded-full" />
+              <Skeleton className="h-8 w-32 max-w-[35%] rounded-full" />
+            </div>
+            <Skeleton className="h-[196px] w-full rounded-xl" />
+          </div>
+        </div>
+
+        {/* Counters. */}
+        <div className="grid grid-cols-2 gap-px 2xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 p-4">
+              <div className="flex flex-col gap-1.5">
+                <Skeleton className="h-2.5 w-20" />
+                <Skeleton className="h-2.5 w-24" />
+              </div>
+              <Skeleton className="h-5 w-10 shrink-0" />
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Action rail — two labelled pills and the overflow circle. They share
-          the row rather than each claiming a fixed 112px. */}
-      <div className="flex items-center gap-2">
-        <Skeleton className="h-12 min-w-0 flex-1 rounded-full sm:max-w-40" />
-        <Skeleton className="h-12 min-w-0 flex-1 rounded-full sm:max-w-40" />
-        <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
-      </div>
-
-      {/* Chain strip — clipped, not overflowing: it scrolls when it's real. */}
-      <div className="flex gap-4 overflow-hidden">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-5 w-28 shrink-0" />
+      {/* Action rail — four pills that share the row. */}
+      <div className="flex items-center gap-2.5">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 min-w-0 flex-1 rounded-full sm:max-w-36" />
         ))}
       </div>
     </div>

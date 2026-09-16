@@ -12,9 +12,9 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { CardShell, CardHeader, Segmented, WeightBar } from "@/components/ui/system"
-import { MiniSpark } from "@/components/preview/charts"
+import { MiniSpark } from "@/components/ui/charts"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { CARD_HUE } from "@/components/preview/surface"
+import { CARD_HUE } from "@/components/ui/surface"
 import {
   GAINERS,
   HOLDINGS,

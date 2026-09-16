@@ -22,7 +22,7 @@ import { Search01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { CardShell, CardHeader, EmptyState, Segmented, WeightBar } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { CARD_HUE } from "@/components/preview/surface"
+import { CARD_HUE } from "@/components/ui/surface"
 import {
   BALANCE_ROWS,
   BALANCES_TOTAL,

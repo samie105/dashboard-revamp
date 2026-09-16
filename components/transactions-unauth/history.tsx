@@ -40,7 +40,7 @@ import {
 import { cn } from "@/lib/utils"
 import { CardShell, CardHeader, EmptyState, Segmented, Eyebrow } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { CARD_HUE } from "@/components/preview/surface"
+import { CARD_HUE } from "@/components/ui/surface"
 import {
   KIND_FILTERS,
   RANGE_FILTERS,

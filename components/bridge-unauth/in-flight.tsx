@@ -20,7 +20,7 @@ import { Tick02Icon, LinkSquare02Icon, ArrowRight01Icon } from "@hugeicons/core-
 import { cn } from "@/lib/utils"
 import { CardShell, CardHeader, EmptyState, Segmented } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { CARD_HUE } from "@/components/preview/surface"
+import { CARD_HUE } from "@/components/ui/surface"
 import {
   HISTORY,
   IN_FLIGHT,

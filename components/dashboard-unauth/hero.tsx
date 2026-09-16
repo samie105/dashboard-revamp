@@ -34,8 +34,8 @@ import {
   Segmented,
   allocationColor,
 } from "@/components/ui/system"
-import { AreaChart, Donut, MiniSpark } from "@/components/preview/charts"
-import { HERO_HUE } from "@/components/preview/surface"
+import { AreaChart, Donut, MiniSpark } from "@/components/ui/charts"
+import { HERO_HUE } from "@/components/ui/surface"
 import {
   ACCOUNTS,
   HOLDINGS,

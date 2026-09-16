@@ -17,8 +17,8 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Tick02Icon, Cancel01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { CardShell, CardHeader, Eyebrow } from "@/components/ui/system"
-import { CARD_HUE } from "@/components/preview/surface"
-import { ScoreRing } from "@/components/preview/charts"
+import { CARD_HUE } from "@/components/ui/surface"
+import { ScoreRing } from "@/components/ui/charts"
 import { SECURITY_FLAGS, WITHDRAWAL_LIMIT, formatUSD } from "@/components/wallet-unauth/wallet-data"
 
 export function Limits() {

@@ -19,8 +19,8 @@ import { ChartUpIcon, ChartDownIcon, FireIcon } from "@hugeicons/core-free-icons
 import { cn } from "@/lib/utils"
 import { CardShell, CardHeader } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { CARD_HUE } from "@/components/preview/surface"
-import { MiniSpark } from "@/components/preview/charts"
+import { CARD_HUE } from "@/components/ui/surface"
+import { MiniSpark } from "@/components/ui/charts"
 import {
   GAINERS,
   HOT,

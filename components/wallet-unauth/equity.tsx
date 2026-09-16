@@ -32,7 +32,7 @@ import {
   DeltaChip,
   Eyebrow,
 } from "@/components/ui/system"
-import { HERO_HUE } from "@/components/preview/surface"
+import { HERO_HUE } from "@/components/ui/surface"
 import { ChainPicker } from "@/components/wallet-unauth/chain-picker"
 import { useReceiveModal } from "@/components/wallet-unauth/receive-modal"
 import {

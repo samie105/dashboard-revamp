@@ -14,8 +14,8 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { CardShell, allocationColor } from "@/components/ui/system"
-import { CARD_HUE } from "@/components/preview/surface"
-import { MiniSpark } from "@/components/preview/charts"
+import { CARD_HUE } from "@/components/ui/surface"
+import { MiniSpark } from "@/components/ui/charts"
 import {
   CAP_SERIES,
   DOMINANCE_SPLIT,
