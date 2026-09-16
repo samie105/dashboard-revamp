@@ -837,9 +837,9 @@ export function PortfolioClient() {
   /* Closed trades and their realized P&L — the thing Open Positions can never
      show, since a closed position isn't a position any more. */
   const { fills: hlFills, isLoading: hlFillsLoading } = useHyperliquidFills()
-  const hlUnrealizedPnl = hlPositions.reduce((sum, p) => sum + numOr(p.unrealizedPnl, 0), 0)
-  const hlRealizedPnl = hlFills.reduce((sum, f) => sum + f.closedPnl, 0)
-  const hlClosedFills = hlFills.filter((f) => f.closedPnl !== 0)
+  const hlUnrealizedPnl = (hlPositions ?? []).reduce((sum, p) => sum + numOr(p.unrealizedPnl, 0), 0)
+  const hlRealizedPnl = (hlFills ?? []).reduce((sum, f) => sum + f.closedPnl, 0)
+  const hlClosedFills = (hlFills ?? []).filter((f) => f.closedPnl !== 0)
 
   // Receive must always resolve the modern (self-custodial) wallet's own
   // addresses, never the legacy Privy wallet-provider's — ReceivePanel falls
