@@ -62,7 +62,7 @@ export function MarketList({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Symbol or name"
-            className="h-9 w-full min-w-0 rounded-full bg-surface-sunken pl-8 pr-8 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="h-9 w-full min-w-0 rounded-full bg-foreground/[0.05] pl-8 pr-8 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
           />
           {query && (
             <button

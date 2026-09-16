@@ -298,7 +298,7 @@ export function TransferModal({
                   key={p}
                   type="button"
                   onClick={() => setAmount(((source.balance * p) / 100).toFixed(2))}
-                  className="h-8 rounded-full bg-surface-sunken text-[12px] font-semibold text-muted-foreground ring-1 ring-transparent transition-colors hover:text-foreground hover:ring-primary/35"
+                  className="h-8 rounded-full bg-foreground/[0.05] text-[12px] font-semibold text-muted-foreground ring-1 ring-transparent transition-colors hover:text-foreground hover:ring-primary/35"
                 >
                   {p === 100 ? "Max" : `${p}%`}
                 </button>
@@ -320,7 +320,7 @@ export function TransferModal({
                         "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors",
                         s.key === sourceKey
                           ? "bg-primary/[0.12] ring-1 ring-primary/40"
-                          : "bg-surface-sunken hover:bg-accent/60",
+                          : "bg-foreground/[0.05] hover:bg-accent/60",
                       )}
                     >
                       <CoinAvatar symbol="USDC" size="md" />
@@ -345,7 +345,7 @@ export function TransferModal({
                 "h-12 rounded-xl text-[14.5px] font-semibold transition-colors",
                 ready
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "cursor-not-allowed bg-surface-sunken text-muted-foreground",
+                  : "cursor-not-allowed bg-foreground/[0.05] text-muted-foreground",
               )}
             >
               {value > 0 ? "Review" : "Enter an amount"}
@@ -355,7 +355,7 @@ export function TransferModal({
 
         {step === "review" && (
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2.5 rounded-xl bg-surface-sunken p-4">
+            <div className="flex flex-col gap-2.5 rounded-xl bg-foreground/[0.05] p-4">
               <Row label="Amount" value={`${usd(value)} USDC`} strong />
               <Row label="From" value={source.label} />
               <Row label="To" value={kind === "withdraw" ? "Modern wallet" : "Futures account"} />
@@ -386,7 +386,7 @@ export function TransferModal({
               <button
                 type="button"
                 onClick={() => setStep("amount")}
-                className="h-12 flex-1 rounded-xl bg-surface-sunken text-[14px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                className="h-12 flex-1 rounded-xl bg-foreground/[0.05] text-[14px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
               >
                 Back
               </button>
@@ -416,7 +416,7 @@ export function TransferModal({
                 "h-12 rounded-xl text-[14px] font-semibold transition-colors",
                 settled
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "bg-surface-sunken text-muted-foreground hover:text-foreground",
+                  : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground",
               )}
             >
               {settled ? "Done" : "Close — this keeps running"}

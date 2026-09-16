@@ -81,7 +81,7 @@ export function Balances() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search"
-                className="h-8 w-36 rounded-full bg-surface-sunken pl-7.5 pr-7 text-[13px] outline-none ring-0 placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="h-8 w-36 rounded-full bg-foreground/[0.05] pl-7.5 pr-7 text-[13px] outline-none ring-0 placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
               />
               {query && (
                 <button
@@ -113,7 +113,7 @@ export function Balances() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search assets"
-            className="h-8 w-44 rounded-full bg-surface-sunken pl-7.5 pr-3 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="h-8 w-44 rounded-full bg-foreground/[0.05] pl-7.5 pr-3 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
           />
         </label>
         <label className="flex cursor-pointer select-none items-center gap-2 text-[12.5px] text-muted-foreground transition-colors hover:text-foreground">

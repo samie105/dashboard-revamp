@@ -154,7 +154,7 @@ export function Hero() {
                 type="button"
                 onClick={copyUid}
                 title="Copy UID"
-                className="ws-icon-mono inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1.5 text-[11px] font-semibold tabular-nums text-muted-foreground transition-colors hover:text-foreground"
+                className="ws-icon-mono inline-flex shrink-0 items-center gap-1.5 rounded-full bg-foreground/[0.05] px-2.5 py-1.5 text-[11px] font-semibold tabular-nums text-muted-foreground transition-colors hover:text-foreground"
               >
                 UID {DEMO_UID}
                 <HugeiconsIcon icon={copied ? Tick02Icon : Copy01Icon} className="h-3.5 w-3.5" />

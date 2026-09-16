@@ -385,7 +385,7 @@ export function History() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search hash, token, address…"
-            className="h-9 w-full min-w-0 rounded-full bg-surface-sunken pl-8 pr-8 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="h-9 w-full min-w-0 rounded-full bg-foreground/[0.05] pl-8 pr-8 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
           />
           {query && (
             <button
@@ -472,7 +472,7 @@ function Select({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={options[0]?.label}
-        className="h-9 appearance-none rounded-full bg-surface-sunken pl-3.5 pr-8 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        className="h-9 appearance-none rounded-full bg-foreground/[0.05] pl-3.5 pr-8 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
         {options.map((o) => (
           <option key={o.key} value={o.key} className="bg-popover text-popover-foreground">

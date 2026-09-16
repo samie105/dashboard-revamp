@@ -37,3 +37,17 @@ export const HERO_HUE =
  *  strength, so the cards belong to the hero without competing with it. */
 export const CARD_HUE =
   "bg-[radial-gradient(110%_80%_at_0%_0%,rgba(250,204,21,0.07)_0%,transparent_64%),radial-gradient(90%_70%_at_100%_0%,rgba(250,204,21,0.035)_0%,transparent_60%),linear-gradient(160deg,rgba(250,204,21,0.022)_0%,rgba(250,204,21,0.01)_100%)]"
+
+/**
+ * PANEL — the recessed surface inside a preview card.
+ *
+ * NOT `bg-foreground/[0.05]`. That token is #101013 in dark, whose blue channel
+ * leads red and green by 3, and against the warm gold card hue those three
+ * points read as a blue-grey slab sitting in a gold pane. It is the right
+ * token for the app's neutral surfaces and the wrong one inside a tinted card.
+ *
+ * This is derived from --foreground, which is pure neutral in both themes, so
+ * the panel takes its colour FROM the card behind it rather than bringing one
+ * of its own. Same class in light mode, where it darkens instead.
+ */
+export const PANEL = "bg-foreground/[0.05]"

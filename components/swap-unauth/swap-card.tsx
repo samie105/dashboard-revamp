@@ -108,7 +108,7 @@ function TokenPicker({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Token or chain"
-                className="h-8 w-full min-w-0 rounded-full bg-surface-sunken pl-7 pr-7 text-[13px] outline-none placeholder:text-muted-foreground"
+                className="h-8 w-full min-w-0 rounded-full bg-foreground/[0.05] pl-7 pr-7 text-[13px] outline-none placeholder:text-muted-foreground"
               />
               {query && (
                 <button
@@ -178,17 +178,21 @@ function TokenPicker({
  * Counts a quote down and reports when it lapses. Starts on mount, never at
  * render, so the server and the client agree on the first paint.
  */
-function useQuoteClock(resetKey: string) {
+function useQuoteClock(resetKey: string, active: boolean) {
   const [left, setLeft] = React.useState(QUOTE_TTL_SECONDS)
 
   React.useEffect(() => {
     setLeft(QUOTE_TTL_SECONDS)
+    // A quote for no amount is not a quote, so it does not age. Without this
+    // the card sat at "expired" over an empty form, and the CTA wore the
+    // amber refresh styling while reading "Enter an amount".
+    if (!active) return
     const id = setInterval(() => setLeft((s) => (s <= 0 ? 0 : s - 1)), 1000)
     return () => clearInterval(id)
-  }, [resetKey])
+  }, [resetKey, active])
 
   const refresh = React.useCallback(() => setLeft(QUOTE_TTL_SECONDS), [])
-  return { left, expired: left <= 0, refresh }
+  return { left, expired: active && left <= 0, refresh }
 }
 
 function Line({
@@ -257,7 +261,7 @@ export function SwapCard({
   const q = quoteFor({ from, to, fromAmount: value, slippagePct: slippage })
 
   // Any change to the terms is a new quote, so the clock restarts.
-  const clock = useQuoteClock(`${fromKey}|${toKey}|${amount}|${slippage}`)
+  const clock = useQuoteClock(`${fromKey}|${toKey}|${amount}|${slippage}`, value > 0)
 
   const flip = () => {
     onFromKey(toKey)
@@ -292,7 +296,7 @@ export function SwapCard({
           </div>
 
           {/* You pay */}
-          <div className="flex flex-col gap-2 rounded-2xl bg-surface-sunken p-4">
+          <div className="flex flex-col gap-2 rounded-2xl bg-foreground/[0.05] p-4">
             <span className="flex items-baseline justify-between gap-2">
               <Eyebrow className="text-[11px]">You pay</Eyebrow>
               <span className={cn("text-[11.5px] tabular-nums", tooBig ? "text-debit" : "text-muted-foreground")}>
@@ -343,7 +347,7 @@ export function SwapCard({
           </div>
 
           {/* You get */}
-          <div className="flex flex-col gap-2 rounded-2xl bg-surface-sunken p-4">
+          <div className="flex flex-col gap-2 rounded-2xl bg-foreground/[0.05] p-4">
             <span className="flex items-baseline justify-between gap-2">
               <Eyebrow className="text-[11px]">You get</Eyebrow>
               <span className="text-[11.5px] tabular-nums text-muted-foreground">
@@ -384,7 +388,7 @@ export function SwapCard({
                     "h-7 rounded-full px-2.5 text-[11.5px] font-semibold tabular-nums transition-colors",
                     slippage === s
                       ? "bg-primary/[0.16] text-primary ring-1 ring-primary/45"
-                      : "bg-surface-sunken text-muted-foreground hover:text-foreground",
+                      : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {s}%
@@ -400,7 +404,7 @@ export function SwapCard({
           <div
             className={cn(
               "flex items-center gap-3 rounded-xl p-3",
-              clock.expired ? "bg-debit-chip" : "bg-surface-sunken",
+              clock.expired ? "bg-debit-chip" : "bg-foreground/[0.05]",
             )}
           >
             <span className="relative flex h-9 w-9 shrink-0 items-center justify-center">
@@ -429,10 +433,14 @@ export function SwapCard({
             </span>
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="text-[12.5px] font-semibold">
-                {clock.expired ? "Quote expired" : "Quote expires"}
+                {clock.expired ? "Quote expired" : value > 0 ? "Quote expires" : "Indicative rate"}
               </span>
               <span className="text-[11.5px] leading-tight text-muted-foreground">
-                {clock.expired ? "Prices have moved on" : `Locked for ${clock.left}s at this rate`}
+                {clock.expired
+                  ? "Prices have moved on"
+                  : value > 0
+                    ? `Locked for ${clock.left}s at this rate`
+                    : "Enter an amount to lock a quote"}
               </span>
             </span>
             <button
@@ -444,7 +452,7 @@ export function SwapCard({
             </button>
           </div>
 
-          <div className="flex flex-col gap-2 rounded-xl bg-surface-sunken p-3.5">
+          <div className="flex flex-col gap-2 rounded-xl bg-foreground/[0.05] p-3.5">
             <Eyebrow className="text-[11px]">Quote</Eyebrow>
             <Line
               label="Rate"
@@ -480,7 +488,7 @@ export function SwapCard({
 
           {/* The working, shown. The live page's own subtitle promises this
               and then shows nothing of it. */}
-          <div className="flex flex-col gap-2 rounded-xl bg-surface-sunken p-3.5">
+          <div className="flex flex-col gap-2 rounded-xl bg-foreground/[0.05] p-3.5">
             <Eyebrow className="text-[11px]">Route · {q.hops.length} step{q.hops.length > 1 ? "s" : ""}</Eyebrow>
             <ol className="flex flex-col gap-2">
               {q.hops.map((h, i) => (
@@ -514,7 +522,7 @@ export function SwapCard({
                 ? "bg-warning text-background hover:bg-warning/90"
                 : ready
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "cursor-not-allowed bg-surface-sunken text-muted-foreground",
+                  : "cursor-not-allowed bg-foreground/[0.05] text-muted-foreground",
             )}
           >
             {cta}

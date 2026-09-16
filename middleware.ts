@@ -26,6 +26,7 @@ const isPublicRoute = createRouteMatcher([
   "/markets-unauth",
   "/trade-unauth",
   "/swap-unauth",
+  "/bridge-unauth",
 ])
 
 // The crypto backend's health/readiness probes are public by design. They are

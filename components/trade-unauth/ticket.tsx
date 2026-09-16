@@ -133,7 +133,7 @@ export function Ticket({
   return (
     <div className="flex h-full flex-col gap-3.5 p-4">
       {/* Side. The ONLY green/red in the panel. */}
-      <div className="grid grid-cols-2 gap-1.5 rounded-full bg-surface-sunken p-1">
+      <div className="grid grid-cols-2 gap-1.5 rounded-full bg-foreground/[0.05] p-1">
         {(["buy", "sell"] as Side[]).map((s) => (
           <button
             key={s}
@@ -171,7 +171,7 @@ export function Ticket({
       {type !== "market" && (
         <div className="flex flex-col gap-1.5">
           <Eyebrow className="text-[11px]">{type === "limit" ? "Limit price" : "Stop price"}</Eyebrow>
-          <div className="flex items-center gap-2 rounded-xl bg-surface-sunken px-3 ring-1 ring-border/50 focus-within:ring-primary/50">
+          <div className="flex items-center gap-2 rounded-xl bg-foreground/[0.05] px-3 ring-1 ring-border/50 focus-within:ring-primary/50">
             <input
               value={limitPrice ?? ""}
               onChange={(e) => onLimitPrice(e.target.value === "" ? null : Number(e.target.value.replace(/[^0-9.]/g, "")))}
@@ -197,7 +197,7 @@ export function Ticket({
         </span>
         <div
           className={cn(
-            "flex items-center gap-2 rounded-xl bg-surface-sunken px-3 ring-1 transition-colors",
+            "flex items-center gap-2 rounded-xl bg-foreground/[0.05] px-3 ring-1 transition-colors",
             tooBig ? "ring-debit/60" : "ring-border/50 focus-within:ring-primary/50",
           )}
         >
@@ -220,7 +220,7 @@ export function Ticket({
               key={p}
               type="button"
               onClick={() => setAmount((spendable * (p / 100)).toFixed(2))}
-              className="h-8 rounded-full bg-surface-sunken text-[12px] font-semibold text-muted-foreground ring-1 ring-transparent transition-colors hover:text-foreground hover:ring-primary/35"
+              className="h-8 rounded-full bg-foreground/[0.05] text-[12px] font-semibold text-muted-foreground ring-1 ring-transparent transition-colors hover:text-foreground hover:ring-primary/35"
             >
               {p === 100 ? "Max" : `${p}%`}
             </button>
@@ -247,7 +247,7 @@ export function Ticket({
                 "h-7 rounded-full px-2.5 text-[11.5px] font-semibold tabular-nums transition-colors",
                 slippage === s
                   ? "bg-primary/[0.16] text-primary ring-1 ring-primary/45"
-                  : "bg-surface-sunken text-muted-foreground hover:text-foreground",
+                  : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground",
               )}
             >
               {s}%
@@ -262,7 +262,7 @@ export function Ticket({
         className={cn(
           "h-12 shrink-0 rounded-xl text-[14.5px] font-semibold transition-colors",
           !ready
-            ? "cursor-not-allowed bg-surface-sunken text-muted-foreground"
+            ? "cursor-not-allowed bg-foreground/[0.05] text-muted-foreground"
             : side === "buy"
               ? "bg-credit text-white hover:bg-credit/90"
               : "bg-debit text-white hover:bg-debit/90",
@@ -274,7 +274,7 @@ export function Ticket({
       {/* ── The summary. This is what fills the rail the live screen leaves
              empty, and it is the part a person actually reads before they
              press the button. ─────────────────────────────────────────── */}
-      <div className="flex flex-col gap-2 rounded-xl bg-surface-sunken p-3.5">
+      <div className="flex flex-col gap-2 rounded-xl bg-foreground/[0.05] p-3.5">
         <Eyebrow className="text-[11px]">Order summary</Eyebrow>
         <Line
           label={side === "buy" ? "You pay" : "You sell"}
@@ -311,7 +311,7 @@ export function Ticket({
       </div>
 
       {/* Balances, kept — but now below the thing you came to read. */}
-      <div className="flex flex-col gap-2 rounded-xl bg-surface-sunken p-3.5">
+      <div className="flex flex-col gap-2 rounded-xl bg-foreground/[0.05] p-3.5">
         <Eyebrow className="text-[11px]">Your wallet on {venueOf(market)}</Eyebrow>
         {[market.base, market.quote].map((sym) => (
           <span key={sym} className="flex items-center gap-2.5">

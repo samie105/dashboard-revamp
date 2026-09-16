@@ -153,7 +153,7 @@ export function ChainPicker({
             onClick={copy}
             title={copied ? "Copied" : `Copy ${chain.address}`}
             className={cn(
-              "ws-icon-mono group flex items-center gap-2.5 rounded-xl bg-surface-sunken px-3 py-2.5 text-left transition-colors hover:bg-accent/60",
+              "ws-icon-mono group flex items-center gap-2.5 rounded-xl bg-foreground/[0.05] px-3 py-2.5 text-left transition-colors hover:bg-accent/60",
               copied && "ring-1 ring-credit/40",
             )}
           >

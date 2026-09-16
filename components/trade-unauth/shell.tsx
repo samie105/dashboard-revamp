@@ -61,7 +61,7 @@ export function TradeShell() {
               "ws-icon-mono inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-3 text-[13px] font-semibold transition-colors sm:px-4",
               a.primary
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "bg-surface-sunken text-muted-foreground hover:text-foreground",
+                : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground",
             )}
           >
             <HugeiconsIcon icon={a.icon} className="h-4 w-4" />

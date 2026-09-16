@@ -93,7 +93,7 @@ function ChainRail({
                 "flex shrink-0 items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3.5 text-left transition-all active:scale-[0.97] motion-reduce:active:scale-100",
                 active
                   ? "bg-primary/[0.14] ring-1 ring-primary/45"
-                  : "bg-surface-sunken ring-1 ring-transparent hover:bg-accent/60",
+                  : "bg-foreground/[0.05] ring-1 ring-transparent hover:bg-accent/60",
               )}
             >
               <CoinAvatar symbol={c.symbol} size="md" />
@@ -117,7 +117,7 @@ function ChainRail({
 
 function QrPanel({ chain, payload }: { chain: ChainGroup; payload: string }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl bg-surface-sunken p-5">
+    <div className="flex flex-col items-center gap-3 rounded-2xl bg-foreground/[0.05] p-5">
       {/* No white plate. The symbol is drawn in the foreground ink straight
           onto the pane, so the modal's own surface is its background. */}
       <div className="w-full max-w-[13.5rem]">
@@ -146,7 +146,7 @@ function AddressPanel({ chain }: { chain: ChainGroup }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2.5 rounded-2xl bg-surface-sunken p-4">
+      <div className="flex flex-col gap-2.5 rounded-2xl bg-foreground/[0.05] p-4">
         <Eyebrow className="text-[11px]">Your address</Eyebrow>
         <div className="flex items-start gap-2">
           <span
@@ -194,7 +194,7 @@ function AddressPanel({ chain }: { chain: ChainGroup }) {
           </button>
           <button
             type="button"
-            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-surface-sunken px-4 text-[13.5px] font-semibold ring-1 ring-border/60 transition-colors hover:bg-accent/60"
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-foreground/[0.05] px-4 text-[13.5px] font-semibold ring-1 ring-border/60 transition-colors hover:bg-accent/60"
           >
             Share
           </button>
@@ -241,7 +241,7 @@ function RequestPanel({ chain }: { chain: ChainGroup }) {
     <div className="flex flex-col gap-4 sm:grid sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)] sm:items-start sm:gap-5">
       <QrPanel chain={chain} payload={link} />
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2.5 rounded-2xl bg-surface-sunken p-4">
+        <div className="flex flex-col gap-2.5 rounded-2xl bg-foreground/[0.05] p-4">
           <Eyebrow className="text-[11px]">Amount (optional)</Eyebrow>
           <div className="flex items-center gap-2 rounded-xl bg-card/60 px-3 ring-1 ring-border/50 focus-within:ring-primary/45">
             <span className="text-[15px] text-muted-foreground">$</span>
@@ -259,7 +259,7 @@ function RequestPanel({ chain }: { chain: ChainGroup }) {
           </span>
         </div>
 
-        <div className="flex flex-col gap-2.5 rounded-2xl bg-surface-sunken p-4">
+        <div className="flex flex-col gap-2.5 rounded-2xl bg-foreground/[0.05] p-4">
           <Eyebrow className="text-[11px]">Payment link</Eyebrow>
           <span className="break-all font-mono text-[12px] leading-snug text-muted-foreground">{link}</span>
           <button
