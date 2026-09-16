@@ -132,6 +132,7 @@ import { chainLabel } from "@/lib/spot-market-search"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
 import { EmptyState, Skel } from "@/components/ui/system"
+import { CARD_HUE } from "@/components/ui/surface"
 import {
   BackAction,
   Segmented,
@@ -2734,7 +2735,7 @@ export function TradeClient() {
             list={list}
             selected={selection}
             onSelect={setSelection}
-            className="ws-pane hidden w-[280px] shrink-0 overflow-hidden rounded-2xl bg-card xl:flex"
+            className={`ws-pane hidden w-[280px] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} xl:flex`}
             style={
               {
                 "--ws-pane-x": "-10px",
@@ -2774,7 +2775,7 @@ export function TradeClient() {
                against the viewport so it scales with the device instead of
                being tuned to one handset, and capped so the panes below it
                stay reachable without a scroll. */
-            className="ws-pane h-[min(44dvh,420px)] shrink-0 overflow-hidden rounded-2xl bg-card sm:h-[min(50dvh,460px)] lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1"
+            className={`ws-pane h-[min(44dvh,420px)] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} sm:h-[min(50dvh,460px)] lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1`}
             style={{ "--ws-pane-delay": "0ms" } as React.CSSProperties}
             data-vivid-target="price-chart"
             data-vivid-label="The candlestick price chart"
@@ -2826,7 +2827,7 @@ export function TradeClient() {
           {market === "spot" ? (
             <OrdersPanel
               showTabs={view.orderTabs}
-              className="ws-pane hidden h-[224px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex"
+              className={`ws-pane hidden h-[224px] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:flex`}
               style={{ "--ws-pane-delay": "90ms" } as React.CSSProperties}
             />
           ) : (
@@ -2835,7 +2836,7 @@ export function TradeClient() {
               busyKey={busyKey}
               onClosePosition={handleClose}
               onCancelOrder={handleCancel}
-              className="ws-pane hidden h-[224px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex"
+              className={`ws-pane hidden h-[224px] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:flex`}
               style={{ "--ws-pane-delay": "90ms" } as React.CSSProperties}
             />
           )}
@@ -2847,7 +2848,7 @@ export function TradeClient() {
               nothing. Positions/Orders open full-screen rather than
               squeezed into this strip's leftover height — the same room
               they get in the always-on desktop rail. */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card lg:hidden">
+          <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:hidden`}>
             {market === "spot" ? (
               /* Same problem as futures had: a full order history table has
                  no readable room left under the chart. Opens full-screen
@@ -2977,7 +2978,7 @@ export function TradeClient() {
             /* Its own card, separated by the workspace gap rather than by a
                hairline drawn down its edge — the same treatment the chart,
                the orders pane and the ticket already get. */
-            className="hidden w-[248px] shrink-0 overflow-hidden rounded-2xl bg-card lg:flex xl:w-[276px]"
+            className={`hidden w-[248px] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:flex xl:w-[276px]`}
           />
         )}
 
@@ -2985,7 +2986,7 @@ export function TradeClient() {
             modal the action bar opens, so the chart owns the screen. */}
         <aside
           aria-label="Order ticket"
-          className="slim-scroll ws-pane hidden shrink-0 overflow-hidden rounded-2xl bg-card lg:block lg:w-[320px] lg:overflow-y-auto xl:w-[344px]"
+          className={`slim-scroll ws-pane hidden shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:block lg:w-[320px] lg:overflow-y-auto xl:w-[344px]`}
           style={
             {
               "--ws-pane-x": "10px",

@@ -180,14 +180,30 @@ export function MarketHeader({
   }, [price, lastTick])
 
   const flash = flashGen > 0 ? lastTick : null
+
+  /* The move shown beside the price, over the longest window we can actually
+     measure. Computed once here so the strip below can skip whatever the
+     headline already used — otherwise a market with no 24h series printed the
+     same 1h figure twice, six inches apart, in one header. */
+  const headline: { value: number; label: string } | null =
+    changePct !== null
+      ? { value: changePct, label: "24H" }
+      : typeof changePct7d === "number"
+        ? { value: changePct7d, label: "7D" }
+        : typeof changePct1h === "number"
+          ? { value: changePct1h, label: "1H" }
+          : null
   const hasRange =
     high24h !== null && low24h !== null && high24h > low24h && price > 0
+  /* Gated on what the strip will ACTUALLY render, not on what data exists.
+     The windows the headline has already claimed are excluded below, so
+     testing for their raw presence here could open an empty flex row. */
   const stats =
     showMarketStats &&
     (volume24h !== null ||
       hasRange ||
-      typeof changePct1h === "number" ||
-      typeof changePct7d === "number")
+      (typeof changePct1h === "number" && headline?.label !== "1H") ||
+      (typeof changePct7d === "number" && headline?.label !== "7D"))
 
   return (
     <header
@@ -288,12 +304,15 @@ export function MarketHeader({
             )}
           </span>
 
-          {changePct !== null ? (
-            <DeltaChip value={changePct} className="shrink-0" />
-          ) : (
-            <span className="shrink-0 text-[12px] text-subtle">
-              24h change unavailable
+          {headline ? (
+            <span className="flex shrink-0 items-center gap-1.5">
+              <DeltaChip value={headline.value} />
+              <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
+                {headline.label}
+              </span>
             </span>
+          ) : (
+            <span className="shrink-0 text-[12px] text-subtle">No move to report yet</span>
           )}
 
           {/* Liveness — one pulse per poll that lands, never a loop. */}
@@ -317,10 +336,10 @@ export function MarketHeader({
 
         {stats && (
           <div className="scrollbar-none flex min-w-0 items-end gap-5 overflow-x-auto pb-0.5">
-            {typeof changePct1h === "number" && (
+            {typeof changePct1h === "number" && headline?.label !== "1H" && (
               <WindowChange label="1h" value={changePct1h} />
             )}
-            {typeof changePct7d === "number" && (
+            {typeof changePct7d === "number" && headline?.label !== "7D" && (
               <WindowChange label="7d" value={changePct7d} />
             )}
             {volume24h !== null && (
