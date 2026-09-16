@@ -125,6 +125,9 @@ function getCryptoStats(transactions: UnifiedTransaction[]): TransactionStats {
     ...DEFAULT_STATS,
     totalDeposits: deposits.length,
     totalWithdrawals: outgoing.length,
+    // `spot_trade` was never counted, so "Moved" reported swaps and transfers
+    // only and silently dropped every executed spot trade from the figure.
+    totalTrades: transactions.filter((transaction) => transaction.type === "spot_trade").length,
     totalSwaps: transactions.filter((transaction) => transaction.type === "swap").length,
     totalTransfers: transactions.filter((transaction) => transaction.type === "transfer").length,
     depositVolume: knownDepositVolume,

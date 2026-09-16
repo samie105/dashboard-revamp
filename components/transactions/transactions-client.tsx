@@ -9,9 +9,11 @@ import {
   Eyebrow,
   IconAction,
   PageHeader,
+  SectionRule,
   Segmented,
   SkeletonRows,
 } from "@/components/ui/system"
+import { CARD_HUE } from "@/components/ui/surface"
 import {
   ArrowDown01Icon,
   ArrowUp01Icon,
@@ -79,7 +81,10 @@ const STATUS_CONFIG: Record<
 > = {
   pending:    { label: "Pending",    icon: Clock01Icon,             chip: "bg-warning-chip text-warning",                  step: 0 },
   processing: { label: "Processing", icon: Loading03Icon,           chip: "bg-warning-chip text-warning",                  step: 1 },
-  completed:  { label: "Completed",  icon: CheckmarkCircle01Icon,   chip: "bg-credit-chip text-credit",                    step: 2 },
+  /* Neutral, not green. "Nothing went wrong" is the DEFAULT case, and a
+     credit-coloured pill on 28 of 30 rows makes the two that did go wrong
+     harder to find — while spending the money-in colour on a non-event. */
+  completed:  { label: "Completed",  icon: CheckmarkCircle01Icon,   chip: "bg-foreground/[0.07] text-muted-foreground",    step: 2 },
   failed:     { label: "Failed",     icon: AlertCircleIcon,         chip: "bg-debit-chip text-debit",                      step: 1, terminal: "failed" },
   cancelled:  { label: "Cancelled",  icon: Cancel01Icon,            chip: "bg-foreground/[0.06] text-muted-foreground",    step: 1, terminal: "stopped" },
   expired:    { label: "Expired",    icon: Clock01Icon,             chip: "bg-foreground/[0.06] text-muted-foreground",    step: 1, terminal: "stopped" },
@@ -372,7 +377,9 @@ export function TransactionsClient() {
   const filtered = Boolean(filters.type || filters.status || filters.search || hasDateFilter)
 
   return (
-    <div className="flex flex-col gap-5 p-4 md:p-6 lg:p-8">
+    // overflow-x-hidden for the same reason the other pages carry it: the
+    // scrollable filter rails inside must not widen the document on a phone.
+    <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
       <PageHeader
         title="Transactions"
         subtitle="Every movement of money, across all your accounts"
@@ -399,35 +406,50 @@ export function TransactionsClient() {
         }
       />
 
-      {/* ── Summary — four figures, in the money-direction palette ── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {(statCards ?? Array.from({ length: 4 }, () => null)).map((card, i) => (
-          <div key={card?.label ?? i} className="flex flex-col gap-1.5 rounded-2xl bg-card/80 p-4">
-            {card ? (
-              <>
-                <Eyebrow>{card.label}</Eyebrow>
-                <span className={`text-[19px] font-semibold tabular-nums tracking-tight ${card.tone}`}>
-                  {card.value}
-                </span>
-                <p className="text-[13px] text-muted-foreground">{card.sub}</p>
-              </>
-            ) : (
-              <>
-                <span className="skel h-2.5 w-16 rounded" />
-                <span className="skel h-5 w-24 rounded" />
-                <span className="skel h-3 w-20 rounded" />
-              </>
-            )}
+      {/* ── Summary ──────────────────────────────────────────────────────
+             Four loose cards became one, divided by hairlines. Loose cards
+             read as four unrelated facts; one panel reads as a statement with
+             four lines, which is what it is. Every figure derives from the
+             SAME rows the list below renders (see getCryptoStats), so the
+             header and the ledger cannot disagree about what happened. */}
+      <div className="flex flex-col gap-3">
+        <SectionRule label="Summary" note="Across the transactions shown below" />
+        <CardShell className={CARD_HUE}>
+          <div className="grid grid-cols-2 gap-px bg-border/40 sm:grid-cols-4">
+            {(statCards ?? Array.from({ length: 4 }, () => null)).map((card, i) => (
+              <div key={card?.label ?? i} className="flex flex-col gap-1 bg-card/40 px-4 py-3.5">
+                {card ? (
+                  <>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                      {card.label}
+                    </span>
+                    <span
+                      className={`font-display text-[22px] font-medium leading-tight tabular-nums ${card.tone}`}
+                    >
+                      {card.value}
+                    </span>
+                    <span className="truncate text-[11.5px] text-muted-foreground">{card.sub}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="skel h-2.5 w-16 rounded" />
+                    <span className="skel h-6 w-24 rounded" />
+                    <span className="skel h-3 w-20 rounded" />
+                  </>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
+        </CardShell>
       </div>
 
       {error && (
         <div className="rounded-2xl bg-debit-chip px-4 py-3 text-[13px] text-debit">{error}</div>
       )}
 
-      {/* ── History ── */}
-      <CardShell>
+      <div className="flex flex-col gap-3">
+        <SectionRule label="History" note="Newest first" />
+        <CardShell className={CARD_HUE}>
         <CardHeader
           title="History"
           subtitle={
@@ -473,8 +495,20 @@ export function TransactionsClient() {
               placeholder="Search hash, token, address…"
               value={filters.search || ""}
               onChange={(e) => setFilters({ search: e.target.value || undefined })}
-              className="h-9 w-full rounded-full bg-surface-sunken pl-9 pr-3 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/50 focus:ring-1 focus:ring-primary/40"
+              className="h-9 w-full rounded-full bg-foreground/[0.05] pl-9 pr-9 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/50 focus:ring-1 focus:ring-primary/40"
             />
+            {/* A search you cannot clear in one tap is a search you have to
+                backspace out of, which on a phone is eight taps. */}
+            {filters.search && (
+              <button
+                type="button"
+                onClick={() => setFilters({ search: undefined })}
+                aria-label="Clear search"
+                className="ws-icon-mono absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           <label className="sr-only" htmlFor="tx-status">Status</label>
@@ -491,7 +525,7 @@ export function TransactionsClient() {
             }
             className={`h-9 shrink-0 rounded-full px-3 text-[13px] font-medium outline-none transition-colors ${
               activeStatus === "all"
-                ? "bg-surface-sunken text-muted-foreground"
+                ? "bg-foreground/[0.05] text-muted-foreground"
                 : "bg-primary/[0.12] text-primary"
             }`}
           >
@@ -508,7 +542,7 @@ export function TransactionsClient() {
               className={`flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors ${
                 hasDateFilter
                   ? "bg-primary/[0.12] text-primary"
-                  : "bg-surface-sunken text-muted-foreground hover:text-foreground"
+                  : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground"
               }`}
             >
               <HugeiconsIcon icon={Calendar01Icon} aria-hidden className="h-3.5 w-3.5" />
@@ -524,7 +558,7 @@ export function TransactionsClient() {
                       type="date"
                       value={filters.dateFrom || ""}
                       onChange={(e) => setFilters({ dateFrom: e.target.value || undefined })}
-                      className="h-9 w-full rounded-lg bg-surface-sunken px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
+                      className="h-9 w-full rounded-lg bg-foreground/[0.05] px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
                     />
                   </div>
                   <div>
@@ -533,7 +567,7 @@ export function TransactionsClient() {
                       type="date"
                       value={filters.dateTo || ""}
                       onChange={(e) => setFilters({ dateTo: e.target.value || undefined })}
-                      className="h-9 w-full rounded-lg bg-surface-sunken px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
+                      className="h-9 w-full rounded-lg bg-foreground/[0.05] px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
                     />
                   </div>
                   {hasDateFilter && (
@@ -574,8 +608,14 @@ export function TransactionsClient() {
                 {/* The day header replaces a date column that every row had to
                     repeat. Sticky, so you always know where you are in a long
                     scroll. */}
-                <h3 className="sticky top-0 z-10 bg-card/85 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 backdrop-blur-sm">
-                  {group.label}
+                <h3 className="sticky top-0 z-10 flex items-center gap-3 bg-card/85 px-4 py-1.5 backdrop-blur-sm">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    {group.label}
+                  </span>
+                  <span aria-hidden className="h-px flex-1 bg-border/40" />
+                  <span className="text-[11px] font-normal normal-case tracking-normal tabular-nums text-muted-foreground/70">
+                    {group.items.length} {group.items.length === 1 ? "entry" : "entries"}
+                  </span>
                 </h3>
                 {group.items.map((tx) => (
                   <TransactionRow
@@ -597,7 +637,8 @@ export function TransactionsClient() {
             )}
           </div>
         )}
-      </CardShell>
+        </CardShell>
+      </div>
     </div>
   )
 }
@@ -678,7 +719,7 @@ function TransactionRow({
       </button>
 
       {expanded && (
-        <div className="bg-surface-sunken/50 px-4 pb-4 pt-1">
+        <div className="bg-foreground/[0.05]/50 px-4 pb-4 pt-1">
           <TransactionDetail tx={tx} />
         </div>
       )}
@@ -838,7 +879,7 @@ function StatusTracker({ tx }: { tx: UnifiedTransaction }) {
         : "bg-credit"
 
   return (
-    <ol className="flex max-w-2xl items-start gap-0 rounded-xl bg-surface-sunken/70 px-4 py-3">
+    <ol className="flex max-w-2xl items-start gap-0 rounded-xl bg-foreground/[0.05]/70 px-4 py-3">
       {steps.map((step, i) => {
         const done = i <= reached
         return (
@@ -875,7 +916,7 @@ function StatusTracker({ tx }: { tx: UnifiedTransaction }) {
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl bg-surface-sunken/70 p-3">
+    <div className="flex flex-col gap-1 rounded-xl bg-foreground/[0.05]/70 p-3">
       <Eyebrow className="px-1 pb-1">{title}</Eyebrow>
       {children}
     </div>
