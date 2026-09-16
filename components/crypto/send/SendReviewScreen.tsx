@@ -9,6 +9,15 @@
  * pre-check policy is asymmetric on purpose — a simulation that says "this
  * would fail" blocks signing, while a simulation we simply couldn't RUN warns
  * and steps aside.
+ *
+ * LANDSCAPE from `sm` up: the route and the itemised rows on the left, and on
+ * the right the one thing the signature actually commits to — the amount, the
+ * fee, and how long the quote is still good for — sitting directly above the
+ * button that commits it. Stacked in a single column this screen put the
+ * countdown several rows above a CTA that could scroll out of sight, so the
+ * number you were racing and the button you were racing it to were never on
+ * screen together. Warnings and errors stay full width beneath both panes:
+ * they are about the whole transfer, not about one half of it.
  */
 
 import * as React from "react"
@@ -78,15 +87,64 @@ export function SendReviewScreen({
   rows.push({ label: "Network fee", value: feeValue })
   if (countdown !== null) rows.push({ label: "Expires", value: expired ? "Expired" : `in ${countdown}` })
 
+  // Split for the two panes: the summary carries what the signature commits
+  // to, the table carries the rest. One source, so the panes cannot disagree.
+  const detailRows = rows.filter((r) => r.label !== "Amount" && r.label !== "Network fee" && r.label !== "Expires")
+
   return (
     <div className="flex flex-col gap-4">
-      <RouteStrip
-        direction="out"
-        from={{ label: "Your Worldstreet wallet", sub: truncateAddress(fromAddress) }}
-        to={{ label: truncateAddress(toAddress) }}
-      />
+      <div className="flex flex-col gap-4 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)] sm:items-start sm:gap-5">
+        <div className="flex min-w-0 flex-col gap-4">
+          <RouteStrip
+            direction="out"
+            from={{ label: "Your Worldstreet wallet", sub: truncateAddress(fromAddress) }}
+            to={{ label: truncateAddress(toAddress) }}
+          />
+          <DetailPanel rows={detailRows} />
+        </div>
 
-      <DetailPanel rows={rows} />
+        {/* The commitment pane. */}
+        <div className="flex flex-col gap-3 rounded-2xl bg-foreground/[0.05] p-4">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+            You&apos;re sending
+          </span>
+          <span className="flex items-baseline gap-1.5">
+            <span className="font-display text-[26px] font-light leading-none tabular-nums">{amount}</span>
+            <span className="text-[14px] font-medium text-muted-foreground">{symbol}</span>
+          </span>
+
+          <div className="flex flex-col gap-1.5 border-t border-border/40 pt-3">
+            <span className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px] text-muted-foreground">Network fee</span>
+              <span className="text-[12.5px] font-medium tabular-nums">{feeValue}</span>
+            </span>
+            {countdown !== null && (
+              <span className="flex items-baseline justify-between gap-3">
+                <span className="text-[12.5px] text-muted-foreground">Quote expires</span>
+                {/* Warning tone, never gold: a deadline running out is not a
+                    brand moment. */}
+                <span
+                  className={`text-[12.5px] font-semibold tabular-nums ${
+                    expired ? "text-debit" : "text-warning"
+                  }`}
+                >
+                  {expired ? "Expired" : `in ${countdown}`}
+                </span>
+              </span>
+            )}
+          </div>
+
+          <FlowCta label={ctaLabel} onClick={onSign} disabled={ctaDisabled} busy={ctaBusy} />
+
+          <button
+            type="button"
+            onClick={onEdit}
+            className="mx-auto inline-flex min-h-11 items-center px-4 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Edit transfer
+          </button>
+        </div>
+      </div>
 
       {feeFallbackReason && <InlineNotice tone="warning">{feeFallbackReason}</InlineNotice>}
 
@@ -111,16 +169,6 @@ export function SendReviewScreen({
       )}
 
       {errorSlot}
-
-      <FlowCta label={ctaLabel} onClick={onSign} disabled={ctaDisabled} busy={ctaBusy} />
-
-      <button
-        type="button"
-        onClick={onEdit}
-        className="mx-auto inline-flex min-h-11 items-center px-4 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-      >
-        Edit transfer
-      </button>
     </div>
   )
 }

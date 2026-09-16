@@ -29,6 +29,7 @@ import * as React from "react"
 import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
+  ArrowDataTransferHorizontalIcon,
   ArrowDownLeft01Icon,
   ArrowUpRight01Icon,
   ChartLineData01Icon,
@@ -52,7 +53,8 @@ import { AreaChart, Donut, MiniSpark } from "@/components/ui/charts"
 import { HERO_HUE, PANEL } from "@/components/ui/surface"
 import { ErrorState } from "@/components/error-state"
 import { useAuth } from "@/components/auth-provider"
-import { useMoneyFlow } from "@/components/flows/money-flow-modal"
+import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
+import { SendModal } from "@/components/crypto/SendModal"
 import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useTradeAccount } from "@/hooks/useTradeAccount"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
@@ -148,7 +150,8 @@ export function DashboardHero({
   error?: string
 }) {
   const { user } = useAuth()
-  const { openDoor } = useMoneyFlow()
+  const [receiveOpen, setReceiveOpen] = React.useState(false)
+  const [sendOpen, setSendOpen] = React.useState(false)
   const { hidden, toggle: toggleHidden } = useBalancePrivacy()
   const { balances: onChainBalances } = useWalletBalances()
   const { balances: hlAccountBalances, positions: hlPositions } = useTradeAccount()
@@ -593,19 +596,30 @@ export function DashboardHero({
       </CardShell>
 
       {/* ── Action rail ──────────────────────────────────────────────────── */}
+      {/* Deposit and Send open the wallet's own surfaces, the SAME two modals
+          the navbar's Deposit button and the wallet page open. They used to
+          call `openDoor`, which asks "where is this money coming from?" first
+          — a fair question on a page that mixes the Dollar Account with the
+          crypto wallet, and a pointless one from a rail whose other three
+          buttons are all on-chain. One tap, not two.
+
+          "Withdraw" is now "Send", because that is what the button does: it
+          moves coins out to an address. "Withdraw" is the cash verb, and
+          having both meant two words for two different money systems with no
+          way to tell from the label which one you were about to use. */}
       <div className="scrollbar-none -mx-1 flex gap-2.5 overflow-x-auto px-1 pb-1">
         <RailButton
           icon={ArrowDownLeft01Icon}
           label="Deposit"
-          onClick={() => openDoor("deposit")}
+          onClick={() => setReceiveOpen(true)}
           vivid="open-deposit"
-          vividLabel="Ask where the money is coming from, then deposit"
+          vividLabel="Show your wallet addresses to deposit crypto"
         />
         <RailButton
           icon={ArrowUpRight01Icon}
-          label="Withdraw"
-          onClick={() => openDoor("withdraw")}
-          vivid="open-withdraw"
+          label="Send"
+          onClick={() => setSendOpen(true)}
+          vivid="open-send"
           vividLabel="Send crypto out of your wallet"
         />
         <RailButton icon={CoinsSwapIcon} label="Swap" href="/swap" vivid="go-swap" vividLabel="Go to the swap page" />
@@ -616,7 +630,20 @@ export function DashboardHero({
           vivid="go-trade"
           vividLabel="Go to the trading workspace"
         />
+        <RailButton
+          icon={ArrowDataTransferHorizontalIcon}
+          label="Bridge"
+          href="/bridge"
+          vivid="go-bridge"
+          vividLabel="Go to the bridge page"
+        />
       </div>
+
+      {/* Mounted here rather than at each button: both are controlled, and a
+          rail that scrolls sideways must not carry a dialog inside a scroll
+          container. */}
+      <ModernReceiveModal open={receiveOpen} onOpenChange={setReceiveOpen} />
+      <SendModal open={sendOpen} onOpenChange={setSendOpen} />
     </div>
   )
 }

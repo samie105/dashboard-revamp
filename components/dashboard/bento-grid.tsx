@@ -3,7 +3,6 @@
 import * as React from "react"
 import Link from "next/link"
 import type { CoinData } from "@/lib/actions"
-import { getPrices } from "@/lib/actions"
 
 // Market rows for the Spot tab — the service's price feed with the display
 // fields the old spotv2 pair registry carried.
@@ -17,9 +16,7 @@ import {
   type IllustrationKey,
 } from "@/components/ui/system"
 import { fetchProfile } from "@/lib/profile-actions"
-import { ActivityCard } from "@/components/dashboard/activity-card"
 import { useLedgerRecords } from "@/hooks/useLedgerRecords"
-import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { useSpotRegistry } from "@/hooks/useSpotRegistry"
 import { describeLedgerRecord, type LedgerRow } from "@/lib/ledger-rows"
 import { explorerTxUrl } from "@/lib/crypto-backend/network-meta"
@@ -434,118 +431,6 @@ function EmptyState({
 }
 
 /* ========== My Positions ========== */
-/**
- * What you hold — the wallet's assets, which is what the subtitle always
- * claimed and never showed.
- *
- * It read the Hyperliquid trading account through the spot ledger adapter, so
- * a wallet full of tokens across three chains reported "No spot holdings".
- * The card says "Everything you hold, across every chain"; this is that, from
- * the same balance source the wallet page's assets section uses.
- */
-function MyPositions() {
-  const { balances, isLoading } = useWalletBalances()
-  const [prices, setPrices] = React.useState<Record<string, number>>({})
-
-  React.useEffect(() => {
-    let cancelled = false
-    const load = () =>
-      getPrices()
-        .then((result) => {
-          if (!cancelled) setPrices(result.prices)
-        })
-        .catch(() => {})
-    void load()
-    const id = setInterval(load, 60_000)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [])
-
-  const holdings = React.useMemo(() => {
-    const priced = balances
-      .filter((balance) => balance.balance > 0)
-      .map((balance) => {
-        const price =
-          prices[balance.symbol] ??
-          prices[balance.symbol.toUpperCase()] ??
-          (balance.symbol === "USDC" || balance.symbol === "USDT" ? 1 : 0)
-        return { ...balance, value: balance.balance * price }
-      })
-    // Biggest first: a holdings list read top-down should answer "what am I
-    // mostly holding?" before anything else.
-    return priced.sort((a, b) => b.value - a.value)
-  }, [balances, prices])
-
-  const total = holdings.reduce((sum, holding) => sum + holding.value, 0)
-  const shown = holdings.slice(0, 5)
-
-  return (
-    <CardShell className={CARD_HUE}>
-      <CardHeader
-        className="flex-wrap"
-        title="My Holdings"
-        subtitle="Everything you hold, across every chain"
-        link={{ label: "View all", href: "/assets" }}
-      />
-
-      {isLoading && holdings.length === 0 ? (
-        <SkeletonRows rows={4} label="Loading holdings" />
-      ) : holdings.length === 0 ? (
-        <EmptyState
-          illustration="noCrypto"
-          title="Nothing here yet"
-          description="Deposit into your wallet and your assets appear here."
-          cta={{ label: "Go to wallet", href: "/wallet/modern" }}
-        />
-      ) : (
-        <>
-          <div className="flex flex-1 flex-col divide-y divide-border/20 px-1">
-            {shown.map((holding) => (
-              <div
-                key={`${holding.chain}-${holding.symbol}-${holding.contractAddress ?? "native"}`}
-                className="flex items-center gap-3 px-3 py-2.5"
-              >
-                <CoinAvatar symbol={holding.symbol} src={holding.logo} size="sm" />
-                <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                  <span className="truncate text-[13.5px] font-medium">{holding.symbol}</span>
-                  <span className="truncate text-[12px] text-muted-foreground">
-                    {holding.networkName ?? holding.chain}
-                  </span>
-                </span>
-                <span className="flex shrink-0 flex-col items-end leading-tight">
-                  <span className="text-[13.5px] font-semibold tabular-nums">
-                    {holding.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })}
-                  </span>
-                  {/* A token with no price shows its amount and nothing else,
-                      rather than a confident $0.00 beside a real balance. */}
-                  {holding.value > 0 && (
-                    <span className="text-[11.5px] tabular-nums text-muted-foreground">
-                      ${holding.value.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center justify-between border-t border-border/30 px-4 py-2.5">
-            <span className="text-[12px] text-muted-foreground">
-              {holdings.length} {holdings.length === 1 ? "asset" : "assets"}
-            </span>
-            <span className="text-[13px] font-semibold tabular-nums">
-              ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-        </>
-      )}
-    </CardShell>
-  )
-}
-
 /* ========== Dashboard Grid ========== */
 interface DashboardGridProps {
   coins: CoinData[]
@@ -587,20 +472,6 @@ export function DashboardGrid({ coins, error }: DashboardGridProps) {
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        <div className="rise" style={cell(0)}>
-          <Rule label="Your money" />
-        </div>
-        <div className="grid w-full gap-4 lg:grid-cols-5">
-          <div className="rise min-w-0 lg:col-span-2" style={cell(40)}>
-            <ActivityCard />
-          </div>
-          <div className="rise min-w-0 lg:col-span-3" style={cell(90)}>
-            <MyPositions />
-          </div>
-        </div>
-      </div>
-
       {/* Insights — four readouts, every figure already on the client. */}
       <div className="flex flex-col gap-3">
         <div className="rise" style={cell(140)}>

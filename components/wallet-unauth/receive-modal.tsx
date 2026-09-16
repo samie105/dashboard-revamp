@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/responsive-modal"
 import { Eyebrow, Segmented } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { QrCode } from "@/components/preview/qr-code"
+import { QrCode } from "@/components/ui/qr-code"
 import { CHAIN_GROUPS, formatUSD, type ChainGroup } from "@/components/wallet-unauth/wallet-data"
 
 type Tab = "address" | "request"

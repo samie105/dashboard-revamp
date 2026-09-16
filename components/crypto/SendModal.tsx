@@ -35,6 +35,7 @@
  */
 
 import * as React from "react"
+import { cn } from "@/lib/utils"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Cancel01Icon } from "@hugeicons/core-free-icons"
 
@@ -54,6 +55,11 @@ export function SendModal({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  /* The review screen is landscape and needs the width; the form and the
+     status screen are single columns that look stretched in it. State, not a
+     ref — the width is rendered, so the shell DOES need to re-render. */
+  const [step, setStep] = React.useState<"form" | "review" | "status">("form")
+
   // A ref, not state: the shell has no reason to re-render when it flips.
   const inFlightRef = React.useRef(false)
   const reportInFlight = React.useCallback((value: boolean) => {
@@ -75,9 +81,18 @@ export function SendModal({
     onOpenChange(false)
   }, [onOpenChange])
 
+  // The flow unmounts on close, so it never reports its way back to "form";
+  // without this the next open would briefly wear the review width.
+  React.useEffect(() => {
+    if (!open) setStep("form")
+  }, [open])
+
   return (
     <ResponsiveModal open={open} onOpenChange={handleOpenChange}>
-      <ResponsiveModalContent showCloseButton={false} className="sm:max-w-md">
+      <ResponsiveModalContent
+        showCloseButton={false}
+        className={cn("transition-[max-width] duration-200", step === "review" ? "sm:max-w-3xl" : "sm:max-w-md")}
+      >
         {/* The flow draws its own header — direction badge, title, subtitle —
             so the dialog's title exists for screen readers only. Rendering
             both would title the popup twice. */}
@@ -97,7 +112,7 @@ export function SendModal({
         </button>
         {open ? (
           <div className="min-h-0 flex-1 overflow-y-auto sm:max-h-[min(78dvh,720px)]">
-            <SendFlow onClose={close} onInFlightChange={reportInFlight} />
+            <SendFlow onClose={close} onInFlightChange={reportInFlight} onStepChange={setStep} />
           </div>
         ) : null}
       </ResponsiveModalContent>

@@ -120,8 +120,13 @@ type CommittedTransfer = {
 export function SendFlow({
   onClose,
   onInFlightChange,
+  onStepChange,
 }: {
   onClose?: () => void
+  /** Reports which screen is showing, so a containing modal can size itself
+   *  to it. Review is landscape and needs the width; the form and the status
+   *  screen are single columns and look stretched in it. */
+  onStepChange?: (step: "form" | "review" | "status") => void
   /** Reports whether a transfer is mid-flight, so a containing modal can
    *  refuse accidental dismissal. Named to match `BuySellClient`, which
    *  reports the same thing to the cash money-flow modal. */
@@ -373,6 +378,9 @@ export function SendFlow({
   React.useEffect(() => {
     onInFlightChange?.(inFlight)
   }, [inFlight, onInFlightChange])
+  React.useEffect(() => {
+    onStepChange?.(step)
+  }, [step, onStepChange])
   const txHash = readTxHash(transfer.sponsorship, submitRecord, intent)
   // The network this transfer was BUILT on, not whatever the picker shows now.
   const sentNetworkId = committed?.networkId ?? networkId
