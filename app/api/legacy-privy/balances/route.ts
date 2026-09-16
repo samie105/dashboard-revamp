@@ -355,8 +355,16 @@ async function fetchTonBalance(address: string): Promise<TokenBalance[]> {
   return results
 }
 
-const TRON_USDT_ADDRESS = "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj"
-const TRON_USDC_ADDRESS = "TEkxiTehnzSmSe2XqrBjG7wVrK2ibdKh4j"
+// The previous USDT address here (TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj) was
+// simply the wrong contract — a validly-formatted Tron address, but not
+// USDT's, so every triggerconstantcontract call against it correctly failed
+// with "Smart contract is not exist." (verified directly against TronGrid).
+// This is the real, verified official Tron USDT (TRC20) contract.
+const TRON_USDT_ADDRESS = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+// The previous USDC address (TEkxiTehnzSmSe2XqrBjG7wVrK2ibdKh4j) wasn't even
+// valid Base58, and Circle doesn't issue USDC on Tron at all (it's absent
+// from Circle's own official contract-address list) — so this was never a
+// real, fetchable token. Dropped rather than replaced with a guess.
 
 async function fetchTronTrc20Balance(
   address: string,
@@ -415,11 +423,8 @@ async function fetchTronBalances(address: string): Promise<TokenBalance[]> {
       isNative: true,
     })
 
-    const tokens = await Promise.all([
-      fetchTronTrc20Balance(address, TRON_USDT_ADDRESS, "USDT", "Tether"),
-      fetchTronTrc20Balance(address, TRON_USDC_ADDRESS, "USDC", "USD Coin"),
-    ])
-    results.push(...tokens.filter((token): token is TokenBalance => token !== null))
+    const usdt = await fetchTronTrc20Balance(address, TRON_USDT_ADDRESS, "USDT", "Tether")
+    if (usdt) results.push(usdt)
   } catch (err) {
     console.error("[wallet/balances] TRON fetch error:", err)
   }
