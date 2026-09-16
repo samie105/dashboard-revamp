@@ -636,13 +636,22 @@ export type HlCloseOutcome = {
 // regardless of what's actually open. The real, currently-implemented routes
 // are the same ones components/trade/trade-client.tsx already calls through
 // cryptoBackendClient, and HlMarkets/HlAccount below already match their
-// response shape exactly.
+// response shape exactly — but unlike the rest of this file's endpoints,
+// they answer through the /api/crypto proxy, which always wraps its payload
+// as {success, data}. `get()` above returns that envelope as-is (it was
+// written for endpoints that don't wrap), so every field read off it was
+// silently undefined until unwrapped here.
+async function getCryptoData<T>(path: string): Promise<T> {
+  const envelope = await get<{ success: boolean; data: T }>(path)
+  return envelope.data
+}
+
 export function fetchHlMarkets(): Promise<HlMarkets> {
-  return get<HlMarkets>("/api/crypto/trading/hyperliquid/markets")
+  return getCryptoData<HlMarkets>("/api/crypto/trading/hyperliquid/markets")
 }
 
 export function fetchHlAccount(): Promise<HlAccount> {
-  return get<HlAccount>("/api/crypto/trading/hyperliquid/account")
+  return getCryptoData<HlAccount>("/api/crypto/trading/hyperliquid/account")
 }
 
 /** One Hyperliquid execution. closedPnl is 0 unless this fill closed or
@@ -663,7 +672,7 @@ export type HlFill = {
 }
 
 export function fetchHlFills(): Promise<{ fills: HlFill[] }> {
-  return get<{ fills: HlFill[] }>("/api/crypto/trading/hyperliquid/fills")
+  return getCryptoData<{ fills: HlFill[] }>("/api/crypto/trading/hyperliquid/fills")
 }
 
 export function placeSpotOrder(input: {

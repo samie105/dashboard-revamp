@@ -19,7 +19,7 @@ export function useHyperliquidFills(enabled = true) {
     setIsLoading(true)
     try {
       const { fills: rows } = await fetchHlFills()
-      setFills(rows)
+      setFills(rows ?? [])
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load trade history")
