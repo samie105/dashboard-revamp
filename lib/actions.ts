@@ -421,7 +421,10 @@ async function fetchHyperliquidPrices(): Promise<PricesResponse | null> {
     return {
       prices,
       coins,
-      globalStats: { totalMarketCap: 0, totalVolume: 0, btcDominance: 0, marketCapChange24h: 0 },
+      // Not zeros. See fetchGlobalStats — this path serves nearly every
+      // request, and hardcoding them here is what left the markets page
+      // showing three dashes.
+      globalStats: await fetchGlobalStats(),
       fetchedAt: Date.now(),
     }
   } catch (error) {
@@ -569,6 +572,57 @@ async function fetchKuCoinPrices(): Promise<PricesResponse | null> {
 
 // ── getPrices ──────────────────────────────────────────────────────────────
 
+
+/**
+ * The global market aggregates — total cap, total volume, BTC dominance.
+ *
+ * Extracted because it used to live INSIDE the CoinGecko fallback branch,
+ * while the Hyperliquid fast path — the one that actually serves nearly every
+ * request — returned a hardcoded block of zeros. The markets page reads these
+ * three figures, so in normal operation its stat row could only ever render
+ * "—", "—" and "0.0%". That was not a cold cache; it was unreachable code.
+ *
+ * Cached separately and for longer than prices: these move slowly, and the
+ * endpoint is rate-limited. A failure returns zeros, which every caller
+ * already treats as "no figure" and hides.
+ */
+const GLOBAL_STATS_TTL = 10 * 60_000
+let globalStatsCache: { value: PricesResponse["globalStats"]; at: number } | null = null
+
+const EMPTY_GLOBAL_STATS: PricesResponse["globalStats"] = {
+  totalMarketCap: 0,
+  totalVolume: 0,
+  btcDominance: 0,
+  marketCapChange24h: 0,
+}
+
+async function fetchGlobalStats(): Promise<PricesResponse["globalStats"]> {
+  if (globalStatsCache && Date.now() - globalStatsCache.at < GLOBAL_STATS_TTL) {
+    return globalStatsCache.value
+  }
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/global", {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(5_000),
+    })
+    if (!res.ok) throw new Error(`global responded ${res.status}`)
+    const body = await res.json()
+    const value: PricesResponse["globalStats"] = {
+      totalMarketCap: body.data?.total_market_cap?.usd ?? 0,
+      totalVolume: body.data?.total_volume?.usd ?? 0,
+      btcDominance: body.data?.market_cap_percentage?.btc ?? 0,
+      marketCapChange24h: body.data?.market_cap_change_percentage_24h_usd ?? 0,
+    }
+    globalStatsCache = { value, at: Date.now() }
+    return value
+  } catch {
+    // Optional data. Zeros mean "no figure", and every reader hides the cell.
+    globalStatsCache = { value: EMPTY_GLOBAL_STATS, at: Date.now() }
+    return EMPTY_GLOBAL_STATS
+  }
+}
+
 export async function getPrices(): Promise<PricesResponse> {
   const now = Date.now()
   console.log("[getPrices] called")
@@ -707,33 +761,7 @@ export async function getPrices(): Promise<PricesResponse> {
     if (!prices.USDT) prices.USDT = 1
     if (!prices.USDC) prices.USDC = 1
 
-    let globalStats = {
-      totalMarketCap: 0,
-      totalVolume: 0,
-      btcDominance: 0,
-      marketCapChange24h: 0,
-    }
-
-    try {
-      const globalRes = await fetch("https://api.coingecko.com/api/v3/global", {
-        headers: { Accept: "application/json" },
-        next: { revalidate: 300 },
-        signal: AbortSignal.timeout(5_000),
-      })
-
-      if (globalRes.ok) {
-        const globalData = await globalRes.json()
-        globalStats = {
-          totalMarketCap: globalData.data?.total_market_cap?.usd ?? 0,
-          totalVolume: globalData.data?.total_volume?.usd ?? 0,
-          btcDominance: globalData.data?.market_cap_percentage?.btc ?? 0,
-          marketCapChange24h:
-            globalData.data?.market_cap_change_percentage_24h_usd ?? 0,
-        }
-      }
-    } catch {
-      // global stats are optional
-    }
+    const globalStats = await fetchGlobalStats()
 
     const result: PricesResponse = { prices, coins, globalStats, fetchedAt: now }
     priceCache = result

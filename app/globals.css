@@ -84,8 +84,15 @@
        surface brown, and the clear glass amplified it to amber. Same
        lightness steps, zinc register — the gold now reads as yellow on
        black instead of baking into the surfaces. */
-    /* Panels that sit UNDER a primary one (the transactions sheet). */
-    --surface-sunken: #101013;
+    /* Panels that sit UNDER a primary one (the transactions sheet).
+       NEUTRAL, not #101013. That value's blue channel led red and green by 3,
+       and against a true near-black canvas and warm gold it read as a cold
+       blue-grey wherever it covered any area — the Segmented track, the icon
+       actions, the filter controls. Same luminance to three decimal places
+       (0.00518 vs 0.00528), so nothing about the depth of the surface moves;
+       only the cast is gone. 42 files reference this token, which is exactly
+       why the fix belongs here and not in any of them. */
+    --surface-sunken: #101010;
 
     --background: #09090B;                /* canvas — true near-black */
     --foreground: oklch(0.985 0 0);

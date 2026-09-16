@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Eyebrow, PageHeader, Segmented } from "@/components/ui/system"
+import { CardHeader, CardShell, Eyebrow, PageHeader, SectionRule, Segmented } from "@/components/ui/system"
 import {
   ArrowUp01Icon,
   ArrowDown01Icon,
@@ -15,6 +15,9 @@ import {
 import type { CoinData, FuturesMarket } from "@/lib/actions"
 import { getSpotMarkets, getFuturesMarkets } from "@/lib/actions"
 import { ErrorState } from "@/components/error-state"
+import { CARD_HUE } from "@/components/ui/surface"
+import { MarketsTicker } from "@/components/trading/markets-ticker"
+import { MarketsStats } from "@/components/trading/markets-stats"
 import { useHyperliquidPositions } from "@/hooks/useHyperliquidPositions"
 import { useHyperliquidBalance } from "@/hooks/useHyperliquidBalance"
 import { baseAsset } from "@/components/ui/coin-avatar"
@@ -256,6 +259,66 @@ interface MarketsClientProps {
   error?: string
 }
 
+
+/**
+ * One ranked rail.
+ *
+ * The three cards share a shell so that "up", "down" and "most active" read as
+ * three answers to one question rather than three unrelated panels. The glyph
+ * carries the list's meaning, so it opts out of the global two-tone gold
+ * treatment and takes the money-direction tokens — including "Most active",
+ * which is brand-gold because "moved a lot" has no direction.
+ *
+ * An empty rail SAYS it is empty. The old markup rendered `null` for a rail
+ * with no rows, so on a flat day the grid silently lost a column and the two
+ * survivors stretched — which looks like a layout bug, not like news.
+ */
+function MoverCard({
+  title,
+  subtitle,
+  icon,
+  tone,
+  empty,
+  children,
+}: {
+  title: string
+  subtitle: string
+  icon: typeof ArrowUp01Icon
+  tone: "credit" | "debit" | "primary"
+  empty: string
+  children: React.ReactNode
+}) {
+  const rows = React.Children.toArray(children)
+  return (
+    <CardShell className={CARD_HUE}>
+      <CardHeader
+        title={title}
+        subtitle={subtitle}
+        right={
+          <span
+            className={`ws-icon-mono flex h-7 w-7 items-center justify-center rounded-full ${
+              tone === "credit"
+                ? "bg-credit-chip text-credit"
+                : tone === "debit"
+                  ? "bg-debit-chip text-debit"
+                  : "bg-convert-chip text-primary"
+            }`}
+          >
+            <HugeiconsIcon icon={icon} className="h-4 w-4" />
+          </span>
+        }
+      />
+      {rows.length === 0 ? (
+        <span className="flex flex-1 items-center px-4 pb-4 text-[12.5px] leading-relaxed text-muted-foreground">
+          {empty}
+        </span>
+      ) : (
+        <div className="flex flex-1 flex-col divide-y divide-border/20 p-1">{rows}</div>
+      )}
+    </CardShell>
+  )
+}
+
 export function MarketsClient({ coins, globalStats, error }: MarketsClientProps) {
   /* The holdings table showed "Value $0.00" for a real SOL balance while the
      market table three inches below priced SOL at $75.78. The value was never
@@ -324,30 +387,58 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
 
   // ── Spot-mode memos ─────────────────────────────────────────────────────
 
+  /* Real 7-day curves AND the real 24h change, for everything this page can
+     rank — one batched request, shared with the Portfolio watchlist.
+
+     This used to be declared below the ranking memos and scoped to the rows
+     the table had already filtered, which meant the three rails were ranked
+     on `coin.change24h` from the price feed. That field arrives as 0 for
+     every asset here, so Gainers and Losers were permanently empty while
+     "Most active" printed the sparkline's real percentages beside a ranking
+     it had never actually performed — the list claimed an order its own
+     numbers disagreed with. Declaring it here lets one `changeOf` feed both
+     the ranking and the row. */
+  const sparkSymbols = React.useMemo(
+    () =>
+      isFutures
+        ? futuresMarkets.map((m) => m.baseAsset)
+        : (tab === "Spot" ? spotMarkets : coins).map((c) => c.symbol),
+    [isFutures, futuresMarkets, tab, spotMarkets, coins],
+  )
+  const spark = useSparklines(sparkSymbols)
+
+  /** The 24h move for a symbol: the sparkline feed's figure where there is
+   *  one, the price feed's otherwise. Both the rails and the rows read this,
+   *  so a row can never show a percentage its own card did not rank on. */
+  const changeOf = React.useCallback(
+    (coin: CoinData) => spark(coin.symbol)?.change24h ?? coin.change24h,
+    [spark],
+  )
+
   const gainers = React.useMemo(
     () =>
       [...(tab === "Spot" ? spotMarkets : coins)]
-        .filter((c) => c.change24h > 0)
-        .sort((a, b) => b.change24h - a.change24h)
+        .filter((c) => changeOf(c) > 0)
+        .sort((a, b) => changeOf(b) - changeOf(a))
         .slice(0, 12),
-    [coins, spotMarkets, tab],
+    [coins, spotMarkets, tab, changeOf],
   )
 
   const losers = React.useMemo(
     () =>
       [...(tab === "Spot" ? spotMarkets : coins)]
-        .filter((c) => c.change24h < 0)
-        .sort((a, b) => a.change24h - b.change24h)
+        .filter((c) => changeOf(c) < 0)
+        .sort((a, b) => changeOf(a) - changeOf(b))
         .slice(0, 12),
-    [coins, spotMarkets, tab],
+    [coins, spotMarkets, tab, changeOf],
   )
 
   const movers = React.useMemo(
     () =>
       [...(tab === "Spot" ? spotMarkets : coins)]
-        .sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h))
+        .sort((a, b) => Math.abs(changeOf(b)) - Math.abs(changeOf(a)))
         .slice(0, 8),
-    [coins, spotMarkets, tab],
+    [coins, spotMarkets, tab, changeOf],
   )
 
   const filtered = React.useMemo(() => {
@@ -411,15 +502,6 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
     return list
   }, [futuresMarkets, search, sortBy, sortAsc])
 
-  /* Real 7-day curves for everything on screen — one batched request, shared
-     with the Portfolio watchlist. The response also carries the 24h change the
-     Hyperliquid feed omits, which is why every row here read "+0.00%". */
-  const visibleSymbols = React.useMemo(
-    () => (isFutures ? filteredFutures.map((m) => m.baseAsset) : filtered.map((c) => c.symbol)),
-    [isFutures, filtered, filteredFutures],
-  )
-  const spark = useSparklines(visibleSymbols)
-
   const toggleSort = (col: SortKey) => {
     if (sortBy === col) setSortAsc((v) => !v)
     else {
@@ -466,7 +548,10 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
               : `Real-time prices for ${coins.length} assets`
           }
         />
-        <div className="-mx-1 overflow-x-auto px-1 scrollbar-none">
+        {/* No negative margin: `-mx-1` made this 8px wider than the column
+            that holds it, so the page reported a clip at 375px. The rail
+            already scrolls, which is what the bleed was reaching for. */}
+        <div className="min-w-0 overflow-x-auto scrollbar-none">
           <Segmented
             /* Every tab is selectable, futures included - see FUTURES_CLOSED.
                A greyed-out tab is a dead end on touch; a live one that answers
@@ -491,66 +576,36 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
           TO RE-OPEN: delete this line and its `</>)}` at the end of the file. */}
       {!futuresClosed && (
       <>
-      {/* Global stats */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {isFutures ? (
-          <>
-            {[
-              { label: "Total Volume 24h", value: fmtLarge(futuresVolume), sub: null, up: null },
-              { label: "Open Interest", value: fmtOI(futuresOI), sub: null, up: null },
-              {
-                label: "Avg Funding Rate",
-                value: fmtFunding(avgFunding),
-                sub: null,
-                up: avgFunding >= 0,
-              },
-              { label: "Contracts", value: `${futuresMarkets.length}`, sub: null, up: null },
-            ].map((s) => (
-              <div
-                key={s.label}
-                className="flex flex-col gap-1 rounded-2xl bg-card p-4"
+      {/* ── The tape ──────────────────────────────────────────────────────
+             Spot only: it is built from the price feed, and the futures venue
+             has its own contracts that are not in it. */}
+      {!isFutures && <MarketsTicker coins={tab === "Spot" ? spotMarkets : coins} />}
+
+      {/* ── Global stats ──────────────────────────────────────────────────
+             Four loose cards became one panel, each cell carrying a visual of
+             its own figure. See markets-stats.tsx for which cells exist and
+             why the preview's other two do not. */}
+      {isFutures ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { label: "Total Volume 24h", value: fmtLarge(futuresVolume), up: null },
+            { label: "Open Interest", value: fmtOI(futuresOI), up: null },
+            { label: "Avg Funding Rate", value: fmtFunding(avgFunding), up: avgFunding >= 0 },
+            { label: "Contracts", value: `${futuresMarkets.length}`, up: null },
+          ].map((s) => (
+            <div key={s.label} className="flex flex-col gap-1 rounded-2xl bg-card p-4">
+              <Eyebrow>{s.label}</Eyebrow>
+              <span
+                className={`text-xl font-bold tabular-nums ${s.up === true ? "text-credit" : s.up === false ? "text-debit" : ""}`}
               >
-                <Eyebrow>{s.label}</Eyebrow>
-                <span className={`text-xl font-bold tabular-nums ${s.up === true ? "text-credit" : s.up === false ? "text-debit" : ""}`}>{s.value}</span>
-              </div>
-            ))}
-          </>
-        ) : (
-          <>
-            {[
-              {
-                label: "Market Cap",
-                value: fmtLarge(globalStats.totalMarketCap),
-                sub: `${globalStats.marketCapChange24h >= 0 ? "+" : ""}${globalStats.marketCapChange24h.toFixed(2)}%`,
-                up: globalStats.marketCapChange24h >= 0,
-              },
-              { label: "24h Volume", value: fmtLarge(globalStats.totalVolume), sub: null, up: null },
-              {
-                label: "BTC Dominance",
-                value: globalStats.btcDominance > 0 ? pct(globalStats.btcDominance, 1) : UNKNOWN,
-                sub: null,
-                up: null,
-              },
-              { label: "Listed Assets", value: `${coins.length}`, sub: null, up: null },
-            ].map((s) => (
-              <div
-                key={s.label}
-                className="flex flex-col gap-1 rounded-2xl bg-card p-4"
-              >
-                <Eyebrow>{s.label}</Eyebrow>
-                <span className="text-xl font-bold tabular-nums">{s.value}</span>
-                {s.sub && (
-                  <span
-                    className={`text-xs font-medium ${s.up ? "text-credit" : "text-debit"}`}
-                  >
-                    {s.sub}
-                  </span>
-                )}
-              </div>
-            ))}
-          </>
-        )}
-      </div>
+                {s.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <MarketsStats coins={tab === "Spot" ? spotMarkets : coins} changeOf={changeOf} globalStats={globalStats} />
+      )}
 
       {/* My Positions / Holdings */}
       {(isFutures ? positions.length > 0 || positionsLoading : spotHoldings.length > 0 || spotHoldingsLoading) && (
@@ -722,8 +777,58 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
         </section>
       )}
 
+      {/* ── Top movers ────────────────────────────────────────────────────
+             Moved ABOVE the table. "What should I look at" is the question
+             this page exists to answer, and it was being answered below a
+             thirty-row list sorted by market cap — which answers "what is
+             biggest", a different question whose answer never changes. */}
+      <div className="flex flex-col gap-3">
+        <SectionRule label="Top movers" note="Last 24 hours" />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <MoverCard
+            title="Gainers"
+            subtitle="Biggest moves up"
+            icon={ArrowUp01Icon}
+            tone="credit"
+            empty="No asset on this list is up right now."
+          >
+            {!isFutures
+              ? gainers.slice(0, 6).map((c, i) => <RankedCoinRow key={c.id} coin={c} rank={i + 1} points={spark(c.symbol)?.prices} change24h={spark(c.symbol)?.change24h} />)
+              : futuresGainers.slice(0, 6).map((m, i) => <RankedFuturesRow key={m.symbol} market={m} rank={i + 1} />)}
+          </MoverCard>
+
+          {/* Losers had no card at all. A markets page that shows only what is
+              up is a markets page you cannot use to decide anything. */}
+          <MoverCard
+            title="Losers"
+            subtitle="Biggest moves down"
+            icon={ArrowDown01Icon}
+            tone="debit"
+            empty="No asset on this list is down right now."
+          >
+            {!isFutures
+              ? losers.slice(0, 6).map((c, i) => <RankedCoinRow key={c.id} coin={c} rank={i + 1} points={spark(c.symbol)?.prices} change24h={spark(c.symbol)?.change24h} />)
+              : []}
+          </MoverCard>
+
+          <MoverCard
+            title="Most active"
+            subtitle="Largest moves either way"
+            icon={Fire02Icon}
+            tone="primary"
+            empty="Nothing has moved enough to rank yet."
+          >
+            {!isFutures
+              ? movers.slice(0, 6).map((c, i) => <RankedCoinRow key={c.id} coin={c} rank={i + 1} points={spark(c.symbol)?.prices} change24h={spark(c.symbol)?.change24h} />)
+              : futuresMovers.slice(0, 6).map((m, i) => <RankedFuturesRow key={m.symbol} market={m} rank={i + 1} />)}
+          </MoverCard>
+        </div>
+      </div>
+
       {/* Full Markets Table */}
-      <section>
+      <div className="flex flex-col gap-3">
+        <SectionRule label="Markets" note="Tap any row to trade" />
+        <section>
         <div className="overflow-hidden rounded-2xl bg-card">
           {/* Table toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 p-4">
@@ -733,11 +838,14 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                 {isFutures ? filteredFutures.length : filtered.length}
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {/* Chain chips — spot only. A perp is one venue, so offering to
-                  filter futures by chain would be a control that does nothing. */}
+                  filter futures by chain would be a control that does nothing.
+                  The row SCROLLS rather than wrapping: four chips plus their
+                  counts do not fit 375px, and a wrap that still overflows by
+                  7px clips the last chip's count instead of moving it. */}
               {!isFutures && registry.chains.length > 1 && (
-                <div className="flex items-center gap-1.5">
+                <div className="scrollbar-none flex min-w-0 max-w-full items-center gap-1.5 overflow-x-auto">
                   {[{ id: ALL_CHAINS, label: "All chains", count: 0 }, ...registry.chains].map((c) => (
                     <button
                       key={c.id}
@@ -965,47 +1073,6 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
         </div>
       </section>
 
-      {/* Top Gainers & Top Movers Side by Side */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Top Gainers */}
-        {(!isFutures ? gainers : futuresGainers).length > 0 && (
-          <section className="overflow-hidden rounded-2xl bg-card">
-            <div className="flex items-center gap-2 border-b border-border/50 px-4 py-3">
-              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-credit-chip">
-                <HugeiconsIcon icon={ArrowUp01Icon} className="h-3.5 w-3.5 text-credit" />
-              </div>
-              <h3 className="text-sm font-semibold">Top Gainers</h3>
-              <span className="ml-auto rounded-full bg-credit-chip px-2 py-0.5 text-[10px] font-medium text-credit">
-                24h
-              </span>
-            </div>
-            <div className="flex flex-col divide-y divide-border/20 p-1">
-              {!isFutures
-                ? gainers.slice(0, 8).map((c, i) => <RankedCoinRow key={c.id} coin={c} rank={i + 1} points={spark(c.symbol)?.prices} change24h={spark(c.symbol)?.change24h} />)
-                : futuresGainers.slice(0, 8).map((m, i) => <RankedFuturesRow key={m.symbol} market={m} rank={i + 1} />)}
-            </div>
-          </section>
-        )}
-
-        {/* Top Movers */}
-        {(!isFutures ? movers : futuresMovers).length > 0 && (
-          <section className="overflow-hidden rounded-2xl bg-card">
-            <div className="flex items-center gap-2 border-b border-border/50 px-4 py-3">
-              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500/10">
-                <HugeiconsIcon icon={Fire02Icon} className="h-3.5 w-3.5 text-orange-500" />
-              </div>
-              <h3 className="text-sm font-semibold">Top Movers</h3>
-              <span className="ml-auto rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-500">
-                24h
-              </span>
-            </div>
-            <div className="flex flex-col divide-y divide-border/20 p-1">
-              {!isFutures
-                ? movers.map((c, i) => <RankedCoinRow key={c.id} coin={c} rank={i + 1} points={spark(c.symbol)?.prices} change24h={spark(c.symbol)?.change24h} />)
-                : futuresMovers.map((m, i) => <RankedFuturesRow key={m.symbol} market={m} rank={i + 1} />)}
-            </div>
-          </section>
-        )}
       </div>
       </>
       )}
