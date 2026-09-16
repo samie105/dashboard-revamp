@@ -2033,7 +2033,10 @@ export function PortfolioClient() {
           </div>
         )}
 
-        {/* ═══ FUTURES TAB: P&L summary + closed trade history ═══ */}
+        {/* ═══ FUTURES TAB: P&L summary + trade history ═══ */}
+        {/* Every fill shows, not just the ones with realized P&L — a user who
+            has only ever opened positions must still see their executions,
+            not an empty table implying nothing happened. */}
         {/* GATE - same treatment as Open Positions above: stands down while
             futures is closed, verbatim otherwise. TO RE-OPEN: nothing extra
             needed, this already reads !FUTURES_CLOSED. */}
@@ -2072,11 +2075,11 @@ export function PortfolioClient() {
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
                 <p className="mt-2 text-xs text-muted-foreground">Loading trade history...</p>
               </div>
-            ) : hlClosedFills.length === 0 ? (
+            ) : hlFills.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-14">
                 <HugeiconsIcon icon={ChartLineData01Icon} className="mb-2 h-5 w-5 text-muted-foreground/50" />
-                <p className="text-xs font-medium text-muted-foreground">No closed trades yet</p>
-                <p className="text-[10px] text-muted-foreground/70">Trades that close or reduce a position appear here with their realized P&amp;L</p>
+                <p className="text-xs font-medium text-muted-foreground">No trades yet</p>
+                <p className="text-[10px] text-muted-foreground/70">Every futures execution — opening, adding to, or closing a position — appears here</p>
               </div>
             ) : (
               <div className="flex-1 overflow-x-auto">
@@ -2093,7 +2096,7 @@ export function PortfolioClient() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/20">
-                    {hlClosedFills.map((f) => {
+                    {hlFills.map((f) => {
                       const isProfit = f.closedPnl >= 0
                       return (
                         <tr key={`${f.oid}-${f.tid}`} className="transition-colors hover:bg-accent/30">
@@ -2120,8 +2123,8 @@ export function PortfolioClient() {
                           <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden md:table-cell">
                             ${f.fee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
                           </td>
-                          <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${isProfit ? "text-credit" : "text-debit"}`}>
-                            {isProfit ? "+" : ""}${f.closedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${f.closedPnl === 0 ? "text-muted-foreground/50 font-normal" : isProfit ? "text-credit" : "text-debit"}`}>
+                            {f.closedPnl === 0 ? "—" : `${isProfit ? "+" : ""}$${f.closedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                           </td>
                           <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
                             {f.timestamp ? new Date(f.timestamp).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
