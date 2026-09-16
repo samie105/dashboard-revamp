@@ -12,6 +12,7 @@ import {
   CardShell,
   ChangeText,
   EmptyState as SystemEmptyState,
+  SectionRule,
   SkeletonRows,
   type IllustrationKey,
 } from "@/components/ui/system"
@@ -438,24 +439,6 @@ interface DashboardGridProps {
   error?: string
 }
 
-/* One rule per section — the label, then a hairline to the end of the row.
-   Cheap, and it does what another card title could not: it groups.
-
-   Module scope, not inside DashboardGrid: a component declared during render
-   is a NEW component type on every pass, so React unmounts and remounts the
-   whole subtree under it each time the parent renders. */
-function Rule({ label, note }: { label: string; note?: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </span>
-      <span aria-hidden className="h-px flex-1 bg-border/50" />
-      {note && <span className="shrink-0 text-[11px] text-muted-foreground/70">{note}</span>}
-    </div>
-  )
-}
-
 export function DashboardGrid({ coins, error }: DashboardGridProps) {
   // Information architecture, ownership first.
   // Row 1 — your money in motion: activity beside everything you hold.
@@ -475,7 +458,7 @@ export function DashboardGrid({ coins, error }: DashboardGridProps) {
       {/* Insights — four readouts, every figure already on the client. */}
       <div className="flex flex-col gap-3">
         <div className="rise" style={cell(140)}>
-          <Rule label="Insights" note="From what you hold" />
+          <SectionRule label="Insights" note="From what you hold" />
         </div>
         <div className="rise" style={cell(180)}>
           <DashboardInsights coins={coins} />
@@ -483,7 +466,7 @@ export function DashboardGrid({ coins, error }: DashboardGridProps) {
       </div>
 
       <div className="rise" style={cell(220)}>
-        <Rule label="Markets &amp; trading" />
+        <SectionRule label="Markets &amp; trading" />
       </div>
 
       <div className="grid w-full gap-4 lg:grid-cols-5">

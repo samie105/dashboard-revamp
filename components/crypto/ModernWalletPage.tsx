@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ComponentType, type CSSProperties } from "react"
+import { useEffect, useMemo, useState, type ComponentType } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, CheckmarkCircle02Icon, Copy01Icon, EyeIcon, HelpCircleIcon, RefreshIcon, Shield01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, EyeIcon, HelpCircleIcon, RefreshIcon, Shield01Icon, ViewOffSlashIcon } from "@hugeicons/core-free-icons"
 import Link from "next/link"
 
 import { useAuth } from "@/components/auth-provider"
@@ -27,11 +27,15 @@ import {
   IconAction,
   PageHeader,
   Rise,
+  SectionRule,
   Skel,
   SkeletonRows,
   WeightBar,
   allocationColor,
 } from "@/components/ui/system"
+import { CARD_HUE, HERO_HUE } from "@/components/ui/surface"
+import { Movements } from "@/components/wallet/movements"
+import { ChainPicker, type ChainGroup, type ChainHolding } from "@/components/wallet/chain-picker"
 import { useBalancePrivacy } from "@/hooks/useBalancePrivacy"
 import { formatCryptoAmount, useCryptoBalances, type CryptoBalanceResult } from "@/hooks/crypto/useCryptoBalances"
 import { COIN_IMAGES } from "@/lib/coin-images"
@@ -63,19 +67,6 @@ const FAMILY_LABEL: Record<string, string> = {
   ton: "TON",
   tron: "Tron",
   intertrain: "Intertrain (WSK)",
-}
-
-/** Gradient stroke for the glass address cards — brand gold dissolving
- *  diagonally to nothing, identical to the dashboard's account cards
- *  (user-card.tsx): a masked ring so the translucent fill keeps showing the
- *  silk field through the card. */
-const GOLD_STROKE: CSSProperties = {
-  background:
-    "linear-gradient(135deg, color-mix(in oklab, var(--primary) 55%, transparent), color-mix(in oklab, var(--primary) 14%, transparent) 38%, transparent 68%)",
-  WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-  WebkitMaskComposite: "xor",
-  mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-  maskComposite: "exclude",
 }
 
 /* The allocation strip and the per-row share bars both read from the house
@@ -145,208 +136,6 @@ function RoundAction({
   )
 }
 
-/** Formats an address like an embossed card number. */
-function groupedAddress(address?: string) {
-  return address ? `${address.slice(0, 6)}  ••••  ••••  ${address.slice(-6)}` : "••••  ••••  ••••  ••••"
-}
-
-/** The gold chip — pure brand furniture on the card objects. */
-function CardChip() {
-  return (
-    <span
-      aria-hidden
-      className="grid h-6 w-8 grid-cols-2 gap-px overflow-hidden rounded-[5px] bg-gradient-to-br from-yellow-200/70 via-yellow-500/60 to-yellow-800/60 p-[3px]"
-    >
-      <span className="rounded-[1px] bg-black/25" />
-      <span className="rounded-[1px] bg-black/10" />
-      <span className="rounded-[1px] bg-black/10" />
-      <span className="rounded-[1px] bg-black/25" />
-    </span>
-  )
-}
-
-/** Everything one card in the wallet needs to render — the WorldStreet
- *  total card and each chain card share this shape. */
-type WalletCardData = {
-  key: string
-  label: string
-  /** undefined = nothing priced yet; render an em dash, never $0.00. */
-  value?: number
-  /** 24h move for what this card holds. undefined = the feed didn't say. */
-  change?: number
-  address?: string
-  /** Network brand hue for chain cards; absent = the gold WorldStreet card. */
-  hue?: string
-  symbol?: string
-  icon?: string
-  balanceAmount?: string
-  networksLabel?: string
-}
-
-/**
- * The wallet pocket — cards tucked into a pouch with their top edges showing.
- * Hover peeks a card out; click deals it onto the hero. The pouch front is
- * the WorldStreet card's own face, and the way back to the total view.
- *
- * What makes this read as a POCKET rather than a list of coloured rows:
- *
- *  · each card is a real card — 92px of card, of which only the top 40px is
- *    ever visible, so what you see is a card DISAPPEARING into something
- *    rather than a 40px-tall strip that happens to be rounded;
- *  · the stack funnels: cards behind are inset a few px each, the way a fan
- *    of cards narrows toward the back of a pocket;
- *  · every card casts a shadow UPWARD onto the one behind it, and the pouch
- *    casts the deepest one of all — that gradient at the pouch mouth is what
- *    sells "these go inside";
- *  · the pouch has a lit lip, dashed stitching, and a gold hairline. Leather
- *    with a brand stamp, not another rounded rectangle.
- */
-function WalletPocket({
-  cards,
-  selected,
-  onSelect,
-  hidden,
-  totalUsd,
-  loading,
-}: {
-  cards: WalletCardData[]
-  selected: string
-  onSelect: (key: string) => void
-  hidden: boolean
-  totalUsd: number
-  loading: boolean
-}) {
-  const chainCards = cards.filter((card) => card.key !== "worldstreet")
-  const depth = chainCards.length
-  const totalActive = selected === "worldstreet"
-  return (
-    // Full width until the hero can sit beside it. A fixed 292px pocket under
-    // a full-width hero card left a ragged 66px of nothing down one side and
-    // read as a misplaced element rather than a second column.
-    <div className="flex w-full shrink-0 flex-col justify-end sm:w-[292px]">
-      <div className="flex flex-col">
-        {chainCards.map((card, index) => {
-          const active = selected === card.key
-          const hue = card.hue ?? "#57534E"
-          // Cards further back sit narrower, so the stack tapers into the
-          // pouch instead of stacking like table rows.
-          const inset = (depth - 1 - index) * 5
-          return (
-            <button
-              key={card.key}
-              type="button"
-              onClick={() => onSelect(card.key)}
-              aria-pressed={active}
-              aria-label={`Show ${card.label}`}
-              style={{
-                zIndex: index + 1,
-                marginLeft: inset,
-                marginRight: inset,
-                // Each card deals in a beat after the one behind it, and
-                // leans a different way on the way down.
-                animationDelay: `${140 + index * 70}ms`,
-                ["--deal-tilt" as string]: index % 2 ? "2.5deg" : "-2.5deg",
-              }}
-              // flex-col + justify-start is load-bearing, not decoration: a
-              // bare <button> centres its content box vertically, which put
-              // every card's name in the middle of its 92px body — i.e. down
-              // on the NEXT card's visible strip — and let the value spill
-              // past the card's right edge.
-              className={`ws-card-deal group/card relative -mb-[52px] flex h-[92px] flex-col items-stretch justify-start rounded-[13px] px-3.5 pt-3 text-left shadow-[0_-9px_20px_-6px_rgb(0_0_0/0.75)] transition-transform duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] active:scale-[0.985] motion-reduce:transition-none ${
-                active ? "-translate-y-2.5" : "hover:-translate-y-2.5 motion-reduce:hover:translate-y-0"
-              }`}
-            >
-              {/* The printed face: the chain's colour burning brightest at the
-                  corner that catches light, falling to card stock. */}
-              <span
-                aria-hidden
-                className="absolute inset-0 rounded-[13px]"
-                style={{ background: `linear-gradient(118deg, ${hue}A6 0%, ${hue}47 30%, #1A1614 66%, #100E0C 100%)` }}
-              />
-              {/* The cut edge catching the light. */}
-              <span
-                aria-hidden
-                className="absolute inset-x-0 top-0 h-px rounded-t-[13px] bg-gradient-to-r from-transparent via-white/40 to-transparent"
-              />
-              <span
-                aria-hidden
-                className={`absolute inset-0 rounded-[13px] ring-1 ring-inset transition-colors ${
-                  active ? "ring-white/40" : "ring-white/[0.12] group-hover/card:ring-white/25"
-                }`}
-              />
-              {/* You-are-here, in the same gold tick the sidebar rail uses. */}
-              {active ? (
-                <span aria-hidden className="absolute left-0 top-3 h-4 w-[3px] rounded-r-full bg-primary" />
-              ) : null}
-              <span className="relative flex w-full items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-2">
-                  {card.symbol ? <CoinAvatar symbol={card.symbol} src={card.icon} size="sm" className="h-[18px] w-[18px] shrink-0" /> : null}
-                  <span className={`truncate text-[12px] font-semibold tracking-[0.01em] transition-colors ${active ? "text-white" : "text-white/85"}`}>
-                    {card.label}
-                  </span>
-                </span>
-                <span className="shrink-0 text-[12px] font-semibold tabular-nums text-white/65">
-                  {card.value !== undefined
-                    ? hidden
-                      ? AMOUNT_MASK
-                      : usd(card.value)
-                    : card.balanceAmount !== undefined
-                      ? hidden
-                        ? AMOUNT_MASK
-                        : `${card.balanceAmount} ${card.symbol ?? ""}`
-                      : "—"}
-                </span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* The pouch front. Its upward shadow is the pocket's mouth — the dark
-          the cards vanish into. */}
-      <button
-        type="button"
-        onClick={() => onSelect("worldstreet")}
-        aria-pressed={totalActive}
-        aria-label="Show your total balance"
-        style={{ animationDelay: `${140 + depth * 70}ms`, ["--deal-tilt" as string]: "0deg" }}
-        className="ws-card-deal relative z-20 h-[116px] overflow-hidden rounded-[18px] text-left shadow-[0_-16px_28px_-8px_rgb(0_0_0/0.85),0_20px_38px_-14px_rgb(0_0_0/0.7)] transition-transform duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-1 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-      >
-        <span aria-hidden className="absolute inset-0 bg-[linear-gradient(168deg,#3A3532_0%,#241F1C_44%,#14110F_100%)]" />
-        <span
-          aria-hidden
-          className="absolute inset-0"
-          style={{ background: "radial-gradient(120% 100% at 100% 0%, rgba(234,179,8,0.15) 0%, transparent 62%)" }}
-        />
-        {/* The lip: a lit top edge over a short fall of light. */}
-        <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-        <span aria-hidden className="absolute inset-x-0 top-0 h-7 bg-[linear-gradient(180deg,rgb(255_255_255/0.08),transparent)]" />
-        {/* Stitching. */}
-        <span aria-hidden className="absolute inset-[7px] rounded-[12px] border border-dashed border-white/[0.11]" />
-        <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[18px] p-px" style={GOLD_STROKE} />
-        {/* Just the number. The WorldStreet mark used to sit above it, which
-            made three brand lockups on one screen — the hero card wears one
-            whenever the total is dealt, and the page header is right there.
-            The pouch front's job is the figure; dropping the mark gave the
-            figure the room to be one. */}
-        <span className="relative flex h-full flex-col items-center justify-center gap-1 px-4">
-          <span className="text-[28px] font-semibold tabular-nums leading-none text-white">
-            {loading ? "––" : hidden ? AMOUNT_MASK : usd(totalUsd)}
-          </span>
-          <span className={`text-[9.5px] font-semibold uppercase tracking-[0.14em] transition-colors ${totalActive ? "text-primary/90" : "text-white/40"}`}>
-            Total balance
-          </span>
-        </span>
-      </button>
-    </div>
-  )
-}
-
-/**
- * One holding's USD value, or `null` when nothing here can be trusted: no
- * live price for the symbol, or an amount that didn't parse. Never NaN — an
- * unpriced asset is excluded from the total and footnoted instead.
- */
 function usdValueOf(balance: CryptoBalanceResult, index: Record<string, number> | null): number | null {
   // Stablecoins are worth one dollar by contract. They must not disappear
   // from the wallet total merely because the optional market-price request is
@@ -428,8 +217,6 @@ export function ModernWalletPage() {
   // render BEHIND the flow's "Your wallet is ready" card and its "Open your
   // wallet" button would point at a wallet that was already on screen.
   const [setupCeremony, setSetupCeremony] = useState(false)
-  // The hero card's press-to-copy flash for the primary address.
-  const [cardCopied, setCardCopied] = useState(false)
   // Scopes the modal's warning to one token when opened from a balance row;
   // `null` from the Deposit pill or the empty-state CTA, the wallet's
   // generic "receive anything" view. Kept (not cleared) on close, matching
@@ -563,65 +350,6 @@ export function ModernWalletPage() {
     return segments
   }, [balances.balances, usdIndex])
 
-  // The card visual wears the wallet's primary identity — the Ethereum
-  // address by convention, or whatever account exists first.
-  const primaryAccount = useMemo(
-    () => (wallet.data?.accounts ?? []).find((account) => account.chainFamily === "evm") ?? wallet.data?.accounts[0],
-    [wallet.data],
-  )
-
-  // Which card is dealt onto the hero — the WorldStreet total by default,
-  // or the chain card picked from the pocket.
-  const [selectedCard, setSelectedCard] = useState("worldstreet")
-  const walletCards = useMemo<WalletCardData[]>(() => {
-    /** A move, or null when there isn't one to report. "+0.00%" on a cold
-     *  feed claims knowledge nobody handed us. */
-    const moveOf = (bucket?: { now: number; before: number }) => {
-      if (!bucket || bucket.before <= 0) return undefined
-      const pct = ((bucket.now - bucket.before) / bucket.before) * 100
-      return Number.isFinite(pct) && Math.abs(pct) >= 0.005 ? pct : undefined
-    }
-    const chainCards = (wallet.data?.accounts ?? []).map((account) => {
-      const familyNetworks = networksForFamily(account.chainFamily, networks.data)
-      const meta = familyNetworks.length ? networkMetaFor(familyNetworks[0].id, networks.data) : null
-      return {
-        key: account.chainFamily,
-        label: FAMILY_LABEL[account.chainFamily] ?? account.chainFamily.toUpperCase(),
-        value: valuation.family[account.chainFamily]?.now,
-        change: moveOf(valuation.family[account.chainFamily]),
-        address: account.canonicalAddress,
-        hue: meta?.hue,
-        symbol: meta?.nativeSymbol ?? account.chainFamily,
-        icon: meta ? NETWORK_ICON[meta.key] : undefined,
-        balanceAmount: (() => {
-          const networkIds = new Set(familyNetworks.map((network) => network.id))
-          const holding = balances.balances.find(
-            (balance) => balance.accountId === account.id && networkIds.has(balance.networkId),
-          )
-          return holding ? formatCryptoAmount(holding.amountBaseUnits, holding.decimals) : undefined
-        })(),
-        networksLabel: familyNetworks.map((network) => network.name).join(" · ") || account.state,
-      }
-    })
-    return [
-      {
-        key: "worldstreet",
-        label: "WorldStreet",
-        value: totalUsd,
-        change: moveOf(valuation),
-        address: primaryAccount?.canonicalAddress,
-      },
-      ...chainCards,
-    ]
-  }, [wallet.data, networks.data, valuation, totalUsd, primaryAccount])
-  // Falls back to the total card, which is always index 0 — a selection can
-  // outlive the card it named when an account disappears from the wallet.
-  const activeCard = walletCards.find((card) => card.key === selectedCard) ?? walletCards[0]
-  const isTotalCard = activeCard.key === "worldstreet"
-  const selectCard = (key: string) => {
-    setSelectedCard(key)
-    setCardCopied(false)
-  }
 
   // The provisioning panel now lives inside the security modal, where nobody
   // would ever find it on their own — so the Security verb wears a dot when
@@ -643,6 +371,65 @@ export function ModernWalletPage() {
       { label: "Accounts", value: wallet.data?.accounts.length ?? 0 },
     ]
   }, [balances.balances, wallet.data])
+
+  /**
+   * The hero's right half: one entry per chain FAMILY, biggest first.
+   *
+   * Families rather than networks because one 0x… address serves every EVM
+   * chain, and listing them separately asks someone to copy the same string
+   * three times and guess which copy was right.
+   */
+  const chainGroups = useMemo<ChainGroup[]>(() => {
+    const groups = (wallet.data?.accounts ?? []).map((account) => {
+      const familyNetworks = networksForFamily(account.chainFamily, networks.data)
+      const meta = familyNetworks.length ? networkMetaFor(familyNetworks[0].id, networks.data) : null
+      const networkIds = new Set(familyNetworks.map((network) => network.id))
+      const holdings: ChainHolding[] = balances.balances
+        .filter((balance) => balance.accountId === account.id && networkIds.has(balance.networkId))
+        .map((balance) => ({
+          key: `${balance.networkId}:${balance.asset.kind}:${balance.asset.identifier}`,
+          symbol: balance.symbol,
+          logo:
+            balance.logo
+            ?? (balance.asset.kind === "token" ? COIN_IMAGES[balance.symbol.toUpperCase()] : undefined)
+            ?? NETWORK_ICON[networkMetaFor(balance.networkId, networks.data)?.key ?? ""],
+          amount: formatCryptoAmount(balance.amountBaseUnits, balance.decimals),
+          value: usdValueOf(balance, usdIndex),
+        }))
+      // Same rule as the balances list: anything the feed could not price
+      // sinks rather than claiming a rank it cannot justify.
+      holdings.sort((a, b) => (b.value ?? -1) - (a.value ?? -1))
+      return {
+        key: account.chainFamily,
+        name: FAMILY_LABEL[account.chainFamily] ?? account.chainFamily.toUpperCase(),
+        caption: familyNetworks.map((network) => network.name).join(" · ") || account.state,
+        symbol: meta?.nativeSymbol ?? account.chainFamily,
+        icon: meta ? NETWORK_ICON[meta.key] : undefined,
+        value: valuation.family[account.chainFamily]?.now,
+        address: account.canonicalAddress,
+        holdings,
+      }
+    })
+    groups.sort((a, b) => (b.value ?? -1) - (a.value ?? -1))
+    return groups
+  }, [wallet.data, networks.data, balances.balances, usdIndex, valuation])
+
+  /* The book priced in BTC as well as in dollars — the unit a trading
+     platform's performance is judged in. Null when the feed has no BTC price:
+     dividing by a missing number is how a wallet claims to hold 0.00000 BTC. */
+  const btcPrice = usdIndex?.BTC ?? usdIndex?.btc ?? 0
+  const btcEquivalent = btcPrice > 0 && totalUsd > 0 ? totalUsd / btcPrice : null
+
+  /* The 24h move in dollars, from the same before/after pass the percentage
+     comes from, so the two can never disagree. */
+  const dayPnl = valuation.before > 0 ? valuation.now - valuation.before : null
+  /** The wallet's own 24h move, or undefined when there is none to report —
+   *  "+0.00%" on a cold feed claims knowledge nobody handed us. */
+  const dayPct = (() => {
+    if (valuation.before <= 0) return undefined
+    const pct = ((valuation.now - valuation.before) / valuation.before) * 100
+    return Number.isFinite(pct) && Math.abs(pct) >= 0.005 ? pct : undefined
+  })()
 
   // One notice per network, not per account — the same chain being down for
   // two accounts is one outage to read about.
@@ -800,176 +587,94 @@ export function ModernWalletPage() {
           {/* ── The hero card + the wallet pocket. The pocket holds every
                  card; clicking one deals it onto the hero, which re-skins to
                  that chain's hue, value, and address. ── */}
-          <Rise delay={40} className="flex flex-wrap items-stretch gap-6">
-            <section className="relative w-full max-w-[560px] flex-1 basis-[340px] overflow-hidden rounded-[20px] shadow-[0_28px_64px_-28px_rgb(0_0_0/0.65)]">
-              <div className="absolute inset-0 bg-[linear-gradient(135deg,#2E2A27_0%,#1C1917_48%,#100E0D_100%)]" />
-              {/* Every card's tint is mounted at once and crossfaded by
-                  opacity. Swapping one inline `background` would cut hard —
-                  background-image can't transition — and a card changing its
-                  colour with a jump-cut looks like a bug, not a deal. */}
-              {walletCards.map((card) => (
-                <div
-                  key={card.key}
-                  aria-hidden
-                  className="absolute inset-0 transition-opacity duration-500 motion-reduce:transition-none"
-                  style={{
-                    opacity: card.key === activeCard.key ? 1 : 0,
-                    background:
-                      card.key === "worldstreet"
-                        ? "radial-gradient(120% 90% at 100% 0%, rgba(234,179,8,0.16) 0%, rgba(234,179,8,0.045) 45%, transparent 68%)"
-                        : `radial-gradient(120% 90% at 100% 0%, ${card.hue ?? "#57534E"}4D 0%, ${card.hue ?? "#57534E"}16 45%, transparent 68%)`,
-                  }}
-                />
-              ))}
-              <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-primary/[0.05] blur-3xl" />
-              {/* Card stock: fine engraved diagonals, barely there. */}
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:repeating-linear-gradient(115deg,transparent_0_9px,rgb(255_255_255/0.65)_9px_10px)]"
-              />
-              {/* Both rings live at once and crossfade with the tint: gold is
-                  the brand card's, a plain white hairline is every other. */}
-              <span
-                aria-hidden
-                className={`pointer-events-none absolute inset-0 rounded-[20px] p-px transition-opacity duration-500 motion-reduce:transition-none ${isTotalCard ? "opacity-90" : "opacity-0"}`}
-                style={GOLD_STROKE}
-              />
-              <span
-                aria-hidden
-                className={`pointer-events-none absolute inset-0 rounded-[20px] ring-1 ring-inset ring-white/15 transition-opacity duration-500 motion-reduce:transition-none ${isTotalCard ? "opacity-0" : "opacity-100"}`}
-              />
-              {/* Light travelling the laminate, replayed on every deal. */}
-              <span
-                key={`sheen-${activeCard.key}`}
-                aria-hidden
-                className="ws-card-sheen pointer-events-none absolute inset-0 overflow-hidden rounded-[20px]"
-              />
-
-              {/* Keyed so dealing a new card replays the settle. */}
-              <div key={activeCard.key} className="ws-card-face-in relative flex h-full flex-col justify-between gap-5 p-5 md:p-6">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    {isTotalCard ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/worldstreet-logo/WorldStreet1.png" alt="" className="h-6 w-6 opacity-90" />
-                        <span className="text-[13px] font-semibold tracking-[0.02em] text-white/90">WorldStreet</span>
-                      </>
-                    ) : (
-                      <>
-                        <CoinAvatar symbol={activeCard.symbol ?? ""} src={activeCard.icon} size="lg" className="h-6 w-6 shrink-0" />
-                        <span className="truncate text-[13px] font-semibold tracking-[0.02em] text-white/90">{activeCard.label}</span>
-                      </>
-                    )}
-                  </div>
-                  <CardChip />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-3">
-                    <Eyebrow className="text-white/45">{isTotalCard ? "Est. Total Value" : `${activeCard.label} balance`}</Eyebrow>
+          {/* ── The hero: one figure on the left, one chain on the right ──
+                 This replaced a deck of credit-card tiles. The deck looked
+                 good and answered almost nothing — you could not read the
+                 balances behind the top card, and the address needed a press
+                 to reveal. A wallet is asked two questions, "how much have I
+                 got" and "where do I send it", so the left half answers the
+                 first in as few elements as it can and the whole right half
+                 goes to the second. */}
+          <Rise delay={40}>
+            <CardShell className={HERO_HUE}>
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                {/* ── Left: the figure ──────────────────────────────────── */}
+                <div className="flex flex-col justify-center gap-6 p-6 lg:p-8">
+                  <div className="flex items-center gap-2">
+                    <Eyebrow>Estimated total value</Eyebrow>
                     <button
                       type="button"
                       onClick={toggleHidden}
                       aria-label={hidden ? "Show balances" : "Hide balances"}
-                      className={`transition-colors ${hidden ? "text-primary" : "text-white/40 hover:text-white/80"}`}
+                      title={hidden ? "Show balances" : "Hide balances"}
+                      className={`ws-icon-mono inline-flex h-6 w-6 items-center justify-center rounded-full transition-colors ${hidden ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
                     >
-                      <HugeiconsIcon icon={EyeIcon} className="h-[18px] w-[18px]" />
+                      <HugeiconsIcon icon={hidden ? ViewOffSlashIcon : EyeIcon} className="h-[15px] w-[15px]" />
                     </button>
                   </div>
-                  {/* The figure below is Medium, not the house hero Light
-                      300 — the same step up the dashboard's total balance
-                      took, so the two big numbers in the app carry the same
-                      weight. 500 and not 600: semi-bold was tried and read
-                      as too thick. */}
-                  {heroLoading ? (
-                    <Skel className="my-1.5 h-[clamp(1.75rem,7.5vw,2.4rem)] w-[clamp(12rem,24vw,18rem)] rounded-lg sm:h-[clamp(2.4rem,5vw,3.4rem)]" />
-                  ) : (
-                    <Balance
-                      value={activeCard.value !== undefined ? usd(activeCard.value) : "—"}
-                      hidden={hidden}
-                      className="font-medium text-[clamp(1.75rem,7.5vw,2.4rem)] text-white sm:text-[clamp(2.4rem,5vw,3.4rem)]"
-                    />
-                  )}
-                  {/* The move comes first — it's the thing you look for after
-                      the figure itself. The sync time is bookkeeping and is
-                      sized like it. */}
-                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                    {!heroLoading && activeCard.change !== undefined ? (
-                      <>
-                        <DeltaChip value={activeCard.change} className="px-2 py-0.5 text-[12px]" />
-                        <span className="text-[12px] font-medium text-white/40">24h</span>
-                        <span aria-hidden className="text-white/20">·</span>
-                      </>
-                    ) : null}
-                    <p className="text-[12px] text-white/40">
+
+                  <div className="flex flex-col gap-2.5">
+                    {heroLoading ? (
+                      <Skel className="my-1.5 h-[clamp(2.75rem,5vw,4.25rem)] w-[min(18rem,80%)] rounded-lg" />
+                    ) : (
+                      <Balance
+                        value={usd(totalUsd)}
+                        hidden={hidden}
+                        className="text-[clamp(2.75rem,5vw,4.25rem)]"
+                      />
+                    )}
+                    <span className="flex flex-wrap items-center gap-2">
+                      {/* Each of these renders only when there is something
+                          to say. A wallet that cannot price itself in BTC, or
+                          has no yesterday to compare against, says nothing
+                          rather than printing a zero that reads as a fact. */}
+                      {btcEquivalent !== null && (
+                        <>
+                          <span className="text-[15px] font-medium tabular-nums text-muted-foreground">
+                            ≈ {hidden ? AMOUNT_MASK : `${btcEquivalent.toFixed(5)} BTC`}
+                          </span>
+                          {(dayPct !== undefined || dayPnl !== null) && (
+                            <span aria-hidden className="h-3.5 w-px bg-border" />
+                          )}
+                        </>
+                      )}
+                      {dayPct !== undefined && <DeltaChip value={dayPct} />}
+                      {dayPnl !== null && (
+                        <span
+                          className={`text-[14px] font-semibold tabular-nums ${dayPnl >= 0 ? "text-credit" : "text-debit"}`}
+                        >
+                          {hidden ? AMOUNT_MASK : `${dayPnl >= 0 ? "+" : "−"}${usd(Math.abs(dayPnl))}`}
+                        </span>
+                      )}
+                      {(dayPct !== undefined || dayPnl !== null) && (
+                        <span className="text-[14px] text-muted-foreground">24h</span>
+                      )}
+                    </span>
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
                       {asOf ?? (heroLoading ? "Syncing…" : "Not synced yet")}
                       {unpriced > 0 ? " · Some assets have no live price" : ""}
-                    </p>
-                    {refreshAction}
+                      {refreshAction}
+                    </span>
                   </div>
                 </div>
 
-                {/* The address is on the card for everybody. Deposit is still
-                    the safer road in — it asks what you're adding first and
-                    then shows the right address for it, which is the step
-                    that stops money being sent somewhere it can't arrive —
-                    but hiding the address from anyone was never what made
-                    that true, and people come to this card to copy it. */}
-                <div className="flex items-end justify-between gap-3">
-                  {/* This is a button, and it used to read as a line of type:
-                      thin, dimmed, no affordance at all. It carries the one
-                      thing on the card people actually come to take away, so
-                      it now wears its weight, an icon, and a pressable box. */}
-                  <button
-                    type="button"
-                    disabled={!activeCard.address}
-                    aria-label={activeCard.address ? `Copy ${activeCard.label} address` : "Address pending"}
-                    onClick={() => {
-                      const address = activeCard.address
-                      if (!address) return
-                      navigator.clipboard?.writeText(address).then(() => {
-                        setCardCopied(true)
-                        setTimeout(() => setCardCopied(false), 1600)
-                      }).catch(() => {})
-                    }}
-                    className={`-mx-2 -my-1 flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 font-mono text-[13px] font-semibold tracking-[0.08em] transition-colors enabled:hover:bg-white/[0.07] disabled:opacity-60 sm:tracking-[0.13em] ${cardCopied ? "text-credit" : "text-white/90 hover:text-white"}`}
-                  >
-                    <span className="truncate">
-                      {cardCopied ? "Address copied" : groupedAddress(activeCard.address)}
+                {/* ── Right: pick a chain, see that chain ────────────────── */}
+                <div className="flex min-w-0 flex-col border-t border-border/40 lg:border-l lg:border-t-0">
+                  <div className="flex items-center justify-between gap-3 px-5 pb-2 pt-5">
+                    <Eyebrow>Balances by chain</Eyebrow>
+                    <span className="text-[11.5px] text-muted-foreground">
+                      Pick a chain to see its address
                     </span>
-                    <HugeiconsIcon
-                      icon={cardCopied ? CheckmarkCircle02Icon : Copy01Icon}
-                      className="h-4 w-4 shrink-0 opacity-70"
-                    />
-                  </button>
-                  {/* The networks label was shrink-0 and untruncated, so the
-                      whole squeeze landed on the address beside it — the one
-                      thing people come to this card to copy. A two-network
-                      family ate ~178px of 288px and left the address at about
-                      eleven characters. It gives first now, and the full list
-                      stays available on hover. */}
-                  <span
-                    title={isTotalCard ? undefined : activeCard.networksLabel}
-                    className={`min-w-0 max-w-[42%] truncate text-right text-[9px] font-semibold uppercase tracking-[0.16em] ${isTotalCard ? "text-primary/90" : "text-white/45"}`}
-                  >
-                    {isTotalCard ? "Only yours" : activeCard.networksLabel}
-                  </span>
+                  </div>
+                  <ChainPicker
+                    groups={chainGroups}
+                    usd={usd}
+                    mask={(value: string) => (hidden ? AMOUNT_MASK : value)}
+                    onReceive={() => openReceive()}
+                  />
                 </div>
               </div>
-            </section>
-
-            {/* The pocket says "your money lives in several different
-                places", which is simply what is true of this wallet — so it
-                is shown to everybody rather than saved for a mode. */}
-            <WalletPocket
-              cards={walletCards}
-              selected={activeCard.key}
-              onSelect={selectCard}
-              hidden={hidden}
-              totalUsd={totalUsd}
-              loading={heroLoading}
-            />
+            </CardShell>
           </Rise>
 
           {/* The verbs, in the round grammar every wallet trains — gold on
@@ -1022,8 +727,15 @@ export function ModernWalletPage() {
             </div>
           </Rise>
 
+          {/* Section rules, the same grammar the dashboard grid uses: a label
+              and a hairline to the end of the row. Cheap, and it does what
+              another card title could not — it groups. */}
+          <Rise delay={140}>
+            <SectionRule label="Balances" note="Everything you hold, priced" />
+          </Rise>
+
           <Rise delay={160}>
-            <CardShell>
+            <CardShell className={CARD_HUE}>
               <CardHeader
                 title="Balances"
                 subtitle={
@@ -1173,6 +885,16 @@ export function ModernWalletPage() {
                 </div>
               )}
             </CardShell>
+          </Rise>
+
+          <Rise delay={200}>
+            <SectionRule label="History" note="Money in and out of this wallet" />
+          </Rise>
+
+          {/* The wallet had no history at all — "did my deposit land?" meant
+              leaving the page and coming back. */}
+          <Rise delay={220}>
+            <Movements />
           </Rise>
         </>
       ) : null}

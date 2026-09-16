@@ -6,19 +6,9 @@
  * client directive). The one icon here is inline SVG for that reason.
  */
 
-/** A section rule — the label, then a hairline running to the end of the row.
- *  Cheap, and it does what four more card titles could not: it groups. */
-export function SectionRule({ label, note }: { label: string; note?: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </span>
-      <span aria-hidden className="h-px flex-1 bg-border/50" />
-      {note && <span className="shrink-0 text-[11px] text-muted-foreground/70">{note}</span>}
-    </div>
-  )
-}
+/* SectionRule now lives in the design system — three pages had grown the
+   same copy. Re-exported so the preview pages import it from one place. */
+export { SectionRule } from "@/components/ui/system"
 
 /**
  * The standing disclaimer. These pages are reachable WITHOUT a session and
