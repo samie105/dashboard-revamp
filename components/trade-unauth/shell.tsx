@@ -32,11 +32,13 @@ export function TradeShell() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Stacks on a phone: side by side, the balance and three buttons wrapped
+          into three ragged rows with Deposit stranded on its own. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
         {/* The trading balance, stated where the funding actions are. The
             live bar has the three buttons and no balance beside them, so
             "Deposit" is an instruction with no context. */}
-        <span className="mr-auto flex items-baseline gap-2">
+        <span className="flex items-baseline gap-2 sm:mr-auto">
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Trading balance
           </span>
@@ -48,13 +50,15 @@ export function TradeShell() {
           </span>
         </span>
 
+        {/* Equal thirds on a phone; natural width from `sm` up. */}
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center">
         {ACTIONS.map((a) => (
           <button
             key={a.key}
             type="button"
             onClick={() => setFlow(a.key)}
             className={cn(
-              "ws-icon-mono inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-4 text-[13px] font-semibold transition-colors",
+              "ws-icon-mono inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-3 text-[13px] font-semibold transition-colors sm:px-4",
               a.primary
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "bg-surface-sunken text-muted-foreground hover:text-foreground",
@@ -64,6 +68,7 @@ export function TradeShell() {
             {a.label}
           </button>
         ))}
+        </div>
       </div>
 
       <TradeWorkspace flow={flow} onFlow={setFlow} />

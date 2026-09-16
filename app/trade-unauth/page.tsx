@@ -39,17 +39,22 @@ export default function TradeUnauthPage() {
             className="h-[22px] w-[22px] shrink-0 object-contain"
             priority
           />
-          <span className="font-display text-[14px] font-semibold tracking-[-0.01em]">WorldStreet</span>
+          <span className="hidden font-display text-[14px] font-semibold tracking-[-0.01em] sm:inline">WorldStreet</span>
         </Link>
         <Link
           href={PREVIEW_ROUTES.wallet}
-          className="ml-auto rounded-full bg-surface-sunken px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="ml-auto shrink-0 whitespace-nowrap rounded-full bg-surface-sunken px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
-          Back to wallet
+          {/* "Back to wallet" wrapped to two lines in a 375px bar. */}
+          <span className="sm:hidden">Wallet</span>
+          <span className="hidden sm:inline">Back to wallet</span>
         </Link>
       </header>
 
-      <div className="slim-scroll flex flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden p-4 md:p-5 lg:p-6">
+      {/* pb-28 on mobile: LayoutShell gives full-bleed routes no bottom padding,
+          so the floating capsule tab bar sits ON the last panel unless the page
+          reserves the room itself. Desktop has no bar. */}
+      <div className="slim-scroll flex flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden p-4 pb-28 md:p-5 md:pb-5 lg:p-6 lg:pb-6">
       <PreviewNotice>
         Every price, candle, order-book level and fill below is invented and frozen. Nothing here reaches a
         venue — no order you place can be submitted. The page is open without signing in so the layout can

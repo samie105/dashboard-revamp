@@ -143,8 +143,11 @@ export function TradeWorkspace({
       </div>
 
       {/* ── Pair header ───────────────────────────────────────────────── */}
-      <CardShell className={HERO_HUE}>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-4 p-4 lg:p-5">
+      <CardShell className={cn(HERO_HUE, "relative")}>
+        {/* On a phone this is three stacked bands — identity, price, figures —
+            rather than one flex-wrap row, which broke into a 4-then-2 ragged
+            grid and stranded the Live badge on its own line. */}
+        <div className="flex flex-col gap-4 p-4 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6 lg:p-5">
           <button
             type="button"
             onClick={() => setListOpen((v) => !v)}
@@ -173,12 +176,12 @@ export function TradeWorkspace({
             </span>
           </button>
 
-          <span className="flex flex-col">
+          <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 lg:flex-col lg:items-start lg:gap-0">
             <span className="font-display text-[30px] font-light leading-none tabular-nums">
               {formatPrice(market.price)}
             </span>
             {/* Stated, not apologised for. */}
-            <span className="mt-1 flex items-center gap-2">
+            <span className="flex items-center gap-2 lg:mt-1">
               <span
                 className={cn("text-[13px] font-semibold tabular-nums", up ? "text-credit" : "text-debit")}
               >
@@ -189,7 +192,7 @@ export function TradeWorkspace({
             </span>
           </span>
 
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border/40 pt-3 sm:grid-cols-3 lg:flex lg:flex-wrap lg:items-center lg:gap-x-6 lg:gap-y-2 lg:border-t-0 lg:pt-0">
             <Figure label={`${windowLabel} high`} value={formatPrice(dayHigh)} />
             <Figure label={`${windowLabel} low`} value={formatPrice(dayLow)} />
             <Figure label="24h volume" value={`$${formatCompact(market.volumeUsd)}`} />
@@ -210,7 +213,7 @@ export function TradeWorkspace({
             )}
           </div>
 
-          <span className="ml-auto flex items-center gap-1.5 rounded-full bg-credit-chip px-2.5 py-1 text-[11.5px] font-semibold text-credit">
+          <span className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full bg-credit-chip px-2.5 py-1 text-[11.5px] font-semibold text-credit lg:static lg:ml-auto">
             <span className="relative flex h-1.5 w-1.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-credit opacity-60" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-credit" />
