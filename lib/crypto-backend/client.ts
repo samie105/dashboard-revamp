@@ -429,8 +429,25 @@ export class CryptoBackendClient {
     }, { signal })
   }
 
-  async getModernSpotMarkets(signal?: AbortSignal) {
-    return this.request<{ markets: Array<{ id: string; symbol: string; quote: string; networkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta"; venue: "0x" | "jupiter"; chartSymbol: string; chartSupported: boolean; price?: number; icon?: string | null; sellToken?: string; buyToken?: string; inputMint?: string; outputMint?: string; baseDecimals?: number; quoteDecimals?: number }> }>("/trading/spot/markets", {}, { signal })
+  /**
+   * The spot registry. `limit`/`offset` are optional and the unpaginated call
+   * is unchanged — the trade screen takes the whole catalogue once and
+   * searches it locally, so it must stay able to.
+   *
+   * The backend sorts by liquidity descending, so `{ limit: n }` alone is
+   * "the n most traded markets", which is what a summary card wants instead
+   * of two thousand rows it will slice to six.
+   */
+  async getModernSpotMarkets(options?: { limit?: number; offset?: number }, signal?: AbortSignal) {
+    const params = new URLSearchParams()
+    if (options?.limit !== undefined) params.set("limit", String(options.limit))
+    if (options?.offset !== undefined) params.set("offset", String(options.offset))
+    const query = params.toString()
+    return this.request<{ total?: number; markets: Array<{ id: string; symbol: string; quote: string; networkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta"; venue: "0x" | "jupiter"; chartSymbol: string; chartSupported: boolean; price?: number; icon?: string | null; sellToken?: string; buyToken?: string; inputMint?: string; outputMint?: string; baseDecimals?: number; quoteDecimals?: number }> }>(
+      query ? `/trading/spot/markets?${query}` : "/trading/spot/markets",
+      {},
+      { signal },
+    )
   }
 
   async createModernSolanaSpotIntent(input: {

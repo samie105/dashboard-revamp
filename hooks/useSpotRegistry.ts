@@ -19,6 +19,9 @@
 import * as React from "react"
 import { isCryptoBackendEnabled } from "@/lib/crypto-backend"
 import { loadSpotMarkets } from "@/lib/spot-markets"
+
+/** One market as the backend sends it. */
+type BackendMarket = Awaited<ReturnType<typeof loadSpotMarkets>>["markets"][number]
 import { chainLabel } from "@/lib/spot-market-search"
 
 export type RegistryRow = {
@@ -65,6 +68,29 @@ export function addressKey(networkId: string, address: string): string {
   return `${networkId}:${address.toLowerCase()}`
 }
 
+/**
+ * One backend market → one registry row.
+ *
+ * Exported because the dashboard's summary card fetches its own six markets
+ * (`loadTopSpotMarkets`) rather than taking the 2,000-row registry to slice
+ * it, and it still needs rows `tradeHref` can route from. Two copies of this
+ * mapping would be two places for `buyToken` vs `outputMint` to drift.
+ */
+export function toRegistryRow(m: BackendMarket): RegistryRow {
+  return {
+    id: m.id,
+    symbol: m.symbol.toUpperCase(),
+    networkId: m.networkId,
+    quote: (m.quote ?? "USDC").toUpperCase(),
+    price: m.price ?? 0,
+    address: m.buyToken ?? m.outputMint ?? null,
+    icon: m.icon ?? null,
+    quoteAddress: m.sellToken ?? m.inputMint ?? null,
+    ...(typeof m.baseDecimals === "number" ? { baseDecimals: m.baseDecimals } : {}),
+    ...(typeof m.quoteDecimals === "number" ? { quoteDecimals: m.quoteDecimals } : {}),
+  }
+}
+
 export function useSpotRegistry(enabled = true): SpotRegistry {
   const [rows, setRows] = React.useState<RegistryRow[] | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -75,24 +101,7 @@ export function useSpotRegistry(enabled = true): SpotRegistry {
     started.current = true
     setLoading(true)
     loadSpotMarkets()
-      .then((result) =>
-        setRows(
-          result.markets
-            .filter((m) => m.chartSupported)
-            .map((m) => ({
-              id: m.id,
-              symbol: m.symbol.toUpperCase(),
-              networkId: m.networkId,
-              quote: (m.quote ?? "USDC").toUpperCase(),
-              price: m.price ?? 0,
-              address: m.buyToken ?? m.outputMint ?? null,
-              icon: m.icon ?? null,
-              quoteAddress: m.sellToken ?? m.inputMint ?? null,
-              ...(typeof m.baseDecimals === "number" ? { baseDecimals: m.baseDecimals } : {}),
-              ...(typeof m.quoteDecimals === "number" ? { quoteDecimals: m.quoteDecimals } : {}),
-            })),
-        ),
-      )
+      .then((result) => setRows(result.markets.filter((m) => m.chartSupported).map(toRegistryRow)))
       // A registry we couldn't reach must not turn every row un-tradable:
       // `rows` stays null and the callers fall back to showing the link.
       .catch(() => setRows(null))
