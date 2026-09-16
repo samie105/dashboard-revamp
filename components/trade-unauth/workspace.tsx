@@ -27,6 +27,10 @@ import { CardShell, Eyebrow, Segmented } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { CARD_HUE, HERO_HUE } from "@/components/preview/surface"
 import { AreaPrice, Candles, OhlcReadout } from "@/components/trade-unauth/chart"
+import { FuturesTicket } from "@/components/trade-unauth/futures-ticket"
+import { PositionsPanel } from "@/components/trade-unauth/positions-panel"
+import { TransferModal, type FlowKind } from "@/components/trade-unauth/transfer-modal"
+import { DEFAULT_PERP, PERPS, perpById } from "@/components/trade-unauth/futures-data"
 import { MarketList } from "@/components/trade-unauth/market-list"
 import { OrderBook } from "@/components/trade-unauth/order-book"
 import { OrdersPanel } from "@/components/trade-unauth/orders-panel"
@@ -48,16 +52,29 @@ import {
 } from "@/components/trade-unauth/trade-data"
 
 type Mode = "simple" | "pro"
+type Venue = "spot" | "futures"
 
-export function TradeWorkspace() {
+export function TradeWorkspace({
+  flow,
+  onFlow,
+}: {
+  flow: FlowKind | null
+  onFlow: (f: FlowKind | null) => void
+}) {
   const [mode, setMode] = React.useState<Mode>("simple")
+  const [venue, setVenue] = React.useState<Venue>("spot")
   const [pairId, setPairId] = React.useState(DEFAULT_PAIR.id)
+  const [perpId, setPerpId] = React.useState(DEFAULT_PERP.id)
   const [tf, setTf] = React.useState<Timeframe>("15m")
   const [limitPrice, setLimitPrice] = React.useState<number | null>(null)
   const [hovered, setHovered] = React.useState<Candle | null>(null)
   const [listOpen, setListOpen] = React.useState(false)
 
-  const market = pairById(pairId)
+  const futures = venue === "futures"
+  const perp = perpById(perpId)
+  // One `market` drives the chart, the header and the book in both venues —
+  // a perp IS its spot pair plus funding, leverage and a mark price.
+  const market = futures ? perp : pairById(pairId)
   const pro = mode === "pro"
   // Simple and Pro read the same generator at different densities.
   const view = pro ? timeframe(tf) : simpleRange(tf)
@@ -79,27 +96,49 @@ export function TradeWorkspace() {
   }, [pro, tf])
 
   const selectPair = (id: string) => {
-    setPairId(id)
+    if (futures) setPerpId(id)
+    else setPairId(id)
     setLimitPrice(null)
     setListOpen(false)
   }
 
+  // Futures is a Pro instrument: leverage, margin and liquidation have no
+  // Simple presentation that is not a lie by omission.
+  React.useEffect(() => {
+    if (futures) setMode("pro")
+  }, [futures])
+
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Mode bar ──────────────────────────────────────────────────── */}
+      {/* ── Venue + mode ──────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3">
         <Segmented
           options={[
-            { key: "simple", label: "Simple" },
+            { key: "spot", label: "Spot" },
+            { key: "futures", label: "Futures" },
+          ]}
+          value={venue}
+          onChange={(k) => setVenue(k as Venue)}
+        />
+        <Segmented
+          options={[
+            {
+              key: "simple",
+              label: "Simple",
+              disabled: futures,
+              disabledReason: "Futures is Pro only — leverage needs the book and the margin figures",
+            },
             { key: "pro", label: "Pro" },
           ]}
           value={mode}
           onChange={(k) => setMode(k as Mode)}
         />
         <span className="text-[12.5px] text-muted-foreground">
-          {pro
-            ? "Order book, limit and stop orders, working orders you can cancel."
-            : "One market, one price, a market order."}
+          {futures
+            ? "Perpetuals: leverage, margin, liquidation price and funding."
+            : pro
+              ? "Order book, limit and stop orders, working orders you can cancel."
+              : "One market, one price, a market order."}
         </span>
       </div>
 
@@ -115,7 +154,11 @@ export function TradeWorkspace() {
             <span className="flex flex-col">
               <span className="flex items-baseline gap-1.5">
                 <span className="font-display text-[20px] font-semibold leading-tight">{market.base}</span>
-                <span className="text-[13px] text-muted-foreground">/{market.quote}</span>
+                {/* A perpetual is not a spot pair and should not be labelled
+                    like one — the live futures header still reads "/USDC". */}
+                <span className="text-[13px] text-muted-foreground">
+                  {futures ? "PERP" : `/${market.quote}`}
+                </span>
                 <HugeiconsIcon
                   icon={ArrowDown01Icon}
                   className={cn(
@@ -125,7 +168,7 @@ export function TradeWorkspace() {
                 />
               </span>
               <span className="text-[11.5px] leading-tight text-muted-foreground">
-                Spot on {venueOf(market)}
+                {futures ? `Perpetual · up to ${perp.maxLeverage}×` : `Spot on ${venueOf(market)}`}
               </span>
             </span>
           </button>
@@ -150,7 +193,21 @@ export function TradeWorkspace() {
             <Figure label={`${windowLabel} high`} value={formatPrice(dayHigh)} />
             <Figure label={`${windowLabel} low`} value={formatPrice(dayLow)} />
             <Figure label="24h volume" value={`$${formatCompact(market.volumeUsd)}`} />
-            <Figure label="Market cap" value={`$${formatCompact(market.marketCapUsd)}`} />
+            {futures ? (
+              <>
+                {/* Mark, not last: liquidations are measured against it, and
+                    the live futures header shows only one price. */}
+                <Figure label="Mark price" value={formatPrice(perp.markPrice)} />
+                <Figure label="Open interest" value={`$${formatCompact(perp.openInterestUsd)}`} />
+                <Figure
+                  label={`Funding · ${Math.floor(perp.fundingInMinutes / 60)}h ${perp.fundingInMinutes % 60}m`}
+                  value={`${perp.fundingPct >= 0 ? "+" : ""}${perp.fundingPct.toFixed(4)}%`}
+                  tone={perp.fundingPct >= 0 ? "credit" : "debit"}
+                />
+              </>
+            ) : (
+              <Figure label="Market cap" value={`$${formatCompact(market.marketCapUsd)}`} />
+            )}
           </div>
 
           <span className="ml-auto flex items-center gap-1.5 rounded-full bg-credit-chip px-2.5 py-1 text-[11.5px] font-semibold text-credit">
@@ -166,7 +223,7 @@ export function TradeWorkspace() {
             but still has to be able to change market. */}
         {listOpen && (
           <div className="h-[22rem] border-t border-border/40">
-            <MarketList activeId={pairId} onSelect={selectPair} />
+            <MarketList activeId={market.id} onSelect={selectPair} markets={futures ? PERPS : undefined} />
           </div>
         )}
       </CardShell>
@@ -182,7 +239,7 @@ export function TradeWorkspace() {
       >
         {pro && (
           <CardShell className={cn(CARD_HUE, "hidden h-[34rem] xl:flex")}>
-            <MarketList activeId={pairId} onSelect={selectPair} />
+            <MarketList activeId={market.id} onSelect={selectPair} markets={futures ? PERPS : undefined} />
           </CardShell>
         )}
 
@@ -234,23 +291,39 @@ export function TradeWorkspace() {
         )}
 
         <CardShell className={CARD_HUE}>
-          <Ticket market={market} pro={pro} limitPrice={limitPrice} onLimitPrice={setLimitPrice} />
+          {futures ? (
+            <FuturesTicket perp={perp} limitPrice={limitPrice} onLimitPrice={setLimitPrice} />
+          ) : (
+            <Ticket market={market} pro={pro} limitPrice={limitPrice} onLimitPrice={setLimitPrice} />
+          )}
         </CardShell>
       </div>
 
       {/* ── Orders ────────────────────────────────────────────────────── */}
       <CardShell className={CARD_HUE}>
-        <OrdersPanel pairId={pairId} />
+        {futures ? <PositionsPanel perpId={perpId} /> : <OrdersPanel pairId={pairId} />}
       </CardShell>
+
+      {flow && <TransferModal kind={flow} open onOpenChange={(v) => !v && onFlow(null)} />}
     </div>
   )
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
+function Figure({ label, value, tone }: { label: string; value: string; tone?: "credit" | "debit" }) {
   return (
     <span className="flex flex-col">
-      <span className="text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground">{label}</span>
-      <span className="text-[13.5px] font-medium tabular-nums">{value}</span>
+      <span className="whitespace-nowrap text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </span>
+      <span
+        className={cn(
+          "whitespace-nowrap text-[13.5px] font-medium tabular-nums",
+          tone === "credit" && "text-credit",
+          tone === "debit" && "text-debit",
+        )}
+      >
+        {value}
+      </span>
     </span>
   )
 }

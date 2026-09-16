@@ -24,10 +24,14 @@ type Sort = "volume" | "change" | "name"
 export function MarketList({
   activeId,
   onSelect,
+  markets,
 }: {
   activeId: string
   onSelect: (id: string) => void
+  /** Defaults to spot pairs; the futures venue passes its perpetuals. */
+  markets?: Market[]
 }) {
+  const universe = markets ?? PAIRS
   const [query, setQuery] = React.useState("")
   const [sort, setSort] = React.useState<Sort>("volume")
   const [favorites, setFavorites] = React.useState<string[]>(["SOL-USDT", "BTC-USDT"])
@@ -35,7 +39,7 @@ export function MarketList({
 
   const rows = React.useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = PAIRS.filter((p) => {
+    const list = universe.filter((p) => {
       if (favOnly && !favorites.includes(p.id)) return false
       if (!q) return true
       return p.base.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.quote.toLowerCase().includes(q)
@@ -43,7 +47,7 @@ export function MarketList({
     if (sort === "volume") return [...list].sort((a, b) => b.volumeUsd - a.volumeUsd)
     if (sort === "change") return [...list].sort((a, b) => b.changePct - a.changePct)
     return [...list].sort((a, b) => a.base.localeCompare(b.base))
-  }, [query, sort, favOnly, favorites])
+  }, [universe, query, sort, favOnly, favorites])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -130,6 +134,9 @@ function Row({
   onFav: () => void
 }) {
   const up = p.changePct >= 0
+  // Perps carry maxLeverage; spot pairs do not. Reading it off the row keeps
+  // one list component serving both venues.
+  const maxLeverage = (p as Market & { maxLeverage?: number }).maxLeverage
   return (
     <div
       className={cn(
@@ -165,10 +172,16 @@ function Row({
             <span className={cn("truncate text-[12.5px]", active ? "font-semibold" : "font-medium")}>
               {p.base}
             </span>
-            <span className="text-[10.5px] text-muted-foreground">/{p.quote}</span>
+            {maxLeverage ? (
+              <span className="rounded bg-foreground/[0.08] px-1 text-[9.5px] font-bold tabular-nums text-muted-foreground">
+                {maxLeverage}×
+              </span>
+            ) : (
+              <span className="text-[10.5px] text-muted-foreground">/{p.quote}</span>
+            )}
           </span>
           <span className="truncate text-[10.5px] leading-tight text-muted-foreground">
-            Vol {formatCompact(p.volumeUsd)}
+            {maxLeverage ? "Perpetual · " : ""}Vol {formatCompact(p.volumeUsd)}
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end">

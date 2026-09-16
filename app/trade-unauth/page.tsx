@@ -6,7 +6,7 @@ import Image from "next/image"
 import { Rise } from "@/components/ui/system"
 import { PreviewNotice } from "@/components/preview/page-chrome"
 import { PREVIEW_ROUTES } from "@/components/preview/routes"
-import { TradeWorkspace } from "@/components/trade-unauth/workspace"
+import { TradeShell } from "@/components/trade-unauth/shell"
 
 export const metadata: Metadata = {
   title: "Trade preview",
@@ -57,7 +57,7 @@ export default function TradeUnauthPage() {
       </PreviewNotice>
 
         <Rise>
-          <TradeWorkspace />
+          <TradeShell />
         </Rise>
       </div>
     </div>
