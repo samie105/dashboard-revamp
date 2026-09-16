@@ -28,6 +28,17 @@ const SUI_RPC =
 // browser. Configure this as the dRPC base URL, for example:
 // https://lb.drpc.live/tron/<server-only-api-key>
 const TRON_RPC_URL = process.env.TRON_RPC_URL || "https://api.trongrid.io"
+// Falling back to the public trongrid.io host with no key at all is exactly
+// what silently dropped TRC20 balances: triggerconstantcontract (used for
+// every TRC20 balanceOf call) is rate-limited hard without TRON-PRO-API-KEY,
+// while getaccount (native TRX) is lenient enough to keep working — so a
+// wallet's native TRX balance showed up but its USDT/USDC never did, with no
+// error surfaced anywhere (fetchTronTrc20Balance swallows the failure and
+// just omits the row). lib/privy/tron.ts already attaches this same header
+// for the send path; the balance path never did.
+const TRON_API_HEADERS: Record<string, string> = process.env.TRON_API_KEY
+  ? { "TRON-PRO-API-KEY": process.env.TRON_API_KEY }
+  : {}
 
 // ── Token Constants ──────────────────────────────────────────────────────
 
@@ -357,7 +368,7 @@ async function fetchTronTrc20Balance(
     const ownerHex = TronWeb.address.toHex(address).replace(/^41/, "")
     const result = await fetch(`${TRON_RPC_URL}/wallet/triggerconstantcontract`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...TRON_API_HEADERS },
       body: JSON.stringify({
         owner_address: address,
         contract_address: contractAddress,
@@ -388,7 +399,7 @@ async function fetchTronBalances(address: string): Promise<TokenBalance[]> {
   try {
     const res = await fetch(`${TRON_RPC_URL}/wallet/getaccount`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...TRON_API_HEADERS },
       body: JSON.stringify({ address, visible: true }),
       cache: "no-store",
     })
