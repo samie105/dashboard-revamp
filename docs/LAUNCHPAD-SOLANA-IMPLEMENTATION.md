@@ -1,6 +1,9 @@
 # Launchpad — Solana implementation plan
 
 **Status:** proposal, not yet started. Nothing in either repo references a launchpad today.
+**UI comes first:** see `LAUNCHPAD-UI-PLAN.md`. The screens are built as `/launchpad-unauth` on
+dummy data before any of this is written, because the screens are what produce the data contract
+below — and Phase 0 is the only part of this document that needs to run in parallel with them.
 **Scope:** token creation, allocations (no vesting), bonding curve, liquidity seeding, on Solana first.
 **Chains after this:** Ethereum, then Intertrain. Per-chain availability is a runtime switch — see §7.
 
