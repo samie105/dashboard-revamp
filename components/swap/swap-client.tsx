@@ -40,6 +40,7 @@ import {
 } from "@hugeicons/core-free-icons"
 
 import { CardShell, CardHeader, EmptyState, SkeletonRows, PageHeader, Segmented } from "@/components/ui/system"
+import { CARD_HUE } from "@/components/ui/surface"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { COIN_IMAGES } from "@/lib/coin-images"
 import { ModeSwitch } from "@/components/ui/mode-switch"
@@ -87,6 +88,27 @@ import {
 } from "./swap-model"
 
 /** Convert a calculated token quantity back to the precision the chain can represent. */
+/**
+ * A displayable message from an error of unknown shape.
+ *
+ * API routes here return `error` as a string most of the time and as an object
+ * on some failures. Anything that reaches React as a child has to be a string,
+ * so this is the narrowing point: known message-bearing shapes are unwrapped,
+ * and anything else falls back to a sentence a reader can act on rather than
+ * to `[object Object]`.
+ */
+function errorText(value: unknown, fallback = "Failed to get quote"): string {
+  if (typeof value === "string" && value.trim()) return value
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>
+    for (const key of ["message", "error", "detail", "reason"]) {
+      const inner = record[key]
+      if (typeof inner === "string" && inner.trim()) return inner
+    }
+  }
+  return fallback
+}
+
 function canonicalTokenAmount(amount: number, decimals: number): string {
   if (!Number.isFinite(amount) || amount <= 0) return "0"
   const fixed = amount.toFixed(decimals)
@@ -267,6 +289,10 @@ function historicalSwapAsset(networkId: string | undefined, identifier: string |
       : undefined)
 }
 
+/** How many rows the card shows. The subtitle names this number, so the two
+ *  cannot drift apart. */
+const HISTORY_ROWS = 10
+
 function SwapHistory() {
   const { records, loading } = useLedgerRecords(50)
   const registry = useSpotRegistry()
@@ -334,9 +360,26 @@ function SwapHistory() {
     return "Swap"
   }
 
+  /* The header said "your last ten conversions" over a list that rendered
+     every swap the ledger returned — up to fifty. A caption that contradicts
+     the rows beneath it is the cheapest possible way to make a page look
+     untrustworthy, so the ten is now real and the subtitle states what is
+     actually on screen. */
+  const shown = swaps.slice(0, HISTORY_ROWS)
+
   return (
-    <CardShell>
-      <CardHeader title="Recent swaps" subtitle="Your last ten conversions" />
+    <CardShell className={CARD_HUE}>
+      <CardHeader
+        title="Recent swaps"
+        subtitle={
+          swaps.length > HISTORY_ROWS
+            ? `Latest ${HISTORY_ROWS} of ${swaps.length}`
+            : swaps.length === 0
+              ? undefined
+              : `${swaps.length} conversion${swaps.length === 1 ? "" : "s"}`
+        }
+        link={{ label: "View all", href: "/transactions" }}
+      />
 
       {loading ? (
         <SkeletonRows rows={3} label="Loading swap history" />
@@ -348,7 +391,7 @@ function SwapHistory() {
         />
       ) : (
         <div className="flex flex-col divide-y divide-border/10">
-          {swaps.map((tx) => {
+          {shown.map((tx) => {
             const from = tx.fromToken ?? tx.token
             const received = tx.toAmount != null ? num(tx.toAmount) : null
             return (
@@ -729,7 +772,15 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
             setQuotedAt(Date.now())
           } else {
             setQuoteData(null)
-            setQuoteError(data.error || "Failed to get quote")
+            // `data.error` is whatever the route put there, and on a 401 it is
+            // an OBJECT. This state is typed `string | null`, but the response
+            // is parsed JSON so TypeScript never sees the lie — the object went
+            // straight into the state and then into JSX, where React refuses to
+            // render it and takes the whole page down with
+            // "Objects are not valid as a React child". Typing an amount into
+            // the swap form was enough to trigger it. Coerced at the boundary,
+            // which is the only place that knows the value is untrusted.
+            setQuoteError(errorText(data.error))
             setQuotedAt(null)
           }
         })
@@ -1130,7 +1181,24 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
         {error && available.length === 0 ? (
           <ErrorState message={error} />
         ) : (
-          <>
+          /* LANDSCAPE in Pro: what you are swapping on the left, what it
+             will cost and how long that price is good for on the right,
+             directly above the button that commits to it. Stacked, the
+             countdown sat several rows above a CTA that could scroll out of
+             view, so the number you were racing and the button you were
+             racing it to were never on screen together.
+
+             Simple stays ONE centred column on purpose — its whole point is
+             that nothing sits in the periphery (see the layout note below),
+             and it has no quote panel to put there anyway. */
+          <div
+            className={
+              isSimple
+                ? "flex flex-col gap-3"
+                : "flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] lg:items-start lg:gap-5"
+            }
+          >
+            <div className="flex min-w-0 flex-col">
             {payBlock}
 
             {/* ── Flip ──
@@ -1164,16 +1232,21 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                 </span>
               </p>
             ) : (
-              <>
-                {view.slippageControl && (
-                  <SlippageField className="mt-3" value={slippage} onChange={setSlippage} />
-                )}
+              view.slippageControl && (
+                <SlippageField className="mt-3" value={slippage} onChange={setSlippage} />
+              )
+            )}
+            </div>
+
+            {/* The commitment pane. */}
+            <div className="flex min-w-0 flex-col gap-3">
+              {!isSimple && (
+                <>
                 {/* Nothing to price until there is an amount, and a lone
                     "no live price yet" row above an empty ticket is furniture
                     rather than information. */}
                 {fromCoin && toCoin && numericFrom > 0 && (
                   <QuoteDetail
-                    className="mt-3"
                     view={view}
                     quote={quoteData}
                     fromSymbol={fromCoin.symbol}
@@ -1188,12 +1261,12 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                     dense={compact}
                   />
                 )}
-              </>
-            )}
+                </>
+              )}
 
             {/* Swap result banner */}
             {swapResult && (
-              <div className={`mt-3 rounded-xl p-3 text-xs font-medium ${
+              <div className={`rounded-xl p-3 text-xs font-medium ${
                 swapResult.success && swapResult.status === "DONE"
                   ? "bg-credit-chip text-credit"
                   : swapResult.success && swapResult.status === "PENDING"
@@ -1212,7 +1285,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
 
             {/* Quote error */}
             {quoteError && !quoteLoading && numericFrom > 0 && (
-              <p className="mt-2 text-xs text-warning">
+              <p className="text-xs text-warning">
                 {isSimple ? "We couldn't price that just now. Try again in a moment." : quoteError}
               </p>
             )}
@@ -1226,7 +1299,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
               data-vivid-guard=""
               aria-label="Execute swap"
               data-vivid-label="Execute the swap. Moves real money."
-              className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {(loadingFirstQuote || swapLoading) && <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin" />}
               {buttonText}
@@ -1246,7 +1319,8 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                 </a>
               </div>
             )}
-          </>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -1325,14 +1399,15 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
           <SwapHistory />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]">
-          <div className="flex min-w-0 flex-col gap-4">
-            {view.rateChart && <SwapRateChart fromCoin={fromCoin} toCoin={toCoin} />}
-            {ticket}
-          </div>
-          <div className="flex flex-col gap-4">
-            <SwapHistory />
-          </div>
+        /* The ticket is landscape now, so it takes the full width and the
+           history sits under it. Squeezed into a `1fr` column beside a 380px
+           sidebar, the ticket's own two panes had nowhere to go and the quote
+           pane collapsed to a sliver — a sidebar is not worth more than the
+           thing the page exists for. */
+        <div className="flex flex-col gap-4">
+          {view.rateChart && <SwapRateChart fromCoin={fromCoin} toCoin={toCoin} />}
+          {ticket}
+          <SwapHistory />
         </div>
       )}
 
