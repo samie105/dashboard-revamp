@@ -18,14 +18,13 @@
 
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Clock01Icon, RefreshIcon, Route01Icon } from "@hugeicons/core-free-icons"
+import { RefreshIcon, Route01Icon } from "@hugeicons/core-free-icons"
 
 import { Segmented } from "@/components/ui/system"
-import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { cn } from "@/lib/utils"
 import { num, pct, qty, usd } from "@/lib/num"
 import type { SwapView } from "@/lib/swap-view"
-import { chainMeta, fromBaseUnits, type QuoteData } from "./swap-model"
+import { fromBaseUnits, QUOTE_TTL_SECONDS, type QuoteData } from "./swap-model"
 
 /* ── Slippage — a control, not a setting buried behind a gear ───────────── */
 
@@ -163,17 +162,6 @@ function impactTone(impact: number) {
   return "text-foreground"
 }
 
-/** One end of the route: the coin, and where it sits. */
-function RouteEnd({ symbol, chain }: { symbol: string; chain: string }) {
-  return (
-    <div className="flex min-w-0 shrink-0 flex-col items-center gap-1">
-      <CoinAvatar symbol={symbol} size="md" />
-      <span className="max-w-[72px] truncate text-[11px] font-semibold">{symbol}</span>
-      <span className="max-w-[72px] truncate text-[10.5px] text-muted-foreground">{chainMeta(chain).label}</span>
-    </div>
-  )
-}
-
 /**
  * The venue chip.
  *
@@ -184,7 +172,7 @@ function RouteEnd({ symbol, chain }: { symbol: string; chain: string }) {
  */
 function VenueChip({ tool, logo }: { tool: string; logo?: string }) {
   return (
-    <span className="inline-flex min-w-0 max-w-[45%] shrink items-center gap-1.5 rounded-full bg-card px-2.5 py-1.5 ring-1 ring-border/40">
+    <span className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full bg-card px-2.5 py-1.5 ring-1 ring-border/40">
       {logo ? (
         <img src={logo} alt="" className="h-3.5 w-3.5 shrink-0 rounded-full" />
       ) : (
@@ -193,6 +181,77 @@ function VenueChip({ tool, logo }: { tool: string; logo?: string }) {
       <span className="truncate text-[11.5px] font-semibold">{tool}</span>
     </span>
   )
+}
+
+
+/**
+ * The countdown, as a ring.
+ *
+ * It was a line of text — "New price in 24s" — sharing a row with a refresh
+ * button, which is the least legible way to show a number that is running
+ * out. A ring drains, so the state is readable without reading: full means
+ * fresh, nearly empty means about to move.
+ *
+ * `seconds` null is a real and distinct state ("no live price yet"), NOT zero:
+ * an empty ring would say the quote had just expired, which is the opposite
+ * of never having had one.
+ */
+function QuoteClock({ seconds, refreshing }: { seconds: number | null; refreshing: boolean }) {
+  const size = 34
+  const stroke = 2.5
+  const r = (size - stroke) / 2
+  const circumference = 2 * Math.PI * r
+  const ratio = seconds === null ? 0 : Math.min(1, Math.max(0, seconds / QUOTE_TTL_SECONDS))
+  // Under five seconds the quote is about to be replaced under the reader's
+  // hands, which is worth a colour. Warning, never gold: gold is brand.
+  const urgent = seconds !== null && seconds <= 5
+
+  return (
+    <span className="relative inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
+        {seconds !== null && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={urgent ? "var(--warning)" : "var(--primary)"}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - ratio)}
+            className="transition-[stroke-dashoffset] duration-1000 ease-linear motion-reduce:transition-none"
+          />
+        )}
+      </svg>
+      <span
+        className={cn(
+          "absolute text-[11px] font-bold tabular-nums",
+          refreshing && "animate-pulse",
+          urgent ? "text-warning" : seconds === null ? "text-muted-foreground/50" : "text-foreground",
+        )}
+      >
+        {seconds === null ? "–" : Math.max(0, seconds)}
+      </span>
+    </span>
+  )
+}
+
+/** A small caps heading over a group of rows. */
+function GroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="block text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+      {children}
+    </span>
+  )
+}
+
+/** Seconds as something a person reads. */
+function duration(seconds: number): string {
+  if (seconds < 60) return `~${Math.max(1, Math.round(seconds))}s`
+  const minutes = Math.round(seconds / 60)
+  return `~${minutes} min`
 }
 
 export function QuoteDetail({
@@ -231,30 +290,61 @@ export function QuoteDetail({
   const rate = fromAmount > 0 && toAmount > 0 ? toAmount / fromAmount : null
   const minReceived = quote ? fromBaseUnits(quote.toAmountMin, quote.toToken.decimals) : null
   const impact = quote && Number.isFinite(quote.priceImpact) ? Math.abs(quote.priceImpact) : null
-  const fee = quote ? num(quote.gasCostUSD) : null
+  const networkFee = quote ? num(quote.gasCostUSD) : null
+
+  /* Protocol fees, separate from gas, and only the ones actually CHARGED on
+     top — LI.FI marks a fee `included` when it is already inside the quoted
+     output, and adding those to a total would bill the reader twice. */
+  const protocolFee = React.useMemo(() => {
+    const costs = quote?.feeCosts?.filter((f) => !f.included) ?? []
+    if (costs.length === 0) return null
+    const total = costs.reduce((sum, f) => sum + (num(f.amountUSD) ?? 0), 0)
+    return total > 0 ? total : null
+  }, [quote])
+
+  const arrives = quote?.executionDuration && quote.executionDuration > 0 ? quote.executionDuration : null
+
+  /* The legs. LI.FI returns one entry for a direct swap and several when it
+     has to hop, so the heading counts what is there rather than claiming a
+     shape. Falls back to the single `tool` when the backend predates the
+     field, which is what makes this pane render identically before deploy. */
+  const steps = React.useMemo(() => {
+    if (quote?.steps?.length) return quote.steps
+    if (!quote) return []
+    return [{ tool: quote.tool, logoURI: quote.toolLogoURI, type: "swap", fromSymbol, toSymbol }]
+  }, [quote, fromSymbol, toSymbol])
 
   const showRefresh = view.quoteRefresh
-  const showRoute = view.routeDetail && quote !== null
+  const showRoute = view.routeDetail && quote !== null && steps.length > 0
   /* The rate is quoted, not derived. `toAmount` falls back to a list-price
      estimate before a quote lands, and a rate row sitting under a heading
      about the quote had better be the quote's rate — so it waits for one. */
   const showRate = view.rateDetail && rate !== null && quote !== null
-  const showBreakdown = view.quoteBreakdown && quote !== null && (impact !== null || minReceived !== null || fee !== null)
+  const showBreakdown =
+    view.quoteBreakdown
+    && quote !== null
+    && (impact !== null || minReceived !== null || networkFee !== null || protocolFee !== null || arrives !== null)
 
   if (!showRefresh && !showRoute && !showRate && !showBreakdown) return null
 
   return (
-    <div className={cn("overflow-hidden rounded-2xl bg-surface-sunken/70", className)}>
+    <div className={cn("flex flex-col gap-3", className)}>
+      {/* ── The clock ──────────────────────────────────────────────────── */}
       {showRefresh && (
-        <div className="flex items-center justify-between gap-2 pl-3.5 pr-1.5 pt-1.5">
-          <span className="inline-flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
-            <HugeiconsIcon icon={Clock01Icon} className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate tabular-nums">
-              {refreshing
-                ? "Getting a new price…"
-                : secondsLeft === null
-                  ? "No live price yet"
-                  : `New price in ${Math.max(0, secondsLeft)}s`}
+        <div className="flex items-center gap-3 rounded-2xl bg-foreground/[0.05] p-3.5">
+          <QuoteClock seconds={secondsLeft} refreshing={refreshing} />
+          <span className="flex min-w-0 flex-1 flex-col leading-tight">
+            <span className="text-[13px] font-semibold">
+              {refreshing ? "Getting a new price…" : secondsLeft === null ? "Indicative rate" : "Live quote"}
+            </span>
+            <span className="truncate text-[11.5px] text-muted-foreground">
+              {/* NOT "enter an amount": this pane only mounts once one has
+                  been entered, so that copy — which the preview used, because
+                  its card was always on screen — could never be true here.
+                  No countdown means no quote has landed yet. */}
+              {secondsLeft === null
+                ? "Waiting for a price"
+                : "Refreshes on its own before it expires"}
             </span>
           </span>
           <button
@@ -262,53 +352,74 @@ export function QuoteDetail({
             onClick={onRefresh}
             aria-label="Get a new price now"
             title="Get a new price now"
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:h-9 sm:w-9"
+            className="ws-icon-mono inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-foreground/[0.06] px-3 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
-            <HugeiconsIcon icon={RefreshIcon} className={cn("h-4 w-4", refreshing && "animate-spin")} />
+            <HugeiconsIcon icon={RefreshIcon} className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+            Refresh
           </button>
         </div>
       )}
 
-      {showRoute && quote && (
-        dense ? (
-          <div className="flex items-center justify-between gap-3 px-3.5 py-3">
-            <span className="text-[12.5px] text-muted-foreground">Fills on</span>
-            <VenueChip tool={quote.tool} logo={quote.toolLogoURI} />
-          </div>
-        ) : (
-          <div className="px-3.5 py-3">
-            <div className="flex items-center gap-2">
-              <RouteEnd symbol={fromSymbol} chain={fromChain} />
-              <span aria-hidden className="h-px min-w-2 flex-1 bg-border/50" />
-              <VenueChip tool={quote.tool} logo={quote.toolLogoURI} />
-              <span aria-hidden className="h-px min-w-2 flex-1 bg-border/50" />
-              <RouteEnd symbol={toSymbol} chain={toChain} />
-            </div>
-          </div>
-        )
+      {/* ── The quote ──────────────────────────────────────────────────── */}
+      {(showRate || showBreakdown) && (
+        <div className="flex flex-col gap-2.5 rounded-2xl bg-foreground/[0.05] p-4">
+          <GroupLabel>Quote</GroupLabel>
+          <dl className="flex flex-col gap-2">
+            {showRate && rate !== null && (
+              <>
+                <Row label="Rate" value={`1 ${fromSymbol} = ${qty(rate)} ${toSymbol}`} />
+                {!dense && <Row label="Inverse" value={`1 ${toSymbol} = ${qty(1 / rate)} ${fromSymbol}`} />}
+              </>
+            )}
+            {showBreakdown && minReceived !== null && (
+              <Row label="Minimum received" value={qty(minReceived, toSymbol)} />
+            )}
+            {showBreakdown && impact !== null && (
+              <Row label="Price impact" value={pct(impact)} tone={impactTone(impact)} />
+            )}
+            {showBreakdown && !dense && networkFee !== null && (
+              <Row label="Network fee" value={usd(networkFee)} />
+            )}
+            {showBreakdown && !dense && protocolFee !== null && (
+              <Row label="Protocol fee" value={usd(protocolFee)} />
+            )}
+            {showBreakdown && arrives !== null && <Row label="Arrives in" value={duration(arrives)} />}
+          </dl>
+        </div>
       )}
 
-      {(showRate || showBreakdown) && (
-        <dl
-          className={cn(
-            "flex flex-col gap-2 px-3.5 pb-3.5 pt-3",
-            (showRefresh || showRoute) && "border-t border-border/20",
+      {/* ── The route ──────────────────────────────────────────────────── */}
+      {showRoute && (
+        <div className="flex flex-col gap-2.5 rounded-2xl bg-foreground/[0.05] p-4">
+          <GroupLabel>
+            Route · {steps.length} step{steps.length === 1 ? "" : "s"}
+          </GroupLabel>
+          {dense ? (
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[12.5px] text-muted-foreground">Fills on</span>
+              <VenueChip tool={steps[0].tool} logo={steps[0].logoURI} />
+            </div>
+          ) : (
+            <ol className="flex flex-col gap-2.5">
+              {steps.map((step, index) => (
+                <li key={`${step.tool}-${index}`} className="flex items-start gap-2.5">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-foreground/[0.09] text-[10px] font-bold tabular-nums text-muted-foreground">
+                    {index + 1}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                    <VenueChip tool={step.tool} logo={step.logoURI} />
+                    {step.fromSymbol && step.toSymbol && (
+                      <span className="mt-1 truncate text-[11.5px] text-muted-foreground">
+                        {step.fromSymbol} → {step.toSymbol}
+                        {index === 0 && fromChain !== toChain ? ` · ${fromChain} → ${toChain}` : ""}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ol>
           )}
-        >
-          {showRate && rate !== null && (
-            <>
-              <Row label="Rate" value={`1 ${fromSymbol} = ${qty(rate)} ${toSymbol}`} />
-              {!dense && <Row label="Inverse" value={`1 ${toSymbol} = ${qty(1 / rate)} ${fromSymbol}`} />}
-            </>
-          )}
-          {showBreakdown && impact !== null && (
-            <Row label="Price impact" value={pct(impact)} tone={impactTone(impact)} />
-          )}
-          {showBreakdown && minReceived !== null && (
-            <Row label="Minimum received" value={qty(minReceived, toSymbol)} />
-          )}
-          {showBreakdown && !dense && fee !== null && <Row label="Estimated fee" value={usd(fee)} />}
-        </dl>
+        </div>
       )}
     </div>
   )

@@ -204,6 +204,18 @@ export interface QuoteData {
   executionData: Record<string, unknown> | null
   fromToken: { chainId: number; address: string; symbol: string; decimals: number }
   toToken: { chainId: number; address: string; symbol: string; decimals: number }
+  /* ── Optional, and optional on purpose ──────────────────────────────────
+     These arrive from LI.FI and were being dropped by the quote route until
+     backend 35187e8. They are `?` so a client running against an older
+     backend renders exactly what it rendered before: every row that reads
+     them is conditional, and a missing field removes a row rather than
+     drawing a zero. */
+  /** Seconds the route is expected to take end to end. */
+  executionDuration?: number
+  /** Protocol/integrator fees, separate from gas. */
+  feeCosts?: { name: string; amountUSD: string; included: boolean }[]
+  /** The legs the route actually crosses — one entry for a direct swap. */
+  steps?: { tool: string; logoURI?: string; type: string; fromSymbol: string; toSymbol: string }[]
 }
 
 /**
