@@ -13,7 +13,8 @@ import {
   Fire02Icon,
 } from "@hugeicons/core-free-icons"
 import type { CoinData, FuturesMarket } from "@/lib/actions"
-import { getSpotMarkets, getFuturesMarkets } from "@/lib/actions"
+import { getFuturesMarkets } from "@/lib/actions"
+import { loadSpotMarkets } from "@/lib/spot-markets"
 import { ErrorState } from "@/components/error-state"
 import { CARD_HUE } from "@/components/ui/surface"
 import { MarketsTicker } from "@/components/trading/markets-ticker"
@@ -216,6 +217,8 @@ function RankedFuturesRow({ market, rank }: { market: FuturesMarket; rank: numbe
 
 // ── Markets Client ───────────────────────────────────────────────────────
 
+const ROWS_PER_PAGE = 50
+
 const MARKET_TABS = ["Total", "Main", "Spot", "Futures"] as const
 type Tab = (typeof MARKET_TABS)[number]
 
@@ -360,11 +363,41 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
   const [spotMarkets, setSpotMarkets] = React.useState<CoinData[]>([])
   const [spotLoading, setSpotLoading] = React.useState(false)
   const hasFetchedSpot = React.useRef(false)
+  /* THE REGISTRY, which is what the trade screen lists.
+     This called `getSpotMarkets()`, which re-wraps `getPrices().coins` — the
+     ~35 Hyperliquid assets — so the "Spot" tab showed the same three dozen
+     rows as every other tab and none of the tradable catalogue. The trade
+     workspace has always read `loadSpotMarkets()` (spec §8: the registry IS
+     the catalogue), so the two screens disagreed about what this app trades.
+     Now they read the same source, through the same cache.
+
+     Cap, volume and 24h change are not in the registry: it carries identity,
+     price and routing. The change column is filled from the sparkline feed by
+     `changeOf` like every other tab, and cap/volume render as "—" rather than
+     as a zero pretending to be a measurement. */
   React.useEffect(() => {
     if (tab !== "Spot" || hasFetchedSpot.current) return
     hasFetchedSpot.current = true
     setSpotLoading(true)
-    getSpotMarkets().then((res) => { setSpotMarkets(res.markets) }).catch(() => {}).finally(() => setSpotLoading(false))
+    loadSpotMarkets()
+      .then((res) => {
+        setSpotMarkets(
+          res.markets.map((m) => ({
+            id: m.id,
+            symbol: m.symbol.toUpperCase(),
+            // The same symbol exists on several chains, so the chain is the
+            // only thing that tells two otherwise identical rows apart.
+            name: chainLabel(m.networkId),
+            price: m.price ?? 0,
+            change24h: 0,
+            marketCap: 0,
+            volume24h: 0,
+            image: m.icon ?? "",
+          })),
+        )
+      })
+      .catch(() => {})
+      .finally(() => setSpotLoading(false))
   }, [tab])
 
   // Lazy-load futures markets
@@ -501,6 +534,24 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
     })
     return list
   }, [futuresMarkets, search, sortBy, sortAsc])
+
+  /* PAGING. The registry runs to thousands of rows once the backend's
+     registry worker is enabled, and a table that lays out every one of them
+     costs a second of main-thread time to show twenty. Search and sort still
+     run across the WHOLE set — only the rendering is paged, so narrowing to
+     one symbol finds it wherever it sits. */
+  const [page, setPage] = React.useState(0)
+  const pageSource = isFutures ? filteredFutures : filtered
+  const pageCount = Math.max(1, Math.ceil(pageSource.length / ROWS_PER_PAGE))
+  // A filter that shortens the list must not leave the view on a page that no
+  // longer exists.
+  const safePage = Math.min(page, pageCount - 1)
+  const pageStart = safePage * ROWS_PER_PAGE
+  const pagedCoins = filtered.slice(pageStart, pageStart + ROWS_PER_PAGE)
+  const pagedFutures = filteredFutures.slice(pageStart, pageStart + ROWS_PER_PAGE)
+  React.useEffect(() => {
+    setPage(0)
+  }, [tab, search, chainFilter, sortBy, sortAsc])
 
   const toggleSort = (col: SortKey) => {
     if (sortBy === col) setSortAsc((v) => !v)
@@ -909,7 +960,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/20">
-                  {filtered.map((coin, idx) => {
+                  {pagedCoins.map((coin, idx) => {
                     /* Prefer the change that arrives with the 7-day series:
                        it comes from the same measurement the chart draws, so
                        the number and the line can never disagree. The primary
@@ -919,7 +970,7 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                     const isFav = favorites.has(coin.id)
                     return (
                       <tr key={coin.id} className="group/row transition-colors hover:bg-accent/20">
-                        <td className="sticky left-0 z-10 bg-card px-4 py-3 text-muted-foreground transition-colors group-hover/row:bg-accent/20">{idx + 1}</td>
+                        <td className="sticky left-0 z-10 bg-card px-4 py-3 text-muted-foreground transition-colors group-hover/row:bg-accent/20">{pageStart + idx + 1}</td>
                         <td className="sticky left-10 z-10 bg-card px-3 py-3 transition-colors group-hover/row:bg-accent/20">
                           <div className="flex items-center gap-2">
                             <button
@@ -1013,12 +1064,12 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/20">
-                  {filteredFutures.map((market, idx) => {
+                  {pagedFutures.map((market, idx) => {
                     const isUp = market.change24h >= 0
                     const fundingUp = market.fundingRate >= 0
                     return (
                       <tr key={market.symbol} className="group/row transition-colors hover:bg-accent/20">
-                        <td className="sticky left-0 z-10 bg-card px-4 py-3 text-muted-foreground transition-colors group-hover/row:bg-accent/20">{idx + 1}</td>
+                        <td className="sticky left-0 z-10 bg-card px-4 py-3 text-muted-foreground transition-colors group-hover/row:bg-accent/20">{pageStart + idx + 1}</td>
                         <td className="sticky left-10 z-10 bg-card px-3 py-3 transition-colors group-hover/row:bg-accent/20">
                           <div className="flex items-center gap-2">
                             {(market.image || getCoinImage(market.baseAsset)) ? (
@@ -1068,6 +1119,39 @@ export function MarketsClient({ coins, globalStats, error }: MarketsClientProps)
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* The pager. Rendered only when there IS more than one page, so the
+              35-row tabs are unchanged and the registry tab gains a control
+              exactly when it needs one. */}
+          {pageCount > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 px-4 py-3">
+              <span className="text-[12px] tabular-nums text-muted-foreground">
+                {pageStart + 1}–{Math.min(pageStart + ROWS_PER_PAGE, pageSource.length)} of{" "}
+                {pageSource.length}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.max(0, safePage - 1))}
+                  disabled={safePage === 0}
+                  className="rounded-full px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+                >
+                  Previous
+                </button>
+                <span className="text-[12px] tabular-nums text-muted-foreground/70">
+                  {safePage + 1} / {pageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))}
+                  disabled={safePage >= pageCount - 1}
+                  className="rounded-full px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+                >
+                  Next
+                </button>
+              </span>
             </div>
           )}
         </div>

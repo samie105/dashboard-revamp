@@ -54,7 +54,7 @@ import { num, qty, usd } from "@/lib/num"
 import type { CoinData } from "@/lib/actions"
 import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
 import { useLedgerRecords } from "@/hooks/useLedgerRecords"
-import { useSpotRegistry } from "@/hooks/useSpotRegistry"
+import { useSpotRegistry, addressKey } from "@/hooks/useSpotRegistry"
 import { describeLedgerRecord } from "@/lib/ledger-rows"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useAuth } from "@/components/auth-provider"
@@ -280,13 +280,34 @@ interface SwapTx {
   createdAt: string
 }
 
+/* The sentinels a chain uses to mean "the native coin". SWAP_ASSETS stores
+   natives with the literal address "native", so a ledger row carrying one of
+   these matched nothing and the UI printed the sentinel — which is how
+   "USDC → 0x0000000000000000000000000000000000000000" ended up on screen
+   where "USDC → ETH" belongs. */
+const NATIVE_SENTINELS = new Set([
+  "native",
+  "0x0000000000000000000000000000000000000000",
+  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "so11111111111111111111111111111111111111112",
+  "11111111111111111111111111111111",
+])
+
 function historicalSwapAsset(networkId: string | undefined, identifier: string | undefined) {
   if (!networkId || !identifier) return undefined
   const normalized = identifier.toLowerCase()
+  if (NATIVE_SENTINELS.has(normalized)) {
+    return SWAP_ASSETS.find((asset) => asset.networkId === networkId && asset.kind === "native")
+  }
   return SWAP_ASSETS.find((asset) => asset.networkId === networkId && asset.address.toLowerCase() === normalized)
-    ?? (networkId === "solana-mainnet-beta" && (identifier === "So11111111111111111111111111111111111111112" || identifier === "11111111111111111111111111111111")
-      ? SWAP_ASSETS.find((asset) => asset.networkId === networkId && asset.symbol === "SOL")
-      : undefined)
+}
+
+/** Last resort for an identifier nothing could name. A 42-character contract
+ *  address in a row that is 30 characters wide is not information, it is a
+ *  layout accident — so it is shortened the way every other address in the
+ *  app is. */
+function shortIdentifier(value: string): string {
+  return value.length <= 13 ? value : `${value.slice(0, 6)}…${value.slice(-4)}`
 }
 
 /** How many rows the card shows. The subtitle names this number, so the two
@@ -304,12 +325,29 @@ function SwapHistory() {
     const described = describeLedgerRecord(record, registry)
     const buyAsset = historicalSwapAsset(record.networkId, text(summary.buyToken) ?? text(asset.identifier))
     const sellAsset = historicalSwapAsset(record.networkId, text(summary.sellToken))
+
+    /* Name a token, or say as little as possible about it.
+       The static SWAP_ASSETS list holds thirteen entries; the registry holds
+       the whole tradable set and is ALREADY loaded on this card — it was just
+       never consulted here, so every swap of anything outside those thirteen
+       rendered its contract address. Order: the static list, then the
+       registry, then a shortened address. */
+    const nameOf = (identifier: string | undefined, known: { symbol: string } | undefined) => {
+      if (known) return known.symbol
+      if (!identifier) return undefined
+      if (record.networkId) {
+        const row = registry.byAddress.get(addressKey(record.networkId, identifier))
+        if (row?.symbol) return row.symbol
+      }
+      return shortIdentifier(identifier)
+    }
+
     const amount = Number(summary.amount ?? 0)
     return [{
       id: record.id,
-      token: buyAsset?.symbol ?? text(asset.symbol) ?? text(asset.identifier),
-      fromToken: sellAsset?.symbol ?? text(summary.sellToken),
-      toToken: buyAsset?.symbol ?? text(summary.buyToken),
+      token: nameOf(text(summary.buyToken) ?? text(asset.identifier), buyAsset) ?? text(asset.symbol),
+      fromToken: nameOf(text(summary.sellToken), sellAsset),
+      toToken: nameOf(text(summary.buyToken), buyAsset),
       amount: Number.isFinite(amount) ? amount : 0,
       amountText: described?.amountText
         ?? (buyAsset ? `${fromBaseUnits(text(summary.amount), buyAsset.decimals)?.toLocaleString(undefined, { maximumFractionDigits: 6 }) ?? "Amount unavailable"} ${buyAsset.symbol}` : undefined),
