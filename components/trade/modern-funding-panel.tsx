@@ -47,7 +47,6 @@ import {
   AnnouncementBanner,
   DetailPanel,
   FlowCta,
-  InlineNotice,
   StatusScreen,
   useElapsed,
   useStageProgress,
@@ -60,6 +59,7 @@ import {
   ResponsiveModalTitle,
 } from "@/components/ui/responsive-modal"
 import { Segmented, type SegmentedOption } from "@/components/ui/system"
+import { FundingAside, FundingLayout, StageOutline } from "@/components/trade/funding-layout"
 import {
   cryptoBackendClient,
   cryptoQueryKeys,
@@ -761,7 +761,9 @@ function DepositFlow({
 
   return (
     <ResponsiveModal open={open} onOpenChange={handleOpenChange}>
-      <ResponsiveModalContent className="sm:max-w-md">
+      {/* Wide only while the form is up. The status screen is a single
+          centred column and looks stranded in a 3xl shell. */}
+      <ResponsiveModalContent className={phase === "form" ? "sm:max-w-3xl" : "sm:max-w-md"}>
         <ResponsiveModalHeader>
           <ResponsiveModalTitle>Fund trading account</ResponsiveModalTitle>
           <ResponsiveModalDescription>
@@ -833,7 +835,24 @@ function DepositFlow({
             {state === "failure" && error ? <SectionMessage error={error} /> : null}
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <FundingLayout
+            aside={
+              <>
+                {/* The route, before you commit to it. Same FUNDING_STAGES the
+                    status screen ticks off afterwards, so the promise made
+                    here and the progress reported later are one list. */}
+                <FundingAside title="What happens next">
+                  <StageOutline stages={FUNDING_STAGES} />
+                </FundingAside>
+                <FundingAside title="This takes a few minutes" tone="warning">
+                  <span className="text-[12px] leading-relaxed text-muted-foreground">
+                    {NOT_INSTANT} You can close this window — the deposit carries on, and
+                    reopening it comes back to the same progress.
+                  </span>
+                </FundingAside>
+              </>
+            }
+          >
             <AmountField
               value={amount}
               onChange={setAmount}
@@ -845,7 +864,6 @@ function DepositFlow({
               { label: "From", value: "Modern wallet · Arbitrum" },
               { label: "Available", value: walletBalances.isLoading ? "Checking…" : `${formatUsdc(arbitrumUsdc)} USDC` },
             ]} />
-            <InlineNotice tone="warning">{NOT_INSTANT}</InlineNotice>
             {error ? (
               <div className="flex flex-col gap-1.5">
                 <SectionMessage
@@ -876,7 +894,7 @@ function DepositFlow({
               disabled={Boolean(blocker)}
               busy={busy}
             />
-          </div>
+          </FundingLayout>
         )}
       </ResponsiveModalContent>
     </ResponsiveModal>
@@ -985,7 +1003,8 @@ function TransferFlow({ userId, wallet, packageValue, evm, open, onOpenChange, r
 
   return (
     <ResponsiveModal open={open} onOpenChange={handleOpenChange}>
-      <ResponsiveModalContent className="sm:max-w-md">
+      {/* Wide for the form, narrow for the single-column status screen. */}
+      <ResponsiveModalContent className={phase === "form" ? "sm:max-w-2xl" : "sm:max-w-md"}>
         <ResponsiveModalHeader>
           <ResponsiveModalTitle>Move funds</ResponsiveModalTitle>
           <ResponsiveModalDescription>
@@ -1038,21 +1057,37 @@ function TransferFlow({ userId, wallet, packageValue, evm, open, onOpenChange, r
                 setAmount("")
               }}
             />
-            <AmountField
-              value={amount}
-              onChange={setAmount}
-              unit="USDC"
-              autoFocus={open}
-              maxSpend={maxSpend}
-              hint={maxSpend !== null ? `${formatUsdc(maxSpend)} USDC available` : undefined}
-              problem={overspend ? `You only have ${formatUsdc(maxSpend ?? 0)} USDC there.` : null}
-            />
-            <FlowCta
-              label={busy ? "Signing on this device…" : (blocker ?? "Move funds")}
-              onClick={() => void runTransfer()}
-              disabled={Boolean(blocker)}
-              busy={busy}
-            />
+            <FundingLayout
+              aside={
+                /* No stage list here, and that is the point: this one really is
+                   instant, so borrowing the deposit's three-step outline would
+                   invent a wait that does not exist. The contrast between the
+                   two asides is the fastest way to tell the flows apart. */
+                <FundingAside title="Instant">
+                  <span className="text-[12px] leading-relaxed text-muted-foreground">
+                    Moving USDC between your Spot and Perps balances happens on the venue.
+                    One signature, no bridge, no network fee, and the balances update
+                    straight away.
+                  </span>
+                </FundingAside>
+              }
+            >
+              <AmountField
+                value={amount}
+                onChange={setAmount}
+                unit="USDC"
+                autoFocus={open}
+                maxSpend={maxSpend}
+                hint={maxSpend !== null ? `${formatUsdc(maxSpend)} USDC available` : undefined}
+                problem={overspend ? `You only have ${formatUsdc(maxSpend ?? 0)} USDC there.` : null}
+              />
+              <FlowCta
+                label={busy ? "Signing on this device…" : (blocker ?? "Move funds")}
+                onClick={() => void runTransfer()}
+                disabled={Boolean(blocker)}
+                busy={busy}
+              />
+            </FundingLayout>
           </div>
         )}
       </ResponsiveModalContent>
@@ -1186,7 +1221,8 @@ function WithdrawFlow({
 
   return (
     <ResponsiveModal open={open} onOpenChange={handleOpenChange}>
-      <ResponsiveModalContent className="sm:max-w-md">
+      {/* Wide for the form, narrow for the single-column status screen. */}
+      <ResponsiveModalContent className={phase === "form" ? "sm:max-w-3xl" : "sm:max-w-md"}>
         <ResponsiveModalHeader>
           <ResponsiveModalTitle>Withdraw from trading account</ResponsiveModalTitle>
           <ResponsiveModalDescription>
@@ -1238,6 +1274,33 @@ function WithdrawFlow({
                 action={{ label: "Move funds", onClick: onSwitchToTransfer }}
               />
             ) : null}
+            <FundingLayout
+              aside={
+                <>
+                  {/* The destination is the point of this screen: the flow
+                      cannot send money anywhere the user does not already
+                      control, and saying so is more reassuring than a row
+                      buried in a receipt. */}
+                  <FundingAside title="Going to your wallet">
+                    {destination ? (
+                      <AddressPill address={destination} />
+                    ) : (
+                      <span className="text-[12.5px] text-muted-foreground">
+                        Your wallet address isn&apos;t ready yet.
+                      </span>
+                    )}
+                    <span className="text-[12px] leading-relaxed text-muted-foreground">
+                      This is your own address. Withdrawals can only go here.
+                    </span>
+                  </FundingAside>
+                  <FundingAside title="This takes a few minutes" tone="warning">
+                    <span className="text-[12px] leading-relaxed text-muted-foreground">
+                      Withdrawals aren&apos;t instant — they usually take a few minutes to arrive.
+                    </span>
+                  </FundingAside>
+                </>
+              }
+            >
             <AmountField
               value={amount}
               onChange={setAmount}
@@ -1253,21 +1316,15 @@ function WithdrawFlow({
                 // The debited balance is named on the receipt, not just in the
                 // prose — this is the row that makes the cap make sense.
                 { label: "From", value: "Perps balance" },
-                {
-                  label: "To your wallet",
-                  value: destination ? <AddressPill address={destination} /> : "Not ready",
-                },
               ]}
             />
-            <InlineNotice tone="warning">
-              Withdrawals aren&apos;t instant — they usually take a few minutes to arrive.
-            </InlineNotice>
             <FlowCta
               label={busy ? "Signing on this device…" : (blocker ?? "Withdraw USDC")}
               onClick={() => void runWithdraw()}
               disabled={Boolean(blocker)}
               busy={busy}
             />
+            </FundingLayout>
           </div>
         )}
       </ResponsiveModalContent>
