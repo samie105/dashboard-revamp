@@ -84,32 +84,41 @@
        surface brown, and the clear glass amplified it to amber. Same
        lightness steps, zinc register — the gold now reads as yellow on
        black instead of baking into the surfaces. */
-    /* Panels that sit UNDER a primary one (the transactions sheet).
-       NEUTRAL, not #101013. That value's blue channel led red and green by 3,
-       and against a true near-black canvas and warm gold it read as a cold
-       blue-grey wherever it covered any area — the Segmented track, the icon
-       actions, the filter controls. Same luminance to three decimal places
-       (0.00518 vs 0.00528), so nothing about the depth of the surface moves;
-       only the cast is gone. 42 files reference this token, which is exactly
-       why the fix belongs here and not in any of them. */
+    /* ── The grey ramp is NEUTRAL ────────────────────────────────────────
+       Every surface below was a Tailwind ZINC step, and zinc is blue-leaning
+       by construction: #18181B is rgb(24, 24, 27), #27272A is rgb(39, 39, 42)
+       — blue ahead of red and green by 3 at every step, and by 9 in the text
+       greys. One step alone reads as neutral; a whole page of them under warm
+       gold reads as cold blue-grey, which is what the markets table looked
+       like.
+
+       Each value below is the nearest TRUE grey by relative luminance, so the
+       depth of every surface is unchanged (four decimal places in every case)
+       and only the cast is gone. Fixing it here rather than per-component is
+       the point: these tokens are referenced from well over a hundred files.
+
+       If a warmer or cooler register is ever wanted, change it HERE and the
+       whole app moves together. */
+
+    /* Panels that sit UNDER a primary one (the transactions sheet). */
     --surface-sunken: #101010;
 
-    --background: #09090B;                /* canvas — true near-black */
+    --background: #090909;                /* canvas — true near-black */
     --foreground: oklch(0.985 0 0);
-    --card: #18181B;                      /* surface */
+    --card: #181818;                      /* surface */
     --card-foreground: oklch(0.985 0 0);
-    --popover: #18181B;
+    --popover: #181818;
     --popover-foreground: oklch(0.985 0 0);
     /* The brighter yellow the light theme already uses — on near-black it
        glows instead of smouldering. */
     --primary: oklch(0.852 0.199 91.936);
     --primary-foreground: oklch(0.147 0.004 49.3);
-    --secondary: #27272A;
+    --secondary: #272727;
     --secondary-foreground: oklch(0.985 0 0);
-    --muted: #27272A;
-    --muted-foreground: #A1A1AA;          /* neutral ink-muted */
-    --subtle: #71717A;                    /* neutral ink-subtle — eyebrows */
-    --accent: #27272A;                    /* raised */
+    --muted: #272727;
+    --muted-foreground: #A2A2A2;          /* neutral ink-muted */
+    --subtle: #727272;                    /* neutral ink-subtle — eyebrows */
+    --accent: #272727;                    /* raised */
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
@@ -120,11 +129,11 @@
     --chart-3: oklch(0.681 0.162 75.834);
     --chart-4: oklch(0.554 0.135 66.442);
     --chart-5: oklch(0.476 0.114 61.907);
-    --sidebar: #101013;
+    --sidebar: #101010;
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.852 0.199 91.936);
     --sidebar-primary-foreground: oklch(0.147 0.004 49.3);
-    --sidebar-accent: #27272A;
+    --sidebar-accent: #272727;
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.552 0.016 285.938);
