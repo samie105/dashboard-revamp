@@ -38,6 +38,13 @@ import { PREVIEW_ROUTES } from "@/components/preview/routes"
 import { LaunchCard } from "@/components/launchpad-unauth/launch-card"
 import { Assumed } from "@/components/launchpad-unauth/parts"
 import {
+  CHAIN_LABEL,
+  CHAIN_ORDER,
+  useAvailability,
+  type ChainKey,
+} from "@/components/launchpad-unauth/availability"
+import { PausedNotice } from "@/components/launchpad-unauth/availability-ui"
+import {
   LaunchLifecycle,
   ResumeBanner,
 } from "@/components/launchpad-unauth/launch-lifecycle"
@@ -62,23 +69,26 @@ import {
   type Draft,
 } from "@/components/launchpad-unauth/launch-data"
 
-type Chain = "solana" | "ethereum" | "intertrain"
+type Chain = ChainKey
 
-const CHAIN_OPTIONS = [
-  { key: "solana" as const, label: "Solana" },
-  {
-    key: "ethereum" as const,
-    label: "Ethereum",
-    disabled: true,
-    disabledReason: "Ethereum launches aren't available yet",
-  },
-  {
-    key: "intertrain" as const,
-    label: "Intertrain",
-    disabled: true,
-    disabledReason: "Intertrain launches aren't available yet",
-  },
-]
+/* The chain options follow the availability switch. A disabled option's
+   reason is on hover (Segmented's own behaviour), and a PAUSED chain also
+   shows its reason in full beneath the picker — hover does not exist on a
+   phone, and "why can't I launch" is not a question to hide. */
+function chainOptions(availability: ReturnType<typeof useAvailability>) {
+  return CHAIN_ORDER.map((key) => {
+    const a = availability[key]
+    return {
+      key,
+      label: CHAIN_LABEL[key],
+      disabled: a.state !== "live",
+      disabledReason:
+        a.state === "paused"
+          ? `${CHAIN_LABEL[key]} launches are paused`
+          : `${CHAIN_LABEL[key]} launches aren't available yet`,
+    }
+  })
+}
 
 const ICON_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 const ICON_MAX_BYTES = 1_000_000
@@ -103,6 +113,8 @@ export function CreateWorkspace() {
      itself is recorded in pending-launch, so it outlives this component. */
   const [phase, setPhase] = React.useState<"form" | "lifecycle">("form")
   const pending = usePendingLaunch()
+  const availability = useAvailability()
+  const paused = availability.solana.state === "paused"
   const fileRef = React.useRef<HTMLInputElement>(null)
 
   // Object URLs hold the file in memory until revoked. Replacing the icon or
@@ -121,7 +133,8 @@ export function CreateWorkspace() {
 
   const checks = validateDraft(draft)
   const blocking = checks.filter((c) => c.blocking && !c.ok)
-  const canLaunch = blocking.length === 0
+  // A valid draft still cannot launch onto a paused chain.
+  const canLaunch = blocking.length === 0 && !paused
   /** Errors appear once a field has been left, or after a launch attempt —
    *  never while someone is still typing their first letter. */
   const show = (key: string) => attempted || touched[key]
@@ -204,11 +217,12 @@ export function CreateWorkspace() {
             >
               <div className="scrollbar-none min-w-0 overflow-x-auto">
                 <Segmented
-                  options={CHAIN_OPTIONS}
+                  options={chainOptions(availability)}
                   value={chain}
                   onChange={setChain}
                 />
               </div>
+              <PausedNotice compact />
             </Section>
 
             <Section
@@ -570,11 +584,13 @@ export function CreateWorkspace() {
                     : "bg-foreground/[0.08] text-muted-foreground"
                 )}
               >
-                {canLaunch
-                  ? `Launch $${draft.symbol} for ${fmtSol(totalSol, 3)}`
-                  : attempted
-                    ? `${blocking.length} ${blocking.length === 1 ? "thing" : "things"} to fix first`
-                    : "Launch token"}
+                {paused
+                  ? "Solana launches are paused"
+                  : canLaunch
+                    ? `Launch $${draft.symbol} for ${fmtSol(totalSol, 3)}`
+                    : attempted
+                      ? `${blocking.length} ${blocking.length === 1 ? "thing" : "things"} to fix first`
+                      : "Launch token"}
               </button>
               <span className="text-center text-[11.5px] leading-relaxed text-muted-foreground">
                 You sign on this device. Nothing is sent until you do, and a

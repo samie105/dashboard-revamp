@@ -100,6 +100,18 @@ export const PROVENANCE: Provenance[] = [
   },
 
   {
+    figure: "Chain availability and pause reason",
+    kind: "sourced",
+    note: "OperationalControl — launchpad_solana / _ethereum / _intertrain, paused + reason",
+    pages: ["discovery", "token", "create"],
+  },
+  {
+    figure: "What a pause stops",
+    kind: "assumed",
+    note: "Here: new launches AND curve trades; graduated tokens unaffected. A product call",
+    pages: ["discovery", "token", "create"],
+  },
+  {
     figure: "Curve constants (30 / 1.073B / 85 SOL)",
     kind: "assumed",
     note: "Standard virtual-reserve values. The real ones are the chosen program's — open question #2",

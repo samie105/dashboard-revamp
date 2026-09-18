@@ -6,6 +6,10 @@ import { DiscoveryHero } from "@/components/launchpad-unauth/discovery-hero"
 import { LaunchGrid } from "@/components/launchpad-unauth/launch-grid"
 import { ManifestCard } from "@/components/launchpad-unauth/parts"
 import { ResumeBanner } from "@/components/launchpad-unauth/launch-lifecycle"
+import {
+  AvailabilityReviewer,
+  PausedNotice,
+} from "@/components/launchpad-unauth/availability-ui"
 
 export const metadata: Metadata = {
   title: "Launchpad preview",
@@ -29,6 +33,7 @@ export default function LaunchpadUnauthPage() {
       {/* Renders nothing unless a launch is still in flight — the page you
           come back to is where a launch you walked away from should find you. */}
       <ResumeBanner />
+      <PausedNotice />
 
       <Rise>
         <DiscoveryHero />
@@ -45,7 +50,10 @@ export default function LaunchpadUnauthPage() {
       </Rise>
 
       <Rise delay={120}>
-        <ManifestCard page="discovery" />
+        <div className="flex flex-col gap-4">
+          <AvailabilityReviewer />
+          <ManifestCard page="discovery" />
+        </div>
       </Rise>
     </div>
   )

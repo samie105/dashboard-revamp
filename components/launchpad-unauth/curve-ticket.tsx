@@ -33,6 +33,8 @@ import { CARD_HUE } from "@/components/ui/surface"
 import { AmountField } from "@/components/ui/flow"
 import { QuoteClock } from "@/components/ui/quote-clock"
 import { Assumed } from "@/components/launchpad-unauth/parts"
+import { useAvailability } from "@/components/launchpad-unauth/availability"
+import { PausedNotice } from "@/components/launchpad-unauth/availability-ui"
 import {
   CURVE_QUOTE_TTL,
   DEMO_SOL_BALANCE,
@@ -68,6 +70,7 @@ export function CurveTicket({ launch }: { launch: LaunchView }) {
   const [slippage, setSlippage] = React.useState<SlippageKey>("100")
   const [seconds, setSeconds] = React.useState<number | null>(null)
   const [signing, setSigning] = React.useState(false)
+  const { solana } = useAvailability()
 
   const tokenBalance = React.useMemo(() => demoTokenBalance(launch), [launch])
   const balance = side === "buy" ? DEMO_SOL_BALANCE : tokenBalance
@@ -102,6 +105,26 @@ export function CurveTicket({ launch }: { launch: LaunchView }) {
     )
     return () => clearTimeout(id)
   }, [seconds])
+
+  /* Paused: the ticket stops trading and says why, in operations' words.
+     Graduated launches never reach this component — they trade on the AMM,
+     which a curve pause does not touch. */
+  if (solana.state === "paused") {
+    return (
+      <CardShell className={CARD_HUE}>
+        <div className="flex flex-col gap-3 p-4">
+          <span className="text-[14px] font-semibold">
+            Trading on this curve is paused
+          </span>
+          <PausedNotice compact />
+          <span className="text-[12px] leading-relaxed text-muted-foreground">
+            Your {launch.symbol} is safe where it is. Buying and selling resume
+            when the pause is lifted — nothing you hold changes in the meantime.
+          </span>
+        </div>
+      </CardShell>
+    )
+  }
 
   const switchSide = (next: Side) => {
     setSide(next)

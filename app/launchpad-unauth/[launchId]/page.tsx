@@ -16,6 +16,7 @@ import {
   TokenHero,
 } from "@/components/launchpad-unauth/token-panels"
 import { CurveTicket } from "@/components/launchpad-unauth/curve-ticket"
+import { AvailabilityReviewer } from "@/components/launchpad-unauth/availability-ui"
 import {
   GraduationStatus,
   TradesTape,
@@ -116,7 +117,10 @@ export default async function LaunchUnauthPage({ params }: Props) {
       </Rise>
 
       <Rise delay={120}>
-        <ManifestCard page="token" />
+        <div className="flex flex-col gap-4">
+          <AvailabilityReviewer />
+          <ManifestCard page="token" />
+        </div>
       </Rise>
     </div>
   )

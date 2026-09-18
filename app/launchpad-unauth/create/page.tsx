@@ -6,6 +6,7 @@ import { PreviewNotice } from "@/components/preview/page-chrome"
 import { PREVIEW_ROUTES } from "@/components/preview/routes"
 import { CreateWorkspace } from "@/components/launchpad-unauth/create-workspace"
 import { ManifestCard } from "@/components/launchpad-unauth/parts"
+import { AvailabilityReviewer } from "@/components/launchpad-unauth/availability-ui"
 
 export const metadata: Metadata = {
   title: "Launch a token · Launchpad preview",
@@ -54,7 +55,10 @@ export default function CreateLaunchUnauthPage() {
       </Rise>
 
       <Rise delay={80}>
-        <ManifestCard page="create" />
+        <div className="flex flex-col gap-4">
+          <AvailabilityReviewer />
+          <ManifestCard page="create" />
+        </div>
       </Rise>
     </div>
   )

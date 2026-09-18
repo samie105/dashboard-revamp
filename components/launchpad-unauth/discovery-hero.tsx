@@ -6,12 +6,11 @@
  * "graduation" means less. Right: the live counts, and the one primary action.
  *
  * The chain row states availability per chain in the three states the plan
- * requires: live, and "soon" for chains not built. (The third state —
- * built-but-paused, with its reason — is Stage 5.)
+ * requires — live, paused with its reason, and "soon" for chains not built —
+ * read live from the availability switch (Stage 5).
  */
 
 import * as React from "react"
-import Link from "next/link"
 import { CardShell } from "@/components/ui/system"
 import { HERO_HUE } from "@/components/ui/surface"
 import {
@@ -22,7 +21,10 @@ import {
   fmtSol,
   viewOf,
 } from "@/components/launchpad-unauth/launch-data"
-import { PREVIEW_ROUTES } from "@/components/preview/routes"
+import {
+  ChainChips,
+  LaunchCta,
+} from "@/components/launchpad-unauth/availability-ui"
 
 const STEPS = [
   {
@@ -37,12 +39,6 @@ const STEPS = [
     title: "Liquidity is seeded",
     body: `The raised SOL is paired with the ${Math.round((RESERVE_SUPPLY / TOTAL_SUPPLY) * 100)}% of supply held back for it, and the token trades on the open market.`,
   },
-]
-
-const CHAINS: { name: string; state: "live" | "soon" }[] = [
-  { name: "Solana", state: "live" },
-  { name: "Ethereum", state: "soon" },
-  { name: "Intertrain", state: "soon" },
 ]
 
 export function DiscoveryHero() {
@@ -84,37 +80,9 @@ export function DiscoveryHero() {
             ))}
           </ol>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11.5px] text-muted-foreground">Chains</span>
-            {CHAINS.map((c) => (
-              <span
-                key={c.name}
-                title={
-                  c.state === "soon"
-                    ? `${c.name} launches are not available yet`
-                    : undefined
-                }
-                className={
-                  c.state === "live"
-                    ? "inline-flex items-center gap-1.5 rounded-full bg-foreground/[0.07] px-2.5 py-1 text-[12px] font-semibold"
-                    : "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-muted-foreground/60 ring-1 ring-border/50 ring-inset"
-                }
-              >
-                {c.state === "live" && (
-                  <span
-                    aria-hidden
-                    className="h-1.5 w-1.5 rounded-full bg-primary"
-                  />
-                )}
-                {c.name}
-                {c.state === "soon" && (
-                  <span className="text-[9.5px] font-bold tracking-[0.06em] uppercase">
-                    Soon
-                  </span>
-                )}
-              </span>
-            ))}
-          </div>
+          {/* Live from the availability switch — see availability.ts. A
+              paused chain reads differently from an unbuilt one. */}
+          <ChainChips />
         </div>
 
         {/* ── The counts, and the one action ─────────────────────────── */}
@@ -129,20 +97,7 @@ export function DiscoveryHero() {
             />
           </div>
 
-          <Link
-            href={`${PREVIEW_ROUTES.launchpad}/create`}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-primary px-6 text-[14px] font-bold text-primary-foreground shadow-[0_8px_24px_-10px_color-mix(in_oklab,var(--primary)_60%,transparent)] transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none"
-          >
-            <svg aria-hidden viewBox="0 0 16 16" className="h-4 w-4">
-              <path
-                d="M8 3v10M3 8h10"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-            </svg>
-            Launch a token
-          </Link>
+          <LaunchCta />
         </div>
       </div>
     </CardShell>
