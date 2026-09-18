@@ -700,6 +700,34 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
     }
   }
 
+  // Launchpad create flow — terms scale the devnet quotes (5% → 1.4075 SOL,
+  // 20% → 6.6045 SOL) so the form can be reviewed; deploys need the real
+  // backend, which builds and co-signs the transaction.
+  if (method === "GET" && path === "launchpad/availability") {
+    return json({ solana: { state: "live" }, ethereum: { state: "soon" }, intertrain: { state: "soon" } })
+  }
+  if (method === "GET" && path.startsWith("launchpad/terms")) {
+    const bps = Number(new URL(req.url, "http://localhost").searchParams.get("creatorBps") ?? 0)
+    const lamports = bps === 0 ? 0 : Math.round(bps <= 500 ? (1407517842 * bps) / 500 : 1407517842 + ((6604506807 - 1407517842) * (bps - 500)) / 1500)
+    return json({
+      graduationLamports: "85000000000", totalSupply: "1000000000000000", curveSupply: "799999988710641", tokenDecimals: 6,
+      tradingFeeBps: 100, creatorBps: bps, maxCreatorBps: 2000, creatorLamports: String(lamports),
+      creatorTokens: String(bps * 100_000_000_000), networkRentLamports: "22080080", networkId: "solana-devnet",
+    })
+  }
+  if (method === "GET" && path === "launchpad/launches") return json([])
+  if (method === "GET" && path === "launchpad/launches/spike") {
+    return json({
+      launchId: "spike", status: "live", chainFamily: "solana", networkId: "solana-devnet",
+      creatorAddress: "oizdGpi8vX52ZEZWWzULF2S7x5WPJ4BYyRw9C5AoiGA", name: "Spike Token", symbol: "SPIKE",
+      mint: "J1V9i5HwPkVBfYRH8Z5xM613PMRM91FWSEjgoKt6JRNC", poolAddress: "49EQv282RkybyMDdU2QRm228UNZcw5atrxEgJMs7N8fZ",
+      allocation: { creatorBps: 200, creatorLamports: "546869990" }, createdAt: nowIso(), updatedAt: nowIso(),
+    })
+  }
+  if (method === "POST" && (path === "launchpad/launches" || /^launchpad\/launches\/[^/]+\/deploy$/.test(path))) {
+    return jsonError("LAUNCHPAD_MOCK", "Launching needs the real backend — the dev mock can't build or co-sign a launch", 501)
+  }
+
   // Launchpad — the real Phase 0 devnet token, as the backend last read it.
   // Quotes scale the recorded devnet buy (0.02 SOL → 707,634 tokens) linearly:
   // good enough to review the page, and nothing here can be signed.
@@ -708,7 +736,7 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
     if (launchId !== "spike") return jsonError("NOT_FOUND", "Launch not found", 404)
     return jsonRaw({
       success: true,
-      platformFeeBps: 100,
+      platformFeeBps: 0,
       tokenDecimals: 6,
       data: {
         launchId: "spike", status: "live", chainFamily: "solana", networkId: "solana-devnet",
@@ -726,9 +754,9 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
     const amount = BigInt(String(body.amount ?? "0"))
     const slippage = BigInt(Number(body.slippageBps ?? 100))
     const buy = body.side === "buy"
-    const fee = buy ? amount / BigInt(100) : BigInt(0)
+    const fee = BigInt(0) // no extra platform fee: our cut is the curve fee
     const out = buy ? ((amount - fee) * BigInt(707634166586)) / BigInt(19800000) : (amount * BigInt(19800000)) / BigInt(707634166586)
-    const sellFee = buy ? BigInt(0) : out / BigInt(100)
+    const sellFee = BigInt(0)
     return json({
       side: body.side, amountIn: amount.toString(), expectedOut: (out - sellFee).toString(),
       minimumOut: ((out * (BigInt(10000) - slippage)) / BigInt(10000) - sellFee).toString(),

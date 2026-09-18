@@ -377,3 +377,31 @@ export interface LaunchpadQuote {
   priceImpactBps: number
   expiresAt: string
 }
+
+/** The create form's figures, read from the on-chain config (GET /launchpad/terms). */
+export interface LaunchpadTerms {
+  graduationLamports: string
+  totalSupply: string
+  curveSupply?: string
+  tokenDecimals: number
+  tradingFeeBps: number
+  creatorBps: number
+  maxCreatorBps: number
+  /** What the creator's allocation costs, quoted by the curve program. */
+  creatorLamports: string
+  creatorTokens: string
+  /** Measured on devnet; the deploy simulation is the final check. */
+  networkRentLamports: string
+  networkId: string
+}
+
+export type LaunchpadAvailability = Record<"solana" | "ethereum" | "intertrain", { state: "live" | "paused" | "soon"; reason?: string }>
+
+export interface LaunchpadDraftInput {
+  name: string
+  symbol: string
+  description?: string
+  creatorBps: number
+  links?: { website?: string; x?: string; telegram?: string }
+  idempotencyKey?: string
+}

@@ -13,7 +13,10 @@ import type {
   CryptoNetwork,
   CryptoServiceHealth,
   CryptoTransactionIntent,
+  LaunchpadAvailability,
+  LaunchpadDraftInput,
   LaunchpadQuote,
+  LaunchpadTerms,
   LaunchpadToken,
   LaunchpadTradeSide,
   CryptoSpotIntentPlan,
@@ -496,6 +499,34 @@ export class CryptoBackendClient {
   }
 
   /* ── Launchpad ─────────────────────────────────────────────────────── */
+
+  async getLaunchpadAvailability(signal?: AbortSignal) {
+    return this.request<LaunchpadAvailability>("/launchpad/availability", {}, { signal })
+  }
+
+  async getLaunchpadTerms(creatorBps: number, signal?: AbortSignal) {
+    return this.request<LaunchpadTerms>(`/launchpad/terms?creatorBps=${encodeURIComponent(String(creatorBps))}`, {}, { signal })
+  }
+
+  async createLaunchDraft(input: LaunchpadDraftInput, signal?: AbortSignal) {
+    return this.request<LaunchpadToken>("/launchpad/launches", { method: "POST", body: JSON.stringify(input) }, { signal })
+  }
+
+  /** Idempotent: a deploy already in flight returns its existing intent. */
+  async deployLaunch(launchId: string, input: { idempotencyKey?: string } = {}, signal?: AbortSignal) {
+    return this.request<{ launch: LaunchpadToken; intent: CryptoTransactionIntent }>(
+      `/launchpad/launches/${encodeURIComponent(launchId)}/deploy`, { method: "POST", body: JSON.stringify(input) }, { signal },
+    )
+  }
+
+  /** The caller's own launch, in any state — including draft and failed. */
+  async getMyLaunch(launchId: string, signal?: AbortSignal) {
+    return this.request<LaunchpadToken & { failureReason?: string }>(`/launchpad/launches/${encodeURIComponent(launchId)}`, {}, { signal })
+  }
+
+  async listMyLaunches(signal?: AbortSignal) {
+    return this.request<Array<LaunchpadToken & { failureReason?: string }>>("/launchpad/launches", {}, { signal })
+  }
 
   async getLaunchpadToken(launchId: string, signal?: AbortSignal) {
     return this.request<{ success: true; data: LaunchpadToken; platformFeeBps: number; tokenDecimals: number }>(
