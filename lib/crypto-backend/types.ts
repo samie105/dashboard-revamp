@@ -357,6 +357,8 @@ export interface LaunchpadToken {
   allocation: { creatorBps: number; creatorLamports?: string }
   /** On-chain curve state, refreshed by the reconciler. Absent until live. */
   curve?: { solRaised: string; progressBps: number; graduationLamports: string; refreshedAt: string }
+  /** Where the liquidity went at graduation. */
+  graduation?: { migratedAt: string; ammPoolAddress: string; txHash?: string }
   createdAt: string
   updatedAt: string
 }
@@ -404,4 +406,8 @@ export interface LaunchpadDraftInput {
   creatorBps: number
   links?: { website?: string; x?: string; telegram?: string }
   idempotencyKey?: string
+  networkId?: LaunchpadNetworkId
 }
+
+export type LaunchpadNetworkId = "solana-devnet" | "solana-mainnet-beta"
+export type LaunchpadFeedFilter = "all" | "new" | "near" | "graduated"

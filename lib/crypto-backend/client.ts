@@ -15,6 +15,8 @@ import type {
   CryptoTransactionIntent,
   LaunchpadAvailability,
   LaunchpadDraftInput,
+  LaunchpadFeedFilter,
+  LaunchpadNetworkId,
   LaunchpadQuote,
   LaunchpadTerms,
   LaunchpadToken,
@@ -504,8 +506,20 @@ export class CryptoBackendClient {
     return this.request<LaunchpadAvailability>("/launchpad/availability", {}, { signal })
   }
 
-  async getLaunchpadTerms(creatorBps: number, signal?: AbortSignal) {
-    return this.request<LaunchpadTerms>(`/launchpad/terms?creatorBps=${encodeURIComponent(String(creatorBps))}`, {}, { signal })
+  async getLaunchpadNetworks(signal?: AbortSignal) {
+    return this.request<{ networks: Array<{ networkId: LaunchpadNetworkId; label: string }>; defaultNetworkId: LaunchpadNetworkId }>(
+      "/launchpad/networks", {}, { signal },
+    )
+  }
+
+  async getLaunchpadTerms(creatorBps: number, networkId: LaunchpadNetworkId, signal?: AbortSignal) {
+    const query = new URLSearchParams({ creatorBps: String(creatorBps), networkId })
+    return this.request<LaunchpadTerms>(`/launchpad/terms?${query}`, {}, { signal })
+  }
+
+  async listLaunchpadTokens(networkId: LaunchpadNetworkId, filter: LaunchpadFeedFilter = "all", signal?: AbortSignal) {
+    const query = new URLSearchParams({ networkId, filter })
+    return this.request<LaunchpadToken[]>(`/launchpad/tokens?${query}`, {}, { signal })
   }
 
   async createLaunchDraft(input: LaunchpadDraftInput, signal?: AbortSignal) {

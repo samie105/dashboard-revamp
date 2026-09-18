@@ -703,6 +703,28 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
   // Launchpad create flow — terms scale the devnet quotes (5% → 1.4075 SOL,
   // 20% → 6.6045 SOL) so the form can be reviewed; deploys need the real
   // backend, which builds and co-signs the transaction.
+  if (method === "GET" && path === "launchpad/networks") {
+    return json({
+      networks: [
+        { networkId: "solana-devnet", label: "Devnet" },
+        { networkId: "solana-mainnet-beta", label: "Mainnet" },
+      ],
+      defaultNetworkId: "solana-devnet",
+    })
+  }
+  if (method === "GET" && path === "launchpad/tokens") {
+    const query = new URL(req.url, "http://localhost").searchParams
+    const filter = query.get("filter") ?? "all"
+    // Devnet has the one real test token; mainnet has nothing launched yet.
+    if (query.get("networkId") !== "solana-devnet" || filter === "graduated" || filter === "near") return json([])
+    return json([{
+      launchId: "spike", status: "live", chainFamily: "solana", networkId: "solana-devnet",
+      creatorAddress: "oizdGpi8vX52ZEZWWzULF2S7x5WPJ4BYyRw9C5AoiGA", name: "Spike Token", symbol: "SPIKE",
+      mint: "J1V9i5HwPkVBfYRH8Z5xM613PMRM91FWSEjgoKt6JRNC", poolAddress: "49EQv282RkybyMDdU2QRm228UNZcw5atrxEgJMs7N8fZ",
+      allocation: { creatorBps: 200 }, curve: { solRaised: "590901290", progressBps: 69, graduationLamports: "85000000000", refreshedAt: nowIso() },
+      createdAt: "2026-09-18T21:30:00.000Z", updatedAt: nowIso(),
+    }])
+  }
   if (method === "GET" && path === "launchpad/availability") {
     return json({ solana: { state: "live" }, ethereum: { state: "soon" }, intertrain: { state: "soon" } })
   }

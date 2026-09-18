@@ -139,7 +139,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Earn",
     items: [
       { name: "Staking", url: "#", icon: Coins01Icon, soon: true },
-      { name: "Launchpad", url: "#", icon: Rocket01Icon, soon: true },
+      { name: "Launchpad", url: "/launchpad", icon: Rocket01Icon },
       { name: "Investments", url: "#", icon: PieChartIcon, soon: true },
       { name: "Airdrops", url: "#", icon: GiftIcon, soon: true },
       { name: "Rewards", url: "#", icon: Award01Icon, soon: true },

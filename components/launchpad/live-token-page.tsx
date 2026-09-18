@@ -29,6 +29,12 @@ import {
 } from "@/lib/crypto-backend"
 import { cn } from "@/lib/utils"
 import { LiveCurveTicket, fromBaseUnits } from "./live-curve-ticket"
+import { NetworkBadge } from "./network"
+
+function explorerUrl(address: string, networkId: string) {
+  const cluster = networkId === "solana-devnet" ? "?cluster=devnet" : ""
+  return `https://solscan.io/account/${address}${cluster}`
+}
 
 const STATUS_LABEL: Record<string, string> = {
   live: "On the curve",
@@ -49,7 +55,7 @@ export function LiveTokenPage({ launchId }: { launchId: string }) {
 
   if (token.isLoading) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
         <PageHeader title="Loading…" back="/launchpad" />
         <CardShell className={cn(CARD_HUE, "p-5")}>
           <SkeletonRows rows={4} />
@@ -60,7 +66,7 @@ export function LiveTokenPage({ launchId }: { launchId: string }) {
 
   if (token.error || !token.data) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
         <PageHeader title="Token not found" back="/launchpad" />
         <EmptyState
           title="We couldn't find this launch"
@@ -75,11 +81,12 @@ export function LiveTokenPage({ launchId }: { launchId: string }) {
   const progressBps = curve?.progressBps ?? 0
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
       <PageHeader
         title={launch.name}
         subtitle={`$${launch.symbol} · Solana`}
         back="/launchpad"
+        actions={<NetworkBadge networkId={launch.networkId} />}
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
@@ -129,6 +136,37 @@ export function LiveTokenPage({ launchId }: { launchId: string }) {
               </p>
             )}
           </CardShell>
+
+          {launch.graduation && (
+            <CardShell className={cn(CARD_HUE, "flex flex-col gap-3 p-5")}>
+              <span className="text-[13px] font-semibold">
+                Graduated to the open market
+              </span>
+              <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                The curve filled and its liquidity moved into a Meteora pool,
+                where it&apos;s locked permanently: nobody, including the
+                creator, can withdraw it.
+                {launch.networkId === "solana-mainnet-beta"
+                  ? " It trades like any other token, and appears in Markets once a price is available."
+                  : " Devnet tokens aren't listed in Markets."}
+              </p>
+              <CopyAddress
+                label="Market pool"
+                value={launch.graduation.ammPoolAddress}
+              />
+              <a
+                href={explorerUrl(
+                  launch.graduation.ammPoolAddress,
+                  launch.networkId
+                )}
+                target="_blank"
+                rel="noreferrer"
+                className="w-fit text-[12.5px] font-semibold text-primary hover:opacity-80"
+              >
+                View the pool on Solscan
+              </a>
+            </CardShell>
+          )}
 
           <SectionRule label="Token" />
           <CardShell className={cn(CARD_HUE, "flex flex-col gap-3 p-5")}>

@@ -31,6 +31,12 @@ import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
 import { cn } from "@/lib/utils"
 import { fromBaseUnits } from "./live-curve-ticket"
 import { useSolanaSigner } from "./use-solana-signer"
+import {
+  isDevnet,
+  NetworkBadge,
+  NetworkSwitch,
+  useLaunchNetwork,
+} from "./network"
 
 const SOL = 9
 /** Solana's base fee per signature — a chain constant. */
@@ -128,6 +134,8 @@ export function CreateLaunch() {
 function LaunchForm() {
   const router = useRouter()
   const signer = useSolanaSigner()
+  const network = useLaunchNetwork()
+  const networkId = network.networkId
   const [form, setForm] = React.useState<Form>(EMPTY)
   const [busy, setBusy] = React.useState<null | "draft" | "deploy" | "sign">(
     null
@@ -147,10 +155,14 @@ function LaunchForm() {
 
   const bps = useDebounced(form.creatorBps, 250)
   const terms = useQuery({
-    queryKey: ["launchpad", "terms", bps],
-    queryFn: ({ signal }) => cryptoBackendClient.getLaunchpadTerms(bps, signal),
-    enabled: isCryptoBackendEnabled,
-    placeholderData: (previous) => previous,
+    queryKey: ["launchpad", "terms", networkId, bps],
+    queryFn: ({ signal }) =>
+      cryptoBackendClient.getLaunchpadTerms(bps, networkId!, signal),
+    enabled: isCryptoBackendEnabled && Boolean(networkId),
+    // Keep the last figures while the slider moves, but never carry them
+    // across networks: that would show one network's terms on the other.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === networkId ? previous : undefined,
   })
   const t = terms.data
   const settled = t?.creatorBps === form.creatorBps
@@ -196,6 +208,7 @@ function LaunchForm() {
           (idempotencyKey.current = crypto.randomUUID())
         setBusy("draft")
         const draft = await cryptoBackendClient.createLaunchDraft({
+          networkId: networkId ?? undefined,
           name: form.name.trim(),
           symbol: form.symbol.trim().replace(/^\$/, "").toUpperCase(),
           description: form.description.trim() || undefined,
@@ -229,12 +242,32 @@ function LaunchForm() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
       <PageHeader
         title="Launch a token"
         subtitle="It starts on a bonding curve and graduates to the open market once the curve fills."
         back="/launchpad"
+        actions={
+          <NetworkSwitch
+            networks={network.networks}
+            networkId={networkId}
+            onChange={(next) => {
+              network.setNetworkId(next)
+              idempotencyKey.current = null // another network, another launch
+            }}
+          />
+        }
       />
+
+      {isDevnet(networkId) && (
+        <p className="rounded-2xl border border-warning/30 bg-warning-chip px-4 py-3 text-[12.5px] leading-relaxed text-foreground/85">
+          <span className="font-semibold text-warning">
+            You&apos;re on devnet.
+          </span>{" "}
+          Tokens launched here are for testing and have no value. They&apos;re
+          paid for with devnet SOL, which is free from the Solana faucet.
+        </p>
+      )}
 
       {inFlight && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/30 bg-primary/[0.06] px-4 py-3">
@@ -537,7 +570,7 @@ function LaunchStatus({ launchId }: { launchId: string }) {
   const l = launch.data
   if (!l) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
         <PageHeader title="Your launch" back="/launchpad/create" />
         <CardShell
           className={cn(CARD_HUE, "p-6 text-[13px] text-muted-foreground")}
@@ -553,8 +586,13 @@ function LaunchStatus({ launchId }: { launchId: string }) {
   const failed = l.status === "failed"
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title={`$${l.symbol}`} subtitle={l.name} back="/launchpad" />
+    <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
+      <PageHeader
+        title={`$${l.symbol}`}
+        subtitle={l.name}
+        back="/launchpad"
+        actions={<NetworkBadge networkId={l.networkId} />}
+      />
       <CardShell className={cn(CARD_HUE, "p-2 sm:p-4 lg:p-6")}>
         <StatusScreen
           state={onChain ? "success" : failed ? "failure" : "processing"}
