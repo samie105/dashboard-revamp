@@ -16,6 +16,7 @@ const PUBLIC_ROUTES = [
   "/trade-unauth",
   "/swap-unauth",
   "/bridge-unauth",
+  "/launchpad-unauth",
 ]
 const LOGIN_URL =
   process.env.NODE_ENV === "production"

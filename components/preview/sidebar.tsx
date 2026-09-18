@@ -132,7 +132,7 @@ const GROUPS: Group[] = [
     label: "Earn",
     items: [
       { name: "Staking", url: "#", icon: Coins01Icon, soon: true },
-      { name: "Launchpad", url: "#", icon: Rocket01Icon, soon: true },
+      { name: "Launchpad", url: PREVIEW_ROUTES.launchpad, icon: Rocket01Icon },
       { name: "Investments", url: "#", icon: PieChartIcon, soon: true },
       { name: "Airdrops", url: "#", icon: GiftIcon, soon: true },
       { name: "Rewards", url: "#", icon: Award01Icon, soon: true },
@@ -361,7 +361,9 @@ export function PreviewSidebar() {
                 <NavRow
                   key={item.name}
                   item={item}
-                  active={item.url === pathname}
+                  // Prefix, not equality: the launchpad's create form and token
+                  // pages live under its route and should keep its row lit.
+                  active={item.url !== "#" && (item.url === pathname || pathname.startsWith(`${item.url}/`))}
                   collapsed={collapsed}
                 />
               ))}

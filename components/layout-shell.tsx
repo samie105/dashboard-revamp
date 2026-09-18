@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { PreviewSidebar } from "@/components/preview/sidebar"
-import { PREVIEW_ROUTES, PREVIEW_PATHS } from "@/components/preview/routes"
+import { PREVIEW_ROUTES, isPreviewPath } from "@/components/preview/routes"
 import { Navbar } from "@/components/navbar"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { IncomingCallProvider } from "@/components/community/incoming-call-provider"
@@ -59,7 +59,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   // the rail.
   // The *-unauth previews lead with the same Balance hero as the pages they
   // redesign, so they get the same atmosphere.
-  const isPreview = PREVIEW_PATHS.includes(pathname)
+  const isPreview = isPreviewPath(pathname)
   // The atmosphere belongs to pages that LEAD with a balance hero. The
   // transactions preview leads with a table, so it stays out of the list.
   const isDashboard =
