@@ -13,6 +13,9 @@ import type {
   CryptoNetwork,
   CryptoServiceHealth,
   CryptoTransactionIntent,
+  LaunchpadQuote,
+  LaunchpadToken,
+  LaunchpadTradeSide,
   CryptoSpotIntentPlan,
   CryptoTransactionRecord,
   CryptoWalletPackageDocument,
@@ -488,6 +491,26 @@ export class CryptoBackendClient {
 
   async createHyperliquidDepositIntents(input: { amount: number; idempotencyKey?: string }, signal?: AbortSignal) {
     return this.request<{ networkId: string; amount: number; intents: CryptoTransactionIntent[]; sponsorship: SponsorshipOperation }>("/trading/hyperliquid/deposit/intents", {
+      method: "POST", body: JSON.stringify(input),
+    }, { signal })
+  }
+
+  /* ── Launchpad ─────────────────────────────────────────────────────── */
+
+  async getLaunchpadToken(launchId: string, signal?: AbortSignal) {
+    return this.request<{ success: true; data: LaunchpadToken; platformFeeBps: number; tokenDecimals: number }>(
+      `/launchpad/tokens/${encodeURIComponent(launchId)}`, {}, { signal, unwrap: false },
+    )
+  }
+
+  async quoteLaunchpadTrade(launchId: string, input: { side: LaunchpadTradeSide; amount: string; slippageBps: number }, signal?: AbortSignal) {
+    return this.request<LaunchpadQuote>(`/launchpad/tokens/${encodeURIComponent(launchId)}/quote`, {
+      method: "POST", body: JSON.stringify(input),
+    }, { signal })
+  }
+
+  async createLaunchpadTradeIntent(launchId: string, input: { side: LaunchpadTradeSide; amount: string; slippageBps: number; idempotencyKey?: string }, signal?: AbortSignal) {
+    return this.request<{ intent: CryptoTransactionIntent; quote?: LaunchpadQuote }>(`/launchpad/tokens/${encodeURIComponent(launchId)}/trade`, {
       method: "POST", body: JSON.stringify(input),
     }, { signal })
   }

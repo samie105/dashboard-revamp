@@ -700,6 +700,46 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
     }
   }
 
+  // Launchpad — the real Phase 0 devnet token, as the backend last read it.
+  // Quotes scale the recorded devnet buy (0.02 SOL → 707,634 tokens) linearly:
+  // good enough to review the page, and nothing here can be signed.
+  if (method === "GET" && path.startsWith("launchpad/tokens/") && !path.endsWith("/quote") && !path.endsWith("/trade")) {
+    const launchId = decodeURIComponent(path.split("/")[2] ?? "")
+    if (launchId !== "spike") return jsonError("NOT_FOUND", "Launch not found", 404)
+    return jsonRaw({
+      success: true,
+      platformFeeBps: 100,
+      tokenDecimals: 6,
+      data: {
+        launchId: "spike", status: "live", chainFamily: "solana", networkId: "solana-devnet",
+        creatorAddress: "oizdGpi8vX52ZEZWWzULF2S7x5WPJ4BYyRw9C5AoiGA", name: "Spike Token", symbol: "SPIKE",
+        description: "The Phase 0 devnet test token.",
+        mint: "J1V9i5HwPkVBfYRH8Z5xM613PMRM91FWSEjgoKt6JRNC", poolAddress: "49EQv282RkybyMDdU2QRm228UNZcw5atrxEgJMs7N8fZ",
+        allocation: { creatorBps: 200, creatorLamports: "546869990" },
+        curve: { solRaised: "590901290", progressBps: 69, graduationLamports: "85000000000", refreshedAt: nowIso() },
+        createdAt: nowIso(), updatedAt: nowIso(),
+      },
+    })
+  }
+  if (method === "POST" && /^launchpad\/tokens\/[^/]+\/quote$/.test(path)) {
+    const body = await readBody()
+    const amount = BigInt(String(body.amount ?? "0"))
+    const slippage = BigInt(Number(body.slippageBps ?? 100))
+    const buy = body.side === "buy"
+    const fee = buy ? amount / BigInt(100) : BigInt(0)
+    const out = buy ? ((amount - fee) * BigInt(707634166586)) / BigInt(19800000) : (amount * BigInt(19800000)) / BigInt(707634166586)
+    const sellFee = buy ? BigInt(0) : out / BigInt(100)
+    return json({
+      side: body.side, amountIn: amount.toString(), expectedOut: (out - sellFee).toString(),
+      minimumOut: ((out * (BigInt(10000) - slippage)) / BigInt(10000) - sellFee).toString(),
+      platformFeeLamports: (buy ? fee : sellFee).toString(), curveFee: (amount / BigInt(100)).toString(),
+      priceImpactBps: 14, expiresAt: new Date(Date.now() + 20_000).toISOString(),
+    })
+  }
+  if (method === "POST" && /^launchpad\/tokens\/[^/]+\/trade$/.test(path)) {
+    return jsonError("LAUNCHPAD_MOCK", "Curve trades need the real backend — the dev mock can't build them", 501)
+  }
+
   // Trading
   if (method === "GET" && path === "trading/spot/markets") return json({ markets: SPOT_MARKETS })
   if (method === "POST" && (path === "trading/spot/evm/intents" || path === "trading/spot/solana/intents")) {

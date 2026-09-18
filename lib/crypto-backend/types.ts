@@ -336,3 +336,44 @@ export interface HyperliquidAccount {
   positions: Array<Record<string, unknown>>
   openOrders: Array<Record<string, unknown>>
 }
+
+/* ── Launchpad (backend: src/api/routes/launchpad.ts) ───────────────────── */
+
+export type LaunchpadStatus = "draft" | "deploying" | "live" | "graduating" | "graduated" | "failed"
+
+export interface LaunchpadToken {
+  launchId: string
+  status: LaunchpadStatus
+  chainFamily: "solana"
+  networkId: string
+  creatorAddress: string
+  name: string
+  symbol: string
+  description?: string
+  iconUrl?: string
+  links?: { website?: string; x?: string; telegram?: string }
+  mint?: string
+  poolAddress?: string
+  allocation: { creatorBps: number; creatorLamports?: string }
+  /** On-chain curve state, refreshed by the reconciler. Absent until live. */
+  curve?: { solRaised: string; progressBps: number; graduationLamports: string; refreshedAt: string }
+  createdAt: string
+  updatedAt: string
+}
+
+export type LaunchpadTradeSide = "buy" | "sell"
+
+/** Every figure comes from the curve program's own math, server-side. */
+export interface LaunchpadQuote {
+  side: LaunchpadTradeSide
+  /** Lamports on a buy; token base units on a sell. */
+  amountIn: string
+  /** Token base units on a buy; lamports on a sell — after the platform fee. */
+  expectedOut: string
+  minimumOut: string
+  platformFeeLamports: string
+  /** In the input asset: lamports on a buy, token base units on a sell. */
+  curveFee: string
+  priceImpactBps: number
+  expiresAt: string
+}
