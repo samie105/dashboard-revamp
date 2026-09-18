@@ -5,6 +5,7 @@ import { PreviewNotice, SectionRule } from "@/components/preview/page-chrome"
 import { DiscoveryHero } from "@/components/launchpad-unauth/discovery-hero"
 import { LaunchGrid } from "@/components/launchpad-unauth/launch-grid"
 import { ManifestCard } from "@/components/launchpad-unauth/parts"
+import { ResumeBanner } from "@/components/launchpad-unauth/launch-lifecycle"
 
 export const metadata: Metadata = {
   title: "Launchpad preview",
@@ -24,6 +25,10 @@ export default function LaunchpadUnauthPage() {
         page is open without signing in so the layout can be reviewed on its
         own.
       </PreviewNotice>
+
+      {/* Renders nothing unless a launch is still in flight — the page you
+          come back to is where a launch you walked away from should find you. */}
+      <ResumeBanner />
 
       <Rise>
         <DiscoveryHero />

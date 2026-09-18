@@ -94,7 +94,7 @@ export function LaunchCard({
           />
           <Fact
             label="Launched"
-            value={v.minutesAgo === 0 ? "Not yet" : ago(v.minutesAgo)}
+            value={v.minutesAgo < 0 ? "Not yet" : ago(v.minutesAgo)}
             align="end"
           />
         </div>

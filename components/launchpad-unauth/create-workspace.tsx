@@ -38,6 +38,15 @@ import { PREVIEW_ROUTES } from "@/components/preview/routes"
 import { LaunchCard } from "@/components/launchpad-unauth/launch-card"
 import { Assumed } from "@/components/launchpad-unauth/parts"
 import {
+  LaunchLifecycle,
+  ResumeBanner,
+} from "@/components/launchpad-unauth/launch-lifecycle"
+import {
+  clearPending,
+  savePending,
+  usePendingLaunch,
+} from "@/components/launchpad-unauth/pending-launch"
+import {
   CREATE_FEE_SOL,
   MAX_CREATOR_BPS,
   NETWORK_RENT_SOL,
@@ -90,7 +99,10 @@ export function CreateWorkspace() {
   const [touched, setTouched] = React.useState<Record<string, boolean>>({})
   const [attempted, setAttempted] = React.useState(false)
   const [iconError, setIconError] = React.useState<string | null>(null)
-  const [launched, setLaunched] = React.useState(false)
+  /* "form" until a valid Launch is pressed, then the lifecycle. The launch
+     itself is recorded in pending-launch, so it outlives this component. */
+  const [phase, setPhase] = React.useState<"form" | "lifecycle">("form")
+  const pending = usePendingLaunch()
   const fileRef = React.useRef<HTMLInputElement>(null)
 
   // Object URLs hold the file in memory until revoked. Replacing the icon or
@@ -104,7 +116,6 @@ export function CreateWorkspace() {
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
     setDraft((d) => ({ ...d, [key]: value }))
-    setLaunched(false)
   }
   const touch = (key: string) => setTouched((t) => ({ ...t, [key]: true }))
 
@@ -137,395 +148,417 @@ export function CreateWorkspace() {
 
   const onLaunch = () => {
     setAttempted(true)
-    if (canLaunch) setLaunched(true)
+    if (!canLaunch) return
+    savePending({ draft, state: "signing", startedAt: Date.now() })
+    setPhase("lifecycle")
+  }
+
+  if (phase === "lifecycle") {
+    return (
+      <LaunchLifecycle
+        draft={draft}
+        totalSol={totalSol}
+        // A failed launch is abandoned when you go back to edit it: the next
+        // Launch is a new attempt, exactly as it would be on chain.
+        onEdit={() => {
+          clearPending()
+          setPhase("form")
+        }}
+        onStartOver={() => {
+          clearPending()
+          setDraft(EMPTY)
+          setTouched({})
+          setAttempted(false)
+          setPhase("form")
+        }}
+      />
+    )
   }
 
   return (
-    <CardShell className={CARD_HUE}>
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
-        {/* ══ The form ═══════════════════════════════════════════════════ */}
-        <form
-          className="flex min-w-0 flex-col gap-7 p-5 sm:p-6 lg:p-7"
-          onSubmit={(e) => {
-            e.preventDefault()
-            onLaunch()
-          }}
-          noValidate
-        >
-          <Section
-            title="Chain"
-            hint="Where the token and its curve will live. More chains are coming."
+    <div className="flex flex-col gap-4">
+      <ResumeBanner
+        onResume={
+          pending
+            ? () => {
+                setDraft({ ...pending.draft })
+                setPhase("lifecycle")
+              }
+            : undefined
+        }
+      />
+      <CardShell className={CARD_HUE}>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+          {/* ══ The form ═══════════════════════════════════════════════════ */}
+          <form
+            className="flex min-w-0 flex-col gap-7 p-5 sm:p-6 lg:p-7"
+            onSubmit={(e) => {
+              e.preventDefault()
+              onLaunch()
+            }}
+            noValidate
           >
-            <div className="scrollbar-none min-w-0 overflow-x-auto">
-              <Segmented
-                options={CHAIN_OPTIONS}
-                value={chain}
-                onChange={setChain}
-              />
-            </div>
-          </Section>
-
-          <Section
-            title="Identity"
-            hint="What people will search for and see in the feed."
-          >
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              {/* Icon */}
-              <div className="flex shrink-0 flex-col items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className={cn(
-                    "group relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full transition-colors",
-                    draft.iconUrl
-                      ? "ring-1 ring-border/50"
-                      : "border-2 border-dashed border-foreground/20 bg-foreground/[0.03] hover:border-primary/50 hover:bg-primary/[0.04]"
-                  )}
-                  aria-label={draft.iconUrl ? "Replace icon" : "Add an icon"}
-                >
-                  {draft.iconUrl ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={draft.iconUrl}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                      <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-[11.5px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        Replace
-                      </span>
-                    </>
-                  ) : (
-                    <span className="flex flex-col items-center gap-1 text-muted-foreground">
-                      <svg aria-hidden viewBox="0 0 20 20" className="h-5 w-5">
-                        <path
-                          d="M10 5v10M5 10h10"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <span className="text-[11px] font-semibold">Icon</span>
-                    </span>
-                  )}
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept={ICON_TYPES.join(",")}
-                  className="sr-only"
-                  tabIndex={-1}
-                  onChange={(e) => {
-                    pickIcon(e.target.files?.[0])
-                    e.target.value = ""
-                  }}
+            <Section
+              title="Chain"
+              hint="Where the token and its curve will live. More chains are coming."
+            >
+              <div className="scrollbar-none min-w-0 overflow-x-auto">
+                <Segmented
+                  options={CHAIN_OPTIONS}
+                  value={chain}
+                  onChange={setChain}
                 />
-                <span
-                  className={cn(
-                    "max-w-[8rem] text-center text-[11px]",
-                    iconError ? "text-debit" : "text-muted-foreground"
-                  )}
-                >
-                  {iconError ?? "Square, under 1 MB"}
-                </span>
               </div>
+            </Section>
 
-              <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <Section
+              title="Identity"
+              hint="What people will search for and see in the feed."
+            >
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                {/* Icon */}
+                <div className="flex shrink-0 flex-col items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className={cn(
+                      "group relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full transition-colors",
+                      draft.iconUrl
+                        ? "ring-1 ring-border/50"
+                        : "border-2 border-dashed border-foreground/20 bg-foreground/[0.03] hover:border-primary/50 hover:bg-primary/[0.04]"
+                    )}
+                    aria-label={draft.iconUrl ? "Replace icon" : "Add an icon"}
+                  >
+                    {draft.iconUrl ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={draft.iconUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-[11.5px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                          Replace
+                        </span>
+                      </>
+                    ) : (
+                      <span className="flex flex-col items-center gap-1 text-muted-foreground">
+                        <svg
+                          aria-hidden
+                          viewBox="0 0 20 20"
+                          className="h-5 w-5"
+                        >
+                          <path
+                            d="M10 5v10M5 10h10"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <span className="text-[11px] font-semibold">Icon</span>
+                      </span>
+                    )}
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept={ICON_TYPES.join(",")}
+                    className="sr-only"
+                    tabIndex={-1}
+                    onChange={(e) => {
+                      pickIcon(e.target.files?.[0])
+                      e.target.value = ""
+                    }}
+                  />
+                  <span
+                    className={cn(
+                      "max-w-[8rem] text-center text-[11px]",
+                      iconError ? "text-debit" : "text-muted-foreground"
+                    )}
+                  >
+                    {iconError ?? "Square, under 1 MB"}
+                  </span>
+                </div>
+
+                <div className="flex min-w-0 flex-1 flex-col gap-4">
+                  <Field
+                    label="Name"
+                    counter={`${draft.name.length}/32`}
+                    error={
+                      show("name") && failed("name")
+                        ? "Use 2 to 32 characters."
+                        : undefined
+                    }
+                  >
+                    <input
+                      value={draft.name}
+                      maxLength={32}
+                      onChange={(e) => set("name", e.target.value)}
+                      onBlur={() => touch("name")}
+                      placeholder="e.g. Quartz Owl"
+                      className={inputCls(
+                        Boolean(show("name") && failed("name"))
+                      )}
+                    />
+                  </Field>
+
+                  <Field
+                    label="Symbol"
+                    counter={`${draft.symbol.length}/10`}
+                    error={symbolError(draft.symbol, show("symbol"), checks)}
+                  >
+                    <div className="relative">
+                      <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-[14px] font-semibold text-muted-foreground">
+                        $
+                      </span>
+                      <input
+                        value={draft.symbol}
+                        maxLength={10}
+                        // Uppercase and strip as you type, rather than rejecting on
+                        // submit: the rule is simple enough to just enforce.
+                        onChange={(e) =>
+                          set(
+                            "symbol",
+                            e.target.value
+                              .toUpperCase()
+                              .replace(/[^A-Z0-9]/g, "")
+                          )
+                        }
+                        onBlur={() => touch("symbol")}
+                        placeholder="QOWL"
+                        className={cn(
+                          inputCls(
+                            Boolean(
+                              symbolError(draft.symbol, show("symbol"), checks)
+                            )
+                          ),
+                          "pl-7 font-semibold tracking-[0.04em]"
+                        )}
+                      />
+                    </div>
+                  </Field>
+                </div>
+              </div>
+            </Section>
+
+            <Section
+              title="Description"
+              hint="Shown on the card and the token page. Say what it is, plainly."
+            >
+              <Field
+                label="Description"
+                hideLabel
+                counter={`${draft.description.length}/280`}
+                error={
+                  show("description") && failed("description")
+                    ? "Keep it to 280 characters."
+                    : undefined
+                }
+              >
+                <textarea
+                  value={draft.description}
+                  maxLength={280}
+                  rows={3}
+                  onChange={(e) => set("description", e.target.value)}
+                  onBlur={() => touch("description")}
+                  placeholder="What is this, and who is it for?"
+                  className={cn(
+                    inputCls(false),
+                    "h-auto resize-none py-3 leading-relaxed"
+                  )}
+                />
+              </Field>
+            </Section>
+
+            <Section
+              title="Links"
+              hint="Optional. Shown on the token page, and never checked by us — the page says so."
+            >
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Field
-                  label="Name"
-                  counter={`${draft.name.length}/32`}
+                  label="Website"
                   error={
-                    show("name") && failed("name")
-                      ? "Use 2 to 32 characters."
+                    show("links") &&
+                    draft.website &&
+                    !/^https:\/\//i.test(draft.website)
+                      ? "Starts with https://"
                       : undefined
                   }
                 >
                   <input
-                    value={draft.name}
-                    maxLength={32}
-                    onChange={(e) => set("name", e.target.value)}
-                    onBlur={() => touch("name")}
-                    placeholder="e.g. Quartz Owl"
-                    className={inputCls(
-                      Boolean(show("name") && failed("name"))
-                    )}
+                    value={draft.website}
+                    onChange={(e) => set("website", e.target.value)}
+                    onBlur={() => touch("links")}
+                    placeholder="https://"
+                    inputMode="url"
+                    className={inputCls(false)}
                   />
                 </Field>
-
-                <Field
-                  label="Symbol"
-                  counter={`${draft.symbol.length}/10`}
-                  error={symbolError(draft.symbol, show("symbol"), checks)}
-                >
-                  <div className="relative">
-                    <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-[14px] font-semibold text-muted-foreground">
-                      $
-                    </span>
-                    <input
-                      value={draft.symbol}
-                      maxLength={10}
-                      // Uppercase and strip as you type, rather than rejecting on
-                      // submit: the rule is simple enough to just enforce.
-                      onChange={(e) =>
-                        set(
-                          "symbol",
-                          e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")
-                        )
-                      }
-                      onBlur={() => touch("symbol")}
-                      placeholder="QOWL"
-                      className={cn(
-                        inputCls(
-                          Boolean(
-                            symbolError(draft.symbol, show("symbol"), checks)
-                          )
-                        ),
-                        "pl-7 font-semibold tracking-[0.04em]"
-                      )}
-                    />
-                  </div>
+                <Field label="X">
+                  <input
+                    value={draft.x}
+                    onChange={(e) => set("x", e.target.value.replace(/^@/, ""))}
+                    onBlur={() => touch("links")}
+                    placeholder="handle"
+                    className={inputCls(false)}
+                  />
+                </Field>
+                <Field label="Telegram">
+                  <input
+                    value={draft.telegram}
+                    onChange={(e) =>
+                      set("telegram", e.target.value.replace(/^@/, ""))
+                    }
+                    onBlur={() => touch("links")}
+                    placeholder="handle"
+                    className={inputCls(false)}
+                  />
                 </Field>
               </div>
-            </div>
-          </Section>
+            </Section>
 
-          <Section
-            title="Description"
-            hint="Shown on the card and the token page. Say what it is, plainly."
-          >
-            <Field
-              label="Description"
-              hideLabel
-              counter={`${draft.description.length}/280`}
-              error={
-                show("description") && failed("description")
-                  ? "Keep it to 280 characters."
-                  : undefined
-              }
+            <Section
+              title="Your allocation"
+              hint="Tokens you buy for yourself at launch, off the same curve as everyone else. There is no vesting — they are yours to sell at any time, and buyers will see exactly how much you took."
             >
-              <textarea
-                value={draft.description}
-                maxLength={280}
-                rows={3}
-                onChange={(e) => set("description", e.target.value)}
-                onBlur={() => touch("description")}
-                placeholder="What is this, and who is it for?"
-                className={cn(
-                  inputCls(false),
-                  "h-auto resize-none py-3 leading-relaxed"
+              <div className="flex flex-col gap-3 rounded-2xl bg-foreground/[0.04] p-4">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="flex items-baseline gap-2">
+                    <span className="font-display text-[28px] leading-none font-medium tabular-nums">
+                      {fmtPct(draft.creatorBps)}
+                    </span>
+                    <span className="text-[12px] text-muted-foreground">
+                      of curve supply
+                    </span>
+                  </span>
+                  <span className="text-right text-[12px] text-muted-foreground tabular-nums">
+                    {draft.creatorBps === 0
+                      ? "No pre-buy"
+                      : `${fmtTokens(allocation.tokens)} tokens`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={MAX_CREATOR_BPS}
+                  step={50}
+                  value={draft.creatorBps}
+                  onChange={(e) => set("creatorBps", Number(e.target.value))}
+                  aria-label="Creator allocation, percent of curve supply"
+                  aria-valuetext={`${fmtPct(draft.creatorBps)}, costing ${fmtSol(allocation.sol, 3)}`}
+                  className="w-full cursor-pointer"
+                  style={{ accentColor: "var(--primary)" }}
+                />
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
+                  <span>None</span>
+                  <span className="inline-flex items-center">
+                    Cap {fmtPct(MAX_CREATOR_BPS)}
+                    <Assumed note="LAUNCHPAD_MAX_CREATOR_BPS is a proposal, not a decision" />
+                  </span>
+                </div>
+                {draft.creatorBps > 0 && (
+                  <p className="text-[12px] leading-relaxed text-muted-foreground">
+                    Costs{" "}
+                    <span className="font-semibold text-foreground">
+                      {fmtSol(allocation.sol, 3)}
+                    </span>{" "}
+                    ({fmtUsd(allocation.usd)}) at the launch price. The price
+                    rises as the curve fills, so the same share bought later
+                    would cost more — which is exactly why buyers are shown this
+                    number.
+                  </p>
                 )}
-              />
-            </Field>
-          </Section>
-
-          <Section
-            title="Links"
-            hint="Optional. Shown on the token page, and never checked by us — the page says so."
-          >
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Field
-                label="Website"
-                error={
-                  show("links") &&
-                  draft.website &&
-                  !/^https:\/\//i.test(draft.website)
-                    ? "Starts with https://"
-                    : undefined
-                }
-              >
-                <input
-                  value={draft.website}
-                  onChange={(e) => set("website", e.target.value)}
-                  onBlur={() => touch("links")}
-                  placeholder="https://"
-                  inputMode="url"
-                  className={inputCls(false)}
-                />
-              </Field>
-              <Field label="X">
-                <input
-                  value={draft.x}
-                  onChange={(e) => set("x", e.target.value.replace(/^@/, ""))}
-                  onBlur={() => touch("links")}
-                  placeholder="handle"
-                  className={inputCls(false)}
-                />
-              </Field>
-              <Field label="Telegram">
-                <input
-                  value={draft.telegram}
-                  onChange={(e) =>
-                    set("telegram", e.target.value.replace(/^@/, ""))
-                  }
-                  onBlur={() => touch("links")}
-                  placeholder="handle"
-                  className={inputCls(false)}
-                />
-              </Field>
-            </div>
-          </Section>
-
-          <Section
-            title="Your allocation"
-            hint="Tokens you buy for yourself at launch, off the same curve as everyone else. There is no vesting — they are yours to sell at any time, and buyers will see exactly how much you took."
-          >
-            <div className="flex flex-col gap-3 rounded-2xl bg-foreground/[0.04] p-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="flex items-baseline gap-2">
-                  <span className="font-display text-[28px] leading-none font-medium tabular-nums">
-                    {fmtPct(draft.creatorBps)}
-                  </span>
-                  <span className="text-[12px] text-muted-foreground">
-                    of curve supply
-                  </span>
-                </span>
-                <span className="text-right text-[12px] text-muted-foreground tabular-nums">
-                  {draft.creatorBps === 0
-                    ? "No pre-buy"
-                    : `${fmtTokens(allocation.tokens)} tokens`}
-                </span>
               </div>
-              <input
-                type="range"
-                min={0}
-                max={MAX_CREATOR_BPS}
-                step={50}
-                value={draft.creatorBps}
-                onChange={(e) => set("creatorBps", Number(e.target.value))}
-                aria-label="Creator allocation, percent of curve supply"
-                aria-valuetext={`${fmtPct(draft.creatorBps)}, costing ${fmtSol(allocation.sol, 3)}`}
-                className="w-full cursor-pointer"
-                style={{ accentColor: "var(--primary)" }}
-              />
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span>None</span>
-                <span className="inline-flex items-center">
-                  Cap {fmtPct(MAX_CREATOR_BPS)}
-                  <Assumed note="LAUNCHPAD_MAX_CREATOR_BPS is a proposal, not a decision" />
-                </span>
-              </div>
-              {draft.creatorBps > 0 && (
-                <p className="text-[12px] leading-relaxed text-muted-foreground">
-                  Costs{" "}
-                  <span className="font-semibold text-foreground">
-                    {fmtSol(allocation.sol, 3)}
-                  </span>{" "}
-                  ({fmtUsd(allocation.usd)}) at the launch price. The price
-                  rises as the curve fills, so the same share bought later would
-                  cost more — which is exactly why buyers are shown this number.
-                </p>
-              )}
-            </div>
-          </Section>
+            </Section>
 
-          {/* On a phone the summary follows the form; this submit sits at the
+            {/* On a phone the summary follows the form; this submit sits at the
               end of the form so the action is where the reader finishes. The
               desktop CTA lives in the summary pane. */}
-          <button type="submit" className="sr-only">
-            Launch token
-          </button>
-        </form>
+            <button type="submit" className="sr-only">
+              Launch token
+            </button>
+          </form>
 
-        {/* ══ What you're making, and what it costs ══════════════════════ */}
-        <aside className="flex min-w-0 flex-col gap-4 border-t border-border/40 p-5 sm:p-6 lg:border-t-0 lg:border-l lg:p-7">
-          <div className="flex flex-col gap-2">
-            <PaneLabel>Preview</PaneLabel>
-            <LaunchCard launch={draftAsLaunch(draft)} />
-          </div>
+          {/* ══ What you're making, and what it costs ══════════════════════ */}
+          <aside className="flex min-w-0 flex-col gap-4 border-t border-border/40 p-5 sm:p-6 lg:border-t-0 lg:border-l lg:p-7">
+            <div className="flex flex-col gap-2">
+              <PaneLabel>Preview</PaneLabel>
+              <LaunchCard launch={draftAsLaunch(draft)} />
+            </div>
 
-          <div className="flex flex-col gap-2.5 rounded-2xl bg-foreground/[0.05] p-4">
-            <PaneLabel>Cost to launch</PaneLabel>
-            <dl className="flex flex-col gap-2 text-[12.5px]">
-              <CostRow
-                label="Creation fee"
-                value={fmtSol(CREATE_FEE_SOL, 3)}
-                assumed="fee model undecided (open question #3)"
-              />
-              <CostRow
-                label="Network rent"
-                value={`~${fmtSol(NETWORK_RENT_SOL, 3)}`}
-                assumed="estimate; the real figure comes from simulating the transaction"
-              />
-              <CostRow
-                label="Your allocation"
-                value={draft.creatorBps === 0 ? "—" : fmtSol(allocation.sol, 4)}
-              />
-              {draft.creatorBps > 0 && (
+            <div className="flex flex-col gap-2.5 rounded-2xl bg-foreground/[0.05] p-4">
+              <PaneLabel>Cost to launch</PaneLabel>
+              <dl className="flex flex-col gap-2 text-[12.5px]">
                 <CostRow
-                  label={`Trading fee (${fmtPct(TRADE_FEE_BPS)})`}
-                  value={fmtSol(tradeFeeOnPreBuy, 4)}
+                  label="Creation fee"
+                  value={fmtSol(CREATE_FEE_SOL, 3)}
                   assumed="fee model undecided (open question #3)"
                 />
-              )}
-            </dl>
-            <div className="flex items-baseline justify-between gap-3 border-t border-border/40 pt-2.5">
-              <span className="text-[13px] font-semibold">Total</span>
-              <span className="flex flex-col items-end">
-                <span className="text-[15px] font-semibold tabular-nums">
-                  {fmtSol(totalSol, 4)}
-                </span>
-                <span className="text-[11.5px] text-muted-foreground tabular-nums">
-                  ≈ {fmtUsd(totalSol * SOL_USD)}
-                </span>
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 rounded-2xl bg-foreground/[0.05] p-4">
-            <PaneLabel>Checks</PaneLabel>
-            <ul className="flex flex-col gap-1.5">
-              {checks.map((c) => (
-                <li
-                  key={c.key}
-                  className="flex items-start gap-2 text-[12.5px]"
-                >
-                  <CheckMark
-                    state={c.ok ? "ok" : c.blocking ? "fail" : "optional"}
+                <CostRow
+                  label="Network rent"
+                  value={`~${fmtSol(NETWORK_RENT_SOL, 3)}`}
+                  assumed="estimate; the real figure comes from simulating the transaction"
+                />
+                <CostRow
+                  label="Your allocation"
+                  value={
+                    draft.creatorBps === 0 ? "—" : fmtSol(allocation.sol, 4)
+                  }
+                />
+                {draft.creatorBps > 0 && (
+                  <CostRow
+                    label={`Trading fee (${fmtPct(TRADE_FEE_BPS)})`}
+                    value={fmtSol(tradeFeeOnPreBuy, 4)}
+                    assumed="fee model undecided (open question #3)"
                   />
-                  <span
-                    className={
-                      c.ok
-                        ? "text-muted-foreground"
-                        : c.blocking
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                    }
-                  >
-                    {c.label}
-                    {!c.blocking && !c.ok && (
-                      <span className="text-muted-foreground/70">
-                        {" "}
-                        — recommended
-                      </span>
-                    )}
+                )}
+              </dl>
+              <div className="flex items-baseline justify-between gap-3 border-t border-border/40 pt-2.5">
+                <span className="text-[13px] font-semibold">Total</span>
+                <span className="flex flex-col items-end">
+                  <span className="text-[15px] font-semibold tabular-nums">
+                    {fmtSol(totalSol, 4)}
                   </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {launched ? (
-            <div className="flex flex-col gap-2 rounded-2xl border border-primary/30 bg-primary/[0.06] p-4">
-              <span className="text-[13.5px] font-semibold">Ready to sign</span>
-              <span className="text-[12.5px] leading-relaxed text-muted-foreground">
-                In the live product your wallet opens here to sign one
-                transaction: it creates ${draftAsLaunch(draft).symbol}, opens
-                its curve
-                {draft.creatorBps > 0
-                  ? `, and buys your ${fmtPct(draft.creatorBps)} allocation`
-                  : ""}{" "}
-                — all or nothing. This is a preview, so nothing was created.
-                What happens after signing is Stage 4.
-              </span>
-              <button
-                type="button"
-                onClick={() => setLaunched(false)}
-                className="mt-1 w-fit text-[12.5px] font-semibold text-primary transition-opacity hover:opacity-80"
-              >
-                Keep editing
-              </button>
+                  <span className="text-[11.5px] text-muted-foreground tabular-nums">
+                    ≈ {fmtUsd(totalSol * SOL_USD)}
+                  </span>
+                </span>
+              </div>
             </div>
-          ) : (
+
+            <div className="flex flex-col gap-2 rounded-2xl bg-foreground/[0.05] p-4">
+              <PaneLabel>Checks</PaneLabel>
+              <ul className="flex flex-col gap-1.5">
+                {checks.map((c) => (
+                  <li
+                    key={c.key}
+                    className="flex items-start gap-2 text-[12.5px]"
+                  >
+                    <CheckMark
+                      state={c.ok ? "ok" : c.blocking ? "fail" : "optional"}
+                    />
+                    <span
+                      className={
+                        c.ok
+                          ? "text-muted-foreground"
+                          : c.blocking
+                            ? "text-foreground"
+                            : "text-muted-foreground"
+                      }
+                    >
+                      {c.label}
+                      {!c.blocking && !c.ok && (
+                        <span className="text-muted-foreground/70">
+                          {" "}
+                          — recommended
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             <div className="flex flex-col gap-2">
               <button
                 type="button"
@@ -548,17 +581,17 @@ export function CreateWorkspace() {
                 launch can&apos;t be edited once it&apos;s live.
               </span>
             </div>
-          )}
 
-          <Link
-            href={PREVIEW_ROUTES.launchpad}
-            className="text-center text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Back to launches
-          </Link>
-        </aside>
-      </div>
-    </CardShell>
+            <Link
+              href={PREVIEW_ROUTES.launchpad}
+              className="text-center text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Back to launches
+            </Link>
+          </aside>
+        </div>
+      </CardShell>
+    </div>
   )
 }
 

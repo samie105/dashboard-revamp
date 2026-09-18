@@ -103,7 +103,13 @@ export const PROVENANCE: Provenance[] = [
     figure: "Curve constants (30 / 1.073B / 85 SOL)",
     kind: "assumed",
     note: "Standard virtual-reserve values. The real ones are the chosen program's — open question #2",
-    pages: ["token", "create"],
+    pages: ["discovery", "token", "create"],
+  },
+  {
+    figure: "“Near graduation” at 75%",
+    kind: "assumed",
+    note: "A filter threshold — a product call, not a fact about the curve",
+    pages: ["discovery"],
   },
   {
     figure: "Creation fee (0.02 SOL)",
@@ -128,6 +134,36 @@ export const PROVENANCE: Provenance[] = [
     kind: "assumed",
     note: "LAUNCHPAD_MAX_CREATOR_BPS — a proposal, not a decision",
     pages: ["create"],
+  },
+  {
+    figure: "Buy / sell quote",
+    kind: "sourced",
+    note: "Program math over live pool reserves — never a local reimplementation in production",
+    pages: ["token"],
+  },
+  {
+    figure: "Price impact, minimum received",
+    kind: "sourced",
+    note: "Arithmetic over the quote and your slippage",
+    pages: ["token"],
+  },
+  {
+    figure: "Recent trades",
+    kind: "assumed",
+    note: "Needs a curve-trade index — the same missing index as price history",
+    pages: ["token"],
+  },
+  {
+    figure: "Your SOL and token balance",
+    kind: "assumed",
+    note: "A demo wallet here. Live: the existing wallet balances hook",
+    pages: ["token"],
+  },
+  {
+    figure: "Buy past the threshold",
+    kind: "assumed",
+    note: "Here the excess is simply not taken. The real behaviour is the chosen program's",
+    pages: ["token"],
   },
   {
     figure: "Name / symbol rules",
@@ -209,6 +245,136 @@ export function curvePoints(
     const sol = (GRADUATION_SOL * i) / (n - 1)
     return { sol, sold: tokensSoldAt(sol), price: priceAt(sol) }
   })
+}
+
+/* ── Trading on the curve ───────────────────────────────────────────────
+   Exact inverses of each other: buying and immediately selling the same
+   tokens returns the SOL put in less the two fees, to the lamport. Checked
+   before this was written — a quote that could create or destroy value on a
+   round trip would be a quote that lies. */
+
+/** Tokens out for `solIn` (after fee) against a curve that has raised `raised`. */
+export function tokensForSol(solIn: number, raised: number): number {
+  const vSol = VIRTUAL_SOL + raised
+  return K / vSol - K / (vSol + solIn)
+}
+
+/** SOL out (before fee) for selling `tokensIn` into a curve at `raised`. */
+export function solForTokens(tokensIn: number, raised: number): number {
+  const vSol = VIRTUAL_SOL + raised
+  return vSol - K / (K / vSol + tokensIn)
+}
+
+/** How long a curve quote is shown before it is re-read. A UI cadence, not a
+ *  chain fact: reserves move whenever anyone else trades. */
+export const CURVE_QUOTE_TTL = 20
+
+export type CurveQuote = {
+  side: "buy" | "sell"
+  /** What the user puts in: SOL for a buy, tokens for a sell. */
+  amountIn: number
+  /** What they get, after fee. */
+  amountOut: number
+  feeSol: number
+  priceImpactPct: number
+  minOut: number
+  /** A buy larger than what is left on the curve — the excess is not taken. */
+  cappedAtSol?: number
+}
+
+export function quoteCurve(
+  side: "buy" | "sell",
+  amountIn: number,
+  launch: LaunchView,
+  slippageBps: number
+): CurveQuote | null {
+  if (!Number.isFinite(amountIn) || amountIn <= 0 || launch.status !== "live")
+    return null
+  const raised = launch.solRaised
+  const spot = priceAt(raised)
+
+  if (side === "buy") {
+    let gross = amountIn
+    let cappedAtSol: number | undefined
+    // Net SOL that would fill the curve exactly: remaining / (1 - fee).
+    const fillGross = launch.remainingSol / (1 - TRADE_FEE_BPS / 10_000)
+    if (gross > fillGross) {
+      cappedAtSol = fillGross
+      gross = fillGross
+    }
+    const feeSol = (gross * TRADE_FEE_BPS) / 10_000
+    const net = gross - feeSol
+    const out = tokensForSol(net, raised)
+    const avg = net / out
+    return {
+      side,
+      amountIn: gross,
+      amountOut: out,
+      feeSol,
+      priceImpactPct: (avg / spot - 1) * 100,
+      minOut: out * (1 - slippageBps / 10_000),
+      cappedAtSol,
+    }
+  }
+
+  const gross = solForTokens(amountIn, raised)
+  const feeSol = (gross * TRADE_FEE_BPS) / 10_000
+  const out = gross - feeSol
+  const avg = gross / amountIn
+  return {
+    side,
+    amountIn,
+    amountOut: out,
+    feeSol,
+    priceImpactPct: (1 - avg / spot) * 100,
+    minOut: out * (1 - slippageBps / 10_000),
+  }
+}
+
+/** The preview's pretend wallet. Assumed — see the manifest. */
+export const DEMO_SOL_BALANCE = 12.5
+export function demoTokenBalance(launch: Launch): number {
+  const rand = mulberry32(seedOf(`${launch.id}:holding`))
+  // Most launches: nothing held. A few: a position worth selling.
+  return rand() < 0.45 ? Math.round(rand() * 24_000_000) : 0
+}
+
+export type CurveTrade = {
+  id: string
+  side: "buy" | "sell"
+  sol: number
+  tokens: number
+  wallet: string
+  minutesAgo: number
+}
+
+/** A seeded tape of recent curve trades. Assumed — no trade index exists. */
+export function tradesFor(launch: Launch, n = 14): CurveTrade[] {
+  const rand = mulberry32(seedOf(`${launch.id}:tape`))
+  const trades: CurveTrade[] = []
+  let raised = Math.min(launch.solRaised, GRADUATION_SOL)
+  let minutes = Math.max(1, Math.floor(rand() * 4))
+  for (let i = 0; i < n && raised > 0.2; i++) {
+    const buy = rand() < 0.7
+    const sol = Math.round((0.05 + rand() * rand() * 3.5) * 1000) / 1000
+    // Walk the curve BACKWARDS from today, so the newest trade is priced at
+    // the current reserves and each earlier one a little lower down.
+    const before = buy ? Math.max(0, raised - sol) : raised
+    const tokens = buy
+      ? tokensForSol(sol, before)
+      : tokensForSol(sol, Math.max(0, raised - sol))
+    trades.push({
+      id: `${launch.id}-t${i}`,
+      side: buy ? "buy" : "sell",
+      sol,
+      tokens,
+      wallet: address(seedOf(`${launch.id}:w${i}`), 44),
+      minutesAgo: minutes,
+    })
+    if (buy) raised = before
+    minutes += 1 + Math.floor(rand() * 9)
+  }
+  return trades
 }
 
 /* ── Launches ───────────────────────────────────────────────────────────── */
@@ -583,7 +749,9 @@ export function draftAsLaunch(d: Draft): Launch {
     // At launch the creator's pre-buy is the only SOL in the curve.
     solRaised: creatorAllocation(d.creatorBps).sol,
     status: "live",
-    minutesAgo: 0,
+    // -1 = not launched yet. 0 is reserved for "just now", which is what a
+    // launch that has actually gone live should say.
+    minutesAgo: -1,
     creator: "You",
     mint: "",
     links: {},

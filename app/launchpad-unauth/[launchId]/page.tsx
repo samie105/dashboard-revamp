@@ -13,9 +13,13 @@ import {
   AllocationPanel,
   ProgressRail,
   TermsPanel,
-  TicketPlaceholder,
   TokenHero,
 } from "@/components/launchpad-unauth/token-panels"
+import { CurveTicket } from "@/components/launchpad-unauth/curve-ticket"
+import {
+  GraduationStatus,
+  TradesTape,
+} from "@/components/launchpad-unauth/trades-and-status"
 import {
   LAUNCHES,
   launchById,
@@ -93,11 +97,18 @@ export default async function LaunchUnauthPage({ params }: Props) {
               </CardShell>
             </div>
             <ProgressRail launch={v} />
+            <TradesTape launch={v} />
             <AboutPanel launch={v} />
           </div>
 
           <div className="flex min-w-0 flex-col gap-4">
-            <TicketPlaceholder launch={v} />
+            {/* The ticket while there is a curve to trade on; once it closes, the
+                same space says where trading went. */}
+            {v.status === "live" ? (
+              <CurveTicket launch={v} />
+            ) : (
+              <GraduationStatus launch={v} />
+            )}
             <AllocationPanel launch={v} />
             <TermsPanel launch={v} />
           </div>
