@@ -350,7 +350,7 @@ export function LiveCurveTicket({
         disabled={!q || busy || expired}
         onClick={execute}
         className={cn(
-          "flex h-12 w-full items-center justify-center rounded-full text-[14px] font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none",
+          "flex h-12 w-full shrink-0 items-center justify-center rounded-full text-[14px] font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none",
           q && !busy && !expired
             ? "bg-primary text-primary-foreground hover:bg-primary/90"
             : "bg-foreground/[0.08] text-muted-foreground"

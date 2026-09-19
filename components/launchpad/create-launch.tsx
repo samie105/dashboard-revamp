@@ -399,7 +399,7 @@ function LaunchForm() {
           </div>
         </CardShell>
 
-        <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4 lg:self-start">
           <CardShell className={cn(CARD_HUE, "flex flex-col gap-4 p-5")}>
             <span className="text-[13px] font-semibold">What it costs</span>
             {terms.error && !t ? (
@@ -496,7 +496,7 @@ function LaunchForm() {
             disabled={!canLaunch}
             onClick={launch}
             className={cn(
-              "flex h-12 w-full items-center justify-center rounded-full text-[14px] font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none",
+              "flex h-12 w-full shrink-0 items-center justify-center rounded-full text-[14px] font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none",
               canLaunch
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "bg-foreground/[0.08] text-muted-foreground"
