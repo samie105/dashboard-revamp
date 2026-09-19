@@ -29,6 +29,14 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^trading\/hyperliquid\/fills$/,
     /^trading\/hyperliquid\/intents\/[^/]+$/,
     /^bridge\/intertrain\/usdc\/status$/,
+    // Launchpad (backend: src/api/routes/launchpad.ts)
+    /^launchpad\/networks$/,
+    /^launchpad\/availability$/,
+    /^launchpad\/terms$/,
+    /^launchpad\/tokens$/,
+    /^launchpad\/tokens\/[^/]+$/,
+    /^launchpad\/launches$/,
+    /^launchpad\/launches\/[^/]+$/,
   ],
   POST: [
     /^wallets$/,
@@ -64,6 +72,10 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^trading\/hyperliquid\/intents$/,
     /^trading\/hyperliquid\/intents\/[^/]+\/submit$/,
     /^bridge\/intertrain\/usdc\/intents$/,
+    /^launchpad\/launches$/,
+    /^launchpad\/launches\/[^/]+\/deploy$/,
+    /^launchpad\/tokens\/[^/]+\/quote$/,
+    /^launchpad\/tokens\/[^/]+\/trade$/,
   ],
 }
 
