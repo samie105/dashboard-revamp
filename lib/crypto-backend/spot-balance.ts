@@ -8,16 +8,22 @@ const WRAPPED_NATIVE: Record<string, string> = {
 
 function nativeAliasFor(networkId: string, identifier: string | null) {
   if (!identifier) return null
-  return nativeTokenFor(networkId, identifier) ??
+  return (
+    nativeTokenFor(networkId, identifier) ??
     (WRAPPED_NATIVE[networkId]?.toLowerCase() === identifier.toLowerCase()
       ? nativeTokenFor(networkId, "11111111111111111111111111111111")
       : null)
+  )
 }
 
-export function spotAssetAddress(market: HlSpotMarket, side: "buy" | "sell"): string | null {
-  const address = side === "buy"
-    ? (market.sellToken ?? market.inputMint)
-    : (market.buyToken ?? market.outputMint)
+export function spotAssetAddress(
+  market: HlSpotMarket,
+  side: "buy" | "sell"
+): string | null {
+  const address =
+    side === "buy"
+      ? (market.sellToken ?? market.inputMint)
+      : (market.buyToken ?? market.outputMint)
   return typeof address === "string" && address !== "native" ? address : null
 }
 
@@ -25,14 +31,19 @@ export function spotAssetAddress(market: HlSpotMarket, side: "buy" | "sell"): st
  * balance is always returned by the backend adapter itself. */
 export function spotBalanceAssets(market: HlSpotMarket): string[] {
   const networkId = market.networkId ?? ""
-  return [...new Set([
-    market.sellToken ?? market.inputMint,
-    market.buyToken ?? market.outputMint,
-  ].filter((address): address is string =>
-    typeof address === "string" &&
-    address !== "native" &&
-    !nativeAliasFor(networkId, address),
-  ))]
+  return [
+    ...new Set(
+      [
+        market.sellToken ?? market.inputMint,
+        market.buyToken ?? market.outputMint,
+      ].filter(
+        (address): address is string =>
+          typeof address === "string" &&
+          address !== "native" &&
+          !nativeAliasFor(networkId, address)
+      )
+    ),
+  ]
 }
 
 /** Match the registry's router identifier to the wallet's canonical balance.
@@ -42,14 +53,19 @@ export function spotBalanceRows(
   balances: readonly (CryptoBalance & { networkId: string })[],
   networkId: string,
   symbol: string,
-  identifier: string | null,
+  identifier: string | null
 ) {
   const alias = nativeAliasFor(networkId, identifier)
   const candidates = balances.filter((balance) => {
     if (balance.networkId !== networkId) return false
     if (alias) {
-      return balance.asset.kind === "native" && balance.symbol.toUpperCase() === alias.symbol.toUpperCase() ||
-        balance.asset.kind === "token" && balance.asset.identifier.toLowerCase() === alias.wrapped.toLowerCase()
+      return (
+        (balance.asset.kind === "native" &&
+          balance.symbol.toUpperCase() === alias.symbol.toUpperCase()) ||
+        (balance.asset.kind === "token" &&
+          balance.asset.identifier.toLowerCase() ===
+            alias.wrapped.toLowerCase())
+      )
     }
     return identifier
       ? balance.asset.identifier.toLowerCase() === identifier.toLowerCase()

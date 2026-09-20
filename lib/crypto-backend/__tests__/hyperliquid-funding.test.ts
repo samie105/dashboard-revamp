@@ -7,7 +7,9 @@ import {
 
 describe("Hyperliquid funding transfers", () => {
   it("maps Spot to Perps to the venue's toPerp flag", () => {
-    expect(buildHyperliquidTransferRequest("toPerps", "12.5", "attempt-1")).toEqual({
+    expect(
+      buildHyperliquidTransferRequest("toPerps", "12.5", "attempt-1")
+    ).toEqual({
       type: "usdClassTransfer",
       amount: 12.5,
       toPerp: true,
@@ -16,13 +18,17 @@ describe("Hyperliquid funding transfers", () => {
   })
 
   it("maps Perps to Spot to the opposite direction", () => {
-    expect(buildHyperliquidTransferRequest("toSpot", 3, "attempt-2").toPerp).toBe(false)
+    expect(
+      buildHyperliquidTransferRequest("toSpot", 3, "attempt-2").toPerp
+    ).toBe(false)
   })
 
   it("rejects invalid amounts and missing attempt keys", () => {
     expect(parseFundingAmount("  ")).toBeNull()
     expect(parseFundingAmount("-1")).toBeNull()
-    expect(() => buildHyperliquidTransferRequest("toPerps", "0", "key")).toThrow()
+    expect(() =>
+      buildHyperliquidTransferRequest("toPerps", "0", "key")
+    ).toThrow()
     expect(() => buildHyperliquidTransferRequest("toPerps", 1, " ")).toThrow()
   })
 

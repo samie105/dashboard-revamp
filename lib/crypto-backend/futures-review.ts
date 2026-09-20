@@ -46,7 +46,12 @@ export type FuturesOrderFigures = {
 const SIZE_KEYS = ["size", "sz", "quantity"] as const
 const PRICE_KEYS = ["price", "px", "limitPrice", "executionPrice"] as const
 const FEE_KEYS = ["estimatedFeeUsd", "estimatedFee", "feeUsd", "fee"] as const
-const LIQUIDATION_KEYS = ["liquidationPrice", "estimatedLiquidationPrice", "liquidationPx", "liqPrice"] as const
+const LIQUIDATION_KEYS = [
+  "liquidationPrice",
+  "estimatedLiquidationPrice",
+  "liquidationPx",
+  "liqPrice",
+] as const
 
 /**
  * A finite, non-negative number, or `null`. Numeric strings are accepted
@@ -54,7 +59,8 @@ const LIQUIDATION_KEYS = ["liquidationPrice", "estimatedLiquidationPrice", "liqu
  * `null`, `""`, `"n/a"`, booleans, objects, negatives, NaN — is absent.
  */
 function finiteNumber(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null
+  if (typeof value === "number")
+    return Number.isFinite(value) && value >= 0 ? value : null
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   if (!trimmed) return null
@@ -69,7 +75,7 @@ function finiteNumber(value: unknown): number | null {
  */
 export function readSummaryNumber(
   source: Record<string, unknown> | undefined | null,
-  keys: readonly string[],
+  keys: readonly string[]
 ): number | null {
   if (!source) return null
   for (const key of keys) {
@@ -81,7 +87,7 @@ export function readSummaryNumber(
 
 /** Everything the review screen may state about an order, straight from the backend. */
 export function readFuturesOrderFigures(
-  summary: Record<string, unknown> | undefined | null,
+  summary: Record<string, unknown> | undefined | null
 ): FuturesOrderFigures {
   const feeUsd = readSummaryNumber(summary, FEE_KEYS)
   const liquidationPrice = readSummaryNumber(summary, LIQUIDATION_KEYS)
@@ -109,7 +115,7 @@ export function readFuturesOrderFigures(
 export function reduceOnlyProblem(
   position: { side: "long" | "short"; absSize: number } | undefined | null,
   symbol: string,
-  side: "buy" | "sell",
+  side: "buy" | "sell"
 ): string | null {
   if (!position || !(position.absSize > 0)) {
     return `You have no open ${symbol} position to reduce.`

@@ -42,10 +42,15 @@ export const FUNDING_STAGES = [
   { key: "credited", label: "Trading account credited" },
 ] as const
 
-export function fundingStageIndex(input: { intentStatuses: string[]; accountCredited: boolean }): number {
+export function fundingStageIndex(input: {
+  intentStatuses: string[]
+  accountCredited: boolean
+}): number {
   // The money being in the trading account is the end of the story, whatever
   // the intent statuses say about how it got there.
   if (input.accountCredited) return FUNDING_STAGES.length
-  const sent = input.intentStatuses.length > 0 && input.intentStatuses.every((status) => status === "confirmed")
+  const sent =
+    input.intentStatuses.length > 0 &&
+    input.intentStatuses.every((status) => status === "confirmed")
   return sent ? 1 : 0
 }

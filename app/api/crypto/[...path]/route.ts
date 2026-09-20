@@ -35,6 +35,7 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^launchpad\/terms$/,
     /^launchpad\/tokens$/,
     /^launchpad\/tokens\/[^/]+$/,
+    /^launchpad\/tokens\/[^/]+\/curve$/,
     /^launchpad\/launches$/,
     /^launchpad\/launches\/[^/]+$/,
   ],
@@ -111,7 +112,10 @@ function responseHeaders(upstream: Response) {
   return headers
 }
 
-async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
+async function forward(
+  req: Request,
+  ctx: { params: Promise<{ path: string[] }> }
+) {
   const { path: segments } = await ctx.params
   const path = segments.map((segment) => encodeURIComponent(segment)).join("/")
 
@@ -124,13 +128,22 @@ async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> 
   }
 
   if (!isCryptoProxyEnabled) {
-    return jsonError("Crypto backend proxy is disabled", 404, "CRYPTO_PROXY_DISABLED")
+    return jsonError(
+      "Crypto backend proxy is disabled",
+      404,
+      "CRYPTO_PROXY_DISABLED"
+    )
   }
 
   // Health is deliberately public so Docker, local scripts, and load balancers
   // can verify the service without manufacturing a Clerk session.
   if (req.method === "GET" && (path === "health" || path === "ready")) {
-    if (!CRYPTO_API) return jsonError("Crypto service is not configured", 503, "CRYPTO_SERVICE_UNCONFIGURED")
+    if (!CRYPTO_API)
+      return jsonError(
+        "Crypto service is not configured",
+        503,
+        "CRYPTO_SERVICE_UNCONFIGURED"
+      )
 
     try {
       const upstream = await fetch(`${CRYPTO_API}/${path}`, {
@@ -142,7 +155,11 @@ async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> 
         headers: responseHeaders(upstream),
       })
     } catch {
-      return jsonError("Crypto service unreachable", 502, "CRYPTO_SERVICE_UNREACHABLE")
+      return jsonError(
+        "Crypto service unreachable",
+        502,
+        "CRYPTO_SERVICE_UNREACHABLE"
+      )
     }
   }
 
@@ -151,14 +168,20 @@ async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> 
   }
 
   if (!CRYPTO_API) {
-    return jsonError("Crypto service is not configured", 503, "CRYPTO_SERVICE_UNCONFIGURED")
+    return jsonError(
+      "Crypto service is not configured",
+      503,
+      "CRYPTO_SERVICE_UNCONFIGURED"
+    )
   }
 
   // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts):
   // clerkMiddleware doesn't run, so auth() would throw. Forward a synthetic
   // bearer token — a local crypto backend running with auth disabled accepts
   // it; anything else rejects it and the client shows its error state.
-  const token = DEV_AUTH_BYPASS ? "dev-bypass-token" : await (await auth()).getToken()
+  const token = DEV_AUTH_BYPASS
+    ? "dev-bypass-token"
+    : await (await auth()).getToken()
   if (!token) return jsonError("Unauthorized", 401, "UNAUTHORIZED")
 
   const upstreamHeaders = new Headers({
@@ -188,7 +211,11 @@ async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> 
       headers: responseHeaders(upstream),
     })
   } catch {
-    return jsonError("Crypto service unreachable", 502, "CRYPTO_SERVICE_UNREACHABLE")
+    return jsonError(
+      "Crypto service unreachable",
+      502,
+      "CRYPTO_SERVICE_UNREACHABLE"
+    )
   }
 }
 

@@ -22,19 +22,16 @@ import {
 } from "@/components/ui/system"
 import { CARD_HUE } from "@/components/ui/surface"
 import { ProgressBar } from "@/components/launchpad-unauth/parts"
-import { CopyAddress } from "@/components/launchpad-unauth/copy-address"
 import {
   cryptoBackendClient,
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
 import { cn } from "@/lib/utils"
 import { LiveCurveTicket, fromBaseUnits } from "./live-curve-ticket"
+import { AddressRow } from "./address-row"
+import { CurveChart } from "./curve-chart"
+import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
 import { NetworkBadge } from "./network"
-
-function explorerUrl(address: string, networkId: string) {
-  const cluster = networkId === "solana-devnet" ? "?cluster=devnet" : ""
-  return `https://solscan.io/account/${address}${cluster}`
-}
 
 const STATUS_LABEL: Record<string, string> = {
   live: "On the curve",
@@ -53,11 +50,19 @@ export function LiveTokenPage({ launchId }: { launchId: string }) {
     refetchInterval: 30_000,
   })
 
+  const curve_ = useQuery({
+    queryKey: ["launchpad", "curve", launchId],
+    queryFn: ({ signal }) =>
+      cryptoBackendClient.getLaunchpadCurve(launchId, signal),
+    enabled: isCryptoBackendEnabled && token.data?.data.status === "live",
+    refetchInterval: 30_000,
+  })
+
   if (token.isLoading) {
     return (
       <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
         <PageHeader title="Loading…" back="/launchpad" />
-        <CardShell className={cn(CARD_HUE, "p-5")}>
+        <CardShell className={cn(CARD_HUE, "h-auto p-5")}>
           <SkeletonRows rows={4} />
         </CardShell>
       </div>
@@ -90,8 +95,8 @@ export function LiveTokenPage({ launchId }: { launchId: string }) {
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
-        <div className="flex min-w-0 flex-col gap-6">
-          <CardShell className={cn(CARD_HUE, "flex flex-col gap-4 p-5")}>
+        <div className="min-w-0 space-y-6">
+          <CardShell className={cn(CARD_HUE, "flex h-auto flex-col gap-4 p-5")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[13px] font-semibold">
                 {STATUS_LABEL[launch.status] ?? launch.status}
@@ -137,8 +142,29 @@ export function LiveTokenPage({ launchId }: { launchId: string }) {
             )}
           </CardShell>
 
+          {launch.status === "live" && (
+            <CurveChart
+              points={curve_.data?.points ?? []}
+              current={curve_.data?.current ?? null}
+              graduationLamports={
+                curve_.data?.graduationLamports ??
+                launch.curve?.graduationLamports ??
+                "0"
+              }
+              symbol={launch.symbol}
+              loading={curve_.isLoading}
+              error={
+                curve_.error
+                  ? formatWalletActionError(curve_.error, "solana")
+                  : null
+              }
+            />
+          )}
+
           {launch.graduation && (
-            <CardShell className={cn(CARD_HUE, "flex flex-col gap-3 p-5")}>
+            <CardShell
+              className={cn(CARD_HUE, "flex h-auto flex-col gap-3 p-5")}
+            >
               <span className="text-[13px] font-semibold">
                 Graduated to the open market
               </span>
@@ -150,26 +176,16 @@ export function LiveTokenPage({ launchId }: { launchId: string }) {
                   ? " It trades like any other token, and appears in Markets once a price is available."
                   : " Devnet tokens aren't listed in Markets."}
               </p>
-              <CopyAddress
+              <AddressRow
                 label="Market pool"
                 value={launch.graduation.ammPoolAddress}
+                networkId={launch.networkId}
               />
-              <a
-                href={explorerUrl(
-                  launch.graduation.ammPoolAddress,
-                  launch.networkId
-                )}
-                target="_blank"
-                rel="noreferrer"
-                className="w-fit text-[12.5px] font-semibold text-primary hover:opacity-80"
-              >
-                View the pool on Solscan
-              </a>
             </CardShell>
           )}
 
           <SectionRule label="Token" />
-          <CardShell className={cn(CARD_HUE, "flex flex-col gap-3 p-5")}>
+          <CardShell className={cn(CARD_HUE, "flex h-auto flex-col gap-3 p-5")}>
             <dl className="flex flex-col gap-2 text-[12.5px]">
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-muted-foreground">Creator allocation</dt>
@@ -189,16 +205,39 @@ export function LiveTokenPage({ launchId }: { launchId: string }) {
                 {launch.description}
               </p>
             )}
+          </CardShell>
+
+          <SectionRule
+            label="Addresses"
+            note="On-chain, check before you send"
+          />
+          <div className="flex flex-col gap-3">
             {launch.mint && (
-              <CopyAddress label="Token address" value={launch.mint} />
+              <AddressRow
+                label="Token address"
+                value={launch.mint}
+                networkId={launch.networkId}
+                hint="The token itself"
+              />
             )}
             {launch.poolAddress && (
-              <CopyAddress label="Curve pool" value={launch.poolAddress} />
+              <AddressRow
+                label="Curve pool"
+                value={launch.poolAddress}
+                networkId={launch.networkId}
+                hint="Holds the SOL raised so far"
+              />
             )}
-          </CardShell>
+            <AddressRow
+              label="Creator"
+              value={launch.creatorAddress}
+              networkId={launch.networkId}
+              hint="Launched this token"
+            />
+          </div>
         </div>
 
-        <div className="min-w-0">
+        <div className="min-w-0 lg:self-start">
           <LiveCurveTicket
             token={launch}
             platformFeeBps={platformFeeBps}

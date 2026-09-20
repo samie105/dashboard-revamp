@@ -215,7 +215,7 @@ export function LiveCurveTicket({
 
   if (!tradable) {
     return (
-      <CardShell className={cn(CARD_HUE, "flex flex-col gap-2 p-5")}>
+      <CardShell className={cn(CARD_HUE, "flex h-auto flex-col gap-2 p-5")}>
         <span className="text-[14px] font-semibold">
           {token.status === "graduated" || token.status === "graduating"
             ? "This token has left the curve"
@@ -244,7 +244,7 @@ export function LiveCurveTicket({
           : `Sell ${token.symbol}`
 
   return (
-    <CardShell className={cn(CARD_HUE, "flex flex-col gap-4 p-5")}>
+    <CardShell className={cn(CARD_HUE, "flex h-auto flex-col gap-4 p-5")}>
       <Segmented
         options={[
           { key: "buy", label: "Buy" },

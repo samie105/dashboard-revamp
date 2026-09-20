@@ -79,7 +79,10 @@ describe("transferFingerprint", () => {
   })
 
   it("ignores key order in the asset object", () => {
-    const reordered = { ...TRANSFER, asset: { identifier: "ETH", kind: "native" as const } }
+    const reordered = {
+      ...TRANSFER,
+      asset: { identifier: "ETH", kind: "native" as const },
+    }
     expect(transferFingerprint(reordered)).toBe(transferFingerprint(TRANSFER))
   })
 })

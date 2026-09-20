@@ -753,7 +753,7 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
   // Launchpad — the real Phase 0 devnet token, as the backend last read it.
   // Quotes scale the recorded devnet buy (0.02 SOL → 707,634 tokens) linearly:
   // good enough to review the page, and nothing here can be signed.
-  if (method === "GET" && path.startsWith("launchpad/tokens/") && !path.endsWith("/quote") && !path.endsWith("/trade")) {
+  if (method === "GET" && path.startsWith("launchpad/tokens/") && !path.endsWith("/quote") && !path.endsWith("/trade") && !path.endsWith("/curve")) {
     const launchId = decodeURIComponent(path.split("/")[2] ?? "")
     if (launchId !== "spike") return jsonError("NOT_FOUND", "Launch not found", 404)
     return jsonRaw({
@@ -770,6 +770,14 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
         createdAt: nowIso(), updatedAt: nowIso(),
       },
     })
+  }
+  if (method === "GET" && /^launchpad\/tokens\/[^/]+\/curve$/.test(path)) {
+    // The devnet config's real endpoints: 2.656e-8 SOL at 0, 4.25e-7 at 85.
+    const points = Array.from({ length: 49 }, (_, i) => {
+      const t = i / 48
+      return { solRaised: String(Math.round(t * 85e9)), price: 2.6562500749684067e-8 * (1 + 3 * t) ** 2 }
+    })
+    return json({ points, current: { solRaised: "590901290", price: 2.6976632788510997e-8 }, graduationLamports: "85000000000", tokenDecimals: 6 })
   }
   if (method === "POST" && /^launchpad\/tokens\/[^/]+\/quote$/.test(path)) {
     const body = await readBody()

@@ -26,7 +26,9 @@ export interface CryptoWalletAccount {
   }>
 }
 
-export type CryptoWalletDetails = CryptoWallet & { accounts: CryptoWalletAccount[] }
+export type CryptoWalletDetails = CryptoWallet & {
+  accounts: CryptoWalletAccount[]
+}
 
 export interface CryptoNetwork {
   id: string
@@ -104,7 +106,12 @@ export interface CryptoTransactionIntent {
   }
   expiresAt?: string
   validationResult?: { ok: boolean; errors: string[]; warnings: string[] }
-  simulationResult?: { ok: boolean; error?: string; gasEstimate?: string; logs?: unknown[] }
+  simulationResult?: {
+    ok: boolean
+    error?: string
+    gasEstimate?: string
+    logs?: unknown[]
+  }
   [key: string]: unknown
 }
 
@@ -162,7 +169,11 @@ export interface CryptoWalletPackageDocument extends CryptoWalletPackage {
 export interface WalletAuthorizationResult {
   walletAuthorizationToken: string
   expiresIn: number
-  authorizationMethod: "clerk-session" | "recovery-secret" | "clerk-mfa" | string
+  authorizationMethod:
+    | "clerk-session"
+    | "recovery-secret"
+    | "clerk-mfa"
+    | string
 }
 
 export interface RecoveryAuthorizationStartResult {
@@ -195,7 +206,12 @@ export interface PasskeyAuthenticationResult {
 
 export interface CryptoIntentSimulation {
   validation: { ok: boolean; errors: string[]; warnings: string[] }
-  simulation: { ok: boolean; error?: string; gasEstimate?: string; logs?: unknown[] }
+  simulation: {
+    ok: boolean
+    error?: string
+    gasEstimate?: string
+    logs?: unknown[]
+  }
 }
 
 export interface SponsorshipConfig {
@@ -223,7 +239,14 @@ export interface SponsorshipOperation {
   estimatedCostUsd?: number
   policyVersion?: string
   signingPayload?: Record<string, unknown>
-  status: "quoted" | "prepared" | "submitted" | "confirmed" | "failed" | "expired" | string
+  status:
+    | "quoted"
+    | "prepared"
+    | "submitted"
+    | "confirmed"
+    | "failed"
+    | "expired"
+    | string
   expiresAt: string
   providerStatus?: string
   txHash?: string
@@ -275,8 +298,20 @@ export interface HyperliquidTradingAgent {
   agentAddress: string
   agentName?: string
   status: "pending" | "active" | "revoked" | string
-  encryptedKeyMaterial: { ciphertext: string; iv: string; aad: string; dekVersion: number; encoding: "base64url" }
-  permissions: { network: "mainnet"; markets: string[]; maxOrderUsd?: string; maxDailyNotionalUsd?: string; maxLeverage?: number }
+  encryptedKeyMaterial: {
+    ciphertext: string
+    iv: string
+    aad: string
+    dekVersion: number
+    encoding: "base64url"
+  }
+  permissions: {
+    network: "mainnet"
+    markets: string[]
+    maxOrderUsd?: string
+    maxDailyNotionalUsd?: string
+    maxLeverage?: number
+  }
   approvedAt?: string
   revokedAt?: string
 }
@@ -331,7 +366,12 @@ export interface HyperliquidAccount {
     perpsAccountValueUsdc: number
     spotUsdc: number
     spotUsdcHold?: number
-    spotTokens?: Array<{ symbol: string; total: number; hold: number; available: number }>
+    spotTokens?: Array<{
+      symbol: string
+      total: number
+      hold: number
+      available: number
+    }>
   } | null
   positions: Array<Record<string, unknown>>
   openOrders: Array<Record<string, unknown>>
@@ -339,7 +379,13 @@ export interface HyperliquidAccount {
 
 /* ── Launchpad (backend: src/api/routes/launchpad.ts) ───────────────────── */
 
-export type LaunchpadStatus = "draft" | "deploying" | "live" | "graduating" | "graduated" | "failed"
+export type LaunchpadStatus =
+  | "draft"
+  | "deploying"
+  | "live"
+  | "graduating"
+  | "graduated"
+  | "failed"
 
 export interface LaunchpadToken {
   launchId: string
@@ -356,7 +402,12 @@ export interface LaunchpadToken {
   poolAddress?: string
   allocation: { creatorBps: number; creatorLamports?: string }
   /** On-chain curve state, refreshed by the reconciler. Absent until live. */
-  curve?: { solRaised: string; progressBps: number; graduationLamports: string; refreshedAt: string }
+  curve?: {
+    solRaised: string
+    progressBps: number
+    graduationLamports: string
+    refreshedAt: string
+  }
   /** Where the liquidity went at graduation. */
   graduation?: { migratedAt: string; ammPoolAddress: string; txHash?: string }
   createdAt: string
@@ -397,7 +448,10 @@ export interface LaunchpadTerms {
   networkId: string
 }
 
-export type LaunchpadAvailability = Record<"solana" | "ethereum" | "intertrain", { state: "live" | "paused" | "soon"; reason?: string }>
+export type LaunchpadAvailability = Record<
+  "solana" | "ethereum" | "intertrain",
+  { state: "live" | "paused" | "soon"; reason?: string }
+>
 
 export interface LaunchpadDraftInput {
   name: string
@@ -411,3 +465,12 @@ export interface LaunchpadDraftInput {
 
 export type LaunchpadNetworkId = "solana-devnet" | "solana-mainnet-beta"
 export type LaunchpadFeedFilter = "all" | "new" | "near" | "graduated"
+
+/** The curve's shape (GET /launchpad/tokens/:id/curve) — a function of SOL
+ *  raised, not price history. */
+export interface LaunchpadCurve {
+  points: Array<{ solRaised: string; price: number }>
+  current: { solRaised: string; price: number } | null
+  graduationLamports: string
+  tokenDecimals: number
+}

@@ -23,7 +23,8 @@ import type { SponsorshipOperation } from "./types"
 
 export const SPONSOR_UNAVAILABLE_REASON =
   "Fee sponsorship isn't available for this transfer — you'll pay the network fee."
-export const SPONSOR_EXPIRED_REASON = "The sponsorship offer expired — you'll pay the network fee."
+export const SPONSOR_EXPIRED_REASON =
+  "The sponsorship offer expired — you'll pay the network fee."
 
 export type FeePresentation =
   | { kind: "sponsored"; costUsd?: number }
@@ -58,16 +59,22 @@ export function resolveFeePresentation(input: {
 
   const prepared =
     operation !== null &&
-    (operation.status === "prepared" || operation.status === "submitted" || operation.status === "confirmed")
+    (operation.status === "prepared" ||
+      operation.status === "submitted" ||
+      operation.status === "confirmed")
   if (prepared) {
-    const estimate = operation.estimatedCostUsd ?? operation.quote?.sponsor?.estimatedCostUsd
+    const estimate =
+      operation.estimatedCostUsd ?? operation.quote?.sponsor?.estimatedCostUsd
     const costUsd = typeof estimate === "string" ? Number(estimate) : estimate
     return Number.isFinite(costUsd) && (costUsd as number) > 0
       ? { kind: "sponsored", costUsd: costUsd as number }
       : { kind: "sponsored" }
   }
 
-  return { kind: "self-paid-fallback", reason: sponsorshipUnavailableReason(quoteError) }
+  return {
+    kind: "self-paid-fallback",
+    reason: sponsorshipUnavailableReason(quoteError),
+  }
 }
 
 /**
@@ -91,7 +98,10 @@ function sponsorshipUnavailableReason(quoteError: unknown): string {
       const message = (details as Record<string, unknown>).message
       if (typeof message === "string" && message.trim()) return message.trim()
     }
-    if (quoteError.code === "SPONSORSHIP_UNAVAILABLE" && quoteError.message.trim()) {
+    if (
+      quoteError.code === "SPONSORSHIP_UNAVAILABLE" &&
+      quoteError.message.trim()
+    ) {
       return quoteError.message.trim()
     }
   }

@@ -301,7 +301,10 @@ function LaunchForm() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
         <CardShell
-          className={cn(CARD_HUE, "flex min-w-0 flex-col gap-5 p-5 sm:p-6")}
+          className={cn(
+            CARD_HUE,
+            "flex h-auto min-w-0 flex-col gap-5 p-5 sm:p-6"
+          )}
         >
           <Field
             label="Name"
@@ -399,8 +402,8 @@ function LaunchForm() {
           </div>
         </CardShell>
 
-        <div className="flex min-w-0 flex-col gap-4 lg:self-start">
-          <CardShell className={cn(CARD_HUE, "flex flex-col gap-4 p-5")}>
+        <div className="min-w-0 space-y-4 lg:self-start">
+          <CardShell className={cn(CARD_HUE, "flex h-auto flex-col gap-4 p-5")}>
             <span className="text-[13px] font-semibold">What it costs</span>
             {terms.error && !t ? (
               <p role="alert" className="text-[12.5px] text-debit">
@@ -444,7 +447,7 @@ function LaunchForm() {
             </p>
           </CardShell>
 
-          <CardShell className={cn(CARD_HUE, "flex flex-col gap-3 p-5")}>
+          <CardShell className={cn(CARD_HUE, "flex h-auto flex-col gap-3 p-5")}>
             <span className="text-[13px] font-semibold">The curve</span>
             <dl className="flex flex-col gap-1.5 text-[12.5px]">
               <Row
@@ -573,7 +576,10 @@ function LaunchStatus({ launchId }: { launchId: string }) {
       <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
         <PageHeader title="Your launch" back="/launchpad/create" />
         <CardShell
-          className={cn(CARD_HUE, "p-6 text-[13px] text-muted-foreground")}
+          className={cn(
+            CARD_HUE,
+            "h-auto p-6 text-[13px] text-muted-foreground"
+          )}
         >
           {launch.error ? "We couldn't find this launch." : "Loading…"}
         </CardShell>
@@ -593,7 +599,7 @@ function LaunchStatus({ launchId }: { launchId: string }) {
         back="/launchpad"
         actions={<NetworkBadge networkId={l.networkId} />}
       />
-      <CardShell className={cn(CARD_HUE, "p-2 sm:p-4 lg:p-6")}>
+      <CardShell className={cn(CARD_HUE, "h-auto p-2 sm:p-4 lg:p-6")}>
         <StatusScreen
           state={onChain ? "success" : failed ? "failure" : "processing"}
           headline={

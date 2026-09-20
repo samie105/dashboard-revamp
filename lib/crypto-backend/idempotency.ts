@@ -52,7 +52,9 @@ export type IdempotencyKeyStore = {
 }
 
 /** `mint` is injectable so tests can assert identity without matching UUIDs. */
-export function createIdempotencyKeyStore(mint: () => string = () => crypto.randomUUID()): IdempotencyKeyStore {
+export function createIdempotencyKeyStore(
+  mint: () => string = () => crypto.randomUUID()
+): IdempotencyKeyStore {
   const keys = new Map<string, string>()
   return {
     keyFor(input) {

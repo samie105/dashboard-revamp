@@ -21,9 +21,10 @@ function entryFor(userId: string) {
 }
 
 function retryable(error: unknown) {
-  const status = typeof error === "object" && error !== null && "status" in error
-    ? Number((error as { status?: unknown }).status)
-    : 0
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? Number((error as { status?: unknown }).status)
+      : 0
   return status === 0 || status >= 500
 }
 
@@ -35,7 +36,7 @@ function retryable(error: unknown) {
 export function fetchCachedBalanceSnapshot(
   userId: string,
   _forceRefresh = false,
-  _callerSignal?: AbortSignal,
+  _callerSignal?: AbortSignal
 ): Promise<CryptoBalanceSnapshot> {
   const entry = entryFor(userId)
   const now = Date.now()
@@ -72,4 +73,3 @@ export function fetchCachedBalanceSnapshot(
 
 export const BALANCE_POLL_INTERVAL_MS = SUCCESS_CACHE_MS
 export const BALANCE_RETRY_DELAYS_MS = [5_000, 10_000, 20_000, 60_000] as const
-

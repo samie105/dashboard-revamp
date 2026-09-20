@@ -20,10 +20,14 @@ import { toBaseUnits } from "@/lib/crypto-wallet/address-validation"
 import type { CryptoBackendClient } from "./client"
 
 type EvmSpotInput = Parameters<CryptoBackendClient["createModernSpotIntent"]>[0]
-type LifiSwapInput = Parameters<CryptoBackendClient["createModernLifiSwapIntent"]>[0]
+type LifiSwapInput = Parameters<
+  CryptoBackendClient["createModernLifiSwapIntent"]
+>[0]
 
 /** The live registry row, exactly as `getModernSpotMarkets` returns it. */
-type RegistryRow = Awaited<ReturnType<CryptoBackendClient["getModernSpotMarkets"]>>["markets"][number]
+type RegistryRow = Awaited<
+  ReturnType<CryptoBackendClient["getModernSpotMarkets"]>
+>["markets"][number]
 
 /**
  * What this builder accepts. It is deliberately looser than `RegistryRow` —
@@ -49,7 +53,9 @@ export type ModernSpotMarketRow = {
 }
 
 /** Compile-time proof a real registry row is accepted as-is (spec §8). */
-export type RegistryRowIsAccepted = RegistryRow extends ModernSpotMarketRow ? true : never
+export type RegistryRowIsAccepted = RegistryRow extends ModernSpotMarketRow
+  ? true
+  : never
 
 export type SpotOrderPlan =
   | { kind: "evm"; input: EvmSpotInput }
@@ -103,18 +109,46 @@ export function normalizeSlippage(value?: number): number {
  * checked against the address the row hands us — see `orientationProblem`.
  */
 const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
-  "arbitrum-one:0xaf88d065e77c8cc2239327c5edb3a432268e5831": { symbol: "USDC", decimals: 6 },
-  "arbitrum-one:0x82af49447d8a07e3bd95bd0d56f35241523fbab1": { symbol: "WETH", decimals: 18 },
-  "ethereum-mainnet:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": { symbol: "USDC", decimals: 6 },
-  "ethereum-mainnet:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": { symbol: "WETH", decimals: 18 },
-  "solana-mainnet-beta:So11111111111111111111111111111111111111112": { symbol: "SOL", decimals: 9 },
-  "solana-mainnet-beta:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": { symbol: "USDC", decimals: 6 },
+  "arbitrum-one:0xaf88d065e77c8cc2239327c5edb3a432268e5831": {
+    symbol: "USDC",
+    decimals: 6,
+  },
+  "arbitrum-one:0x82af49447d8a07e3bd95bd0d56f35241523fbab1": {
+    symbol: "WETH",
+    decimals: 18,
+  },
+  "ethereum-mainnet:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+    symbol: "USDC",
+    decimals: 6,
+  },
+  "ethereum-mainnet:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+    symbol: "WETH",
+    decimals: 18,
+  },
+  "solana-mainnet-beta:So11111111111111111111111111111111111111112": {
+    symbol: "SOL",
+    decimals: 9,
+  },
+  "solana-mainnet-beta:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+    symbol: "USDC",
+    decimals: 6,
+  },
 }
 
 /** Quote assets the ticket's USD amount can be taken at face value against. */
-const USD_QUOTE_SYMBOLS = new Set(["USD", "USDC", "USDC.E", "USDT", "USDB", "DAI"])
+const USD_QUOTE_SYMBOLS = new Set([
+  "USD",
+  "USDC",
+  "USDC.E",
+  "USDT",
+  "USDB",
+  "DAI",
+])
 
-const EVM_SPOT_NETWORKS = new Set<EvmSpotInput["networkId"]>(["ethereum-mainnet", "arbitrum-one"])
+const EVM_SPOT_NETWORKS = new Set<EvmSpotInput["networkId"]>([
+  "ethereum-mainnet",
+  "arbitrum-one",
+])
 
 function knownTokenFor(networkId: string, identifier: string) {
   const key = networkId.startsWith("solana")
@@ -127,7 +161,10 @@ function knownTokenFor(networkId: string, identifier: string) {
  * Decimals for a token the backend named, or `undefined` when we have never
  * been told — the caller must refuse, not assume 18.
  */
-export function tokenDecimalsFor(networkId: string, identifier: string): number | undefined {
+export function tokenDecimalsFor(
+  networkId: string,
+  identifier: string
+): number | undefined {
   return knownTokenFor(networkId, identifier)?.decimals
 }
 
@@ -138,7 +175,12 @@ export function tokenDecimalsFor(networkId: string, identifier: string): number 
  * the address we check it — a row whose "spend this" address is not the quote
  * asset it names would trade backwards, and is refused instead.
  */
-function orientationProblem(networkId: string, quoteIdentifier: string, quoteSymbol: string, label: string): string | null {
+function orientationProblem(
+  networkId: string,
+  quoteIdentifier: string,
+  quoteSymbol: string,
+  label: string
+): string | null {
   const known = knownTokenFor(networkId, quoteIdentifier)
   if (!known || known.symbol === quoteSymbol) return null
   return `The registry's token addresses for ${label} don't line up with the ${quoteSymbol} quote it names, so we won't guess which side of the trade is which.`
@@ -194,11 +236,18 @@ function truncateFraction(decimalText: string, decimals: number): string {
  * only float in the chain is the quantity itself — printed at the token's own
  * precision, with the binary noise trimmed, before it is ever scaled.
  */
-function sizeInBaseUnits(quantity: number, decimals: number): { units: string } | { problem: "unusable" | "dust" } {
-  if (!Number.isFinite(quantity) || quantity <= 0) return { problem: "unusable" }
+function sizeInBaseUnits(
+  quantity: number,
+  decimals: number
+): { units: string } | { problem: "unusable" | "dust" } {
+  if (!Number.isFinite(quantity) || quantity <= 0)
+    return { problem: "unusable" }
   // Past 1e21 there is no honest decimal string for a double this side of BigInt.
   if (quantity >= 1e21) return { problem: "unusable" }
-  const units = toBaseUnits(truncateFraction(plainDecimal(quantity, SIGNIFICANT_DIGITS), decimals), decimals)
+  const units = toBaseUnits(
+    truncateFraction(plainDecimal(quantity, SIGNIFICANT_DIGITS), decimals),
+    decimals
+  )
   if (units === null) return { problem: "unusable" }
   if (units === "0") return { problem: "dust" }
   return { units }
@@ -232,7 +281,10 @@ type SpotLegs = {
   label: string
 }
 
-function resolveEvmLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): SpotLegs | { reason: string } {
+function resolveEvmLegs(
+  row: ModernSpotMarketRow,
+  side: "buy" | "sell"
+): SpotLegs | { reason: string } {
   const label = row.symbol ? row.symbol.toUpperCase() : "This market"
   const quoteSymbol = (row.quote ?? "").toUpperCase()
   if (!quoteSymbol) return { reason: missingQuoteReason(label) }
@@ -247,23 +299,43 @@ function resolveEvmLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): SpotLeg
   const quoteToken = row.sellToken
   const baseToken = row.buyToken
   if (!quoteToken || !baseToken) {
-    return { reason: `The market registry didn't include the token addresses for ${label}, so we can't build the order.` }
+    return {
+      reason: `The market registry didn't include the token addresses for ${label}, so we can't build the order.`,
+    }
   }
-  const misoriented = orientationProblem(networkId, quoteToken, quoteSymbol, label)
+  const misoriented = orientationProblem(
+    networkId,
+    quoteToken,
+    quoteSymbol,
+    label
+  )
   if (misoriented) return { reason: misoriented }
 
   const sellIdentifier = side === "buy" ? quoteToken : baseToken
   const buyIdentifier = side === "buy" ? baseToken : quoteToken
   const spentSymbol = side === "buy" ? quoteSymbol : label
-  const sellDecimals = side === "buy"
-    ? row.quoteDecimals ?? tokenDecimalsFor(networkId, sellIdentifier)
-    : row.baseDecimals ?? tokenDecimalsFor(networkId, sellIdentifier)
-  if (sellDecimals === undefined) return { reason: precisionReason(spentSymbol, networkId) }
+  const sellDecimals =
+    side === "buy"
+      ? (row.quoteDecimals ?? tokenDecimalsFor(networkId, sellIdentifier))
+      : (row.baseDecimals ?? tokenDecimalsFor(networkId, sellIdentifier))
+  if (sellDecimals === undefined)
+    return { reason: precisionReason(spentSymbol, networkId) }
 
-  return { venue: "evm", networkId, sellIdentifier, buyIdentifier, sellDecimals, spentSymbol, label }
+  return {
+    venue: "evm",
+    networkId,
+    sellIdentifier,
+    buyIdentifier,
+    sellDecimals,
+    spentSymbol,
+    label,
+  }
 }
 
-function resolveSolanaLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): SpotLegs | { reason: string } {
+function resolveSolanaLegs(
+  row: ModernSpotMarketRow,
+  side: "buy" | "sell"
+): SpotLegs | { reason: string } {
   const label = row.symbol ? row.symbol.toUpperCase() : "This market"
   const quoteSymbol = (row.quote ?? "").toUpperCase()
   if (!quoteSymbol) return { reason: missingQuoteReason(label) }
@@ -273,27 +345,52 @@ function resolveSolanaLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): Spot
   const quoteMint = row.inputMint
   const baseMint = row.outputMint
   if (!quoteMint || !baseMint) {
-    return { reason: `The market registry didn't include the token mints for ${label}, so we can't build the swap.` }
+    return {
+      reason: `The market registry didn't include the token mints for ${label}, so we can't build the swap.`,
+    }
   }
-  const misoriented = orientationProblem(networkId, quoteMint, quoteSymbol, label)
+  const misoriented = orientationProblem(
+    networkId,
+    quoteMint,
+    quoteSymbol,
+    label
+  )
   if (misoriented) return { reason: misoriented }
 
   const sellIdentifier = side === "buy" ? quoteMint : baseMint
   const buyIdentifier = side === "buy" ? baseMint : quoteMint
   const spentSymbol = side === "buy" ? quoteSymbol : label
-  const sellDecimals = side === "buy"
-    ? row.quoteDecimals ?? tokenDecimalsFor(networkId, sellIdentifier)
-    : row.baseDecimals ?? tokenDecimalsFor(networkId, sellIdentifier)
-  if (sellDecimals === undefined) return { reason: precisionReason(spentSymbol, networkId) }
+  const sellDecimals =
+    side === "buy"
+      ? (row.quoteDecimals ?? tokenDecimalsFor(networkId, sellIdentifier))
+      : (row.baseDecimals ?? tokenDecimalsFor(networkId, sellIdentifier))
+  if (sellDecimals === undefined)
+    return { reason: precisionReason(spentSymbol, networkId) }
 
-  return { venue: "solana", networkId, sellIdentifier, buyIdentifier, sellDecimals, spentSymbol, label }
+  return {
+    venue: "solana",
+    networkId,
+    sellIdentifier,
+    buyIdentifier,
+    sellDecimals,
+    spentSymbol,
+    label,
+  }
 }
 
 /** Venue dispatch — the only place that reads `row.venue`. */
-function resolveSpotLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): SpotLegs | { reason: string } {
+function resolveSpotLegs(
+  row: ModernSpotMarketRow,
+  side: "buy" | "sell"
+): SpotLegs | { reason: string } {
   if (row.venue === "0x") return resolveEvmLegs(row, side)
   if (row.venue === "jupiter") return resolveSolanaLegs(row, side)
-  return { reason: venueReason(row.venue, row.symbol ? row.symbol.toUpperCase() : "This market") }
+  return {
+    reason: venueReason(
+      row.venue,
+      row.symbol ? row.symbol.toUpperCase() : "This market"
+    ),
+  }
 }
 
 /**
@@ -311,7 +408,7 @@ function resolveSpotLegs(row: ModernSpotMarketRow, side: "buy" | "sell"): SpotLe
 function planFromLegs(
   legs: SpotLegs,
   sellAmountBaseUnits: string,
-  slippage: number = SLIPPAGE_PERCENTAGE,
+  slippage: number = SLIPPAGE_PERCENTAGE
 ): SpotOrderPlan {
   if (legs.venue === "evm") {
     return {
@@ -352,7 +449,7 @@ export function buildSpotOrderPlan(
   amountUsd: number,
   price: number,
   /** The ticket's tolerance. Absent or out of band → the house default. */
-  slippage?: number,
+  slippage?: number
 ): SpotOrderPlan {
   const label = row.symbol ? row.symbol.toUpperCase() : "This market"
 
@@ -365,17 +462,25 @@ export function buildSpotOrderPlan(
   if (!USD_QUOTE_SYMBOLS.has(quoteSymbol)) {
     // The ticket takes a USD figure. Against a non-USD quote that figure is a
     // different quantity entirely — the mis-scaling this module exists to stop.
-    return unavailable(`${label} is quoted in ${quoteSymbol}, and this ticket only sizes orders in USD.`)
+    return unavailable(
+      `${label} is quoted in ${quoteSymbol}, and this ticket only sizes orders in USD.`
+    )
   }
   if (side === "sell" && !(Number.isFinite(price) && price > 0)) {
-    return unavailable(`We don't have a live ${label} price yet, so we can't work out how much to sell.`)
+    return unavailable(
+      `We don't have a live ${label} price yet, so we can't work out how much to sell.`
+    )
   }
 
   const legs = resolveSpotLegs(row, side)
   if ("reason" in legs) return unavailable(legs.reason)
 
-  const sized = sizeInBaseUnits(side === "buy" ? amountUsd : amountUsd / price, legs.sellDecimals)
-  if ("problem" in sized) return unavailable(sizingReason(sized.problem, legs.label))
+  const sized = sizeInBaseUnits(
+    side === "buy" ? amountUsd : amountUsd / price,
+    legs.sellDecimals
+  )
+  if ("problem" in sized)
+    return unavailable(sizingReason(sized.problem, legs.label))
 
   return planFromLegs(legs, sized.units, normalizeSlippage(slippage))
 }
@@ -384,7 +489,10 @@ export function buildSpotOrderPlan(
  * The same checks, as a yes/no for a screen that wants to refuse BEFORE the
  * user types an amount. `null` means the row is safe to trade on this side.
  */
-export function spotOrderProblem(row: ModernSpotMarketRow, side: "buy" | "sell"): string | null {
+export function spotOrderProblem(
+  row: ModernSpotMarketRow,
+  side: "buy" | "sell"
+): string | null {
   const legs = resolveSpotLegs(row, side)
   return "reason" in legs ? legs.reason : null
 }
@@ -416,7 +524,10 @@ export function baseTokenOf(row: ModernSpotMarketRow): string | null {
 }
 
 /** The symbol the amount field is denominated in when it isn't USD. */
-export function spentTokenSymbol(row: ModernSpotMarketRow, side: "buy" | "sell"): string | null {
+export function spentTokenSymbol(
+  row: ModernSpotMarketRow,
+  side: "buy" | "sell"
+): string | null {
   const legs = resolveSpotLegs(row, side)
   return "reason" in legs ? null : legs.spentSymbol
 }
@@ -435,16 +546,19 @@ export function buildSpotOrderPlanFromTokenAmount(
   side: "buy" | "sell",
   amountText: string,
   /** The ticket's tolerance. Absent or out of band → the house default. */
-  slippage?: number,
+  slippage?: number
 ): SpotOrderPlan {
   const legs = resolveSpotLegs(row, side)
   if ("reason" in legs) return unavailable(legs.reason)
 
   const sellAmountBaseUnits = toBaseUnits(amountText.trim(), legs.sellDecimals)
   if (sellAmountBaseUnits === null) {
-    return unavailable(`Enter a ${legs.spentSymbol} amount with at most ${legs.sellDecimals} decimal places.`)
+    return unavailable(
+      `Enter a ${legs.spentSymbol} amount with at most ${legs.sellDecimals} decimal places.`
+    )
   }
-  if (sellAmountBaseUnits === "0") return unavailable(`Enter a ${legs.spentSymbol} amount above zero.`)
+  if (sellAmountBaseUnits === "0")
+    return unavailable(`Enter a ${legs.spentSymbol} amount above zero.`)
 
   return planFromLegs(legs, sellAmountBaseUnits, normalizeSlippage(slippage))
 }
@@ -457,11 +571,15 @@ export function buildSpotOrderPlanFromTokenAmount(
  */
 export function spotOrderTokens(
   row: ModernSpotMarketRow,
-  side: "buy" | "sell",
+  side: "buy" | "sell"
 ): { spend: string; receive: string; networkId: string } | null {
   const legs = resolveSpotLegs(row, side)
   if ("reason" in legs) return null
-  return { spend: legs.sellIdentifier, receive: legs.buyIdentifier, networkId: legs.networkId }
+  return {
+    spend: legs.sellIdentifier,
+    receive: legs.buyIdentifier,
+    networkId: legs.networkId,
+  }
 }
 
 function venueReason(venue: string | undefined, label: string): string {

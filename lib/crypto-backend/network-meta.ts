@@ -13,23 +13,34 @@ const BACKEND_NETWORK_KEY: Record<string, string> = {
   "intertrain-mainnet": "intertrain",
 }
 
-const CHAIN_ID_KEY: Record<number, string> = { 1: "ethereum", 42161: "arbitrum" }
+const CHAIN_ID_KEY: Record<number, string> = {
+  1: "ethereum",
+  42161: "arbitrum",
+}
 
-export function networkMetaFor(backendNetworkId: string, networks?: CryptoNetwork[]): NetworkMeta | null {
+export function networkMetaFor(
+  backendNetworkId: string,
+  networks?: CryptoNetwork[]
+): NetworkMeta | null {
   let key: string | undefined = BACKEND_NETWORK_KEY[backendNetworkId]
   if (!key && networks) {
     const live = networks.find((n) => n.id === backendNetworkId)
-    if (live?.family === "evm" && live.chainId != null) key = CHAIN_ID_KEY[live.chainId]
+    if (live?.family === "evm" && live.chainId != null)
+      key = CHAIN_ID_KEY[live.chainId]
     else if (live?.family === "solana") key = "solana"
     else if (live?.family === "sui") key = "sui"
     else if (live?.family === "ton") key = "ton"
     else if (live?.family === "tron") key = "tron"
     else if (live?.family === "intertrain") key = "intertrain"
   }
-  return key ? NETWORKS.find((n) => n.key === key) ?? null : null
+  return key ? (NETWORKS.find((n) => n.key === key) ?? null) : null
 }
 
-export function explorerTxUrl(backendNetworkId: string, txHash: string, networks?: CryptoNetwork[]): string | null {
+export function explorerTxUrl(
+  backendNetworkId: string,
+  txHash: string,
+  networks?: CryptoNetwork[]
+): string | null {
   const meta = networkMetaFor(backendNetworkId, networks)
   return meta ? meta.txUrl(txHash) : null
 }
@@ -46,13 +57,16 @@ export function explorerTxUrl(backendNetworkId: string, txHash: string, networks
 export function explorerAddressUrl(
   backendNetworkId: string,
   address: string,
-  networks?: CryptoNetwork[],
+  networks?: CryptoNetwork[]
 ): string | null {
   const meta = networkMetaFor(backendNetworkId, networks)
   return meta ? meta.explorerUrl(address) : null
 }
 
 /** What to call that explorer in a link — "Etherscan", "Solscan". */
-export function explorerName(backendNetworkId: string, networks?: CryptoNetwork[]): string | null {
+export function explorerName(
+  backendNetworkId: string,
+  networks?: CryptoNetwork[]
+): string | null {
   return networkMetaFor(backendNetworkId, networks)?.explorerName ?? null
 }

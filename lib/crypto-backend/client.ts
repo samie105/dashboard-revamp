@@ -14,6 +14,7 @@ import type {
   CryptoServiceHealth,
   CryptoTransactionIntent,
   LaunchpadAvailability,
+  LaunchpadCurve,
   LaunchpadDraftInput,
   LaunchpadFeedFilter,
   LaunchpadNetworkId,
@@ -74,11 +75,19 @@ export class CryptoBackendClient {
   }
 
   async getHealth(signal?: AbortSignal): Promise<CryptoServiceHealth> {
-    return this.request<CryptoServiceHealth>("/health", {}, { unwrap: false, signal })
+    return this.request<CryptoServiceHealth>(
+      "/health",
+      {},
+      { unwrap: false, signal }
+    )
   }
 
   async getReady(signal?: AbortSignal): Promise<CryptoServiceHealth> {
-    return this.request<CryptoServiceHealth>("/ready", {}, { unwrap: false, signal })
+    return this.request<CryptoServiceHealth>(
+      "/ready",
+      {},
+      { unwrap: false, signal }
+    )
   }
 
   async getWallet(signal?: AbortSignal): Promise<CryptoWalletDetails> {
@@ -105,7 +114,11 @@ export class CryptoBackendClient {
         from: string | null
         to: string | null
       }
-      fearGreed: { value: number; classification: string; recordedAt: string } | null
+      fearGreed: {
+        value: number
+        classification: string
+        recordedAt: string
+      } | null
     }>(`/insights${query}`, {}, { signal })
   }
 
@@ -117,36 +130,60 @@ export class CryptoBackendClient {
     accountId: string,
     networkId: string,
     assets: string[] = [],
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<CryptoBalance[]> {
     const query = new URLSearchParams({ networkId })
     if (assets.length > 0) query.set("assets", assets.join(","))
     return this.request<CryptoBalance[]>(
       `/wallets/me/accounts/${encodeURIComponent(accountId)}/balances?${query.toString()}`,
       {},
-      { signal },
+      { signal }
     )
   }
 
-  async listBalanceSnapshot(refresh = false, signal?: AbortSignal): Promise<CryptoBalanceSnapshot> {
+  async listBalanceSnapshot(
+    refresh = false,
+    signal?: AbortSignal
+  ): Promise<CryptoBalanceSnapshot> {
     const query = refresh ? "?refresh=1" : ""
-    return this.request<CryptoBalanceSnapshot>(`/wallets/me/balances${query}`, {}, { signal })
+    return this.request<CryptoBalanceSnapshot>(
+      `/wallets/me/balances${query}`,
+      {},
+      { signal }
+    )
   }
 
-  async listTransactions(limit = 50, signal?: AbortSignal): Promise<CryptoTransactionRecord[]> {
+  async listTransactions(
+    limit = 50,
+    signal?: AbortSignal
+  ): Promise<CryptoTransactionRecord[]> {
     return this.request<CryptoTransactionRecord[]>(
       `/transactions?limit=${encodeURIComponent(String(limit))}`,
       {},
-      { signal },
+      { signal }
     )
   }
 
-  async getIntent(intentId: string, signal?: AbortSignal): Promise<CryptoTransactionIntent> {
-    return this.request<CryptoTransactionIntent>(`/transactions/intents/${encodeURIComponent(intentId)}`, {}, { signal })
+  async getIntent(
+    intentId: string,
+    signal?: AbortSignal
+  ): Promise<CryptoTransactionIntent> {
+    return this.request<CryptoTransactionIntent>(
+      `/transactions/intents/${encodeURIComponent(intentId)}`,
+      {},
+      { signal }
+    )
   }
 
-  async getTransaction(transactionId: string, signal?: AbortSignal): Promise<CryptoTransactionRecord> {
-    return this.request<CryptoTransactionRecord>(`/transactions/${encodeURIComponent(transactionId)}`, {}, { signal })
+  async getTransaction(
+    transactionId: string,
+    signal?: AbortSignal
+  ): Promise<CryptoTransactionRecord> {
+    return this.request<CryptoTransactionRecord>(
+      `/transactions/${encodeURIComponent(transactionId)}`,
+      {},
+      { signal }
+    )
   }
 
   async createWallet(): Promise<CryptoWallet> {
@@ -154,18 +191,34 @@ export class CryptoBackendClient {
   }
 
   async authorizeWallet(): Promise<WalletAuthorizationResult> {
-    return this.request<WalletAuthorizationResult>("/wallets/me/authorize", { method: "POST" })
+    return this.request<WalletAuthorizationResult>("/wallets/me/authorize", {
+      method: "POST",
+    })
   }
 
   async startRecoveryAuthorization(): Promise<RecoveryAuthorizationStartResult> {
-    return this.request<RecoveryAuthorizationStartResult>("/wallets/me/authorize/recovery/start", { method: "POST" })
+    return this.request<RecoveryAuthorizationStartResult>(
+      "/wallets/me/authorize/recovery/start",
+      { method: "POST" }
+    )
   }
 
-  async completeRecoveryAuthorization(input: { authorizationId: string; recoveryPublicKey: string; signature: string }): Promise<WalletAuthorizationResult> {
-    return this.request<WalletAuthorizationResult>("/wallets/me/authorize/recovery", { method: "POST", body: JSON.stringify(input) })
+  async completeRecoveryAuthorization(input: {
+    authorizationId: string
+    recoveryPublicKey: string
+    signature: string
+  }): Promise<WalletAuthorizationResult> {
+    return this.request<WalletAuthorizationResult>(
+      "/wallets/me/authorize/recovery",
+      { method: "POST", body: JSON.stringify(input) }
+    )
   }
 
-  async prepareAccount(input: { chainFamily: string; keyAlgorithm?: string; keyType?: string }): Promise<CryptoWalletAccount> {
+  async prepareAccount(input: {
+    chainFamily: string
+    keyAlgorithm?: string
+    keyType?: string
+  }): Promise<CryptoWalletAccount> {
     return this.request<CryptoWalletAccount>("/wallets/me/accounts/prepare", {
       method: "POST",
       body: JSON.stringify(input),
@@ -177,28 +230,43 @@ export class CryptoBackendClient {
   }
 
   async createPasskeyRegistrationOptions(): Promise<PasskeyRegistrationOptions> {
-    return this.request<PasskeyRegistrationOptions>("/passkeys/registration/options", { method: "POST" })
+    return this.request<PasskeyRegistrationOptions>(
+      "/passkeys/registration/options",
+      { method: "POST" }
+    )
   }
 
-  async verifyPasskeyRegistration(ceremonyId: string, response: Record<string, unknown>): Promise<PasskeyRegistrationResult> {
-    return this.request<PasskeyRegistrationResult>("/passkeys/registration/verify", {
-      method: "POST",
-      body: JSON.stringify({ ceremonyId, response }),
-    })
+  async verifyPasskeyRegistration(
+    ceremonyId: string,
+    response: Record<string, unknown>
+  ): Promise<PasskeyRegistrationResult> {
+    return this.request<PasskeyRegistrationResult>(
+      "/passkeys/registration/verify",
+      {
+        method: "POST",
+        body: JSON.stringify({ ceremonyId, response }),
+      }
+    )
   }
 
   async createPasskeyAuthenticationOptions(): Promise<PasskeyAuthenticationOptions> {
-    return this.request<PasskeyAuthenticationOptions>("/passkeys/authentication/options", { method: "POST" })
+    return this.request<PasskeyAuthenticationOptions>(
+      "/passkeys/authentication/options",
+      { method: "POST" }
+    )
   }
 
   async verifyPasskeyAuthentication(
     ceremonyId: string,
-    response: Record<string, unknown>,
+    response: Record<string, unknown>
   ): Promise<PasskeyAuthenticationResult> {
-    return this.request<PasskeyAuthenticationResult>("/passkeys/authentication/verify", {
-      method: "POST",
-      body: JSON.stringify({ ceremonyId, response }),
-    })
+    return this.request<PasskeyAuthenticationResult>(
+      "/passkeys/authentication/verify",
+      {
+        method: "POST",
+        body: JSON.stringify({ ceremonyId, response }),
+      }
+    )
   }
 
   async getRecoveryStatus(): Promise<RecoveryStatus> {
@@ -206,7 +274,9 @@ export class CryptoBackendClient {
   }
 
   async startRecovery(): Promise<RecoveryStartResult> {
-    return this.request<RecoveryStartResult>("/recovery/start", { method: "POST" })
+    return this.request<RecoveryStartResult>("/recovery/start", {
+      method: "POST",
+    })
   }
 
   async completeRecovery(input: {
@@ -215,10 +285,13 @@ export class CryptoBackendClient {
     signature: string
     package: CryptoWalletPackage
   }) {
-    return this.request<{ packageVersion?: number; status: string }>("/recovery/complete", {
-      method: "POST",
-      body: JSON.stringify(input),
-    })
+    return this.request<{ packageVersion?: number; status: string }>(
+      "/recovery/complete",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    )
   }
 
   async listDevices(): Promise<Device[]> {
@@ -226,42 +299,63 @@ export class CryptoBackendClient {
   }
 
   async startDeviceEnrollment(
-    input: { label: string; platform?: string; publicKey: string; keyAgreementPublicKey?: string },
-    walletAuthorizationToken: string,
+    input: {
+      label: string
+      platform?: string
+      publicKey: string
+      keyAgreementPublicKey?: string
+    },
+    walletAuthorizationToken: string
   ) {
-    return this.request<{ deviceId: string; ceremonyId: string; challenge: string }>("/devices/enrollment/start", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }, { walletAuthorizationToken })
+    return this.request<{
+      deviceId: string
+      ceremonyId: string
+      challenge: string
+    }>(
+      "/devices/enrollment/start",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { walletAuthorizationToken }
+    )
   }
 
   async completeDeviceEnrollment(
     input: { deviceId: string; ceremonyId: string; signature: string },
-    walletAuthorizationToken: string,
+    walletAuthorizationToken: string
   ) {
-    return this.request<{ deviceId: string; status: string }>("/devices/enrollment/complete", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }, { walletAuthorizationToken })
+    return this.request<{ deviceId: string; status: string }>(
+      "/devices/enrollment/complete",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { walletAuthorizationToken }
+    )
   }
 
   async revokeDevice(deviceId: string, walletAuthorizationToken: string) {
     return this.request<{ deviceId: string; status: string }>(
       `/devices/${encodeURIComponent(deviceId)}/revoke`,
       { method: "POST" },
-      { walletAuthorizationToken },
+      { walletAuthorizationToken }
     )
   }
 
   async commitWalletPackage(
     walletPackage: CryptoWalletPackage,
     walletAuthorizationToken: string,
-    rotate = false,
+    rotate = false
   ): Promise<CryptoWalletPackageDocument> {
-    return this.request<CryptoWalletPackageDocument>(rotate ? "/wallets/me/rotate" : "/wallets/me/package", {
-      method: "POST",
-      body: JSON.stringify(walletPackage),
-    }, { walletAuthorizationToken })
+    return this.request<CryptoWalletPackageDocument>(
+      rotate ? "/wallets/me/rotate" : "/wallets/me/package",
+      {
+        method: "POST",
+        body: JSON.stringify(walletPackage),
+      },
+      { walletAuthorizationToken }
+    )
   }
 
   async createTransferIntent(
@@ -273,192 +367,410 @@ export class CryptoBackendClient {
       amount: string
       idempotencyKey?: string
     },
-    walletSessionToken?: string,
+    walletSessionToken?: string
   ): Promise<CryptoTransactionIntent> {
-    const response = await this.request<{ data: CryptoTransactionIntent; existing: boolean }>(
+    const response = await this.request<{
+      data: CryptoTransactionIntent
+      existing: boolean
+    }>(
       "/transactions/intents",
       { method: "POST", body: JSON.stringify(input) },
-      { walletSessionToken, unwrap: false },
+      { walletSessionToken, unwrap: false }
     )
     return response.data
   }
 
-  async simulateIntent(intentId: string, signal?: AbortSignal): Promise<CryptoIntentSimulation> {
-    return this.request<CryptoIntentSimulation>(`/transactions/intents/${encodeURIComponent(intentId)}/simulate`, {
-      method: "POST",
-    }, { signal })
+  async simulateIntent(
+    intentId: string,
+    signal?: AbortSignal
+  ): Promise<CryptoIntentSimulation> {
+    return this.request<CryptoIntentSimulation>(
+      `/transactions/intents/${encodeURIComponent(intentId)}/simulate`,
+      {
+        method: "POST",
+      },
+      { signal }
+    )
   }
 
-  async submitIntent(intentId: string, signedTransaction: string, signal?: AbortSignal): Promise<CryptoTransactionRecord> {
-    return this.request<CryptoTransactionRecord>(`/transactions/intents/${encodeURIComponent(intentId)}/submit`, {
-      method: "POST",
-      body: JSON.stringify({ signedTransaction }),
-    }, { signal })
+  async submitIntent(
+    intentId: string,
+    signedTransaction: string,
+    signal?: AbortSignal
+  ): Promise<CryptoTransactionRecord> {
+    return this.request<CryptoTransactionRecord>(
+      `/transactions/intents/${encodeURIComponent(intentId)}/submit`,
+      {
+        method: "POST",
+        body: JSON.stringify({ signedTransaction }),
+      },
+      { signal }
+    )
   }
 
   async getSponsorshipConfig(signal?: AbortSignal): Promise<SponsorshipConfig> {
-    return this.request<SponsorshipConfig>("/sponsorship/config", {}, { signal })
+    return this.request<SponsorshipConfig>(
+      "/sponsorship/config",
+      {},
+      { signal }
+    )
   }
 
-  async quoteSponsorship(input: {
-    accountId: string
-    networkId: string
-    operation: "native-transfer" | "token-transfer" | "contract-call" | "hyperliquid-deposit"
-    intentId?: string
-  }, signal?: AbortSignal): Promise<SponsorshipOperation> {
-    return this.request<SponsorshipOperation>("/sponsorship/quote", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }, { signal })
+  async quoteSponsorship(
+    input: {
+      accountId: string
+      networkId: string
+      operation:
+        | "native-transfer"
+        | "token-transfer"
+        | "contract-call"
+        | "hyperliquid-deposit"
+      intentId?: string
+    },
+    signal?: AbortSignal
+  ): Promise<SponsorshipOperation> {
+    return this.request<SponsorshipOperation>(
+      "/sponsorship/quote",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { signal }
+    )
   }
 
-  async prepareSponsorship(operationId: string, intentId: string, signal?: AbortSignal): Promise<SponsorshipOperation> {
-    return this.request<SponsorshipOperation>(`/sponsorship/operations/${encodeURIComponent(operationId)}/prepare`, {
-      method: "POST",
-      body: JSON.stringify({ intentId }),
-    }, { signal })
+  async prepareSponsorship(
+    operationId: string,
+    intentId: string,
+    signal?: AbortSignal
+  ): Promise<SponsorshipOperation> {
+    return this.request<SponsorshipOperation>(
+      `/sponsorship/operations/${encodeURIComponent(operationId)}/prepare`,
+      {
+        method: "POST",
+        body: JSON.stringify({ intentId }),
+      },
+      { signal }
+    )
   }
 
-  async submitSponsorship(operationId: string, signedPayload: Record<string, unknown>, signal?: AbortSignal) {
-    return this.request<{ operation: SponsorshipOperation; txHash?: string; providerStatus: string }>(`/sponsorship/operations/${encodeURIComponent(operationId)}/submit`, {
-      method: "POST",
-      body: JSON.stringify({ signedPayload }),
-    }, { signal })
+  async submitSponsorship(
+    operationId: string,
+    signedPayload: Record<string, unknown>,
+    signal?: AbortSignal
+  ) {
+    return this.request<{
+      operation: SponsorshipOperation
+      txHash?: string
+      providerStatus: string
+    }>(
+      `/sponsorship/operations/${encodeURIComponent(operationId)}/submit`,
+      {
+        method: "POST",
+        body: JSON.stringify({ signedPayload }),
+      },
+      { signal }
+    )
   }
 
-  async getSponsorshipStatus(operationId: string, signal?: AbortSignal): Promise<SponsorshipOperation> {
-    return this.request<SponsorshipOperation>(`/sponsorship/operations/${encodeURIComponent(operationId)}`, {}, { signal })
+  async getSponsorshipStatus(
+    operationId: string,
+    signal?: AbortSignal
+  ): Promise<SponsorshipOperation> {
+    return this.request<SponsorshipOperation>(
+      `/sponsorship/operations/${encodeURIComponent(operationId)}`,
+      {},
+      { signal }
+    )
   }
 
-  async getHyperliquidMarkets(signal?: AbortSignal): Promise<HyperliquidMarkets> {
-    return this.request<HyperliquidMarkets>("/trading/hyperliquid/markets", {}, { signal })
+  async getHyperliquidMarkets(
+    signal?: AbortSignal
+  ): Promise<HyperliquidMarkets> {
+    return this.request<HyperliquidMarkets>(
+      "/trading/hyperliquid/markets",
+      {},
+      { signal }
+    )
   }
 
-  async getHyperliquidAccount(signal?: AbortSignal): Promise<HyperliquidAccount> {
-    return this.request<HyperliquidAccount>("/trading/hyperliquid/account", {}, { signal })
+  async getHyperliquidAccount(
+    signal?: AbortSignal
+  ): Promise<HyperliquidAccount> {
+    return this.request<HyperliquidAccount>(
+      "/trading/hyperliquid/account",
+      {},
+      { signal }
+    )
   }
 
-  async createHyperliquidIntent(input: Record<string, unknown>, signal?: AbortSignal): Promise<HyperliquidIntent> {
-    return this.request<HyperliquidIntent>("/trading/hyperliquid/intents", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }, { signal })
+  async createHyperliquidIntent(
+    input: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<HyperliquidIntent> {
+    return this.request<HyperliquidIntent>(
+      "/trading/hyperliquid/intents",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { signal }
+    )
   }
 
-  async submitHyperliquidIntent(intentId: string, signatures: Array<{ r: string; s: string; v: number }>, signal?: AbortSignal) {
-    return this.request<{ intentId: string; status: string; results: unknown[] }>(`/trading/hyperliquid/intents/${encodeURIComponent(intentId)}/submit`, {
-      method: "POST",
-      body: JSON.stringify({ signatures }),
-    }, { signal })
+  async submitHyperliquidIntent(
+    intentId: string,
+    signatures: Array<{ r: string; s: string; v: number }>,
+    signal?: AbortSignal
+  ) {
+    return this.request<{
+      intentId: string
+      status: string
+      results: unknown[]
+    }>(
+      `/trading/hyperliquid/intents/${encodeURIComponent(intentId)}/submit`,
+      {
+        method: "POST",
+        body: JSON.stringify({ signatures }),
+      },
+      { signal }
+    )
   }
 
   async syncTransactions(signal?: AbortSignal): Promise<{ started: boolean }> {
-    return this.request<{ started: boolean }>("/transactions/sync", { method: "POST" }, { signal })
+    return this.request<{ started: boolean }>(
+      "/transactions/sync",
+      { method: "POST" },
+      { signal }
+    )
   }
 
   async getIntertrainUsdcBridgeStatus(signal?: AbortSignal) {
-    return this.request<{ enabled: boolean; available: boolean; sourceNetworks: string[]; destinationNetwork: string; asset: string; reason?: string; paused?: boolean }>("/bridge/intertrain/usdc/status", {}, { signal })
+    return this.request<{
+      enabled: boolean
+      available: boolean
+      sourceNetworks: string[]
+      destinationNetwork: string
+      asset: string
+      reason?: string
+      paused?: boolean
+    }>("/bridge/intertrain/usdc/status", {}, { signal })
   }
 
-  async createIntertrainUsdcBridgeIntents(input: { accountId: string; destinationAccountId: string; amount: string; idempotencyKey?: string }, signal?: AbortSignal) {
-    return this.request<{ intents: CryptoTransactionIntent[] }>("/bridge/intertrain/usdc/intents", { method: "POST", body: JSON.stringify(input) }, { signal })
+  async createIntertrainUsdcBridgeIntents(
+    input: {
+      accountId: string
+      destinationAccountId: string
+      amount: string
+      idempotencyKey?: string
+    },
+    signal?: AbortSignal
+  ) {
+    return this.request<{ intents: CryptoTransactionIntent[] }>(
+      "/bridge/intertrain/usdc/intents",
+      { method: "POST", body: JSON.stringify(input) },
+      { signal }
+    )
   }
 
   async listHyperliquidAgents(signal?: AbortSignal) {
-    return this.request<HyperliquidTradingAgent[]>("/trading/hyperliquid/agents", {}, { signal })
+    return this.request<HyperliquidTradingAgent[]>(
+      "/trading/hyperliquid/agents",
+      {},
+      { signal }
+    )
   }
 
-  async registerHyperliquidAgent(input: Omit<HyperliquidTradingAgent, "id" | "status" | "approvedAt" | "revokedAt">, walletAuthorizationToken: string, signal?: AbortSignal) {
-    return this.request<HyperliquidTradingAgent>("/trading/hyperliquid/agents", { method: "POST", body: JSON.stringify(input) }, { walletAuthorizationToken, signal })
+  async registerHyperliquidAgent(
+    input: Omit<
+      HyperliquidTradingAgent,
+      "id" | "status" | "approvedAt" | "revokedAt"
+    >,
+    walletAuthorizationToken: string,
+    signal?: AbortSignal
+  ) {
+    return this.request<HyperliquidTradingAgent>(
+      "/trading/hyperliquid/agents",
+      { method: "POST", body: JSON.stringify(input) },
+      { walletAuthorizationToken, signal }
+    )
   }
 
-  async revokeHyperliquidAgent(address: string, walletAuthorizationToken: string, signal?: AbortSignal) {
-    return this.request<HyperliquidTradingAgent>(`/trading/hyperliquid/agents/${encodeURIComponent(address)}/revoke`, { method: "POST" }, { walletAuthorizationToken, signal })
+  async revokeHyperliquidAgent(
+    address: string,
+    walletAuthorizationToken: string,
+    signal?: AbortSignal
+  ) {
+    return this.request<HyperliquidTradingAgent>(
+      `/trading/hyperliquid/agents/${encodeURIComponent(address)}/revoke`,
+      { method: "POST" },
+      { walletAuthorizationToken, signal }
+    )
   }
 
-  async createTradingSession(input: {
-    accountId: string
-    chainFamily: "evm" | "solana"
-    networkIds: string[]
-    allowedTargets?: string[]
-    allowedOperations?: string[]
-    maxTransactionValue?: string
-    maxDailyValue?: string
-    maxRequestsPerMinute?: number
-    ttlSeconds?: number
-  }, walletAuthorizationToken: string) {
-    return this.request<{ session: WalletTradingSession; token: string }>("/wallets/me/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        ...input,
-        // Delegated sessions are deliberately limited to trading operations.
-        allowedOperations: input.allowedOperations ?? ["transfer"],
-      }),
-    }, { walletAuthorizationToken })
+  async createTradingSession(
+    input: {
+      accountId: string
+      chainFamily: "evm" | "solana"
+      networkIds: string[]
+      allowedTargets?: string[]
+      allowedOperations?: string[]
+      maxTransactionValue?: string
+      maxDailyValue?: string
+      maxRequestsPerMinute?: number
+      ttlSeconds?: number
+    },
+    walletAuthorizationToken: string
+  ) {
+    return this.request<{ session: WalletTradingSession; token: string }>(
+      "/wallets/me/sessions",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...input,
+          // Delegated sessions are deliberately limited to trading operations.
+          allowedOperations: input.allowedOperations ?? ["transfer"],
+        }),
+      },
+      { walletAuthorizationToken }
+    )
   }
 
   async listTradingSessions() {
     return this.request<WalletTradingSession[]>("/wallets/me/sessions")
   }
 
-  async revokeTradingSession(sessionId: string, walletAuthorizationToken: string) {
-    await this.request(`/wallets/me/sessions/${encodeURIComponent(sessionId)}/revoke`, { method: "POST" }, { walletAuthorizationToken })
+  async revokeTradingSession(
+    sessionId: string,
+    walletAuthorizationToken: string
+  ) {
+    await this.request(
+      `/wallets/me/sessions/${encodeURIComponent(sessionId)}/revoke`,
+      { method: "POST" },
+      { walletAuthorizationToken }
+    )
   }
 
   async revokeAllTradingSessions(walletAuthorizationToken: string) {
-    await this.request("/wallets/me/sessions/revoke-all", { method: "POST" }, { walletAuthorizationToken })
+    await this.request(
+      "/wallets/me/sessions/revoke-all",
+      { method: "POST" },
+      { walletAuthorizationToken }
+    )
   }
 
-  async getHyperliquidIntent(intentId: string, signal?: AbortSignal): Promise<HyperliquidIntent> {
-    return this.request<HyperliquidIntent>(`/trading/hyperliquid/intents/${encodeURIComponent(intentId)}`, {}, { signal })
+  async getHyperliquidIntent(
+    intentId: string,
+    signal?: AbortSignal
+  ): Promise<HyperliquidIntent> {
+    return this.request<HyperliquidIntent>(
+      `/trading/hyperliquid/intents/${encodeURIComponent(intentId)}`,
+      {},
+      { signal }
+    )
   }
 
-  async createModernSpotIntent(input: {
-    networkId: "ethereum-mainnet" | "arbitrum-one"
-    sellToken: string
-    buyToken: string
-    sellAmountBaseUnits: string
-    slippagePercentage?: number
-    idempotencyKey?: string
-  }, signal?: AbortSignal): Promise<CryptoSpotIntentPlan> {
-    const result = await this.request<CryptoTransactionIntent | CryptoSpotIntentPlan>("/trading/spot/evm/intents", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }, { signal })
+  async createModernSpotIntent(
+    input: {
+      networkId: "ethereum-mainnet" | "arbitrum-one"
+      sellToken: string
+      buyToken: string
+      sellAmountBaseUnits: string
+      slippagePercentage?: number
+      idempotencyKey?: string
+    },
+    signal?: AbortSignal
+  ): Promise<CryptoSpotIntentPlan> {
+    const result = await this.request<
+      CryptoTransactionIntent | CryptoSpotIntentPlan
+    >(
+      "/trading/spot/evm/intents",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { signal }
+    )
     return Array.isArray((result as { intents?: unknown }).intents)
-      ? result as CryptoSpotIntentPlan
-      : { intents: [result as CryptoTransactionIntent], requiresApproval: false }
+      ? (result as CryptoSpotIntentPlan)
+      : {
+          intents: [result as CryptoTransactionIntent],
+          requiresApproval: false,
+        }
   }
 
-  async createModernLifiSwapIntent(input: {
-    sourceNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet" | "bitcoin-mainnet"
-    destinationNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "sui-mainnet" | "tron-mainnet" | "bitcoin-mainnet"
-    sellToken: string
-    buyToken: string
-    sellAmountBaseUnits: string
-    slippagePercentage?: number
-    idempotencyKey?: string
-  }, signal?: AbortSignal): Promise<CryptoSpotIntentPlan> {
-    const result = await this.request<CryptoTransactionIntent | CryptoSpotIntentPlan>("/trading/spot/lifi/intents", {
-      method: "POST", body: JSON.stringify(input),
-    }, { signal })
+  async createModernLifiSwapIntent(
+    input: {
+      sourceNetworkId:
+        | "ethereum-mainnet"
+        | "arbitrum-one"
+        | "solana-mainnet-beta"
+        | "sui-mainnet"
+        | "tron-mainnet"
+        | "bitcoin-mainnet"
+      destinationNetworkId:
+        | "ethereum-mainnet"
+        | "arbitrum-one"
+        | "solana-mainnet-beta"
+        | "sui-mainnet"
+        | "tron-mainnet"
+        | "bitcoin-mainnet"
+      sellToken: string
+      buyToken: string
+      sellAmountBaseUnits: string
+      slippagePercentage?: number
+      idempotencyKey?: string
+    },
+    signal?: AbortSignal
+  ): Promise<CryptoSpotIntentPlan> {
+    const result = await this.request<
+      CryptoTransactionIntent | CryptoSpotIntentPlan
+    >(
+      "/trading/spot/lifi/intents",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { signal }
+    )
     return Array.isArray((result as { intents?: unknown }).intents)
-      ? result as CryptoSpotIntentPlan
-      : { intents: [result as CryptoTransactionIntent], requiresApproval: false }
+      ? (result as CryptoSpotIntentPlan)
+      : {
+          intents: [result as CryptoTransactionIntent],
+          requiresApproval: false,
+        }
   }
 
-  async createModernProviderSwapIntent(input: {
-    sourceNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "ton-mainnet" | "tron-mainnet"
-    destinationNetworkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta" | "ton-mainnet" | "tron-mainnet"
-    sellToken: string
-    buyToken: string
-    sellAmountBaseUnits: string
-    slippagePercentage?: number
-    idempotencyKey?: string
-  }, signal?: AbortSignal): Promise<CryptoTransactionIntent> {
-    return this.request<CryptoTransactionIntent>("/trading/spot/provider/intents", {
-      method: "POST", body: JSON.stringify(input),
-    }, { signal })
+  async createModernProviderSwapIntent(
+    input: {
+      sourceNetworkId:
+        | "ethereum-mainnet"
+        | "arbitrum-one"
+        | "solana-mainnet-beta"
+        | "ton-mainnet"
+        | "tron-mainnet"
+      destinationNetworkId:
+        | "ethereum-mainnet"
+        | "arbitrum-one"
+        | "solana-mainnet-beta"
+        | "ton-mainnet"
+        | "tron-mainnet"
+      sellToken: string
+      buyToken: string
+      sellAmountBaseUnits: string
+      slippagePercentage?: number
+      idempotencyKey?: string
+    },
+    signal?: AbortSignal
+  ): Promise<CryptoTransactionIntent> {
+    return this.request<CryptoTransactionIntent>(
+      "/trading/spot/provider/intents",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { signal }
+    )
   }
 
   /**
@@ -470,102 +782,239 @@ export class CryptoBackendClient {
    * "the n most traded markets", which is what a summary card wants instead
    * of two thousand rows it will slice to six.
    */
-  async getModernSpotMarkets(options?: { limit?: number; offset?: number }, signal?: AbortSignal) {
+  async getModernSpotMarkets(
+    options?: { limit?: number; offset?: number },
+    signal?: AbortSignal
+  ) {
     const params = new URLSearchParams()
     if (options?.limit !== undefined) params.set("limit", String(options.limit))
-    if (options?.offset !== undefined) params.set("offset", String(options.offset))
+    if (options?.offset !== undefined)
+      params.set("offset", String(options.offset))
     const query = params.toString()
-    return this.request<{ total?: number; markets: Array<{ id: string; symbol: string; quote: string; networkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta"; venue: "0x" | "jupiter"; chartSymbol: string; chartSupported: boolean; price?: number; icon?: string | null; sellToken?: string; buyToken?: string; inputMint?: string; outputMint?: string; baseDecimals?: number; quoteDecimals?: number }> }>(
+    return this.request<{
+      total?: number
+      markets: Array<{
+        id: string
+        symbol: string
+        quote: string
+        networkId: "ethereum-mainnet" | "arbitrum-one" | "solana-mainnet-beta"
+        venue: "0x" | "jupiter"
+        chartSymbol: string
+        chartSupported: boolean
+        price?: number
+        icon?: string | null
+        sellToken?: string
+        buyToken?: string
+        inputMint?: string
+        outputMint?: string
+        baseDecimals?: number
+        quoteDecimals?: number
+      }>
+    }>(
       query ? `/trading/spot/markets?${query}` : "/trading/spot/markets",
       {},
-      { signal },
+      { signal }
     )
   }
 
-  async createModernSolanaSpotIntent(input: {
-    inputMint: string
-    outputMint: string
-    amountBaseUnits: string
-    slippageBps?: number
-    idempotencyKey?: string
-  }, signal?: AbortSignal): Promise<CryptoTransactionIntent> {
-    return this.request<CryptoTransactionIntent>("/trading/spot/solana/intents", {
-      method: "POST", body: JSON.stringify(input),
-    }, { signal })
+  async createModernSolanaSpotIntent(
+    input: {
+      inputMint: string
+      outputMint: string
+      amountBaseUnits: string
+      slippageBps?: number
+      idempotencyKey?: string
+    },
+    signal?: AbortSignal
+  ): Promise<CryptoTransactionIntent> {
+    return this.request<CryptoTransactionIntent>(
+      "/trading/spot/solana/intents",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { signal }
+    )
   }
 
-  async createHyperliquidDepositIntents(input: { amount: number; idempotencyKey?: string }, signal?: AbortSignal) {
-    return this.request<{ networkId: string; amount: number; intents: CryptoTransactionIntent[]; sponsorship: SponsorshipOperation }>("/trading/hyperliquid/deposit/intents", {
-      method: "POST", body: JSON.stringify(input),
-    }, { signal })
+  async createHyperliquidDepositIntents(
+    input: { amount: number; idempotencyKey?: string },
+    signal?: AbortSignal
+  ) {
+    return this.request<{
+      networkId: string
+      amount: number
+      intents: CryptoTransactionIntent[]
+      sponsorship: SponsorshipOperation
+    }>(
+      "/trading/hyperliquid/deposit/intents",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { signal }
+    )
   }
 
   /* ── Launchpad ─────────────────────────────────────────────────────── */
 
   async getLaunchpadAvailability(signal?: AbortSignal) {
-    return this.request<LaunchpadAvailability>("/launchpad/availability", {}, { signal })
-  }
-
-  async getLaunchpadNetworks(signal?: AbortSignal) {
-    return this.request<{ networks: Array<{ networkId: LaunchpadNetworkId; label: string }>; defaultNetworkId: LaunchpadNetworkId }>(
-      "/launchpad/networks", {}, { signal },
+    return this.request<LaunchpadAvailability>(
+      "/launchpad/availability",
+      {},
+      { signal }
     )
   }
 
-  async getLaunchpadTerms(creatorBps: number, networkId: LaunchpadNetworkId, signal?: AbortSignal) {
-    const query = new URLSearchParams({ creatorBps: String(creatorBps), networkId })
-    return this.request<LaunchpadTerms>(`/launchpad/terms?${query}`, {}, { signal })
+  async getLaunchpadNetworks(signal?: AbortSignal) {
+    return this.request<{
+      networks: Array<{ networkId: LaunchpadNetworkId; label: string }>
+      defaultNetworkId: LaunchpadNetworkId
+    }>("/launchpad/networks", {}, { signal })
   }
 
-  async listLaunchpadTokens(networkId: LaunchpadNetworkId, filter: LaunchpadFeedFilter = "all", signal?: AbortSignal) {
+  async getLaunchpadTerms(
+    creatorBps: number,
+    networkId: LaunchpadNetworkId,
+    signal?: AbortSignal
+  ) {
+    const query = new URLSearchParams({
+      creatorBps: String(creatorBps),
+      networkId,
+    })
+    return this.request<LaunchpadTerms>(
+      `/launchpad/terms?${query}`,
+      {},
+      { signal }
+    )
+  }
+
+  async listLaunchpadTokens(
+    networkId: LaunchpadNetworkId,
+    filter: LaunchpadFeedFilter = "all",
+    signal?: AbortSignal
+  ) {
     const query = new URLSearchParams({ networkId, filter })
-    return this.request<LaunchpadToken[]>(`/launchpad/tokens?${query}`, {}, { signal })
+    return this.request<LaunchpadToken[]>(
+      `/launchpad/tokens?${query}`,
+      {},
+      { signal }
+    )
   }
 
   async createLaunchDraft(input: LaunchpadDraftInput, signal?: AbortSignal) {
-    return this.request<LaunchpadToken>("/launchpad/launches", { method: "POST", body: JSON.stringify(input) }, { signal })
+    return this.request<LaunchpadToken>(
+      "/launchpad/launches",
+      { method: "POST", body: JSON.stringify(input) },
+      { signal }
+    )
   }
 
   /** Idempotent: a deploy already in flight returns its existing intent. */
-  async deployLaunch(launchId: string, input: { idempotencyKey?: string } = {}, signal?: AbortSignal) {
-    return this.request<{ launch: LaunchpadToken; intent: CryptoTransactionIntent }>(
-      `/launchpad/launches/${encodeURIComponent(launchId)}/deploy`, { method: "POST", body: JSON.stringify(input) }, { signal },
+  async deployLaunch(
+    launchId: string,
+    input: { idempotencyKey?: string } = {},
+    signal?: AbortSignal
+  ) {
+    return this.request<{
+      launch: LaunchpadToken
+      intent: CryptoTransactionIntent
+    }>(
+      `/launchpad/launches/${encodeURIComponent(launchId)}/deploy`,
+      { method: "POST", body: JSON.stringify(input) },
+      { signal }
     )
   }
 
   /** The caller's own launch, in any state — including draft and failed. */
   async getMyLaunch(launchId: string, signal?: AbortSignal) {
-    return this.request<LaunchpadToken & { failureReason?: string }>(`/launchpad/launches/${encodeURIComponent(launchId)}`, {}, { signal })
-  }
-
-  async listMyLaunches(signal?: AbortSignal) {
-    return this.request<Array<LaunchpadToken & { failureReason?: string }>>("/launchpad/launches", {}, { signal })
-  }
-
-  async getLaunchpadToken(launchId: string, signal?: AbortSignal) {
-    return this.request<{ success: true; data: LaunchpadToken; platformFeeBps: number; tokenDecimals: number }>(
-      `/launchpad/tokens/${encodeURIComponent(launchId)}`, {}, { signal, unwrap: false },
+    return this.request<LaunchpadToken & { failureReason?: string }>(
+      `/launchpad/launches/${encodeURIComponent(launchId)}`,
+      {},
+      { signal }
     )
   }
 
-  async quoteLaunchpadTrade(launchId: string, input: { side: LaunchpadTradeSide; amount: string; slippageBps: number }, signal?: AbortSignal) {
-    return this.request<LaunchpadQuote>(`/launchpad/tokens/${encodeURIComponent(launchId)}/quote`, {
-      method: "POST", body: JSON.stringify(input),
-    }, { signal })
+  async listMyLaunches(signal?: AbortSignal) {
+    return this.request<Array<LaunchpadToken & { failureReason?: string }>>(
+      "/launchpad/launches",
+      {},
+      { signal }
+    )
   }
 
-  async createLaunchpadTradeIntent(launchId: string, input: { side: LaunchpadTradeSide; amount: string; slippageBps: number; idempotencyKey?: string }, signal?: AbortSignal) {
-    return this.request<{ intent: CryptoTransactionIntent; quote?: LaunchpadQuote }>(`/launchpad/tokens/${encodeURIComponent(launchId)}/trade`, {
-      method: "POST", body: JSON.stringify(input),
-    }, { signal })
+  async getLaunchpadToken(launchId: string, signal?: AbortSignal) {
+    return this.request<{
+      success: true
+      data: LaunchpadToken
+      platformFeeBps: number
+      tokenDecimals: number
+    }>(
+      `/launchpad/tokens/${encodeURIComponent(launchId)}`,
+      {},
+      { signal, unwrap: false }
+    )
   }
 
-  private async request<T>(path: string, init: RequestInit = {}, options: RequestOptions = {}): Promise<T> {
+  async getLaunchpadCurve(launchId: string, signal?: AbortSignal) {
+    return this.request<LaunchpadCurve>(
+      `/launchpad/tokens/${encodeURIComponent(launchId)}/curve`,
+      {},
+      { signal }
+    )
+  }
+
+  async quoteLaunchpadTrade(
+    launchId: string,
+    input: { side: LaunchpadTradeSide; amount: string; slippageBps: number },
+    signal?: AbortSignal
+  ) {
+    return this.request<LaunchpadQuote>(
+      `/launchpad/tokens/${encodeURIComponent(launchId)}/quote`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { signal }
+    )
+  }
+
+  async createLaunchpadTradeIntent(
+    launchId: string,
+    input: {
+      side: LaunchpadTradeSide
+      amount: string
+      slippageBps: number
+      idempotencyKey?: string
+    },
+    signal?: AbortSignal
+  ) {
+    return this.request<{
+      intent: CryptoTransactionIntent
+      quote?: LaunchpadQuote
+    }>(
+      `/launchpad/tokens/${encodeURIComponent(launchId)}/trade`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      { signal }
+    )
+  }
+
+  private async request<T>(
+    path: string,
+    init: RequestInit = {},
+    options: RequestOptions = {}
+  ): Promise<T> {
     const headers = new Headers(init.headers)
     headers.set("accept", "application/json")
-    if (init.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
-    if (options.walletAuthorizationToken) headers.set("x-wallet-authorization", options.walletAuthorizationToken)
-    if (options.walletSessionToken) headers.set("x-wallet-session-token", options.walletSessionToken)
+    if (init.body !== undefined && !headers.has("content-type"))
+      headers.set("content-type", "application/json")
+    if (options.walletAuthorizationToken)
+      headers.set("x-wallet-authorization", options.walletAuthorizationToken)
+    if (options.walletSessionToken)
+      headers.set("x-wallet-session-token", options.walletSessionToken)
 
     const endpoint = `${this.basePath}${path}`
     let response: Response
@@ -579,19 +1028,25 @@ export class CryptoBackendClient {
       })
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") throw error
-      const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      const reason =
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error)
       if (process.env.NODE_ENV !== "production") {
-        console.error("[crypto-backend] request failed before receiving a response", {
-          endpoint,
-          method: init.method ?? "GET",
-          reason,
-        })
+        console.error(
+          "[crypto-backend] request failed before receiving a response",
+          {
+            endpoint,
+            method: init.method ?? "GET",
+            reason,
+          }
+        )
       }
       throw new CryptoBackendError(
         `Crypto backend request failed before a response (${init.method ?? "GET"} ${endpoint}): ${reason}`,
         0,
         "CRYPTO_BACKEND_UNREACHABLE",
-        { endpoint, method: init.method ?? "GET", reason },
+        { endpoint, method: init.method ?? "GET", reason }
       )
     }
 
@@ -606,22 +1061,40 @@ export class CryptoBackendClient {
     const payload = (body ?? {}) as ErrorPayload & { data?: T }
     const requestId = response.headers.get("x-request-id") ?? payload.requestId
     if (path.startsWith("/wallets/me/balances")) {
-      console.info("[crypto-backend] balance response", { status: response.status, requestId })
+      console.info("[crypto-backend] balance response", {
+        status: response.status,
+        requestId,
+      })
     }
     if (!response.ok || payload.success === false) {
-      if (response.status === 401 && !options._retried && typeof window !== "undefined") {
+      if (
+        response.status === 401 &&
+        !options._retried &&
+        typeof window !== "undefined"
+      ) {
         // clerk-js refreshes the session cookie as a side effect of getToken().
         try {
-          await (window as { Clerk?: { session?: { getToken?: (o?: { skipCache?: boolean }) => Promise<string | null> } } }).Clerk?.session?.getToken?.({ skipCache: true })
+          await (
+            window as {
+              Clerk?: {
+                session?: {
+                  getToken?: (o?: {
+                    skipCache?: boolean
+                  }) => Promise<string | null>
+                }
+              }
+            }
+          ).Clerk?.session?.getToken?.({ skipCache: true })
         } catch {}
         return this.request<T>(path, init, { ...options, _retried: true })
       }
       throw new CryptoBackendError(
-        payload.error?.message ?? `Crypto backend request failed (${response.status})`,
+        payload.error?.message ??
+          `Crypto backend request failed (${response.status})`,
         response.status,
         payload.error?.code ?? "CRYPTO_API_ERROR",
         payload.error?.details,
-        requestId,
+        requestId
       )
     }
 
@@ -636,5 +1109,7 @@ export class CryptoBackendClient {
 // instance that had never heard of the wallet. Keeping the state in the tab
 // that owns it removes the failure mode rather than narrowing it.
 export const cryptoBackendClient = new CryptoBackendClient(
-  DEV_AUTH_BYPASS && typeof window !== "undefined" ? { fetcher: devMockFetch } : {},
+  DEV_AUTH_BYPASS && typeof window !== "undefined"
+    ? { fetcher: devMockFetch }
+    : {}
 )
