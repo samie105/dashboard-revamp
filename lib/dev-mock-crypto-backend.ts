@@ -649,6 +649,31 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
 
   // Networks & balances
   if (method === "GET" && path === "networks") return json(NETWORKS)
+  if (method === "GET" && path === "fiat/config") return json({
+    generatedAt: nowIso(),
+    cacheExpiresAt: inMs(60_000),
+    environment: "sandbox",
+    enabled: false,
+    availability: "disabled",
+    rollout: { allowlisted: true },
+    readiness: {
+      environment: "sandbox",
+      featureEnabled: false,
+      productionApproved: false,
+      complianceApproved: false,
+      ready: false,
+      blockingReasons: ["FIAT_RAMP_ENABLED is false"],
+      providers: {
+        onswitch: { provider: "onswitch", environment: "sandbox", baseUrl: "https://api.onswitch.xyz", enabled: false, keyConfigured: false, keyEnvironmentValid: true, configured: false, accountApproved: false, webhookConfigured: false, complianceApproved: false, discoveryAvailable: false, operationAvailable: false, blockingReasons: ["ONSWITCH_ENABLED is false"] },
+        bridge: { provider: "bridge", environment: "sandbox", baseUrl: "https://api.sandbox.bridge.xyz", enabled: false, keyConfigured: false, keyEnvironmentValid: true, configured: false, accountApproved: false, webhookConfigured: false, complianceApproved: false, discoveryAvailable: false, operationAvailable: false, blockingReasons: ["BRIDGE_ENABLED is false"] },
+      },
+    },
+    providers: {
+      onswitch: { status: "disabled", directions: { onrampEnabled: false, offrampEnabled: false }, coverage: [], assets: [] },
+      bridge: { status: "disabled", routes: [], account: { customerRequired: true, kycRequired: true, supportedFiat: ["USD"], virtualAccountsEnabled: false, withdrawalsEnabled: false, liquidationEnabled: false } },
+    },
+    assetRoutes: [],
+  })
   if (method === "GET" && path.startsWith("wallets/me/balances")) {
     if (!state.pkg) return jsonError("WALLET_NOT_FOUND", "No wallet exists for this user yet", 404)
     return json(balanceSnapshot())

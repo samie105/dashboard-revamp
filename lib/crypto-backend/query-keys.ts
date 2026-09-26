@@ -8,6 +8,7 @@ export const cryptoQueryKeys = {
   walletPackage: (userId: string) =>
     [...cryptoQueryKeys.all, "wallet-package", userId] as const,
   networks: () => [...cryptoQueryKeys.all, "networks"] as const,
+  fiatConfig: () => [...cryptoQueryKeys.all, "fiat-config"] as const,
   balances: (userId: string) =>
     [...cryptoQueryKeys.all, "balances", userId] as const,
   balanceSnapshot: (userId: string) =>

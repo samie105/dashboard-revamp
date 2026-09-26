@@ -152,6 +152,200 @@ export interface CryptoServiceHealth {
   dependencies?: Record<string, string>
 }
 
+export type FiatCapabilityStatus =
+  | "disabled"
+  | "blocked"
+  | "discovery_only"
+  | "available"
+  | "unavailable"
+
+export interface FiatProviderReadiness {
+  provider: "onswitch" | "bridge"
+  environment: "sandbox" | "production"
+  baseUrl: string
+  enabled: boolean
+  keyConfigured: boolean
+  configured: boolean
+  keyEnvironmentValid: boolean
+  accountApproved: boolean
+  webhookConfigured: boolean
+  complianceApproved: boolean
+  discoveryAvailable: boolean
+  operationAvailable: boolean
+  blockingReasons: string[]
+}
+
+export interface FiatCapabilitySnapshot {
+  generatedAt: string
+  cacheExpiresAt: string
+  environment: "sandbox" | "production"
+  enabled: boolean
+  availability: "disabled" | "blocked" | "discovery_only" | "available"
+  rollout: { allowlisted: boolean }
+  readiness: {
+    environment: "sandbox" | "production"
+    featureEnabled: boolean
+    productionApproved: boolean
+    complianceApproved: boolean
+    ready: boolean
+    blockingReasons: string[]
+    providers: {
+      onswitch: FiatProviderReadiness
+      bridge: FiatProviderReadiness
+    }
+  }
+  providers: {
+    onswitch: {
+      status: FiatCapabilityStatus
+      directions: {
+        onrampEnabled: boolean
+        offrampEnabled: boolean
+      }
+      coverage: Array<{
+        countryCode: string
+        currencyCode: string
+        channels: string[]
+        directions: Array<"onramp" | "offramp">
+        enabled: boolean
+        settlementCurrency?: string
+        countryName?: string
+      }>
+      assets: Array<{
+        providerAssetId: string
+        symbol: string
+        decimals?: number
+        chain: string
+        address?: string
+        onrampSupported: boolean
+        offrampSupported: boolean
+      }>
+      lastFetchedAt?: string
+      error?: string
+    }
+    bridge: {
+      status: FiatCapabilityStatus
+      routes: Array<{
+        id: string
+        provider: "bridge"
+        direction: "onramp" | "offramp"
+        fiatCurrency: "USD"
+        paymentRail: string
+        accountType: "virtual_account" | "external_bank_account" | "liquidation_address"
+        requiresCustomerKyc: boolean
+        requiresOwnedExternalAccount: boolean
+        status: FiatCapabilityStatus
+        notes: string[]
+      }>
+      account: {
+        customerRequired: true
+        kycRequired: true
+        supportedFiat: ["USD"]
+        virtualAccountsEnabled: boolean
+        withdrawalsEnabled: boolean
+        liquidationEnabled: boolean
+      }
+    }
+  }
+  assetRoutes: Array<{
+    provider: "onswitch"
+    providerAssetId: string
+    symbol: string
+    decimals?: number
+    providerChain: string
+    providerAddress?: string
+    localNetworkId?: string
+    walletReady: boolean
+    status: "wallet_ready" | "network_disabled" | "wallet_capability_missing" | "unsupported_network"
+    onrampSupported: boolean
+    offrampSupported: boolean
+  }>
+}
+
+export interface FiatQuote {
+  id: string
+  provider: "onswitch" | "bridge"
+  direction: "onramp" | "offramp"
+  country: string
+  currency: string
+  channel: string
+  exactOutput?: boolean
+  sourceAmount: string
+  sourceCurrency: string
+  destinationAmount: string
+  destinationCurrency: string
+  asset: string
+  network: string
+  providerRate?: string
+  providerFee?: string
+  worldstreetFee?: string
+  expectedSettlementSeconds?: number
+  expiresAt: string
+  state: "active" | "accepted" | "expired" | "superseded" | string
+  acceptedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FiatOrder {
+  id: string
+  publicReference: string
+  provider: "onswitch" | "bridge"
+  direction: "onramp" | "offramp"
+  country: string
+  currency: string
+  channel: string
+  asset: string
+  network: string
+  beneficiaryId?: string
+  quoteId?: string
+  localCryptoIntentId?: string
+  transactionRecordId?: string
+  expectedDepositAmount?: string
+  observedDepositAmount?: string
+  observedDepositAsset?: string
+  observedDepositNetwork?: string
+  observedDepositTxHash?: string
+  providerStatus?: string
+  state: string
+  providerDisplay?: Record<string, unknown>
+  cryptoIntent?: CryptoTransactionIntent
+  failureReason?: string
+  reviewReason?: string
+  refundReason?: string
+  expiresAt?: string
+  completedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FiatVirtualAccount {
+  id: string
+  provider: "bridge"
+  walletId: string
+  networkId: string
+  asset: string
+  destinationAddress: string
+  status: string
+  providerStatus?: string
+  depositInstructions?: Record<string, unknown>
+  lastSyncedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FiatVirtualAccountActivity {
+  id: string
+  virtualAccountId: string
+  providerStatus: string
+  amount: string
+  currency: string
+  destinationTxHash?: string
+  sourcePaymentRail?: string
+  occurredAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type CryptoWalletPackage = Record<string, unknown>
 
 export interface CryptoWalletPackageDocument extends CryptoWalletPackage {

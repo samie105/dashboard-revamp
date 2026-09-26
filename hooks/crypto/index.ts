@@ -1,4 +1,5 @@
 export { useCryptoWallet } from "./useCryptoWallet"
 export { useCryptoNetworks } from "./useCryptoNetworks"
+export { useFiatConfig } from "./useFiatConfig"
 export { useModernWalletSetup } from "./useModernWalletSetup"
 export { useWalletSecurity } from "./useWalletSecurity"

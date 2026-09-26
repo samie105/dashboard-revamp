@@ -40,6 +40,11 @@ import type {
   RecoveryStatus,
   SponsorshipConfig,
   SponsorshipOperation,
+  FiatCapabilitySnapshot,
+  FiatQuote,
+  FiatOrder,
+  FiatVirtualAccountActivity,
+  FiatVirtualAccount,
 } from "./types"
 
 type RequestOptions = {
@@ -47,6 +52,7 @@ type RequestOptions = {
   walletSessionToken?: string
   unwrap?: boolean
   signal?: AbortSignal
+  idempotencyKey?: string
   /** Internal: set once a request has already been retried after a 401. */
   _retried?: boolean
 }
@@ -124,6 +130,73 @@ export class CryptoBackendClient {
 
   async listNetworks(signal?: AbortSignal): Promise<CryptoNetwork[]> {
     return this.request<CryptoNetwork[]>("/networks", {}, { signal })
+  }
+
+  async getFiatConfig(signal?: AbortSignal): Promise<FiatCapabilitySnapshot> {
+    return this.request<FiatCapabilitySnapshot>("/fiat/config", {}, { signal })
+  }
+
+  async createFiatQuote(input: {
+    provider: "onswitch"
+    direction: "onramp" | "offramp"
+    country: string
+    currency?: string
+    channel?: string
+    amount: string
+    asset: string
+    network: string
+    exactOutput?: boolean
+  }, idempotencyKey: string, signal?: AbortSignal): Promise<FiatQuote> {
+    return this.request<FiatQuote>("/fiat/quotes", { method: "POST", body: JSON.stringify(input) }, { signal, idempotencyKey })
+  }
+
+  async getFiatQuote(quoteId: string, signal?: AbortSignal): Promise<FiatQuote> {
+    return this.request<FiatQuote>(`/fiat/quotes/${encodeURIComponent(quoteId)}`, {}, { signal })
+  }
+
+  async createFiatOrder(input: {
+    provider: "onswitch"
+    walletId: string
+    quoteId: string
+    beneficiaryId?: string
+  } | {
+    provider: "bridge"
+    walletId: string
+    networkId: string
+    asset: string
+    amount: string
+    beneficiaryId: string
+    channel: "ach" | "ach_same_day" | "wire" | "fednow"
+  }, idempotencyKey: string, signal?: AbortSignal): Promise<FiatOrder> {
+    return this.request<FiatOrder>("/fiat/orders", { method: "POST", body: JSON.stringify(input) }, { signal, idempotencyKey })
+  }
+
+  async listFiatOrders(limit = 50, signal?: AbortSignal): Promise<FiatOrder[]> {
+    return this.request<FiatOrder[]>(`/fiat/orders?limit=${encodeURIComponent(String(limit))}`, {}, { signal })
+  }
+
+  async getFiatOrder(orderId: string, signal?: AbortSignal): Promise<FiatOrder> {
+    return this.request<FiatOrder>(`/fiat/orders/${encodeURIComponent(orderId)}`, {}, { signal })
+  }
+
+  async confirmFiatOrder(orderId: string, transactionHash: string, idempotencyKey: string, signal?: AbortSignal): Promise<FiatOrder> {
+    return this.request<FiatOrder>(`/fiat/orders/${encodeURIComponent(orderId)}/confirm`, { method: "POST", body: JSON.stringify({ transactionHash }) }, { signal, idempotencyKey })
+  }
+
+  async createBridgeVirtualAccount(input: { walletId: string; networkId: string; asset?: string }, idempotencyKey: string, signal?: AbortSignal): Promise<FiatVirtualAccount> {
+    return this.request<FiatVirtualAccount>("/fiat/bridge/virtual-accounts", { method: "POST", body: JSON.stringify(input) }, { signal, idempotencyKey })
+  }
+
+  async listBridgeVirtualAccounts(signal?: AbortSignal): Promise<FiatVirtualAccount[]> {
+    return this.request<FiatVirtualAccount[]>("/fiat/bridge/virtual-accounts", {}, { signal })
+  }
+
+  async getBridgeVirtualAccount(accountId: string, signal?: AbortSignal): Promise<FiatVirtualAccount> {
+    return this.request<FiatVirtualAccount>(`/fiat/bridge/virtual-accounts/${encodeURIComponent(accountId)}`, {}, { signal })
+  }
+
+  async listBridgeVirtualAccountActivity(accountId: string, limit = 100, signal?: AbortSignal): Promise<FiatVirtualAccountActivity[]> {
+    return this.request<FiatVirtualAccountActivity[]>(`/fiat/bridge/virtual-accounts/${encodeURIComponent(accountId)}/activity?limit=${encodeURIComponent(String(limit))}`, {}, { signal })
   }
 
   async listBalances(
@@ -1015,6 +1088,8 @@ export class CryptoBackendClient {
       headers.set("x-wallet-authorization", options.walletAuthorizationToken)
     if (options.walletSessionToken)
       headers.set("x-wallet-session-token", options.walletSessionToken)
+    if (options.idempotencyKey)
+      headers.set("idempotency-key", options.idempotencyKey)
 
     const endpoint = `${this.basePath}${path}`
     let response: Response
