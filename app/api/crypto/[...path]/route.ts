@@ -23,6 +23,9 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^sponsorship\/config$/,
     /^sponsorship\/operations\/[^/]+$/,
     /^fiat\/config$/,
+    /^fiat\/compliance$/, // CP2 (guide §7 GET /fiat/compliance)
+    /^fiat\/institutions$/, // CP2 (guide §8 GET /fiat/institutions)
+    /^fiat\/beneficiaries$/, // CP2 (guide §8 GET /fiat/beneficiaries)
     /^fiat\/quotes\/[^/]+$/,
     /^fiat\/orders$/,
     /^fiat\/orders\/[^/]+$/,
@@ -79,6 +82,10 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^trading\/hyperliquid\/deposit\/intents$/,
     /^trading\/hyperliquid\/intents$/,
     /^trading\/hyperliquid\/intents\/[^/]+\/submit$/,
+    /^fiat\/compliance\/customer$/, // CP2 (guide §7 POST /fiat/compliance/customer)
+    /^fiat\/compliance\/bridge\/kyc-link$/, // CP2 (guide §7 POST /fiat/compliance/bridge/kyc-link)
+    /^fiat\/compliance\/bridge\/sync$/, // CP2 (guide §7 POST /fiat/compliance/bridge/sync)
+    /^fiat\/beneficiaries$/, // CP2 (guide §8 POST /fiat/beneficiaries)
     /^fiat\/quotes$/,
     /^fiat\/orders$/,
     /^fiat\/orders\/[^/]+\/confirm$/,
@@ -88,6 +95,12 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^launchpad\/launches\/[^/]+\/deploy$/,
     /^launchpad\/tokens\/[^/]+\/quote$/,
     /^launchpad\/tokens\/[^/]+\/trade$/,
+  ],
+  DELETE: [
+    // CP2 addition. Before this there was no DELETE key, so isAllowed
+    // returned false and every DELETE 404'd. The id segment excludes "/"
+    // and "." so "..", "." and nested paths can't be forwarded.
+    /^fiat\/beneficiaries\/[A-Za-z0-9_-]+$/, // guide §8 DELETE /fiat/beneficiaries/:beneficiaryId
   ],
 }
 

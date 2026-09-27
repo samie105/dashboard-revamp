@@ -346,6 +346,93 @@ export interface FiatVirtualAccountActivity {
   updatedAt: string
 }
 
+/**
+ * Fiat compliance customer record.
+ *
+ * Guide §7 GET /fiat/compliance illustrative response
+ * (docs/fiat-frontend-integration-guide.md lines 440-460). The provider
+ * customer id (`id`) MUST NOT be rendered in the UI (guide §7:
+ * "Never accept a customer ID from another user or expose provider
+ * customer IDs in the UI").
+ */
+export interface FiatCustomer {
+  id: string
+  provider: "onswitch" | "bridge"
+  status: string
+  country: string
+  kycStatus: string
+  tosStatus: string
+  endorsements: Record<string, string>
+  termsAcceptedAt?: string
+  lastSyncedAt?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * Bridge hosted KYC link returned by POST /fiat/compliance/bridge/kyc-link
+ * (guide §7 lines 475-497). The url MUST be validated as `https:` before
+ * being opened (guide §7 hosted KYC + CLAUDE.md fiat-ramp rules).
+ */
+export interface FiatKycLink {
+  url: string
+  tosUrl: string
+  kycStatus: string
+  tosStatus: string
+}
+
+export interface FiatKycLinkResult {
+  customer: FiatCustomer
+  kycLink: FiatKycLink
+}
+
+/**
+ * Fiat institution (bank / payment institution) discovery record.
+ *
+ * Guide §8 GET /fiat/institutions (lines 558-572): "The exact data shape
+ * is provider-controlled and can evolve, so render known fields
+ * defensively and preserve the selected provider identifier exactly
+ * when posting the beneficiary payload." Everything except `id` is
+ * optional and unknown extra fields are permitted via the index
+ * signature.
+ */
+export interface FiatInstitution {
+  id: string
+  name?: string
+  code?: string
+  country?: string
+  currency?: string
+  channel?: string
+  [key: string]: unknown
+}
+
+/**
+ * Fiat beneficiary (user-owned offramp destination).
+ *
+ * Guide §8 GET /fiat/beneficiaries (lines 578-602). A beneficiary MUST
+ * only be selectable when both `status === "verified"` and
+ * `ownershipStatus === "verified"` (guide §8, CLAUDE.md hard rules,
+ * checkpoint CP7).
+ */
+export interface FiatBeneficiary {
+  id: string
+  provider: "onswitch" | "bridge"
+  direction: "onramp" | "offramp"
+  country: string
+  currency: string
+  channel: string
+  holderType: string
+  holderName: string
+  maskedAccount: string
+  ownershipStatus: string
+  verificationMethod?: string
+  verificationReason?: string | null
+  status: string
+  verifiedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type CryptoWalletPackage = Record<string, unknown>
 
 export interface CryptoWalletPackageDocument extends CryptoWalletPackage {

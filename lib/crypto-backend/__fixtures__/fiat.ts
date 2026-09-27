@@ -22,13 +22,16 @@
  * the guide doesn't give are rendered as the literal `"..."` so nothing is
  * fabricated.
  *
- * When CP2 lands the missing types (FiatCustomer, FiatKycLink,
- * FiatBeneficiary, FiatInstitution) the local shape-only interfaces below
- * get replaced with the imported types.
+ * All fixtures are typed against lib/crypto-backend/types.ts, so a guide
+ * shape that drifts from the runtime types fails typecheck.
  */
 
 import type {
+  FiatBeneficiary,
   FiatCapabilitySnapshot,
+  FiatCustomer,
+  FiatInstitution,
+  FiatKycLinkResult,
   FiatOrder,
   FiatQuote,
   FiatVirtualAccount,
@@ -194,30 +197,8 @@ export const FIAT_CONFIG_AVAILABLE: FiatCapabilitySnapshot = {
 
 /* ── §7 Compliance ─────────────────────────────────────────────────────── */
 
-// CP2 replaces these with typed FiatCustomer / FiatKycLink / FiatKycLinkResult.
-interface FiatCustomerFixture {
-  id: string
-  provider: "bridge" | "onswitch"
-  status: string
-  country: string
-  kycStatus: string
-  tosStatus: string
-  endorsements: Record<string, string>
-  termsAcceptedAt?: string
-  lastSyncedAt?: string
-  createdAt?: string
-  updatedAt?: string
-}
-
-interface FiatKycLinkFixture {
-  url: string
-  tosUrl: string
-  kycStatus: string
-  tosStatus: string
-}
-
 /** Guide §7: "Illustrative response" for GET /fiat/compliance. */
-export const FIAT_COMPLIANCE_LIST: FiatCustomerFixture[] = [
+export const FIAT_COMPLIANCE_LIST: FiatCustomer[] = [
   {
     id: "66f000000000000000000001",
     provider: "bridge",
@@ -234,10 +215,7 @@ export const FIAT_COMPLIANCE_LIST: FiatCustomerFixture[] = [
 ]
 
 /** Guide §7: "Illustrative response" for POST /fiat/compliance/bridge/kyc-link. */
-export const FIAT_BRIDGE_KYC_LINK_RESPONSE: {
-  customer: FiatCustomerFixture
-  kycLink: FiatKycLinkFixture
-} = {
+export const FIAT_BRIDGE_KYC_LINK_RESPONSE: FiatKycLinkResult = {
   customer: {
     id: "66f000000000000000000001",
     provider: "bridge",
@@ -258,7 +236,7 @@ export const FIAT_BRIDGE_KYC_LINK_RESPONSE: {
 }
 
 /** Guide §7: "Illustrative response" for POST /fiat/compliance/bridge/sync. */
-export const FIAT_BRIDGE_SYNC_RESPONSE: FiatCustomerFixture = {
+export const FIAT_BRIDGE_SYNC_RESPONSE: FiatCustomer = {
   id: "66f000000000000000000001",
   provider: "bridge",
   status: "approved",
@@ -271,37 +249,8 @@ export const FIAT_BRIDGE_SYNC_RESPONSE: FiatCustomerFixture = {
 
 /* ── §8 Institutions and beneficiaries ─────────────────────────────────── */
 
-// CP2 replaces these with typed FiatInstitution / FiatBeneficiary.
-interface FiatInstitutionFixture {
-  id: string
-  name: string
-  code?: string
-  country?: string
-  currency?: string
-  channel?: string
-}
-
-interface FiatBeneficiaryFixture {
-  id: string
-  provider: "onswitch" | "bridge"
-  direction: "onramp" | "offramp"
-  country: string
-  currency: string
-  channel: string
-  holderType: string
-  holderName: string
-  maskedAccount: string
-  ownershipStatus: string
-  verificationMethod?: string
-  verificationReason?: string | null
-  status: string
-  verifiedAt?: string
-  createdAt: string
-  updatedAt: string
-}
-
 /** Guide §8: "Illustrative response" for GET /fiat/institutions. */
-export const FIAT_INSTITUTIONS_NG_NGN_BANK: FiatInstitutionFixture[] = [
+export const FIAT_INSTITUTIONS_NG_NGN_BANK: FiatInstitution[] = [
   {
     id: "provider-bank-code",
     name: "Example Bank",
@@ -313,7 +262,7 @@ export const FIAT_INSTITUTIONS_NG_NGN_BANK: FiatInstitutionFixture[] = [
 ]
 
 /** Guide §8: "Illustrative response" for GET /fiat/beneficiaries. */
-export const FIAT_BENEFICIARIES_LIST: FiatBeneficiaryFixture[] = [
+export const FIAT_BENEFICIARIES_LIST: FiatBeneficiary[] = [
   {
     id: "66f000000000000000000021",
     provider: "onswitch",
@@ -760,7 +709,7 @@ export const FIAT_QUOTE_OFFRAMP: FiatQuote = (() => {
  *  fields — only documented values on existing fields are changed.
  *  Guide §7 shows no response body for POST /fiat/compliance/customer,
  *  which is why this is derived rather than verbatim. */
-export const FIAT_CUSTOMER_ONSWITCH: FiatCustomerFixture = (() => {
+export const FIAT_CUSTOMER_ONSWITCH: FiatCustomer = (() => {
   const customer = cloneJson(FIAT_COMPLIANCE_LIST[0])
   customer.provider = "onswitch"
   customer.country = "NG"

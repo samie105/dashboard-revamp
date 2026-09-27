@@ -35,4 +35,32 @@ export const cryptoQueryKeys = {
     [...cryptoQueryKeys.all, "intent", userId, intentId] as const,
   transaction: (userId: string, transactionId: string) =>
     [...cryptoQueryKeys.all, "transaction", userId, transactionId] as const,
+  fiatCompliance: (userId: string) =>
+    [...cryptoQueryKeys.all, "fiat-compliance", userId] as const,
+  fiatInstitutions: (
+    userId: string,
+    query: { country: string; currency: string; channel: string },
+  ) =>
+    [
+      ...cryptoQueryKeys.all,
+      "fiat-institutions",
+      userId,
+      query.country,
+      query.currency,
+      query.channel,
+    ] as const,
+  fiatBeneficiaries: (userId: string) =>
+    [...cryptoQueryKeys.all, "fiat-beneficiaries", userId] as const,
+  fiatQuote: (userId: string, quoteId: string) =>
+    [...cryptoQueryKeys.all, "fiat-quote", userId, quoteId] as const,
+  fiatOrders: (userId: string, limit: number) =>
+    [...cryptoQueryKeys.all, "fiat-orders", userId, limit] as const,
+  fiatOrder: (userId: string, orderId: string) =>
+    [...cryptoQueryKeys.all, "fiat-order", userId, orderId] as const,
+  fiatVirtualAccounts: (userId: string) =>
+    [...cryptoQueryKeys.all, "fiat-virtual-accounts", userId] as const,
+  fiatVirtualAccount: (userId: string, accountId: string) =>
+    [...cryptoQueryKeys.all, "fiat-virtual-account", userId, accountId] as const,
+  fiatVirtualAccountActivity: (userId: string, accountId: string) =>
+    [...cryptoQueryKeys.all, "fiat-virtual-account-activity", userId, accountId] as const,
 }

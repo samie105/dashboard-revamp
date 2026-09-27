@@ -1,7 +1,6 @@
 import { CryptoBackendError } from "./errors"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import { FIAT_MOCKS_ENABLED } from "@/lib/fiat-mocks"
-import { devMockFetch } from "@/lib/dev-mock-fetch"
 import type {
   CryptoBalance,
   CryptoBalanceSnapshot,
@@ -41,7 +40,11 @@ import type {
   RecoveryStatus,
   SponsorshipConfig,
   SponsorshipOperation,
+  FiatBeneficiary,
   FiatCapabilitySnapshot,
+  FiatCustomer,
+  FiatInstitution,
+  FiatKycLinkResult,
   FiatQuote,
   FiatOrder,
   FiatVirtualAccountActivity,
@@ -72,14 +75,51 @@ const DEFAULT_BASE_PATH = "/api/crypto"
 
 export class CryptoBackendClient {
   private readonly basePath: string
-  private readonly fetcher: typeof fetch
+  private fetcher: typeof fetch
 
   constructor(options: { basePath?: string; fetcher?: typeof fetch } = {}) {
     this.basePath = (options.basePath ?? DEFAULT_BASE_PATH).replace(/\/$/, "")
     // Window.fetch is an invocation-sensitive method in some browsers. Keep
     // the default client safe when it is stored and called later as a function.
+    // The dev-mock fetcher is loaded lazily below in ensureFetcher() so the
+    // mock modules (fixtures, responder, wallet state) don't ship to prod.
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+    this.fetcherInjected = options.fetcher !== undefined
   }
+
+  /**
+   * Return the fetcher to use for the next request. On first call this
+   * kicks off the (possibly async) dev-mock resolution and CACHES THE
+   * PROMISE — concurrent callers await the same one, so no request slips
+   * past to the real fetch while the mock module is still loading.
+   *
+   * An injected fetcher (constructor `options.fetcher`) is never
+   * replaced; tests pass their own fetch and get it back verbatim.
+   */
+  private ensureFetcher(): Promise<typeof fetch> {
+    if (!this.fetcherResolution) {
+      this.fetcherResolution = this.resolveFetcher()
+    }
+    return this.fetcherResolution
+  }
+
+  private async resolveFetcher(): Promise<typeof fetch> {
+    if (this.fetcherInjected) return this.fetcher
+    if (typeof window === "undefined") return this.fetcher
+    if (!DEV_AUTH_BYPASS && !FIAT_MOCKS_ENABLED) return this.fetcher
+    try {
+      const mockModule = await import("@/lib/dev-mock-fetch")
+      this.fetcher = mockModule.devMockFetch
+    } catch {
+      // Mock module failed to load — keep the real fetcher. Any dev with
+      // the flag on will see the mock not activating, which is the right
+      // failure mode compared with breaking real requests.
+    }
+    return this.fetcher
+  }
+
+  private readonly fetcherInjected: boolean
+  private fetcherResolution: Promise<typeof fetch> | undefined
 
   async getHealth(signal?: AbortSignal): Promise<CryptoServiceHealth> {
     return this.request<CryptoServiceHealth>(
@@ -135,6 +175,136 @@ export class CryptoBackendClient {
 
   async getFiatConfig(signal?: AbortSignal): Promise<FiatCapabilitySnapshot> {
     return this.request<FiatCapabilitySnapshot>("/fiat/config", {}, { signal })
+  }
+
+  /* ── §7 Compliance ─────────────────────────────────────────────── */
+
+  async getFiatCompliance(signal?: AbortSignal): Promise<FiatCustomer[]> {
+    return this.request<FiatCustomer[]>("/fiat/compliance", {}, { signal })
+  }
+
+  /**
+   * Guide §7 POST /fiat/compliance/customer — used when the integration
+   * has the required profile fields (Bridge direct creation requires a
+   * complete profile). Prefer `createBridgeKycLink` for Bridge unless
+   * the operator has explicitly approved a direct profile workflow.
+   */
+  async createFiatCustomer(
+    input: {
+      provider: "onswitch" | "bridge"
+      legalName: string
+      firstName?: string
+      lastName?: string
+      email: string
+      phone?: string
+      country: string
+      birthDate?: string
+      residentialAddress?: Record<string, string>
+    },
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<FiatCustomer> {
+    return this.request<FiatCustomer>(
+      "/fiat/compliance/customer",
+      { method: "POST", body: JSON.stringify(input) },
+      { signal, idempotencyKey },
+    )
+  }
+
+  /**
+   * Guide §7 POST /fiat/compliance/bridge/kyc-link — the normal Bridge
+   * onboarding path. Returns `{ customer, kycLink }`; the caller must
+   * validate `kycLink.url.startsWith("https:")` before opening it.
+   */
+  async createBridgeKycLink(
+    input: { legalName: string; email: string; country: string },
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<FiatKycLinkResult> {
+    return this.request<FiatKycLinkResult>(
+      "/fiat/compliance/bridge/kyc-link",
+      { method: "POST", body: JSON.stringify(input) },
+      { signal, idempotencyKey },
+    )
+  }
+
+  /**
+   * Guide §7 POST /fiat/compliance/bridge/sync — refresh the user's
+   * Bridge customer/endorsement state. No request body; no idempotency
+   * key required (guide §6.2 route table).
+   */
+  async syncBridgeCompliance(signal?: AbortSignal): Promise<FiatCustomer> {
+    return this.request<FiatCustomer>(
+      "/fiat/compliance/bridge/sync",
+      { method: "POST" },
+      { signal },
+    )
+  }
+
+  /* ── §8 Institutions and beneficiaries ─────────────────────────── */
+
+  async listFiatInstitutions(
+    query: { country: string; currency: string; channel: string },
+    signal?: AbortSignal,
+  ): Promise<FiatInstitution[]> {
+    const params = new URLSearchParams({
+      country: query.country,
+      currency: query.currency,
+      channel: query.channel,
+    })
+    return this.request<FiatInstitution[]>(
+      `/fiat/institutions?${params.toString()}`,
+      {},
+      { signal },
+    )
+  }
+
+  async listFiatBeneficiaries(signal?: AbortSignal): Promise<FiatBeneficiary[]> {
+    return this.request<FiatBeneficiary[]>("/fiat/beneficiaries", {}, { signal })
+  }
+
+  /**
+   * Guide §8 POST /fiat/beneficiaries — creates a user-owned offramp
+   * beneficiary. The provider-specific `providerPayload` MUST come from
+   * the institution's dynamic requirements; raw account details must
+   * never be logged or persisted in the browser (guide §15).
+   */
+  async createFiatBeneficiary(
+    input: {
+      provider: "onswitch" | "bridge"
+      direction: "onramp" | "offramp"
+      country: string
+      currency: string
+      channel: string
+      holderName: string
+      holderType: string
+      providerPayload: Record<string, unknown>
+    },
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<FiatBeneficiary> {
+    return this.request<FiatBeneficiary>(
+      "/fiat/beneficiaries",
+      { method: "POST", body: JSON.stringify(input) },
+      { signal, idempotencyKey },
+    )
+  }
+
+  /**
+   * Guide §8 DELETE /fiat/beneficiaries/:id — deactivates an owned
+   * beneficiary. Guide gives no example response body; the client
+   * returns whatever `data` field the envelope carries.
+   */
+  async deleteFiatBeneficiary(
+    beneficiaryId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    return this.request<unknown>(
+      `/fiat/beneficiaries/${encodeURIComponent(beneficiaryId)}`,
+      { method: "DELETE" },
+      { signal, idempotencyKey },
+    )
   }
 
   async createFiatQuote(input: {
@@ -1093,9 +1263,10 @@ export class CryptoBackendClient {
       headers.set("idempotency-key", options.idempotencyKey)
 
     const endpoint = `${this.basePath}${path}`
+    const fetcher = await this.ensureFetcher()
     let response: Response
     try {
-      response = await this.fetcher(endpoint, {
+      response = await fetcher(endpoint, {
         ...init,
         credentials: "include",
         headers,
@@ -1170,7 +1341,8 @@ export class CryptoBackendClient {
         response.status,
         payload.error?.code ?? "CRYPTO_API_ERROR",
         payload.error?.details,
-        requestId
+        requestId,
+        response.headers.get("retry-after") ?? undefined
       )
     }
 
@@ -1179,17 +1351,9 @@ export class CryptoBackendClient {
   }
 }
 
-// Dev-only bypass (see lib/dev-auth-bypass.ts): answer from the in-browser
-// mock instead of the proxy route. The mock is stateful and the route is
-// serverless once deployed, so a round trip could — and did — land on an
-// instance that had never heard of the wallet. Keeping the state in the tab
-// that owns it removes the failure mode rather than narrowing it.
-//
-// FIAT_MOCKS_ENABLED (see lib/fiat-mocks.ts) selects the same in-browser
-// fetcher, but the fetcher only intercepts /fiat/* under that flag — every
-// other path passes through to the real proxy. Both flags are dev-only.
-export const cryptoBackendClient = new CryptoBackendClient(
-  (DEV_AUTH_BYPASS || FIAT_MOCKS_ENABLED) && typeof window !== "undefined"
-    ? { fetcher: devMockFetch }
-    : {}
-)
+// The dev-mock fetcher is selected lazily inside CryptoBackendClient's
+// ensureFetcher() when DEV_AUTH_BYPASS or FIAT_MOCKS_ENABLED is on, so its
+// modules (fixtures, responder, wallet state) never ship in a production
+// bundle. Both flags compile to `false` under NODE_ENV=production and the
+// dynamic import is guarded on them.
+export const cryptoBackendClient = new CryptoBackendClient()
