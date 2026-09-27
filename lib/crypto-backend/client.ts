@@ -191,15 +191,17 @@ export class CryptoBackendClient {
    */
   async createFiatCustomer(
     input: {
+      // Guide §7 lines 506-520 show these fields but not which are
+      // required (open question 21), so only `provider` is mandatory here.
       provider: "onswitch" | "bridge"
-      legalName: string
+      legalName?: string
       firstName?: string
       lastName?: string
-      email: string
+      email?: string
       phone?: string
-      country: string
+      country?: string
       birthDate?: string
-      residentialAddress?: Record<string, string>
+      residentialAddress?: { country?: string; city?: string }
     },
     idempotencyKey: string,
     signal?: AbortSignal,

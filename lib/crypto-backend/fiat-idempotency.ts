@@ -198,6 +198,37 @@ export const fiatIdempotencyStore: FiatIdempotencyStore = {
 }
 
 /**
+ * A stable, non-reversible fingerprint of a request body, for use as an
+ * idempotency identity field when the body holds personal data (name,
+ * email, phone). The store persists identities in sessionStorage, so this
+ * keeps PII out of storage while an exact retry of the same body still gets
+ * the same key. FNV-1a 64-bit over canonical JSON: collision-resistant
+ * enough to tell one user's form submissions apart, not a security hash.
+ */
+export function fiatFingerprint(value: unknown): string {
+  const text = JSON.stringify(canonicalValue(value))
+  let hash = BigInt("0xcbf29ce484222325")
+  const prime = BigInt("0x100000001b3")
+  const mask = BigInt("0xffffffffffffffff")
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= BigInt(text.charCodeAt(i))
+    hash = (hash * prime) & mask
+  }
+  return hash.toString(16).padStart(16, "0")
+}
+
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalValue)
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>)
+      .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+      .sort()
+      .map((key) => [key, canonicalValue((value as Record<string, unknown>)[key])])
+  }
+  return value
+}
+
+/**
  * Whether a failed mutation's outcome is definitive (the key can be
  * released) or uncertain (the key MUST be kept for an exact retry).
  *
