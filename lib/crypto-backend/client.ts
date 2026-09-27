@@ -1,5 +1,6 @@
 import { CryptoBackendError } from "./errors"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+import { FIAT_MOCKS_ENABLED } from "@/lib/fiat-mocks"
 import { devMockFetch } from "@/lib/dev-mock-fetch"
 import type {
   CryptoBalance,
@@ -1183,8 +1184,12 @@ export class CryptoBackendClient {
 // serverless once deployed, so a round trip could — and did — land on an
 // instance that had never heard of the wallet. Keeping the state in the tab
 // that owns it removes the failure mode rather than narrowing it.
+//
+// FIAT_MOCKS_ENABLED (see lib/fiat-mocks.ts) selects the same in-browser
+// fetcher, but the fetcher only intercepts /fiat/* under that flag — every
+// other path passes through to the real proxy. Both flags are dev-only.
 export const cryptoBackendClient = new CryptoBackendClient(
-  DEV_AUTH_BYPASS && typeof window !== "undefined"
+  (DEV_AUTH_BYPASS || FIAT_MOCKS_ENABLED) && typeof window !== "undefined"
     ? { fetcher: devMockFetch }
     : {}
 )

@@ -25,6 +25,9 @@
  * the path. So the same dispatcher serves both callers.
  */
 
+import { DEV_AUTH_BYPASS } from "./dev-auth-bypass"
+import { FIAT_MOCKS_ENABLED } from "./fiat-mocks"
+import { respondFromFiatFixtures } from "./crypto-backend/dev-mock-fiat-responder"
 import {
   devMockCryptoApiResponse,
   persistMockCryptoState,
@@ -45,17 +48,28 @@ export const devMockFetch: typeof fetch = async (input, init) => {
   }
 
   const path = pathname.slice(PROXY_PREFIX.length)
-  const response = await devMockCryptoApiResponse(request, path)
 
-  // Persist AFTER the handler, so whatever it mutated is what gets written.
-  // Cheap enough to do unconditionally: the payload is a few KB and this runs
-  // once per API call, not per frame.
-  persistMockCryptoState()
+  if (DEV_AUTH_BYPASS) {
+    const response = await devMockCryptoApiResponse(request, path)
+    // Persist AFTER the handler, so whatever it mutated is what gets
+    // written. Cheap enough to do unconditionally: the payload is a few KB
+    // and this runs once per API call, not per frame.
+    persistMockCryptoState()
+    // A null response means the mock doesn't implement this path. Answering
+    // 404 matches what the proxy route does with an unlisted path, so the
+    // client's error handling is identical in both places.
+    return response ?? new Response(null, { status: 404 })
+  }
 
-  // A null response means the mock doesn't implement this path. Answering 404
-  // matches what the proxy route does with an unlisted path, so the client's
-  // error handling is identical in both places.
-  return response ?? new Response(null, { status: 404 })
+  // FIAT_MOCKS_ENABLED (no full DEV_AUTH_BYPASS): only fiat/* is mocked.
+  // Anything else passes through to the real proxy so a developer running
+  // against real Clerk keeps normal behaviour for wallet/trade/etc.
+  if (FIAT_MOCKS_ENABLED && path.startsWith("fiat/")) {
+    const response = await respondFromFiatFixtures(request, path)
+    if (response) return response
+  }
+
+  return fetch(input as RequestInfo, init)
 }
 
 /**

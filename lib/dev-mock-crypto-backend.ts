@@ -31,6 +31,7 @@
 import { Keypair, PublicKey, SystemProgram, TransactionMessage, VersionedTransaction } from "@solana/web3.js"
 
 import { DEV_BYPASS_USER } from "./dev-auth-bypass"
+import { respondFromFiatFixtures } from "./crypto-backend/dev-mock-fiat-responder"
 
 // ── Envelope helpers ────────────────────────────────────────────────────────
 
@@ -586,6 +587,16 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
   if (method === "GET" && path === "dev/reset") {
     resetMockCryptoState()
     return jsonRaw({ success: true, data: { reset: true } })
+  }
+
+  // Fiat routes are served by the shared fixture responder so the
+  // guide-shaped fixtures and lifecycle behaviour are consistent between
+  // DEV_AUTH_BYPASS and FIAT_MOCKS_ENABLED entry points. Falls through
+  // to the hand-rolled fiat handler below if the path is fiat/* but the
+  // responder doesn't cover it.
+  if (path.startsWith("fiat/")) {
+    const fiatResponse = await respondFromFiatFixtures(req, path)
+    if (fiatResponse) return fiatResponse
   }
 
   if (path === "auth/me") return json({ userId: DEV_BYPASS_USER.userId, walletId: state.wallet?.id ?? null })
