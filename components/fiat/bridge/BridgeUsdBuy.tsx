@@ -57,43 +57,55 @@ export function BridgeUsdBuy({
   const compliance = useFiatCompliance()
   const kycRequired = isBridgeKycRequired(config, "virtual-account")
   const hasBridgeRecord = Boolean(complianceRecordFor(compliance.data, "bridge"))
-  const [showKyc, setShowKyc] = React.useState<boolean | null>(null)
-  // Open by default only while there's no Bridge record to show; this is
-  // layout, not a gate: the section is always reachable.
-  const kycOpen = showKyc ?? !hasBridgeRecord
+  const [kycOpen, setKycOpen] = React.useState(false)
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <RouteStrip
         direction="in"
         from={{ label: "Your bank", sub: "USD" }}
         to={{ label: "Worldstreet wallet", sub: "USDC" }}
       />
 
-      {kycRequired && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <Eyebrow>Identity verification</Eyebrow>
-            <Button variant="ghost" size="xs" onClick={() => setShowKyc(!kycOpen)}>
-              {kycOpen ? "Hide" : "Show"}
-            </Button>
-          </div>
-          {kycOpen && <BridgeKycPanel kycRequired />}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(20rem,0.88fr)] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-4">
+          {accounts.isLoading ? (
+            <FlowSkeleton />
+          ) : accounts.error && !accounts.data ? (
+            <>
+              <FiatErrorDetail error={describeFiatError(accounts.error)} />
+              <FlowCta label="Try again" onClick={() => void accounts.refetch()} />
+            </>
+          ) : accounts.data && accounts.data.length > 0 ? (
+            accounts.data.map((account) => <UsdAccount key={account.id} account={account} />)
+          ) : (
+            <CreateUsdAccount config={config} walletId={walletId} walletNetworkIds={walletNetworkIds} walletNetworkAddresses={walletNetworkAddresses} />
+          )}
         </div>
-      )}
 
-      {accounts.isLoading ? (
-        <FlowSkeleton />
-      ) : accounts.error && !accounts.data ? (
-        <>
-          <FiatErrorDetail error={describeFiatError(accounts.error)} />
-          <FlowCta label="Try again" onClick={() => void accounts.refetch()} />
-        </>
-      ) : accounts.data && accounts.data.length > 0 ? (
-        accounts.data.map((account) => <UsdAccount key={account.id} account={account} />)
-      ) : (
-        <CreateUsdAccount config={config} walletId={walletId} walletNetworkIds={walletNetworkIds} walletNetworkAddresses={walletNetworkAddresses} />
-      )}
+        {kycRequired && (
+          <aside className="rounded-2xl bg-surface-sunken/45 p-4 ring-1 ring-border/25">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <Eyebrow>Bridge identity check</Eyebrow>
+                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                  {hasBridgeRecord
+                    ? "Your Bridge record is on file. Open this section to continue or refresh verification."
+                    : "Required before Bridge can issue USD bank details. OnSwitch local-currency buying does not use this check."}
+                </p>
+              </div>
+              <Button variant="ghost" size="xs" onClick={() => setKycOpen((open) => !open)}>
+                {kycOpen ? "Hide" : hasBridgeRecord ? "Review" : "Start"}
+              </Button>
+            </div>
+            {kycOpen && (
+              <div className="mt-4 border-t border-border/50 pt-4">
+                <BridgeKycPanel kycRequired />
+              </div>
+            )}
+          </aside>
+        )}
+      </div>
     </div>
   )
 }

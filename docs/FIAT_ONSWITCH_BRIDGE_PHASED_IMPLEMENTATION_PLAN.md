@@ -1,6 +1,6 @@
 # OnSwitch + Bridge Fiat Ramp: Phased Implementation Plan
 
-**Audit date:** 2026-09-28  
+**Audit date:** 2026-09-29  
 **Repositories reviewed:** `dashboard-revamp` and `worldstreet-crypto-backend`  
 **Scope:** OnSwitch African fiat rails and Bridge USD rails  
 **Security model:** authenticated users may operate only on their own WorldStreet wallet, customer profile, beneficiary, external account, and virtual account  
@@ -22,8 +22,8 @@ The backend is ahead of the frontend, but the core frontend surfaces are now wir
 | OnSwitch coverage/assets | Implemented with runtime discovery and wallet compatibility mapping | Dynamic corridor/asset/channel selectors implemented | Provider account approval, live coverage verification, and end-to-end tests |
 | Bridge USD capabilities | Implemented in `/fiat/config`, including supported wallet networks/default and explicit withdrawal channels | USD rail is rendered when capability is available | Verify capability-cache expiry and a controlled live account |
 | Durable domain/idempotency | Implemented | Client sends idempotency keys and tests retry behavior | Controlled provider fixtures, webhook registration, operational reconciliation checks |
-| Compliance/KYC | Bridge KYC link/sync and OnSwitch local profile routes implemented | Bridge KYC panel and OnSwitch profile form implemented | Resolve approval policy and verify actual provider onboarding |
-| OnSwitch African onramp | Quote, order, provider instructions, status, webhooks, and wallet destination intent implemented | Buy flow released by default; explicit `legacy` remains the rollback | Resolve customer-profile gating mismatch and complete live canary |
+| Compliance/KYC | Bridge KYC link/sync and OnSwitch local profile routes implemented | Bridge KYC panel is scoped to USD; OnSwitch profile form is scoped to local payout/offramp | Verify actual provider onboarding and retain off-ramp account-owner approval |
+| OnSwitch African onramp | Quote, order, provider instructions, status, webhooks, and wallet destination intent implemented | Buy flow released by default; no Bridge-style KYC/profile gate; explicit `legacy` remains the rollback | Complete live corridor and payment canary |
 | Bridge USD onramp | Virtual account create/list/get/activity and reconciliation implemented; capability exposes supported networks/default | Account display/activity polling and owned-address/canonical-USDC readiness gate implemented | Test a real deposit path and verify Bridge sandbox settlement/reconciliation |
 | OnSwitch African offramp | Quote, order, beneficiary, crypto intent, confirm, status, and webhook paths implemented | Sell flow released by default; explicit `legacy` remains the rollback | Provider approval and controlled live payout verification |
 | Bridge USD withdrawal | Provider transfer, own-account checks, crypto intent, status, and webhook paths implemented | Capability-driven USD sell/sign/poll flow implemented; beneficiary creation remains intentionally out of scope | Resolve/approve beneficiary schema and ownership evidence, then run controlled payout verification |
@@ -210,7 +210,7 @@ Confirm the product and operational boundaries before more money-movement UI is 
 
 Record written answers for:
 
-1. OnSwitch profile requirement before quote/order.
+1. ANSWERED (2026-09-29): OnSwitch onramp quote/order does not require an approved customer/KYC profile; offramps and beneficiary creation still require approved account-owner controls.
 2. Bridge beneficiary create schema and US ACH ownership evidence.
 3. Bridge withdrawal amount/fee semantics.
 4. Terminal state/reason copy for `manual_review`, `blocked`, `reversed`, `refund_in_flight`, `refunded`, and `refund_failed`.
@@ -843,7 +843,7 @@ The frontend must not be the only place where rollback occurs.
 ### Product/compliance/operations owner
 
 - approve supported countries/corridors/channels and limits;
-- approve OnSwitch profile/KYC requirement;
+- approve OnSwitch off-ramp account-owner/compliance controls;
 - approve Bridge USD user eligibility and withdrawal countries;
 - approve own-account evidence for US ACH and mobile money;
 - approve fees, settlement copy, refund policy, and manual-review SLAs;

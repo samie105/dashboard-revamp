@@ -35,7 +35,7 @@ Check yourself (no need to ask):
 Still open:
 - [ ] ⛔ Bridge beneficiary (US bank account) create payload
 - [x] Source of the canonical USDC contract address for Bridge withdrawals — backend resolves it from the shared `src/swap/assets.ts` registry; frontend sends only `asset: "USDC"`
-- [x] OnSwitch profile prerequisite resolved from the current backend contract: an owned customer with `status: "approved"` is required before local quote/order; frontend mirrors it as a UX guard and backend enforces it again
+- [x] OnSwitch profile policy resolved: local Buy/onramp does not require an approved customer/KYC profile; local Sell/offramp and beneficiary creation still require approved account-owner controls
 
 ## 2. Foundations (CP2), guide §3–6, §12
 
@@ -87,7 +87,7 @@ KYC (CP4):
 - [x] OnSwitch profile submission obeys the single backend `FIAT_RAMP_ENABLED` kill switch and provider/compliance approvals
 - [x] Bridge remains backend-authoritative: KYC need comes from `/fiat/config`, and the virtual-account request is refused safely when the user is not approved
 - [x] **Tests:** pending → approved via sync; non-https URL rejected; idempotency key sent; OnSwitch UX approval guard; profile mutation mock transitions into the approved record; Bridge 403 refusal stops with verification guidance and isn't retried
-- [x] Mount the panels: required OnSwitch profile setup in local Buy; Bridge KYC above the USD account (collapsible, never a gate)
+- [x] Mount the panels: Bridge KYC above the USD account (collapsible); keep the OnSwitch profile form on local Sell/offramp only
 
 Bridge USD onramp (CP6):
 - [x] Gated on the Bridge virtual account route being available (USD tab shown only then; local currency is the default tab)

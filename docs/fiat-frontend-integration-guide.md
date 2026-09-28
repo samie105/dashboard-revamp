@@ -696,9 +696,16 @@ beneficiary and does not make an in-flight order disappear.
 DELETE /api/crypto/fiat/beneficiaries/66f000000000000000000021
 Idempotency-Key: <new-uuid>
 9. OnSwitch quote and order flow
-Before the local Buy flow requests a quote, ensure the signed-in user has an
-approved OnSwitch customer record as described in §7. A missing or pending
-record is a setup/review state, not a reason to retry the quote request.
+The local Buy flow does not require a Bridge-style KYC link or an approved
+OnSwitch customer profile. OnSwitch's documented onramp contract accepts the
+local corridor, amount, stablecoin asset, and the signed-in user's owned wallet
+as the beneficiary. The backend still applies the global fiat kill switch,
+provider readiness/compliance gates, wallet ownership checks, provider AML or
+transaction decisions, and all idempotency/error handling.
+
+The approved OnSwitch customer/profile gate remains on local Sell/offramp
+flows, because those flows pay out to a bank or mobile-money beneficiary and
+must verify account ownership.
 
 9.1 Create an OnSwitch quote
 POST /fiat/quotes supports OnSwitch only. Use a coverage item and a

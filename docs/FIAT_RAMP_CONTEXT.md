@@ -206,10 +206,10 @@ addresses.
    (`supportedNetworks` + `defaultNetworkId`), not a frontend constant.
 5. The Bridge KYC return flow: redirect URL? new tab or popup? when to call `/sync`?
 6. What happens to Flutterwave, existing fiat balances and in-flight payments.
-7. ANSWERED (2026-09-28): the current backend requires an approved owned
-   OnSwitch customer before an onramp quote or order. The frontend mirrors the
-   status only to prevent a predictable failed request; the backend remains
-   the final enforcement point.
+7. ANSWERED (2026-09-29): OnSwitch onramp quote/order does not require an
+   approved customer profile or Bridge-style hosted KYC. The signed-in user's
+   owned wallet is the onramp beneficiary. OnSwitch offramps and beneficiary
+   creation still require an approved customer/account-owner profile.
 8. Fees and amounts to show for a Bridge withdrawal (there is no quote step).
 9. Wrong-amount, late or duplicate bank deposits: refund behaviour and UI copy.
 10. The formal list of terminal order states. The guide never lists them:

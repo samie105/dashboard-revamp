@@ -26,14 +26,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/components/auth-provider"
 import { SectionMessage } from "@/components/crypto/primitives"
 import { BridgeUsdBuy } from "@/components/fiat/bridge/BridgeUsdBuy"
-import { ComplianceStatusList } from "@/components/fiat/compliance/ComplianceStatusList"
-import { OnswitchProfileForm } from "@/components/fiat/compliance/OnswitchProfileForm"
 import { OnrampOrderScreen } from "@/components/fiat/buy/OnrampOrderScreen"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { formatCountdown } from "@/components/fiat/shared/format"
 import { refreshWalletBalances } from "@/components/fiat/shared/refreshWalletBalances"
 import { FlowTerminal, OptionRows } from "@/components/flows/flow-terminal"
-import { Button } from "@/components/ui/button"
 import {
   AmountField,
   AnnouncementBanner,
@@ -43,14 +40,12 @@ import {
   FlowHeader,
   FlowShell,
   FlowSkeleton,
-  InlineNotice,
   RouteStrip,
   UnavailablePanel,
   useStageProgress,
 } from "@/components/ui/flow"
 import { Eyebrow, PageHeader, Segmented } from "@/components/ui/system"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
-import { useFiatCompliance } from "@/hooks/crypto/useFiatCompliance"
 import { useFiatConfig } from "@/hooks/crypto/useFiatConfig"
 import { useFiatOrderPoll } from "@/hooks/crypto/useFiatOrderPoll"
 import {
@@ -60,7 +55,6 @@ import {
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
 import { buyRails, type BuyRail } from "@/lib/crypto-backend/fiat-bridge-onramp"
-import { complianceRecordFor, isProviderCustomerApproved } from "@/lib/crypto-backend/fiat-compliance"
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backend/fiat-errors"
 import {
@@ -113,7 +107,6 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   const userId = user?.userId ?? "anonymous"
   const wallet = useCryptoWalletState()
   const config = useFiatConfig()
-  const compliance = useFiatCompliance()
 
   const [orderId, setOrderId] = React.useState<string | null>(
     () => (typeof window === "undefined" ? null : readPendingFlow("fiat-buy")?.reference ?? null),
@@ -152,18 +145,6 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   // A quote only counts for the exact request it was made for; changing the
   // amount or a picker drops it and the CTA goes back to "Get a quote".
   const currentQuote = quote && sameRequest(quotedRequest, currentRequest) ? quote : null
-  const onswitchCustomer = complianceRecordFor(compliance.data, "onswitch")
-  const onswitchProfileApproved = isProviderCustomerApproved(onswitchCustomer)
-  // UX guard only: the backend independently checks the signed-in user's
-  // owned provider customer before both quote and order creation.
-  const localProfileReady = rail !== "local" || onswitchProfileApproved
-  const localProfileChecking = rail === "local" && compliance.data === undefined && !compliance.error
-  const localProfileReadError = rail === "local" && Boolean(compliance.error && !compliance.data)
-  const refreshProfileAfterProviderRefusal = (error: unknown) => {
-    if (error instanceof CryptoBackendError && (error.status === 403 || error.status === 404)) {
-      void compliance.refetch()
-    }
-  }
 
   /* ── Mutations ────────────────────────────────────────────────────── */
 
@@ -175,7 +156,6 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       setQuotedRequest(request)
     },
     onError: (error) => {
-      refreshProfileAfterProviderRefusal(error)
       if (shouldRefetchCapabilities(error)) config.refetchOnProviderError()
     },
   })
@@ -191,7 +171,6 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       setOrderId(created.id)
     },
     onError: (error) => {
-      refreshProfileAfterProviderRefusal(error)
       if (needsRequote(error) && quotedRequest) {
         // Guide lines 970-971: re-quote. The quote key was released after the
         // last success, so this is a new logical action with a new key.
@@ -231,8 +210,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     !wallet.needsSetup &&
     !wallet.error &&
     Boolean(config.data) &&
-    rails.length > 0 &&
-    localProfileReady
+    rails.length > 0
   const usingTerminal = isModal && formReady && rail === "local"
   React.useEffect(() => onInFlightChange?.(inFlight), [inFlight, onInFlightChange])
   React.useEffect(() => onCompactChange?.(!usingTerminal), [usingTerminal, onCompactChange])
@@ -258,9 +236,9 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     isModal ? (
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{content}</div>
     ) : (
-      <FlowShell>
-        <PageHeader title={TITLE} subtitle={SUBTITLE} back="/" className="mb-5" />
-        <div className="flex flex-1 flex-col gap-4">{content}</div>
+      <FlowShell className="max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+        <PageHeader title={TITLE} subtitle={SUBTITLE} back="/" className="mb-4" />
+        <div className="flex flex-1 flex-col gap-5">{content}</div>
       </FlowShell>
     )
 
@@ -363,6 +341,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
         options={rails.map((r) => ({ key: r, label: r === "local" ? "Local currency" : "USD" }))}
         value={rail}
         onChange={setRailChoice}
+        grow
       />
     ) : null
 
@@ -381,6 +360,26 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       <>
         {railTabs}
         {sandbox}
+        <div className="rounded-2xl bg-surface-sunken/55 px-4 py-3 ring-1 ring-border/25">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <Eyebrow>USD via Bridge</Eyebrow>
+              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                Bridge identity verification applies to USD bank details only. It is not an OnSwitch requirement.
+              </p>
+            </div>
+            {rails.length === 1 && (
+              <span className="shrink-0 rounded-full bg-foreground/[0.06] px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                Only live route
+              </span>
+            )}
+          </div>
+          {rails.length === 1 && (
+            <p className="mt-2 text-[12px] leading-relaxed text-subtle">
+              African local-currency buying will appear here when the backend returns a wallet-ready OnSwitch corridor for this account.
+            </p>
+          )}
+        </div>
         <BridgeUsdBuy
           config={config.data}
           walletId={wallet.data?.id}
@@ -429,31 +428,21 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       ]
     : null
 
-  const ctaLabel = localProfileChecking
-    ? "Checking OnSwitch profile…"
-    : localProfileReadError
-      ? "Retry profile check"
-      : !localProfileReady
-        ? "Complete OnSwitch profile"
-        : orderMutation.isPending
-          ? "Creating your order…"
-          : quoteMutation.isPending
-            ? "Getting a quote…"
-            : !amount.trim()
-              ? "Enter an amount"
-              : amountProblem
-                ? "Enter a valid amount"
-                : !currentQuote
-                  ? "Get a quote"
-                  : !quoteUsable
-                    ? "Get a new quote"
-                    : `Buy ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}`
+  const ctaLabel = orderMutation.isPending
+    ? "Creating your order…"
+    : quoteMutation.isPending
+      ? "Getting a quote…"
+      : !amount.trim()
+        ? "Enter an amount"
+        : amountProblem
+          ? "Enter a valid amount"
+          : !currentQuote
+            ? "Get a quote"
+            : !quoteUsable
+              ? "Get a new quote"
+              : `Buy ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}`
 
   const onCta = () => {
-    if (!localProfileReady) {
-      void compliance.refetch()
-      return
-    }
     if (!currentRequest) return
     if (!currentQuote || !quoteUsable) {
       setRequoted(false)
@@ -466,7 +455,6 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   const ctaDisabled =
     !currentRequest ||
     submitting ||
-    !localProfileReady ||
     (Boolean(currentQuote) && quoteUsable && !walletId)
 
   const route = {
@@ -493,48 +481,6 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   const channelChoices = channels.map((c) => ({ key: c, label: humanizeValue(c) }))
   const routeChoices = routes.map((o) => ({ key: o.key, label: o.symbol, sub: o.network }))
   const corridorValue = `${activeCorridor.countryCode}|${activeCorridor.currencyCode}`
-
-  const profileStatus = onswitchCustomer?.status.trim().toLowerCase()
-  const profileNeedsReview = ["rejected", "denied", "blocked", "suspended"].includes(profileStatus ?? "")
-  const profile = (
-    <div className="border-t border-border/60 pt-3">
-      <div className="flex flex-col gap-3">
-        <div>
-          <Eyebrow>OnSwitch profile</Eyebrow>
-          <p className="text-[13px] leading-relaxed text-muted-foreground">
-            Local-currency buying is available after the backend reports an approved OnSwitch profile.
-          </p>
-        </div>
-
-        {localProfileChecking && <InlineNotice>Checking your OnSwitch approval status…</InlineNotice>}
-
-        {localProfileReadError && (
-          <InlineNotice tone="error">
-            {describeFiatError(compliance.error).message}
-            {describeFiatError(compliance.error).requestId ? ` Reference: ${describeFiatError(compliance.error).requestId}` : ""}
-            <Button className="mt-2" variant="outline" size="xs" onClick={() => void compliance.refetch()}>
-              Retry profile check
-            </Button>
-          </InlineNotice>
-        )}
-
-        {onswitchCustomer && <ComplianceStatusList records={[onswitchCustomer]} />}
-
-        {compliance.data && !onswitchProfileApproved && (
-          <>
-            <InlineNotice tone={profileNeedsReview ? "error" : "warning"}>
-              {profileNeedsReview
-                ? "OnSwitch has not approved this profile. Review the details below or contact support before trying again."
-                : onswitchCustomer
-                  ? "Your OnSwitch profile is waiting for approval. You can request a local-currency quote after the approved status is synced."
-                  : "Complete your OnSwitch profile to request a local-currency quote."}
-            </InlineNotice>
-            <OnswitchProfileForm required />
-          </>
-        )}
-      </div>
-    </div>
-  )
 
   if (isModal) {
     return (
@@ -570,7 +516,6 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
                 <OptionRows options={routeChoices} value={selected.key} onChange={setRouteKey} disabled={submitting} />
               </div>
             )}
-            {profile}
           </div>
         }
         receipt={receipt}
@@ -622,7 +567,6 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       )}
       {error && <FiatErrorDetail error={error} />}
       <FlowCta label={ctaLabel} onClick={onCta} disabled={ctaDisabled} busy={submitting} />
-      {profile}
     </>,
   )
 }

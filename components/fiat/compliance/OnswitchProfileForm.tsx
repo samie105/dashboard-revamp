@@ -2,11 +2,10 @@
 
 /**
  * OnSwitch customer profile (guide §7 lines 503-524). One input per
- * documented request field, nothing else. The current backend requires an
- * approved OnSwitch customer before an onramp quote/order, so local-currency
- * Buy presents this as a required setup step. Which fields are required by
- * the provider isn't documented; backend INVALID_REQUEST fieldErrors mark
- * what's missing.
+ * documented request field, nothing else. The current backend uses this
+ * profile for local-currency payout/account-owner checks; OnSwitch onramp
+ * buying does not use this form. Which fields are required by the provider
+ * isn't documented; backend INVALID_REQUEST fieldErrors mark what's missing.
  */
 
 import * as React from "react"
@@ -65,7 +64,7 @@ export function OnswitchProfileForm({ required = false }: Props) {
     <div className="flex flex-col gap-4">
       <div className="rounded-2xl bg-surface-sunken/60 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
         {required
-          ? "An approved OnSwitch profile is required before you can request a local-currency quote or order. Submit the details below; approval is enforced by the backend."
+          ? "An approved OnSwitch profile is required before you can create a local-currency payout. Submit the details below; approval is enforced by the backend."
           : "Your profile with OnSwitch, our local-currency payment partner."}
       </div>
 
