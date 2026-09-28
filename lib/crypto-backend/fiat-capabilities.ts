@@ -33,7 +33,11 @@
  * money-moving action even when a provider looks green.
  */
 
-import type { FiatCapabilitySnapshot } from "./types"
+import type {
+  BridgeWithdrawalChannel,
+  BridgeWithdrawalChannelCapability,
+  FiatCapabilitySnapshot,
+} from "./types"
 
 /** Top-level gate — nothing money-moving is allowed unless this is true. */
 export function isMoneyMovementAvailable(
@@ -89,32 +93,57 @@ export function isBridgeVirtualAccountAvailable(
 export function isBridgeWithdrawalAvailable(
   config: FiatCapabilitySnapshot | undefined,
 ): boolean {
-  if (!isBridgeProviderAvailable(config) || !config) return false
-  const route = config.providers.bridge.routes.find(
-    (r) => r.direction === "offramp" && r.accountType === "external_bank_account",
-  )
-  if (!route || route.status !== "available") return false
-  return config.providers.bridge.account.withdrawalsEnabled === true
+  return bridgeWithdrawalChannels(config).length > 0
 }
 
 /**
- * Guide §10.3: "Only render fednow when the capability response and
- * account configuration make it available."
- *
- * The illustrative §5 config does not carry an inline `fednow` flag,
- * and the guide gives no example of where it appears. Returning
- * `false` here is the conservative default; CP8 revisits when the
- * backend team confirms the shape (open question in
- * `docs/FIAT_RAMP_CONTEXT.md`).
+ * Return only Bridge USD withdrawal channels that the backend has marked
+ * usable for this deployment. The route fallback keeps older live backend
+ * responses safe during a rolling deployment; new responses should use the
+ * explicit `withdrawalChannels` field.
  */
+export function bridgeWithdrawalChannels(
+  config: FiatCapabilitySnapshot | undefined,
+): BridgeWithdrawalChannelCapability[] {
+  if (!isBridgeProviderAvailable(config) || !config) return []
+  if (config.providers.bridge.account.withdrawalsEnabled !== true) return []
+
+  const declared = config.providers.bridge.withdrawalChannels
+  if (declared) {
+    return declared.filter(
+      (channel) => channel.status === "available" && channel.requiresOwnedExternalAccount,
+    )
+  }
+
+  const knownChannels = new Set<BridgeWithdrawalChannel>([
+    "ach",
+    "ach_same_day",
+    "wire",
+    "fednow",
+  ])
+  return config.providers.bridge.routes
+    .filter(
+      (route): route is typeof route & { paymentRail: BridgeWithdrawalChannel } =>
+        route.direction === "offramp" &&
+        route.accountType === "external_bank_account" &&
+        route.status === "available" &&
+        route.requiresOwnedExternalAccount &&
+        knownChannels.has(route.paymentRail as BridgeWithdrawalChannel),
+    )
+    .map((route) => ({
+      channel: route.paymentRail,
+      routeId: route.id,
+      paymentRail: route.paymentRail,
+      status: route.status,
+      requiresOwnedExternalAccount: true,
+    }))
+}
+
+/** Only render FedNow when the capability response explicitly enables it. */
 export function isBridgeFednowAvailable(
   config: FiatCapabilitySnapshot | undefined,
 ): boolean {
-  // TODO(CP8, open question): confirm how fednow enablement is signalled
-  // in /fiat/config with the backend team. Until then this always returns
-  // false so we can't accidentally render an unsupported channel.
-  void config
-  return false
+  return bridgeWithdrawalChannels(config).some((channel) => channel.channel === "fednow")
 }
 
 export interface OnswitchCorridorMatch {

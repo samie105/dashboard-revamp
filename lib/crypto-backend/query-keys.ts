@@ -49,6 +49,19 @@ export const cryptoQueryKeys = {
       query.currency,
       query.channel,
     ] as const,
+  fiatBeneficiaryRequirements: (
+    userId: string,
+    query: { country: string; currency: string; channel: string; holderType?: string },
+  ) =>
+    [
+      ...cryptoQueryKeys.all,
+      "fiat-beneficiary-requirements",
+      userId,
+      query.country,
+      query.currency,
+      query.channel,
+      query.holderType ?? "",
+    ] as const,
   fiatBeneficiaries: (userId: string) =>
     [...cryptoQueryKeys.all, "fiat-beneficiaries", userId] as const,
   fiatQuote: (userId: string, quoteId: string) =>

@@ -2,11 +2,11 @@
 
 /**
  * OnSwitch customer profile (guide §7 lines 503-524). One input per
- * documented request field, nothing else. It never blocks the OnSwitch
- * onramp: whether a profile is required before a quote is an open question
- * (docs/FIAT_RAMP_CONTEXT.md Q7), so the Buy flow doesn't wait on it.
- * Which fields are required isn't documented either (Q21); the backend's
- * INVALID_REQUEST fieldErrors mark what's missing.
+ * documented request field, nothing else. The current backend requires an
+ * approved OnSwitch customer before an onramp quote/order, so local-currency
+ * Buy presents this as a required setup step. Which fields are required by
+ * the provider isn't documented; backend INVALID_REQUEST fieldErrors mark
+ * what's missing.
  */
 
 import * as React from "react"
@@ -16,6 +16,10 @@ import { Input } from "@/components/ui/input"
 import { useCreateOnswitchCustomer } from "@/hooks/crypto/useFiatCompliance"
 import { invalidFieldsFrom, type OnswitchProfileInput } from "@/lib/crypto-backend/fiat-compliance"
 import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
+
+type Props = {
+  required?: boolean
+}
 
 const FIELDS: Array<{
   key: keyof OnswitchProfileInput
@@ -49,7 +53,7 @@ const EMPTY: OnswitchProfileInput = {
   addressCity: "",
 }
 
-export function OnswitchProfileForm() {
+export function OnswitchProfileForm({ required = false }: Props) {
   const create = useCreateOnswitchCustomer()
   const [form, setForm] = React.useState<OnswitchProfileInput>(EMPTY)
   const invalid = new Set(invalidFieldsFrom(create.error))
@@ -60,7 +64,9 @@ export function OnswitchProfileForm() {
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-2xl bg-surface-sunken/60 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
-        Your profile with OnSwitch, our local-currency payment partner. You can buy without filling this in.
+        {required
+          ? "An approved OnSwitch profile is required before you can request a local-currency quote or order. Submit the details below; approval is enforced by the backend."
+          : "Your profile with OnSwitch, our local-currency payment partner."}
       </div>
 
       {FIELDS.map((field) => (
@@ -85,7 +91,13 @@ export function OnswitchProfileForm() {
           {error.requestId ? ` Reference: ${error.requestId}` : ""}
         </InlineNotice>
       )}
-      {create.isSuccess && <InlineNotice className="bg-credit-chip text-credit">Profile saved.</InlineNotice>}
+      {create.isSuccess && (
+        <InlineNotice className="bg-credit-chip text-credit">
+          {create.data?.status?.toLowerCase() === "approved"
+            ? "Profile saved and approved."
+            : "Profile saved. OnSwitch approval is still pending; buying will unlock after the approved status is synced."}
+        </InlineNotice>
+      )}
 
       <FlowCta
         label={create.isPending ? "Saving…" : "Save profile"}

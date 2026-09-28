@@ -22,7 +22,7 @@ import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { refreshWalletBalances } from "@/components/fiat/shared/refreshWalletBalances"
 import { SensitiveValue } from "@/components/fiat/shared/SensitiveValue"
 import { Button } from "@/components/ui/button"
-import { DetailPanel, FlowCta, FlowSkeleton, RouteStrip } from "@/components/ui/flow"
+import { AnnouncementBanner, DetailPanel, FlowCta, FlowSkeleton, RouteStrip } from "@/components/ui/flow"
 import { Eyebrow } from "@/components/ui/system"
 import { useFiatCompliance } from "@/hooks/crypto/useFiatCompliance"
 import {
@@ -31,7 +31,8 @@ import {
 } from "@/hooks/crypto/useFiatVirtualAccountPoll"
 import { useCreateBridgeUsdAccount, useFiatVirtualAccounts } from "@/hooks/crypto/useFiatVirtualAccounts"
 import {
-  BRIDGE_VIRTUAL_ACCOUNT_NETWORK_ID,
+  bridgeVirtualAccountNetworkId,
+  bridgeVirtualAccountReadiness,
   completedActivityIds,
   depositInstructionRows,
   hasNewCompletedDelivery,
@@ -44,9 +45,13 @@ import type { FiatCapabilitySnapshot, FiatVirtualAccount } from "@/lib/crypto-ba
 export function BridgeUsdBuy({
   config,
   walletId,
+  walletNetworkIds,
+  walletNetworkAddresses,
 }: {
   config: FiatCapabilitySnapshot
   walletId: string | undefined
+  walletNetworkIds?: readonly string[]
+  walletNetworkAddresses?: Readonly<Record<string, string | undefined>>
 }) {
   const accounts = useFiatVirtualAccounts()
   const compliance = useFiatCompliance()
@@ -87,7 +92,7 @@ export function BridgeUsdBuy({
       ) : accounts.data && accounts.data.length > 0 ? (
         accounts.data.map((account) => <UsdAccount key={account.id} account={account} />)
       ) : (
-        <CreateUsdAccount walletId={walletId} />
+        <CreateUsdAccount config={config} walletId={walletId} walletNetworkIds={walletNetworkIds} walletNetworkAddresses={walletNetworkAddresses} />
       )}
     </div>
   )
@@ -180,11 +185,33 @@ function UsdAccount({ account: listed }: { account: FiatVirtualAccount }) {
 
 /* ── No account yet ───────────────────────────────────────────────────── */
 
-function CreateUsdAccount({ walletId }: { walletId: string | undefined }) {
+function CreateUsdAccount({
+  config,
+  walletId,
+  walletNetworkIds,
+  walletNetworkAddresses,
+}: {
+  config: FiatCapabilitySnapshot
+  walletId: string | undefined
+  walletNetworkIds?: readonly string[]
+  walletNetworkAddresses?: Readonly<Record<string, string | undefined>>
+}) {
   const create = useCreateBridgeUsdAccount()
-  const networkId = BRIDGE_VIRTUAL_ACCOUNT_NETWORK_ID
+  const readiness = bridgeVirtualAccountReadiness(config, walletId, walletNetworkAddresses)
+  // Retain the explicit network helper as a compatibility fallback for a
+  // rolling frontend/backend deploy where only network ids are available.
+  const networkId = readiness.networkId ?? bridgeVirtualAccountNetworkId(config, walletNetworkIds)
   const refusal = create.error ? describeBridgeVirtualAccountRefusal(create.error) : null
-  const ready = Boolean(networkId && walletId)
+  const ready = readiness.ready && Boolean(networkId && walletId)
+  const readinessCopy = readiness.reason === "capability_unavailable"
+    ? "USD deposits are not enabled for this deployment yet."
+    : readiness.reason === "wallet_unavailable"
+      ? "Set up your Worldstreet wallet before creating USD deposit details."
+      : readiness.reason === "network_unavailable"
+        ? "Bridge has not supplied a safe USDC destination network for this wallet."
+        : readiness.reason === "wallet_address_unavailable"
+          ? "Your wallet does not have an address on Bridge's selected USDC network yet."
+          : null
 
   return (
     <div className="flex flex-col gap-2">
@@ -192,13 +219,14 @@ function CreateUsdAccount({ walletId }: { walletId: string | undefined }) {
       <p className="rounded-2xl bg-surface-sunken/60 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
         Get US bank details to send USD to. What you send arrives as USDC in your Worldstreet wallet.
       </p>
+      {readinessCopy && <AnnouncementBanner title="USD deposits are unavailable" detail={readinessCopy} />}
       {refusal && <FiatErrorDetail error={refusal} />}
       <FlowCta
         label={
           create.isPending
             ? "Creating your USD account…"
-            : !networkId
-              ? "Creating a USD account isn't available yet"
+            : !ready
+              ? "USD account creation isn't available yet"
               : "Create USD account"
         }
         disabled={!ready || create.isPending}

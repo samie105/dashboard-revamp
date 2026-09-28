@@ -39,6 +39,8 @@
 import type { NextRequest } from "next/server"
 import {
   FIAT_BENEFICIARIES_LIST,
+  FIAT_BENEFICIARY_BRIDGE_USD,
+  FIAT_BENEFICIARY_REQUIREMENTS_NG_BANK,
   FIAT_BRIDGE_KYC_LINK_RESPONSE,
   FIAT_BRIDGE_SYNC_RESPONSE,
   FIAT_BRIDGE_VIRTUAL_ACCOUNT,
@@ -72,10 +74,12 @@ interface IdempotencyEntry {
 }
 const idempotencyStore = new Map<string, IdempotencyEntry>()
 const orderPollCount = new Map<string, number>()
+let onswitchCustomerCreated = false
 
 export function __resetFiatMockState(): void {
   idempotencyStore.clear()
   orderPollCount.clear()
+  onswitchCustomerCreated = false
 }
 
 /* ── Envelope + header helpers ────────────────────────────────────────── */
@@ -242,7 +246,10 @@ export async function respondFromFiatFixtures(
 
   // §7 compliance
   if (method === "GET" && path === "fiat/compliance") {
-    return envelope(cloneJson(FIAT_COMPLIANCE_LIST))
+    const records = onswitchCustomerCreated
+      ? [...cloneJson(FIAT_COMPLIANCE_LIST), cloneJson(FIAT_CUSTOMER_ONSWITCH)]
+      : cloneJson(FIAT_COMPLIANCE_LIST)
+    return envelope(records)
   }
   if (method === "POST" && path === "fiat/compliance/customer") {
     // DERIVED — not a guide example (guide §7 shows no response body for
@@ -252,6 +259,7 @@ export async function respondFromFiatFixtures(
     // record. See FIAT_CUSTOMER_ONSWITCH in ./__fixtures__/fiat.ts.
     const body = await readJson(request)
     const provider = String(body.provider ?? "bridge")
+    if (provider === "onswitch") onswitchCustomerCreated = true
     const record = provider === "onswitch"
       ? cloneJson(FIAT_CUSTOMER_ONSWITCH)
       : cloneJson(FIAT_COMPLIANCE_LIST[0])
@@ -270,8 +278,11 @@ export async function respondFromFiatFixtures(
   if (method === "GET" && path === "fiat/institutions") {
     return envelope(cloneJson(FIAT_INSTITUTIONS_NG_NGN_BANK))
   }
+  if (method === "GET" && path === "fiat/beneficiary-requirements") {
+    return envelope(cloneJson(FIAT_BENEFICIARY_REQUIREMENTS_NG_BANK))
+  }
   if (method === "GET" && path === "fiat/beneficiaries") {
-    return envelope(cloneJson(FIAT_BENEFICIARIES_LIST))
+    return envelope(cloneJson([...FIAT_BENEFICIARIES_LIST, FIAT_BENEFICIARY_BRIDGE_USD]))
   }
   if (method === "POST" && path === "fiat/beneficiaries") {
     return idempotentCreate(request, () => cloneJson(FIAT_BENEFICIARIES_LIST[0]))
@@ -307,7 +318,11 @@ export async function respondFromFiatFixtures(
     return idempotentCreate(request, () => freshenOnrampOrder(FIAT_ORDER_ONSWITCH_ONRAMP))
   }
   if (method === "GET" && path === "fiat/orders") {
-    return envelope([freshenOnrampOrder(FIAT_ORDER_ONSWITCH_ONRAMP)])
+    return envelope([
+      freshenOnrampOrder(FIAT_ORDER_ONSWITCH_ONRAMP),
+      freshenOfframpOrder(FIAT_ORDER_ONSWITCH_OFFRAMP),
+      freshenOfframpOrder(FIAT_ORDER_BRIDGE_WITHDRAWAL),
+    ])
   }
   if (method === "GET" && /^fiat\/orders\/[^/]+$/.test(path)) {
     const id = decodeURIComponent(path.split("/")[2] ?? "")

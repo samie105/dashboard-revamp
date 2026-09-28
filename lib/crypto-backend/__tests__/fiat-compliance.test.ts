@@ -18,6 +18,7 @@ import {
   finishBridgeKyc,
   invalidFieldsFrom,
   isBridgeKycRequired,
+  isProviderCustomerApproved,
   openKycLink,
   safeKycUrl,
   startBridgeKyc,
@@ -33,7 +34,8 @@ import type { FiatCapabilitySnapshot } from "@/lib/crypto-backend/types"
 
 /**
  * CP4, guide §7 (docs/fiat-frontend-integration-guide.md lines 429-541) and
- * the team decision "no frontend compliance gate" (docs/FIAT_RAMP_CONTEXT.md).
+ * Bridge remains backend-authoritative; the OnSwitch Buy form also mirrors
+ * the backend's approved-profile prerequisite as a UX guard.
  */
 
 class MemoryStorage implements Storage {
@@ -126,6 +128,12 @@ describe("compliance display never exposes the provider customer id (guide lines
     expect(complianceRecordFor(FIAT_COMPLIANCE_LIST, "onswitch")).toBeUndefined()
     expect(complianceRecordFor(undefined, "bridge")).toBeUndefined()
   })
+
+  it("uses approved status only as the OnSwitch Buy UX guard", () => {
+    expect(isProviderCustomerApproved(FIAT_COMPLIANCE_LIST[0])).toBe(true)
+    expect(isProviderCustomerApproved({ ...FIAT_COMPLIANCE_LIST[0], status: "pending" })).toBe(false)
+    expect(isProviderCustomerApproved(undefined)).toBe(false)
+  })
 })
 
 describe("whether KYC is needed comes from /fiat/config (guide §5 lines 311-343)", () => {
@@ -157,7 +165,7 @@ describe("whether KYC is needed comes from /fiat/config (guide §5 lines 311-343
   })
 })
 
-describe("no frontend compliance gate (team decision)", () => {
+describe("Bridge compliance remains backend-authoritative", () => {
   it("virtual-account availability depends only on /fiat/config, not on compliance records", () => {
     // isBridgeVirtualAccountAvailable takes the config alone; an unapproved
     // or missing Bridge record can't hide the action. The backend decides.

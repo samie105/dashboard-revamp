@@ -36,13 +36,78 @@ export function buyRails(config: FiatCapabilitySnapshot | undefined): BuyRail[] 
 /* ── Creating the virtual account (guide §10.1 lines 816-860) ─────────── */
 
 /**
- * The network to create the account on. The guide only shows
- * "ethereum-mainnet" as an example value (lines 821, 836, 899) and
- * /fiat/config lists no Bridge networks, so there is no documented source
- * yet (open question 4). Until the backend confirms one, this is null and
- * the UI keeps "Create USD account" disabled; existing accounts still work.
+ * Select the network supplied by the backend capability contract. The
+ * frontend never hardcodes Ethereum (or a token address). A response from an
+ * older backend without the new fields remains fail-closed; an explicitly
+ * null/invalid default also remains fail-closed.
  */
-export const BRIDGE_VIRTUAL_ACCOUNT_NETWORK_ID: string | null = null
+export function bridgeVirtualAccountNetworkId(
+  config: FiatCapabilitySnapshot | undefined,
+  ownedNetworkIds?: readonly string[],
+): string | null {
+  const bridge = config?.providers.bridge
+  if (!bridge) return null
+  const supported = bridge.supportedNetworks ?? []
+  const defaultId = bridge.defaultNetworkId
+  const usable = supported.filter((network) => network.asset === "USDC")
+  if (defaultId === null) return null
+  if (typeof defaultId !== "string") return usable[0]?.networkId ?? null
+
+  const defaultIsSupported = usable.some((network) => network.networkId === defaultId)
+  if (!defaultIsSupported) return null
+  if (!ownedNetworkIds || ownedNetworkIds.length === 0) return defaultId
+
+  const owned = new Set(ownedNetworkIds)
+  if (owned.has(defaultId)) return defaultId
+  return usable.find((network) => owned.has(network.networkId))?.networkId ?? null
+}
+
+export type BridgeVirtualAccountReadinessReason =
+  | "capability_unavailable"
+  | "wallet_unavailable"
+  | "network_unavailable"
+  | "wallet_address_unavailable"
+  | null
+
+export interface BridgeVirtualAccountReadiness {
+  ready: boolean
+  networkId: string | null
+  networkName: string | null
+  walletAddress: string | null
+  asset: "USDC" | null
+  reason: BridgeVirtualAccountReadinessReason
+}
+
+/**
+ * Final client-side gate for POST /fiat/bridge/virtual-accounts. The backend
+ * remains authoritative, but the CTA should not invite a request that cannot
+ * be satisfied by this owned wallet. A wallet address is only used to prove
+ * the selected network is provisioned; it is never sent as a provider token
+ * address or persisted as fiat account data.
+ */
+export function bridgeVirtualAccountReadiness(
+  config: FiatCapabilitySnapshot | undefined,
+  walletId: string | undefined,
+  walletNetworkAddresses?: Readonly<Record<string, string | undefined>>,
+): BridgeVirtualAccountReadiness {
+  if (!config || !isBridgeVirtualAccountAvailable(config)) {
+    return { ready: false, networkId: null, networkName: null, walletAddress: null, asset: null, reason: "capability_unavailable" }
+  }
+  if (!walletId) {
+    return { ready: false, networkId: null, networkName: null, walletAddress: null, asset: null, reason: "wallet_unavailable" }
+  }
+  const ownedNetworkIds = walletNetworkAddresses ? Object.keys(walletNetworkAddresses) : []
+  const networkId = bridgeVirtualAccountNetworkId(config, ownedNetworkIds)
+  const network = config.providers.bridge.supportedNetworks.find((item) => item.networkId === networkId)
+  if (!network || network.asset !== "USDC") {
+    return { ready: false, networkId: null, networkName: null, walletAddress: null, asset: null, reason: "network_unavailable" }
+  }
+  const walletAddress = walletNetworkAddresses?.[network.networkId]?.trim() || null
+  if (!walletAddress) {
+    return { ready: false, networkId: network.networkId, networkName: network.networkName, walletAddress: null, asset: "USDC", reason: "wallet_address_unavailable" }
+  }
+  return { ready: true, networkId: network.networkId, networkName: network.networkName, walletAddress, asset: "USDC", reason: null }
+}
 
 /**
  * POST /fiat/bridge/virtual-accounts with the guide's body: walletId,

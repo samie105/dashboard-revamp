@@ -71,6 +71,13 @@ describe("institutions and beneficiaries (guide §8)", () => {
     expect(calls[0].method).toBe("GET")
   })
 
+  it("listFiatBeneficiaryRequirements → GET /fiat/beneficiary-requirements with corridor query", async () => {
+    const { client, calls } = clientReturning([])
+    await client.listFiatBeneficiaryRequirements({ country: "NG", currency: "NGN", channel: "BANK" })
+    expect(calls[0].url).toBe("/api/crypto/fiat/beneficiary-requirements?country=NG&currency=NGN&channel=BANK")
+    expect(calls[0].method).toBe("GET")
+  })
+
   it("listFiatBeneficiaries → GET /fiat/beneficiaries", async () => {
     const { client, calls } = clientReturning([])
     await client.listFiatBeneficiaries()

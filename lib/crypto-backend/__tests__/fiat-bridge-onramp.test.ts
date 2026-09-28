@@ -13,7 +13,8 @@ import {
 } from "@/lib/crypto-backend/__fixtures__/fiat"
 import { __resetFiatMockState, respondFromFiatFixtures } from "@/lib/crypto-backend/dev-mock-fiat-responder"
 import {
-  BRIDGE_VIRTUAL_ACCOUNT_NETWORK_ID,
+  bridgeVirtualAccountNetworkId,
+  bridgeVirtualAccountReadiness,
   buyRails,
   completedActivityIds,
   createBridgeUsdAccount,
@@ -118,8 +119,31 @@ describe("Buy rails come from /fiat/config (guide §5, §13 lines 1169-1170)", (
 })
 
 describe("creating the USD account (guide §10.1 lines 816-860)", () => {
-  it("stays disabled until the backend confirms where networkId comes from (open question 4)", () => {
-    expect(BRIDGE_VIRTUAL_ACCOUNT_NETWORK_ID).toBeNull()
+  it("requires an owned address on the backend-selected USDC network before enabling the CTA", () => {
+    expect(bridgeVirtualAccountReadiness(FIAT_CONFIG_AVAILABLE, "wallet-1", { "ethereum-mainnet": "0xowned" })).toMatchObject({
+      ready: true,
+      networkId: "ethereum-mainnet",
+      asset: "USDC",
+    })
+    expect(bridgeVirtualAccountReadiness(FIAT_CONFIG_AVAILABLE, "wallet-1", { "ethereum-mainnet": "" })).toMatchObject({
+      ready: false,
+      reason: "wallet_address_unavailable",
+    })
+  })
+
+  it("uses the backend-authoritative default network, never a frontend chain constant", () => {
+    expect(bridgeVirtualAccountNetworkId(FIAT_CONFIG_AVAILABLE)).toBe("ethereum-mainnet")
+    expect(bridgeVirtualAccountNetworkId(FIAT_CONFIG_AVAILABLE, ["arbitrum-one"])).toBe("arbitrum-one")
+  })
+
+  it("fails closed when the wallet owns no backend-supported network", () => {
+    expect(bridgeVirtualAccountNetworkId(FIAT_CONFIG_AVAILABLE, ["solana-mainnet-beta"])).toBeNull()
+  })
+
+  it("fails closed when the backend has no safe default", () => {
+    const config = clone()
+    config.providers.bridge.defaultNetworkId = null
+    expect(bridgeVirtualAccountNetworkId(config)).toBeNull()
   })
 
   it("posts exactly the guide's body with an idempotency key; asset is USDC, never a contract address", async () => {

@@ -1,7 +1,8 @@
 # Fiat ramp checklist: legacy (Flutterwave) → OnSwitch port + Bridge integration
 
 Source of truth: `docs/fiat-frontend-integration-guide.md` ("guide").
-Scope: dashboard repo only. No backend changes. The proxy allowlist is only ever added to.
+Scope: dashboard integration plus the matching backend safety contract. The proxy
+allowlist is only ever added to; existing legacy rails remain intact.
 Tick items as you go. ⛔ means blocked on an answer from the backend team.
 
 ---
@@ -27,19 +28,20 @@ Confirmed:
 - [x] Bridge virtual account is not a fiat balance; funds arrive as USDC in the wallet (guide §10)
 
 Check yourself (no need to ask):
-- [ ] On prod, logged in, `/api/crypto/fiat/config` shows `environment` (sandbox/live) and `enabled`/`blockingReasons`
+- [ ] On prod, logged in, `/api/crypto/fiat/config` shows `environment: production` and `enabled`/`blockingReasons`
 - [x] Where the wallet UI gets `walletId` (Claude Code finds it in CP2) — `useCryptoWallet()` / `useCryptoWalletState()` in `hooks/crypto/useCryptoWallet.ts:9-21` → `GET /wallets/me` → `CryptoWalletDetails.id`; used as `wallet.data.id` at `components/crypto/ModernWalletPage.tsx:922`. The buy-sell and fund clients don't read it today.
-- [x] Whether the codebase has a canonical USDC address per network (Claude Code checks in CP2) — only as spot-trading token metadata: `KNOWN_TOKENS` in `lib/crypto-backend/spot-order.ts:111-136` (ethereum-mainnet, arbitrum-one, solana-mainnet-beta). Not a confirmed match for the backend's "configured canonical WorldStreet USDC" (guide §10.1, §10.3), so the ⛔ below stays open.
+- [x] Whether the codebase has a canonical USDC address per network (Claude Code checks in CP2) — the backend's shared `src/swap/assets.ts` registry owns the canonical token for the Bridge virtual-account capability; the frontend never reads or copies token addresses.
 
 Still open:
 - [ ] ⛔ Bridge beneficiary (US bank account) create payload
-- [ ] ⛔ Source of the canonical USDC contract address for Bridge withdrawals (if not in the codebase)
-- [ ] ⛔ Is an OnSwitch customer profile required before onramp? (guide §7 doesn't say)
+- [x] Source of the canonical USDC contract address for Bridge withdrawals — backend resolves it from the shared `src/swap/assets.ts` registry; frontend sends only `asset: "USDC"`
+- [x] OnSwitch profile prerequisite resolved from the current backend contract: an owned customer with `status: "approved"` is required before local quote/order; frontend mirrors it as a UX guard and backend enforces it again
 
 ## 2. Foundations (CP2), guide §3–6, §12
 
 - [x] Types: `FiatCustomer`, `FiatKycLink(Result)`, `FiatBeneficiary`, `FiatInstitution` (defensive optional fields, guide §8)
 - [x] Client methods: `getFiatCompliance`, `createFiatCustomer`, `createBridgeKycLink`, `syncBridgeCompliance`, `listFiatInstitutions`, `listFiatBeneficiaries`, `createFiatBeneficiary`, `deleteFiatBeneficiary`
+- [x] Client method + typed hook: `listFiatBeneficiaryRequirements` / `GET /fiat/beneficiary-requirements`; provider requirement responses are normalized server-side before reaching the browser
 - [x] Proxy allowlist **additions only** (existing entries untouched; diff is 13 insertions, 0 deletions):
   - GET: compliance, institutions, beneficiaries
   - POST: compliance/customer, compliance/bridge/kyc-link, compliance/bridge/sync, beneficiaries
@@ -62,9 +64,10 @@ Still open:
 ## 3. Buy → OnSwitch onramp (CP3 mapping, CP5 build), guide §9.1–9.2, §11, §13
 
 - [x] CP3: written mapping of every legacy `lib/crypto-api.ts` call in buy/sell/fund → new route (no edits) — `docs/FIAT_LEGACY_ROUTE_MAP.md`; Q1 answered (follow the guide), Q2 and Q5 answered by guide §5, Q3 and Q4 still open
-- [x] Rollback flag (`legacy` | `onswitch`); legacy code kept — `NEXT_PUBLIC_FIAT_BUY_FLOW`, defaults to `legacy` pending the team's rollout decision; legacy kept as `LegacyBuySellClient`
+- [x] Release/rollback flag (`legacy` | `onswitch`); the guide flow is now the default and legacy is kept as an explicit rollback — `NEXT_PUBLIC_FIAT_BUY_FLOW`; legacy kept as `LegacyBuySellClient`
 - [x] Corridor + asset selectors derived from `/fiat/config` (nothing hardcoded)
 - [x] Quote screen: `sourceAmount`, `destinationAmount`, `providerRate`, `providerFee`, `worldstreetFee`, expiry countdown
+- [x] Local Buy checks the signed-in user's OnSwitch compliance record before quote/order; missing, pending, rejected, and suspended states show setup/review copy
 - [x] Expired quote / `FIAT_QUOTE_NOT_ACTIVE` → re-quote with a new idempotency key
 - [x] Order creation with an idempotency key; submit disabled while in flight
 - [x] 201 is not treated as paid; a 200 replay renders as the same order (guide §11)
@@ -81,44 +84,49 @@ KYC (CP4):
 - [x] `kycLink.url` checked for `https:`, opened in a new tab with `noopener,noreferrer`; never logged
 - [x] "I've finished" → `POST /fiat/compliance/bridge/sync` → refetch compliance
 - [x] OnSwitch: customer profile form using exactly the documented `POST /fiat/compliance/customer` fields
-- [x] OnSwitch onramp NOT blocked on the profile (⛔ open question)
-- [x] No frontend compliance gate (team decision 2026-09-27): compliance fields are display-only; KYC need comes from `/fiat/config`; the backend accepts or refuses the virtual-account request
-- [x] **Tests:** pending → approved via sync; non-https URL rejected; idempotency key sent; virtual-account availability depends only on `/fiat/config`, and a 403 refusal stops with verification guidance and isn't retried (replaces "unapproved Bridge users can't reach virtual account creation", per the team decision)
-- [x] Mount the panels: OnSwitch profile in the ported Buy flow (optional section under the Buy form), Bridge KYC above the USD account (collapsible, never a gate)
+- [x] OnSwitch profile submission obeys the single backend `FIAT_RAMP_ENABLED` kill switch and provider/compliance approvals
+- [x] Bridge remains backend-authoritative: KYC need comes from `/fiat/config`, and the virtual-account request is refused safely when the user is not approved
+- [x] **Tests:** pending → approved via sync; non-https URL rejected; idempotency key sent; OnSwitch UX approval guard; profile mutation mock transitions into the approved record; Bridge 403 refusal stops with verification guidance and isn't retried
+- [x] Mount the panels: required OnSwitch profile setup in local Buy; Bridge KYC above the USD account (collapsible, never a gate)
 
 Bridge USD onramp (CP6):
 - [x] Gated on the Bridge virtual account route being available (USD tab shown only then; local currency is the default tab)
-- [ ] Approved → create/get virtual account (`asset: "USDC"`, never a contract address) — built and tested (`createBridgeUsdAccount`); "Create USD account" stays disabled until the backend confirms the `networkId` source (open question 4). Existing accounts are listed and polled. No frontend approval check (team decision)
+- [x] Approved → create/get virtual account (`asset: "USDC"`, never a contract address) — built and tested (`createBridgeUsdAccount`); the backend returns `supportedNetworks` + `defaultNetworkId` and the UI creates only with that value. Existing accounts are listed and polled. No frontend approval check (team decision)
 - [x] Deposit instructions shown exactly as returned, masked, copy buttons, not in analytics
 - [x] Activity polled; an empty list reads "no deposits yet", not failure
 - [x] Balance refreshed after a completed activity item (only when an item newly shows `providerStatus: "completed"`)
+- [x] Create CTA fails closed unless wallet id, capability, backend-supported network, owned wallet address, and canonical `USDC` route are all present
 - [x] **Tests:** empty activity message; duplicate create returns the same account; balance refresh on completion
 
-## 5. Sell → OnSwitch offramp (CP7), guide §8, §9.2–9.3, shipped disabled
+## 5. Sell → OnSwitch offramp (CP7), guide §8, §9.2–9.3
 
-- [ ] Behind `FIAT_OFFRAMP_UI_ENABLED = false`; legacy sell stays active
-- [ ] Institutions selector from `/fiat/institutions` (no hardcoded bank codes)
-- [ ] Beneficiary form uses documented BANK fields only; raw account number never logged or persisted
-- [ ] Only `status === 'verified' && ownershipStatus === 'verified'` selectable
-- [ ] Offramp quote → order with `beneficiaryId`
-- [ ] `cryptoIntent` signed via existing signing modules (not `createTransferIntent`); deposit address never editable
-- [ ] `/confirm` only after broadcast, with a separate idempotency key
-- [ ] Order polled to a terminal state
-- [ ] **Tests:** unverified beneficiary blocked; confirm only after broadcast; confirm key differs; no raw account number logged or stored; flag off by default
+- [x] Released by default through `NEXT_PUBLIC_FIAT_SELL_FLOW`; setting it to `legacy` is the explicit rollback path
+- [x] Institutions selector from `/fiat/institutions` plus provider-controlled typed requirements from `/fiat/beneficiary-requirements`
+- [x] Beneficiary form keeps raw account values in memory only and stores only a fingerprint for exact retries
+- [x] Only `status === 'verified' && ownershipStatus === 'verified'` selectable
+- [x] Offramp quote → order with `beneficiaryId`, quote expiry and separate idempotency keys
+- [x] `cryptoIntent` adopted and signed via existing wallet signing modules; deposit address/asset/amount/network are not editable
+- [x] `/confirm` only after broadcast, with a separate idempotency key
+- [x] Order polled to a terminal state
+- [x] **Tests:** typed payload mapping, verified-beneficiary filter, expiry/signing state mapping, confirm helper, and explicit legacy rollback
+- [ ] Controlled live bank/mobile-money payout, webhook, and reversal verification
 
-## 6. Bridge USD withdrawal (CP8), guide §10.3, shipped disabled
+## 6. Bridge USD withdrawal (CP8), guide §10.3
 
-- [ ] Behind `FIAT_OFFRAMP_UI_ENABLED`
-- [ ] Lists existing verified Bridge beneficiaries only (⛔ create payload)
-- [ ] No hardcoded USDC address (⛔ source)
-- [ ] Channels ach / ach_same_day / wire; fednow only if capability allows
-- [ ] `cryptoIntent` signed; **no** `/confirm`; order polled
-- [ ] **Tests:** fednow hidden unless allowed; no confirm call; flag off by default
+- [x] Routed from the existing OnSwitch sell entry when `NEXT_PUBLIC_FIAT_SELL_FLOW=onswitch`; backend `FIAT_RAMP_ENABLED` remains authoritative
+- [x] Lists existing verified, user-owned Bridge beneficiaries only; beneficiary creation remains blocked pending the approved provider payload/ownership evidence
+- [x] Sends literal `asset: "USDC"`; the backend resolves the canonical USDC address for the owned network
+- [x] Channels derive from backend capability; `fednow` appears only when explicitly available
+- [x] `cryptoIntent` signed; **no** `/confirm`; order polled and rehydrated on refresh
+- [x] **Tests:** capability/network/beneficiary/request/state mapping coverage
+- [ ] Controlled live USD payout, webhook, reversal, and ACH ownership verification
 
 ## 7. Order history (CP9)
 
-- [ ] `GET /fiat/orders` list, refresh on focus, no aggressive polling
-- [ ] **Tests:** list renders all states; no interval polling on the list
+- [x] `GET /fiat/orders` list, focus refresh, explicit refresh, no aggressive list polling
+- [x] Expand an owned order for detail refresh and recover it through the existing pending-flow/signing path without a duplicate mutation
+- [x] Safe normalized fields only; provider display blobs and unmasked bank/payment instructions are not rendered
+- [ ] **Tests:** browser-level list rendering across every state and deployed authorization/recovery verification
 
 ## 8. Security review (CP9), guide §15
 
@@ -133,7 +141,7 @@ Bridge USD onramp (CP6):
 
 ## 9. Live handoff tests (after CP10, on prod), guide §16
 
-- [ ] Confirm `environment` (sandbox/live) before creating anything
+- [ ] Confirm `environment: production` before creating anything
 - [ ] `/api/crypto/fiat/config` returns the expected environment and capabilities
 - [ ] Every route used by the screens is allowlisted
 - [ ] Missing session → 401 handled, no duplicate order
@@ -149,9 +157,9 @@ Bridge USD onramp (CP6):
 
 ## 10. Final (CP10)
 
-- [ ] Full test suite, typecheck, lint and production build pass
-- [ ] Summary of all changes, test coverage, TODOs and open questions
-- [ ] List of §9 live tests still to run
-- [ ] Small commits; PR opened
-- [ ] Offramp/withdrawal enabled only after §9 passes and the backend team approves
+- [x] Full test suite, typecheck, touched-source lint and production build pass
+- [x] Summary of all changes, test coverage, TODOs and open questions recorded in `docs/FIAT_ONSWITCH_BRIDGE_PHASED_IMPLEMENTATION_PLAN.md`
+- [ ] §9 live provider tests still require production credentials, provider approval, webhook verification, and an operational owner
+- [x] Both repository changes committed and pushed to their default branches
+- [x] Offramp/withdrawal UI released to authenticated users; backend capability and the single `FIAT_RAMP_ENABLED` switch remain authoritative and fail closed
 

@@ -2,12 +2,12 @@
  * Fiat compliance logic (CP4). Guide §7, docs/fiat-frontend-integration-guide.md
  * lines 429-541.
  *
- * Team decision (docs/FIAT_RAMP_CONTEXT.md, "no frontend compliance gate"):
- * the backend is the source of truth for customer compliance (guide lines
- * 10-11). Compliance records are used ONLY to render state; nothing here
- * decides whether a user is approved or unlocks an action. Whether KYC is
- * needed comes from /fiat/config (guide §5), and the backend accepts or
- * refuses the money-moving request.
+ * The backend remains the source of truth for customer compliance (guide
+ * lines 10-11). The small approval helper below is only a UX guard for the
+ * OnSwitch Buy form: the backend independently enforces the same requirement
+ * before every quote and order. Bridge actions intentionally remain
+ * backend-authoritative because its capability response has no per-user
+ * approval field.
  */
 
 import type { CryptoBackendClient } from "./client"
@@ -56,6 +56,15 @@ export function complianceRecordFor(
   provider: FiatCustomer["provider"],
 ): FiatCustomer | undefined {
   return records?.find((record) => record.provider === provider)
+}
+
+/**
+ * UX-only mirror of the backend's approved customer state. Never use this as
+ * an authorization decision: POST /fiat/quotes and POST /fiat/orders still
+ * re-check the signed-in user's owned provider customer on the backend.
+ */
+export function isProviderCustomerApproved(record: Pick<FiatCustomer, "status"> | undefined): boolean {
+  return record?.status.trim().toLowerCase() === "approved"
 }
 
 /* ── Whether KYC is needed (from /fiat/config, guide §5) ──────────────── */

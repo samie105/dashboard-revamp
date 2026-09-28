@@ -25,6 +25,7 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^fiat\/config$/,
     /^fiat\/compliance$/, // CP2 (guide §7 GET /fiat/compliance)
     /^fiat\/institutions$/, // CP2 (guide §8 GET /fiat/institutions)
+    /^fiat\/beneficiary-requirements$/, // provider-controlled typed beneficiary fields
     /^fiat\/beneficiaries$/, // CP2 (guide §8 GET /fiat/beneficiaries)
     /^fiat\/quotes\/[^/]+$/,
     /^fiat\/orders$/,

@@ -2,11 +2,16 @@
 
 ## Status
 
-Phase 4/5 implementation baseline. The backend money-movement paths, provider
-adapters, webhook/reconciliation services, and dashboard proxy/client contract
-are implemented, but all provider mutation lanes remain fail-closed by default.
+Phase 6 implementation baseline. The backend money-movement paths, provider
+adapters, webhook/reconciliation services, dashboard proxy/client contract, and
+single master fiat kill switch are implemented, but all provider mutation lanes
+remain fail-closed by default.
 The planning sections below remain the architecture, compliance, testing, and
 production-rollout source of truth.
+
+For route-by-route dashboard consumption, browser authentication, success/error
+envelopes, polling, idempotency, and frontend environment setup, see the
+[Fiat ↔ Crypto Frontend Integration Guide](FIAT_CRYPTO_FRONTEND_INTEGRATION_GUIDE.md).
 
 Prepared on 2026-09-26 after reviewing the current OnSwitch and Bridge documentation and the WorldStreet dashboard and crypto-backend repositories.
 
@@ -504,6 +509,10 @@ Do not hardcode the current country table as the production source of truth. The
 
 ### 9.2 African fiat → stablecoin onramp
 
+0. Ensure the authenticated user has an owned OnSwitch customer profile with
+   `status: "approved"`. The dashboard may use `GET /fiat/compliance` to show
+   setup/review copy, but the backend repeats this check for every quote and
+   order.
 1. The user selects country, fiat currency, channel, stablecoin, network, and destination WorldStreet wallet account.
 2. The backend verifies the corridor and asset are enabled for ONRAMP.
 3. The backend verifies the destination address belongs to the authenticated user's wallet.
@@ -938,7 +947,10 @@ Exit gate:
 Implementation status (phase 0/1): the backend now contains a fail-closed
 provider configuration/readiness layer, read-only OnSwitch capability clients,
 a Bridge USD route/customer capability client, a provider-asset to WorldStreet
-network compatibility catalog, and `GET /v1/fiat/config`. The dashboard exposes
+network compatibility catalog, a centralized Bridge network/payment-rail
+contract, and `GET /v1/fiat/config` with `supportedNetworks`,
+`defaultNetworkId`, `defaultNetworkSource`, and explicit
+`withdrawalChannels` capability entries. The dashboard exposes
 the endpoint through `/api/crypto/fiat/config` and has typed query support. The
 operational runbook is in `worldstreet-crypto-backend/docs/runbooks/fiat-ramp-phase-0-1.md`.
 At the Phase 0/1 baseline, all flags defaulted to disabled and the
@@ -972,6 +984,14 @@ boundary, webhooks were acknowledged only after a verified, deduplicated event
 was stored and the local order-draft/idempotency primitives were ready for the
 later identity and money-movement phases. The remaining provider-fixture and
 operational approval gate still applies before enabling a mutation lane.
+
+The webhook processor now atomically claims each durable event before applying
+an order update, retries failed events, and reclaims stale processing claims
+after a crash. Local signed OnSwitch HMAC and Bridge ECDSA fixtures cover
+provider terminal events that sandbox cannot reliably emit. A scheduled
+read/repair reconciler is started by the backend and records structured
+counts; it only re-queries provider state/history and repairs local
+order/ledger rows, never creating a provider payout or a second crypto intent.
 
 ### Phase 3 — Identity, KYC, and own-account beneficiaries
 
@@ -1041,6 +1061,12 @@ remain server-side; only selected payment instructions are returned to the
 authenticated owner. Refund/reversal/blocked/manual-review states are modeled
 and reconciled, but automatic refund creation is intentionally not enabled
 until the provider's refund contract and operations policy are approved.
+
+The dashboard local Buy flow now consumes the owned compliance record and keeps
+quote/order controls unavailable until OnSwitch reports `approved`; it renders
+pending, rejected, and suspended states as setup/review states. This is a UX
+guard only—the backend remains the final authorization boundary. OnSwitch
+profile writes also use the single `FIAT_RAMP_ENABLED` kill switch.
 
 Implemented authenticated routes:
 
@@ -1181,6 +1207,14 @@ Scheduled reconciliation must:
 - detect a confirmed crypto deposit not linked to an order;
 - detect a completed payout without a completed local ledger row;
 - alert without silently creating a second payout.
+
+The backend worker emits structured reconciliation records for checked orders,
+state updates, provider errors, stale webhook rows reprocessed, webhook
+errors, virtual-account history errors, and completed orders repaired without a
+ledger row. Route those fields to dashboards/alerts
+for webhook failures, stale processing claims, stuck orders,
+`completedWithoutLedger`, blockchain-confirmed-without-order, and refund
+failures. The external metrics/dashboard sink remains deployment-specific.
 
 ## 20. Outstanding provider confirmations
 

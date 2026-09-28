@@ -7,6 +7,7 @@ import {
   FIAT_CONFIG_DISCOVERY_ONLY,
 } from "@/lib/crypto-backend/__fixtures__/fiat"
 import {
+  bridgeWithdrawalChannels,
   isBridgeFednowAvailable,
   isBridgeVirtualAccountAvailable,
   isBridgeWithdrawalAvailable,
@@ -183,7 +184,32 @@ describe("corridor + walletReady asset route both required (lines 375-377)", () 
 })
 
 describe("fednow (guide §10.3)", () => {
-  it("is hidden until the backend confirms how it is signalled (open question)", () => {
+  it("is enabled only when the backend explicitly declares an available channel", () => {
     expect(isBridgeFednowAvailable(FIAT_CONFIG_AVAILABLE)).toBe(false)
+
+    const config = clone()
+    config.providers.bridge.withdrawalChannels?.push({
+      channel: "fednow",
+      routeId: "bridge-usd-withdrawal-fednow",
+      paymentRail: "fednow",
+      status: "available",
+      requiresOwnedExternalAccount: true,
+    })
+    expect(isBridgeFednowAvailable(config)).toBe(true)
+    expect(bridgeWithdrawalChannels(config).map((channel) => channel.channel)).toEqual([
+      "ach",
+      "wire",
+      "fednow",
+    ])
+
+    const disabled = clone()
+    disabled.providers.bridge.withdrawalChannels?.push({
+      channel: "fednow",
+      routeId: "bridge-usd-withdrawal-fednow",
+      paymentRail: "fednow",
+      status: "disabled",
+      requiresOwnedExternalAccount: true,
+    })
+    expect(isBridgeFednowAvailable(disabled)).toBe(false)
   })
 })

@@ -159,6 +159,16 @@ export type FiatCapabilityStatus =
   | "available"
   | "unavailable"
 
+export type BridgeWithdrawalChannel = "ach" | "ach_same_day" | "wire" | "fednow"
+
+export interface BridgeWithdrawalChannelCapability {
+  channel: BridgeWithdrawalChannel
+  routeId: string
+  paymentRail: string
+  status: FiatCapabilityStatus
+  requiresOwnedExternalAccount: true
+}
+
 export interface FiatProviderReadiness {
   provider: "onswitch" | "bridge"
   environment: "sandbox" | "production"
@@ -236,6 +246,18 @@ export interface FiatCapabilitySnapshot {
         status: FiatCapabilityStatus
         notes: string[]
       }>
+      /** Backend-authoritative wallet networks that can receive Bridge USDC. */
+      supportedNetworks: Array<{
+        networkId: string
+        networkName: string
+        paymentRail: string
+        asset: "USDC"
+      }>
+      /** Null means the deployment has no safe default and the CTA stays off. */
+      defaultNetworkId: string | null
+      defaultNetworkSource: "configured" | "first_supported" | "none"
+      /** Backend-authoritative withdrawal-channel contract. */
+      withdrawalChannels?: BridgeWithdrawalChannelCapability[]
       account: {
         customerRequired: true
         kycRequired: true
@@ -404,6 +426,14 @@ export interface FiatInstitution {
   currency?: string
   channel?: string
   [key: string]: unknown
+}
+
+/** Safe validation metadata returned by GET /fiat/beneficiary-requirements. */
+export interface FiatBeneficiaryRequirement {
+  path: string
+  required: boolean
+  regex?: string
+  example?: string
 }
 
 /**

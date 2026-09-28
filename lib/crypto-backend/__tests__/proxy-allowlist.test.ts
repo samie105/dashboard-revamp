@@ -48,6 +48,7 @@ const DOCUMENTED: Array<[string, string]> = [
   ["POST", "fiat/compliance/bridge/kyc-link"],
   ["POST", "fiat/compliance/bridge/sync"],
   ["GET", "fiat/institutions"],
+  ["GET", "fiat/beneficiary-requirements"],
   ["GET", "fiat/beneficiaries"],
   ["POST", "fiat/beneficiaries"],
   ["DELETE", "fiat/beneficiaries/66f000000000000000000021"],

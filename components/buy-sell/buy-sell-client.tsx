@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/flow"
 import { FlowTerminal, OptionRows } from "@/components/flows/flow-terminal"
 import { FiatBuyFlow } from "@/components/fiat/buy/FiatBuyFlow"
+import { FiatSellRouter } from "@/components/fiat/sell/FiatSellRouter"
 import { buySellImplementation } from "@/lib/fiat-flags"
 import { useOnline } from "@/hooks/useOnline"
 import {
@@ -144,14 +145,25 @@ type BuySellClientProps = React.ComponentProps<typeof LegacyBuySellClient>
 /**
  * Buy follows the fiat integration guide (OnSwitch onramp) when
  * NEXT_PUBLIC_FIAT_BUY_FLOW is "onswitch"; otherwise, including when unset,
- * it's the legacy buy (lib/fiat-flags.ts). Sell stays on the legacy flow
- * until the offramp ships behind its own flag.
+ * it's the legacy buy (lib/fiat-flags.ts). Sell independently follows
+ * NEXT_PUBLIC_FIAT_SELL_FLOW and defaults to the legacy flow. The live
+ * OnSwitch sell branch routes between African local fiat and Bridge USD from
+ * GET /fiat/config.
  * Same props either way, so /buy, /sell and the money modal are unchanged.
  */
 export function BuySellClient(props: BuySellClientProps) {
   if (buySellImplementation(props.mode) === "onswitch-buy") {
     return (
       <FiatBuyFlow
+        variant={props.variant}
+        onInFlightChange={props.onInFlightChange}
+        onCompactChange={props.onCompactChange}
+      />
+    )
+  }
+  if (buySellImplementation(props.mode) === "onswitch-sell") {
+    return (
+      <FiatSellRouter
         variant={props.variant}
         onInFlightChange={props.onInFlightChange}
         onCompactChange={props.onCompactChange}

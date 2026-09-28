@@ -26,6 +26,7 @@ export type {
   FiatMutationOperation,
 } from "./fiat-idempotency"
 export {
+  bridgeWithdrawalChannels,
   isBridgeFednowAvailable,
   isBridgeProviderAvailable,
   isBridgeVirtualAccountAvailable,

@@ -34,6 +34,7 @@ import {
   LinkSquare01Icon,
 } from "@hugeicons/core-free-icons"
 import { useUnifiedTransactions } from "@/hooks/use-unified-transactions"
+import { FiatOrderHistory } from "@/components/fiat/history/FiatOrderHistory"
 import { exportTransactionsPdf } from "@/lib/export-transactions-pdf"
 import type {
   UnifiedTransaction,
@@ -639,6 +640,8 @@ export function TransactionsClient() {
         )}
         </CardShell>
       </div>
+
+      <FiatOrderHistory />
     </div>
   )
 }

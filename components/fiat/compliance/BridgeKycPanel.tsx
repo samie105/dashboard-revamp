@@ -8,8 +8,9 @@
  *
  * Renders only when /fiat/config says KYC is required for the Bridge route
  * (guide §5). It never decides whether the user is approved and never locks
- * the virtual-account action; the backend accepts or refuses that request
- * (docs/FIAT_RAMP_CONTEXT.md, "no frontend compliance gate").
+ * the Bridge virtual-account action; the backend accepts or refuses that
+ * request. The OnSwitch Buy rail has a separate UX-only approved-profile
+ * guard because its backend quote/order contract explicitly requires one.
  *
  * The KYC link is held in memory only: never logged, never persisted.
  */

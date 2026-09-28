@@ -28,6 +28,7 @@
 
 import type {
   FiatBeneficiary,
+  FiatBeneficiaryRequirement,
   FiatCapabilitySnapshot,
   FiatCustomer,
   FiatInstitution,
@@ -168,6 +169,38 @@ export const FIAT_CONFIG_AVAILABLE: FiatCapabilitySnapshot = {
           notes: [],
         },
       ],
+      supportedNetworks: [
+        {
+          networkId: "ethereum-mainnet",
+          networkName: "Ethereum",
+          paymentRail: "ethereum",
+          asset: "USDC",
+        },
+        {
+          networkId: "arbitrum-one",
+          networkName: "Arbitrum One",
+          paymentRail: "arbitrum",
+          asset: "USDC",
+        },
+      ],
+      defaultNetworkId: "ethereum-mainnet",
+      defaultNetworkSource: "configured",
+      withdrawalChannels: [
+        {
+          channel: "ach",
+          routeId: "bridge-usd-withdrawal-ach",
+          paymentRail: "ach",
+          status: "available",
+          requiresOwnedExternalAccount: true,
+        },
+        {
+          channel: "wire",
+          routeId: "bridge-usd-withdrawal-wire",
+          paymentRail: "wire",
+          status: "available",
+          requiresOwnedExternalAccount: true,
+        },
+      ],
       account: {
         customerRequired: true,
         kycRequired: true,
@@ -261,6 +294,12 @@ export const FIAT_INSTITUTIONS_NG_NGN_BANK: FiatInstitution[] = [
   },
 ]
 
+/** Provider-controlled, safe metadata for the NGN bank beneficiary form. */
+export const FIAT_BENEFICIARY_REQUIREMENTS_NG_BANK: FiatBeneficiaryRequirement[] = [
+  { path: "bank.account_number", required: true, regex: "^\\d{10}$", example: "10 digits" },
+  { path: "bank.bank_code", required: true, regex: "^\\d{3,6}$", example: "058" },
+]
+
 /** Guide §8: "Illustrative response" for GET /fiat/beneficiaries. */
 export const FIAT_BENEFICIARIES_LIST: FiatBeneficiary[] = [
   {
@@ -282,6 +321,16 @@ export const FIAT_BENEFICIARIES_LIST: FiatBeneficiary[] = [
     updatedAt: "2026-09-26T10:40:00.000Z",
   },
 ]
+
+/** DERIVED — local mock-only Bridge USD beneficiary for the withdrawal UI. */
+export const FIAT_BENEFICIARY_BRIDGE_USD: FiatBeneficiary = {
+  ...FIAT_BENEFICIARIES_LIST[0],
+  id: "66f000000000000000000091",
+  provider: "bridge",
+  country: "US",
+  currency: "USD",
+  channel: "ach",
+}
 
 /* ── §9 OnSwitch quotes and orders ─────────────────────────────────────── */
 

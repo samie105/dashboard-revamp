@@ -71,6 +71,15 @@ describe("dev-mock-fiat-responder envelope + requestId", () => {
     expect(generated).toBeLessThanOrEqual(after)
     expect(expires - generated).toBeGreaterThan(30_000)
   })
+
+  it("returns only safe beneficiary requirement metadata", async () => {
+    const { body } = await respond("GET", "fiat/beneficiary-requirements")
+    expect(body.success).toBe(true)
+    expect(body.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "bank.account_number", required: true }),
+    ]))
+    expect(JSON.stringify(body.data)).not.toContain("3048915627")
+  })
 })
 
 describe("dev-mock-fiat-responder idempotency (guide §3.3, §6.2)", () => {
@@ -196,6 +205,18 @@ describe("dev-mock-fiat-responder id-based order lookup (guide §11)", () => {
 })
 
 describe("dev-mock-fiat-responder compliance customer (derived, guide §7)", () => {
+  it("surfaces the approved OnSwitch record after the profile mutation", async () => {
+    const before = await respond("GET", "fiat/compliance")
+    expect(before.body.data.some((record: { provider: string }) => record.provider === "onswitch")).toBe(false)
+
+    await respond("POST", "fiat/compliance/customer", {
+      body: { provider: "onswitch", legalName: "Example", email: "e@x", country: "NG" },
+      idempotencyKey: "cust-on-get",
+    })
+    const after = await respond("GET", "fiat/compliance")
+    expect(after.body.data.find((record: { provider: string }) => record.provider === "onswitch")?.status).toBe("approved")
+  })
+
   it("returns an onswitch record when the request declares provider=onswitch", async () => {
     const { body } = await respond("POST", "fiat/compliance/customer", {
       body: { provider: "onswitch", legalName: "Example", email: "e@x", country: "NG" },

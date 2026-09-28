@@ -41,6 +41,7 @@ import type {
   SponsorshipConfig,
   SponsorshipOperation,
   FiatBeneficiary,
+  FiatBeneficiaryRequirement,
   FiatCapabilitySnapshot,
   FiatCustomer,
   FiatInstitution,
@@ -256,6 +257,21 @@ export class CryptoBackendClient {
     })
     return this.request<FiatInstitution[]>(
       `/fiat/institutions?${params.toString()}`,
+      {},
+      { signal },
+    )
+  }
+
+  async listFiatBeneficiaryRequirements(
+    query: { country: string; currency?: string; channel?: string; holderType?: string },
+    signal?: AbortSignal,
+  ): Promise<FiatBeneficiaryRequirement[]> {
+    const params = new URLSearchParams({ country: query.country })
+    if (query.currency) params.set("currency", query.currency)
+    if (query.channel) params.set("channel", query.channel)
+    if (query.holderType) params.set("holderType", query.holderType)
+    return this.request<FiatBeneficiaryRequirement[]>(
+      `/fiat/beneficiary-requirements?${params.toString()}`,
       {},
       { signal },
     )
