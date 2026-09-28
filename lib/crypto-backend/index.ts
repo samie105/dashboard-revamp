@@ -39,6 +39,7 @@ export {
 export type { OnswitchCorridorMatch } from "./fiat-capabilities"
 export {
   FIAT_ORDER_PAUSE_STATES,
+  FIAT_ORDER_SLOW_STATES,
   FIAT_ORDER_TERMINAL_STATES,
   fiatConfigRefetchDelayMs,
   nextFiatOrderPollDelayMs,

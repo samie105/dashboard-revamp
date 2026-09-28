@@ -1,0 +1,285 @@
+/**
+ * OnSwitch onramp logic for the Buy flow. Guide §5 (lines 207-381), §9.1-9.2
+ * (lines 640-795), §11 (lines 947-984), §13 "OnSwitch local-fiat onramp"
+ * (lines 1145-1156).
+ *
+ * The backend is the source of truth for capability, quotes and order state
+ * (guide lines 10-12); everything here derives from what it returns and
+ * renders it as given. Nothing is hardcoded: corridors, channels, assets and
+ * networks all come from /fiat/config.
+ */
+
+import type { CryptoBackendClient } from "./client"
+import { CryptoBackendError } from "./errors"
+import { onswitchCorridors } from "./fiat-capabilities"
+import { runIdempotentMutation } from "./fiat-idempotency"
+import { FIAT_ORDER_TERMINAL_STATES } from "./fiat-poll-schedule"
+import type { FiatCapabilitySnapshot, FiatOrder, FiatQuote } from "./types"
+
+type OnrampClient = Pick<CryptoBackendClient, "createFiatQuote" | "createFiatOrder">
+
+/* ── Availability (guide §5 lines 368-377) ────────────────────────────── */
+
+export type OnrampAvailability =
+  | "loading"
+  | "disabled" // "Hide or disable fiat actions."
+  | "blocked" // "Show a non-actionable 'temporarily unavailable' state."
+  | "discovery_only" // "do not show money-moving buttons"
+  | "unavailable" // OnSwitch onramp route or every corridor is off
+  | "available"
+
+export function onrampAvailability(config: FiatCapabilitySnapshot | undefined): OnrampAvailability {
+  if (!config) return "loading"
+  if (!config.enabled || config.availability === "disabled") return "disabled"
+  if (config.availability === "blocked") return "blocked"
+  if (config.availability === "discovery_only") return "discovery_only"
+  return onrampOptions(config).length > 0 ? "available" : "unavailable"
+}
+
+/* ── Options: corridor × channel × wallet-ready asset route ───────────── */
+
+export interface OnrampOption {
+  /** Stable key for selection state. */
+  key: string
+  countryCode: string
+  countryName?: string
+  currencyCode: string
+  channel: string
+  /** providerAssetId, sent as `asset` (guide line 654). */
+  asset: string
+  /** localNetworkId, sent as `network` (guide line 655). */
+  network: string
+  symbol: string
+}
+
+/**
+ * Every option the UI may offer. Guide lines 375-377: a coverage item and an
+ * assetRoutes item must both be enabled and wallet-ready. A route with no
+ * localNetworkId can't be quoted (there's no `network` to send), so it's
+ * left out rather than guessed.
+ */
+export function onrampOptions(config: FiatCapabilitySnapshot | undefined): OnrampOption[] {
+  const options: OnrampOption[] = []
+  for (const { coverage, assetRoutes } of onswitchCorridors(config, "onramp")) {
+    for (const channel of coverage.channels) {
+      for (const route of assetRoutes) {
+        if (!route.localNetworkId) continue
+        options.push({
+          key: [coverage.countryCode, coverage.currencyCode, channel, route.providerAssetId, route.localNetworkId].join("|"),
+          countryCode: coverage.countryCode,
+          countryName: coverage.countryName,
+          currencyCode: coverage.currencyCode,
+          channel,
+          asset: route.providerAssetId,
+          network: route.localNetworkId,
+          symbol: route.symbol,
+        })
+      }
+    }
+  }
+  return options
+}
+
+/* ── Quote (guide §9.1 lines 641-705) ─────────────────────────────────── */
+
+export type OnrampQuoteRequest = Parameters<OnrampClient["createFiatQuote"]>[0]
+
+/** A positive decimal. Anything finer (limits, precision) is the backend's call. */
+export function isValidAmount(amount: string): boolean {
+  return /^\d+(\.\d+)?$/.test(amount.trim()) && Number(amount) > 0
+}
+
+/** The guide's onramp request body (lines 646-657), built from a config option. */
+export function buildOnrampQuoteRequest(option: OnrampOption, amount: string): OnrampQuoteRequest {
+  return {
+    provider: "onswitch",
+    direction: "onramp",
+    country: option.countryCode,
+    currency: option.currencyCode,
+    channel: option.channel,
+    amount: amount.trim(),
+    asset: option.asset,
+    network: option.network,
+    exactOutput: false,
+  }
+}
+
+/**
+ * POST /fiat/quotes under an idempotency key scoped to the exact request.
+ * After a success the key is released, so asking again for the same amount
+ * (e.g. after expiry, guide line 701) gets a new key.
+ */
+export function requestOnrampQuote(client: OnrampClient, request: OnrampQuoteRequest): Promise<FiatQuote> {
+  return runIdempotentMutation("quote", { ...request }, (key) => client.createFiatQuote(request, key))
+}
+
+/** Seconds until the quote expires (0 when expired or unparseable). Guide line 700: "Display the quote expiry." */
+export function quoteSecondsLeft(quote: Pick<FiatQuote, "expiresAt">, now: number = Date.now()): number {
+  const expires = Date.parse(quote.expiresAt)
+  if (!Number.isFinite(expires)) return 0
+  return Math.max(0, Math.floor((expires - now) / 1000))
+}
+
+/**
+ * Whether an order can still be placed against this quote. Guide line 700:
+ * "A quote is not a payment and does not reserve funds." The guide shows
+ * only `state: "active"`, so anything else, or a passed expiry, needs a new
+ * quote. The backend has the final word (FIAT_QUOTE_NOT_ACTIVE, line 971).
+ */
+export function isQuoteUsable(quote: Pick<FiatQuote, "expiresAt" | "state">, now: number = Date.now()): boolean {
+  return quote.state === "active" && quoteSecondsLeft(quote, now) > 0
+}
+
+/* ── Order (guide §9.2 lines 707-757) ─────────────────────────────────── */
+
+/**
+ * POST /fiat/orders for an OnSwitch onramp. The key is scoped to
+ * (walletId, quoteId): a double-click or a retry after a timeout reuses it,
+ * so the backend replays the same order (guide lines 968-969, 974-975).
+ */
+export function createOnrampOrder(
+  client: OnrampClient,
+  input: { walletId: string; quoteId: string },
+): Promise<FiatOrder> {
+  const body = { provider: "onswitch" as const, walletId: input.walletId, quoteId: input.quoteId }
+  return runIdempotentMutation("order", body, (key) => client.createFiatOrder(body, key))
+}
+
+/** Guide line 970-971: "Re-quote when the backend returns FIAT_QUOTE_NOT_ACTIVE." */
+export function needsRequote(error: unknown): boolean {
+  return error instanceof CryptoBackendError && error.code === "FIAT_QUOTE_NOT_ACTIVE"
+}
+
+/* ── Order state → screen (guide §11 lines 952-963) ───────────────────── */
+
+export type OnrampOrderScreen =
+  | "continue" // created / quoted
+  | "pay" // awaiting_bank_deposit
+  | "processing" // provider_processing / scheduled, and the crypto_* states
+  | "completed"
+  | "review" // manual_review / blocked
+  | "problem" // failed / reversed / refund_in_flight / refunded / refund_failed
+  | "unknown" // a state the guide doesn't list
+
+export interface OnrampOrderView {
+  screen: OnrampOrderScreen
+  /**
+   * True for end states (completed, failed, reversed, refunded,
+   * refund_failed; see FIAT_ORDER_TERMINAL_STATES and open question 10).
+   * Not terminal: manual_review / blocked (automatic polling stops, guide
+   * line 962, but the order can still move) and refund_in_flight (still
+   * polled, slowly). Both stay resumable.
+   */
+  terminal: boolean
+  /** The backend's reason for review/problem states, as plain text, if any. */
+  reason?: string
+}
+
+const SCREEN_BY_STATE: Record<string, OnrampOrderScreen> = {
+  created: "continue",
+  quoted: "continue",
+  awaiting_bank_deposit: "pay",
+  awaiting_crypto_deposit: "processing",
+  crypto_intent_ready: "processing",
+  crypto_submitted: "processing",
+  provider_processing: "processing",
+  scheduled: "processing",
+  completed: "completed",
+  manual_review: "review",
+  blocked: "review",
+  failed: "problem",
+  reversed: "problem",
+  refund_in_flight: "problem",
+  refunded: "problem",
+  refund_failed: "problem",
+}
+
+/**
+ * The screen for an order is driven by `state` only. `providerStatus` is
+ * diagnostics (guide lines 948-950) and the HTTP status of the create call
+ * never matters: 201 "does not mean the fiat payment settled" (lines 966-967).
+ *
+ * The reason shown for review/problem states comes from whichever of
+ * failureReason / reviewReason / refundReason (types.ts FiatOrder) the
+ * backend filled in; which field it uses per state is open question 16.
+ */
+export function onrampOrderView(order: Pick<FiatOrder, "state" | "failureReason" | "reviewReason" | "refundReason">): OnrampOrderView {
+  const screen = SCREEN_BY_STATE[order.state] ?? "unknown"
+  const terminal = FIAT_ORDER_TERMINAL_STATES.has(order.state)
+  const reason =
+    screen === "review" || screen === "problem"
+      ? [order.reviewReason, order.refundReason, order.failureReason].find(
+          (value): value is string => typeof value === "string" && value.trim() !== "",
+        )
+      : undefined
+  return { screen, terminal, ...(reason ? { reason } : {}) }
+}
+
+/* ── Payment instructions (guide §9.2 lines 740-757) ──────────────────── */
+
+export interface InstructionRow {
+  key: string
+  label: string
+  value: string
+  /** Bank account details: shown masked until the user reveals them. */
+  sensitive: boolean
+}
+
+export interface PaymentInstructions {
+  rows: InstructionRow[]
+  expiresAt?: string
+}
+
+const INSTRUCTION_LABELS: Record<string, string> = {
+  amount: "Amount",
+  currency: "Currency",
+  bankName: "Bank",
+  accountName: "Account name",
+  accountNumber: "Account number",
+  reference: "Reference",
+}
+
+const SENSITIVE_KEYS = new Set(["accountNumber", "iban", "routingNumber"])
+
+const humanize = (key: string) =>
+  key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/^./, (c) => c.toUpperCase())
+
+/**
+ * "providerDisplay is a sanitized display object. Render only the fields
+ * returned by the backend and treat the instructions as expiring. Do not
+ * infer bank details from the quote." (guide lines 755-757)
+ *
+ * Reads providerDisplay.paymentInstructions (the documented shape). Only
+ * string and number values become rows, in the order returned; nested
+ * objects are skipped rather than guessed at. expiresAt is pulled out for
+ * the countdown. If the backend sends no instructions, there are no rows.
+ */
+export function paymentInstructionsFrom(providerDisplay: FiatOrder["providerDisplay"]): PaymentInstructions {
+  const raw = providerDisplay?.paymentInstructions
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { rows: [] }
+  const rows: InstructionRow[] = []
+  let expiresAt: string | undefined
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== "string" && typeof value !== "number") continue
+    if (key === "expiresAt") {
+      expiresAt = String(value)
+      continue
+    }
+    rows.push({
+      key,
+      label: INSTRUCTION_LABELS[key] ?? humanize(key),
+      value: String(value),
+      sensitive: SENSITIVE_KEYS.has(key),
+    })
+  }
+  return { rows, ...(expiresAt ? { expiresAt } : {}) }
+}
+
+/** "••••1234" style mask for a sensitive value, keeping the last four characters. */
+export function maskValue(value: string): string {
+  const visible = value.slice(-4)
+  return `${"•".repeat(Math.max(value.length - 4, 4))}${visible}`
+}

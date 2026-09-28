@@ -13,38 +13,39 @@
  *   For virtual-account activity, poll less frequently (15-30s while
  *   the account screen is open) and refresh on focus.
  *
- * Terminal + pause state grouping comes from §11 lines 954-963: the
- * table shows `completed`, `failed`, `reversed`, `refund_in_flight`,
- * `refunded`, `refund_failed` as end states; `manual_review` /
- * `blocked` say "Stop automatic retries and show support/review
- * messaging" — treated here as pause (auto-poll off, focus refetch
- * still allowed).
+ * The guide never lists terminal states (open question 10). The grouping
+ * below comes from §11 lines 954-963 and §13 line 1185 (the Bridge
+ * offramp polls "until completed, failed, reversed, or manual review"):
+ *  · end states stop polling;
+ *  · `manual_review` / `blocked` pause automatic polling — "Stop automatic
+ *    retries and show support/review messaging" — with focus refetch still
+ *    allowed;
+ *  · `refund_in_flight` is grouped with the problem states in §11 but a
+ *    refund in flight can still change, so it keeps polling at the slow
+ *    end of the ladder.
  */
 
 const ORDER_LADDER_MS: readonly number[] = [2_000, 4_000, 8_000, 15_000, 30_000, 45_000]
 
 const VIRTUAL_ACCOUNT_INTERVAL_MS = 20_000 // guide §11: 15-30s while the account screen is open.
 
-/** Terminal states — polling stops entirely. */
+/** End states — polling stops entirely. Not a guide-given list (open question 10). */
 export const FIAT_ORDER_TERMINAL_STATES: ReadonlySet<string> = new Set([
   "completed",
   "failed",
   "reversed",
-  "refund_in_flight",
   "refunded",
   "refund_failed",
 ])
 
-/**
- * Pause states — auto-poll pauses (support/review messaging), focus
- * refetch still allowed. `refund_in_flight` is intentionally NOT here:
- * it's terminal per §11's "Show the backend's safe reason and a
- * support/recovery action" grouping.
- */
+/** Pause states — automatic polling stops; focus refetch still allowed. */
 export const FIAT_ORDER_PAUSE_STATES: ReadonlySet<string> = new Set([
   "manual_review",
   "blocked",
 ])
+
+/** Still changing, but slowly: polled at the ladder's slowest step. */
+export const FIAT_ORDER_SLOW_STATES: ReadonlySet<string> = new Set(["refund_in_flight"])
 
 /**
  * Return the next order-poll delay in ms, or null if polling should
@@ -56,6 +57,7 @@ export function nextFiatOrderPollDelayMs(
 ): number | null {
   if (state && FIAT_ORDER_TERMINAL_STATES.has(state)) return null
   if (state && FIAT_ORDER_PAUSE_STATES.has(state)) return null
+  if (state && FIAT_ORDER_SLOW_STATES.has(state)) return ORDER_LADDER_MS[ORDER_LADDER_MS.length - 1]
   const index = Math.min(Math.max(pollCount, 0), ORDER_LADDER_MS.length - 1)
   return ORDER_LADDER_MS[index]
 }

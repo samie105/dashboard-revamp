@@ -21,7 +21,9 @@
  * flow reaches a terminal state.
  */
 
-export type PendingFlowKind = "buy" | "sell" | "fund" | "trading-withdraw" | "hyperliquid-deposit" | "hyperliquid-withdrawal"
+// "fiat-buy" holds an OnSwitch order id, kept apart from the legacy "buy"
+// reference so neither flow can pick up the other's entry.
+export type PendingFlowKind = "buy" | "sell" | "fund" | "trading-withdraw" | "hyperliquid-deposit" | "hyperliquid-withdrawal" | "fiat-buy"
 
 export interface PendingFlow {
   reference: string

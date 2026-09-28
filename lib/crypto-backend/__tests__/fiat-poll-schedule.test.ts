@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   FIAT_ORDER_PAUSE_STATES,
+  FIAT_ORDER_SLOW_STATES,
   FIAT_ORDER_TERMINAL_STATES,
   fiatConfigRefetchDelayMs,
   nextFiatOrderPollDelayMs,
@@ -44,13 +45,23 @@ describe("order poll ladder", () => {
     expect(nextFiatOrderPollDelayMs(state, 3)).not.toBeNull()
   })
 
-  it.each(["completed", "failed", "reversed", "refund_in_flight", "refunded", "refund_failed"])(
-    "stops on terminal state %s",
+  it.each(["completed", "failed", "reversed", "refunded", "refund_failed"])(
+    "stops on end state %s",
     (state) => {
       expect(FIAT_ORDER_TERMINAL_STATES.has(state)).toBe(true)
       expect(nextFiatOrderPollDelayMs(state, 0)).toBeNull()
     },
   )
+
+  it("keeps polling refund_in_flight at the slow end of the ladder (a refund can still change)", () => {
+    expect(FIAT_ORDER_TERMINAL_STATES.has("refund_in_flight")).toBe(false)
+    expect(FIAT_ORDER_SLOW_STATES.has("refund_in_flight")).toBe(true)
+    for (const count of [0, 1, 10]) {
+      const delay = nextFiatOrderPollDelayMs("refund_in_flight", count)
+      expect(delay).toBeGreaterThanOrEqual(30_000)
+      expect(delay).toBeLessThanOrEqual(60_000)
+    }
+  })
 
   it.each(["manual_review", "blocked"])("stops automatic polling on %s (\"Stop automatic retries\")", (state) => {
     expect(FIAT_ORDER_PAUSE_STATES.has(state)).toBe(true)

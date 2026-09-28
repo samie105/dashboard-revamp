@@ -28,6 +28,8 @@ import {
   type Stage,
 } from "@/components/ui/flow"
 import { FlowTerminal, OptionRows } from "@/components/flows/flow-terminal"
+import { OnswitchBuyFlow } from "@/components/fiat/onramp/OnswitchBuyFlow"
+import { buySellImplementation } from "@/lib/fiat-flags"
 import { useOnline } from "@/hooks/useOnline"
 import {
   savePendingFlow,
@@ -137,7 +139,30 @@ function ModalBody({ children, className }: { children: React.ReactNode; classNa
   return <div className={cn("flex flex-1 flex-col p-4 sm:p-5", className)}>{children}</div>
 }
 
-export function BuySellClient({
+type BuySellClientProps = React.ComponentProps<typeof LegacyBuySellClient>
+
+/**
+ * Buy follows the fiat integration guide (OnSwitch onramp) when
+ * NEXT_PUBLIC_FIAT_BUY_FLOW is "onswitch"; otherwise, including when unset,
+ * it's the legacy buy (lib/fiat-flags.ts). Sell stays on the legacy flow
+ * until the offramp ships behind its own flag.
+ * Same props either way, so /buy, /sell and the money modal are unchanged.
+ */
+export function BuySellClient(props: BuySellClientProps) {
+  if (buySellImplementation(props.mode) === "onswitch-buy") {
+    return (
+      <OnswitchBuyFlow
+        variant={props.variant}
+        onInFlightChange={props.onInFlightChange}
+        onCompactChange={props.onCompactChange}
+      />
+    )
+  }
+  return <LegacyBuySellClient {...props} />
+}
+
+/** The pre-guide Dollar Account ⇄ USDT buy/sell, kept as the rollback. */
+function LegacyBuySellClient({
   mode,
   variant = "page",
   onInFlightChange,

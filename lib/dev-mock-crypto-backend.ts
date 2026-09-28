@@ -32,6 +32,7 @@ import { Keypair, PublicKey, SystemProgram, TransactionMessage, VersionedTransac
 
 import { DEV_BYPASS_USER } from "./dev-auth-bypass"
 import { respondFromFiatFixtures } from "./crypto-backend/dev-mock-fiat-responder"
+import { FIAT_MOCKS_ENABLED } from "./fiat-mocks"
 
 // ── Envelope helpers ────────────────────────────────────────────────────────
 
@@ -604,6 +605,16 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
   // Wallet lifecycle
   if (method === "GET" && path === "wallets/me") {
     const details = walletDetails()
+    if (!details && FIAT_MOCKS_ENABLED) {
+      // Dev-only: fiat mock mode needs a ready wallet to reach Buy. Not stored,
+      // so running the real setup ceremony later still creates its own wallet.
+      // The id is the guide's example walletId (fiat guide lines 712, 820).
+      return json({
+        id: "66f000000000000000000041", userId: DEV_BYPASS_USER.userId, status: "active",
+        version: 1, securityVersion: 1, provisioningMode: "self-custodial",
+        createdAt: nowIso(), updatedAt: nowIso(), accounts: [],
+      })
+    }
     if (!details) return jsonError("WALLET_NOT_FOUND", "No wallet exists for this user yet", 404)
     return json(details)
   }
