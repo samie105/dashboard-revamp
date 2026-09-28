@@ -17,6 +17,7 @@ import { __resetFiatIdempotencyStore } from "@/lib/crypto-backend/fiat-idempoten
 import {
   buildOnrampQuoteRequest,
   createOnrampOrder,
+  AFRICAN_BUY_NETWORKS,
   isQuoteUsable,
   isValidAmount,
   ONRAMP_STAGES,
@@ -132,6 +133,28 @@ describe("options come only from /fiat/config (guide lines 364-366, 375-377)", (
     const config = clone()
     config.providers.onswitch.coverage[0].channels = ["BANK", "MOBILE_MONEY"]
     expect(onrampOptions(config).filter((o) => o.countryCode === "NG").map((o) => o.channel)).toEqual(["BANK", "MOBILE_MONEY"])
+  })
+
+  it("exposes only the Ethereum and Solana product destinations", () => {
+    const config = clone()
+    config.assetRoutes.push(
+      {
+        ...config.assetRoutes[0],
+        providerAssetId: "solana:usdc",
+        providerChain: "solana",
+        localNetworkId: "solana-mainnet-beta",
+      },
+      {
+        ...config.assetRoutes[0],
+        providerAssetId: "arbitrum:usdc",
+        providerChain: "arbitrum",
+        localNetworkId: "arbitrum-one",
+      },
+    )
+
+    const networks = new Set(onrampOptions(config).map((option) => option.network))
+    expect(networks).toEqual(new Set(AFRICAN_BUY_NETWORKS))
+    expect(networks.has("arbitrum-one")).toBe(false)
   })
 
   it("skips a wallet-ready route with no localNetworkId rather than guessing a network", () => {

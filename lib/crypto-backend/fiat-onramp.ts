@@ -4,9 +4,9 @@
  * (lines 1145-1156).
  *
  * The backend is the source of truth for capability, quotes and order state
- * (guide lines 10-12); everything here derives from what it returns and
- * renders it as given. Nothing is hardcoded: corridors, channels, assets and
- * networks all come from /fiat/config.
+ * (guide lines 10-12). The dashboard applies one product-level destination
+ * filter below for the African buy UI; it can hide a backend-supported route,
+ * but it never enables a route the backend did not return as wallet-ready.
  */
 
 import type { CryptoBackendClient } from "./client"
@@ -18,6 +18,17 @@ import { FIAT_ORDER_TERMINAL_STATES } from "./fiat-poll-schedule"
 import type { FiatCapabilitySnapshot, FiatOrder, FiatQuote } from "./types"
 
 type OnrampClient = Pick<CryptoBackendClient, "createFiatQuote" | "createFiatOrder">
+
+/**
+ * Networks currently exposed by the African local-currency buy UI.
+ *
+ * This is intentionally frontend-only. The backend may return additional
+ * wallet-ready OnSwitch routes, but the dashboard should only present the two
+ * destinations currently supported by the product: Ethereum and Solana.
+ */
+export const AFRICAN_BUY_NETWORKS = ["ethereum-mainnet", "solana-mainnet-beta"] as const
+
+const AFRICAN_BUY_NETWORK_SET: ReadonlySet<string> = new Set(AFRICAN_BUY_NETWORKS)
 
 /* ── Availability (guide §5 lines 368-377) ────────────────────────────── */
 
@@ -57,14 +68,15 @@ export interface OnrampOption {
  * Every option the UI may offer. Guide lines 375-377: a coverage item and an
  * assetRoutes item must both be enabled and wallet-ready. A route with no
  * localNetworkId can't be quoted (there's no `network` to send), so it's
- * left out rather than guessed.
+ * left out rather than guessed. The product allowlist also removes networks
+ * that are valid in the backend contract but not exposed in this UI.
  */
 export function onrampOptions(config: FiatCapabilitySnapshot | undefined): OnrampOption[] {
   const options: OnrampOption[] = []
   for (const { coverage, assetRoutes } of onswitchCorridors(config, "onramp")) {
     for (const channel of coverage.channels) {
       for (const route of assetRoutes) {
-        if (!route.localNetworkId) continue
+        if (!route.localNetworkId || !AFRICAN_BUY_NETWORK_SET.has(route.localNetworkId)) continue
         options.push({
           key: [coverage.countryCode, coverage.currencyCode, channel, route.providerAssetId, route.localNetworkId].join("|"),
           countryCode: coverage.countryCode,
