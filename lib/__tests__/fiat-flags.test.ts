@@ -62,7 +62,7 @@ describe("the legacy Buy/Sell code is kept, and BuySellClient switches on the fl
     expect(source).toContain("function LegacyBuySellClient(")
     expect(source).toContain("buySellImplementation(props.mode)")
     expect(source).toContain("<LegacyBuySellClient {...props} />")
-    expect(source).toContain("<OnswitchBuyFlow")
+    expect(source).toContain("<FiatBuyFlow")
     // The legacy submit path is still there.
     expect(source).toContain("initiateBuy(")
     expect(source).toContain("initiateSell(")

@@ -12,17 +12,19 @@ import {
   FIAT_QUOTE_ONRAMP,
 } from "@/lib/crypto-backend/__fixtures__/fiat"
 import { __resetFiatMockState, respondFromFiatFixtures } from "@/lib/crypto-backend/dev-mock-fiat-responder"
+import { maskValue } from "@/lib/crypto-backend/fiat-display"
 import { __resetFiatIdempotencyStore } from "@/lib/crypto-backend/fiat-idempotency"
 import {
   buildOnrampQuoteRequest,
   createOnrampOrder,
   isQuoteUsable,
   isValidAmount,
-  maskValue,
+  ONRAMP_STAGES,
   needsRequote,
   onrampAvailability,
   onrampOptions,
   onrampOrderView,
+  onrampStageIndex,
   paymentInstructionsFrom,
   quoteSecondsLeft,
   requestOnrampQuote,
@@ -357,5 +359,27 @@ describe("payment instructions render only what the backend returns (guide lines
   it("masks all but the last four characters", () => {
     expect(maskValue("0123456789")).toBe("••••••6789")
     expect(maskValue("12")).toBe("••••12")
+  })
+})
+
+describe("status stages restate the §11 groups (guide lines 954-961)", () => {
+  it("has one stage per group an onramp passes through", () => {
+    expect(ONRAMP_STAGES.map((s) => s.key)).toEqual(["created", "awaiting_bank_deposit", "provider_processing", "completed"])
+  })
+
+  it.each([
+    ["created", 0],
+    ["quoted", 0],
+    ["awaiting_bank_deposit", 1],
+    ["provider_processing", 2],
+    ["scheduled", 2],
+    ["crypto_submitted", 2],
+    ["completed", 4],
+    ["manual_review", null],
+    ["failed", null],
+    ["refund_in_flight", null],
+    ["something_new", null],
+  ])("%s → stage %s", (state, index) => {
+    expect(onrampStageIndex(state)).toBe(index)
   })
 })

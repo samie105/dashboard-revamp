@@ -28,7 +28,7 @@ import {
   type Stage,
 } from "@/components/ui/flow"
 import { FlowTerminal, OptionRows } from "@/components/flows/flow-terminal"
-import { OnswitchBuyFlow } from "@/components/fiat/onramp/OnswitchBuyFlow"
+import { FiatBuyFlow } from "@/components/fiat/buy/FiatBuyFlow"
 import { buySellImplementation } from "@/lib/fiat-flags"
 import { useOnline } from "@/hooks/useOnline"
 import {
@@ -151,7 +151,7 @@ type BuySellClientProps = React.ComponentProps<typeof LegacyBuySellClient>
 export function BuySellClient(props: BuySellClientProps) {
   if (buySellImplementation(props.mode) === "onswitch-buy") {
     return (
-      <OnswitchBuyFlow
+      <FiatBuyFlow
         variant={props.variant}
         onInFlightChange={props.onInFlightChange}
         onCompactChange={props.onCompactChange}

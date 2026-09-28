@@ -11,6 +11,7 @@
 
 import type { CryptoBackendClient } from "./client"
 import { CryptoBackendError } from "./errors"
+import { displayRows, type DisplayRow } from "./fiat-display"
 import { onswitchCorridors } from "./fiat-capabilities"
 import { runIdempotentMutation } from "./fiat-idempotency"
 import { FIAT_ORDER_TERMINAL_STATES } from "./fiat-poll-schedule"
@@ -215,15 +216,49 @@ export function onrampOrderView(order: Pick<FiatOrder, "state" | "failureReason"
   return { screen, terminal, ...(reason ? { reason } : {}) }
 }
 
+/* ── Status stages (guide §11 lines 954-961) ──────────────────────────── */
+
+/**
+ * The staged checklist on the order status screen, one stage per §11 state
+ * group an onramp passes through. Labels restate the guide's "UI meaning"
+ * column; they don't add states.
+ */
+export const ONRAMP_STAGES: ReadonlyArray<{ key: string; label: string }> = [
+  { key: "created", label: "Order created" }, // created / quoted
+  { key: "awaiting_bank_deposit", label: "Waiting for your bank payment" },
+  { key: "provider_processing", label: "Payment being processed" }, // provider_processing / scheduled
+  { key: "completed", label: "Delivered to your wallet" },
+]
+
+/**
+ * Which stage is in flight for a state. Returns ONRAMP_STAGES.length once
+ * completed (the checklist then shows every stage done), or null for states
+ * that aren't on the happy path (review, problem, unknown), which the screen
+ * shows without the checklist.
+ */
+export function onrampStageIndex(state: string): number | null {
+  switch (state) {
+    case "created":
+    case "quoted":
+      return 0
+    case "awaiting_bank_deposit":
+      return 1
+    case "provider_processing":
+    case "scheduled":
+    case "awaiting_crypto_deposit":
+    case "crypto_intent_ready":
+    case "crypto_submitted":
+      return 2
+    case "completed":
+      return ONRAMP_STAGES.length
+    default:
+      return null
+  }
+}
+
 /* ── Payment instructions (guide §9.2 lines 740-757) ──────────────────── */
 
-export interface InstructionRow {
-  key: string
-  label: string
-  value: string
-  /** Bank account details: shown masked until the user reveals them. */
-  sensitive: boolean
-}
+export type InstructionRow = DisplayRow
 
 export interface PaymentInstructions {
   rows: InstructionRow[]
@@ -239,47 +274,26 @@ const INSTRUCTION_LABELS: Record<string, string> = {
   reference: "Reference",
 }
 
-const SENSITIVE_KEYS = new Set(["accountNumber", "iban", "routingNumber"])
-
-const humanize = (key: string) =>
-  key
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/_/g, " ")
-    .replace(/^./, (c) => c.toUpperCase())
+const INSTRUCTION_SENSITIVE_KEYS: ReadonlySet<string> = new Set(["accountNumber", "iban", "routingNumber"])
 
 /**
  * "providerDisplay is a sanitized display object. Render only the fields
  * returned by the backend and treat the instructions as expiring. Do not
  * infer bank details from the quote." (guide lines 755-757)
  *
- * Reads providerDisplay.paymentInstructions (the documented shape). Only
- * string and number values become rows, in the order returned; nested
- * objects are skipped rather than guessed at. expiresAt is pulled out for
- * the countdown. If the backend sends no instructions, there are no rows.
+ * Reads providerDisplay.paymentInstructions (the documented shape) through
+ * the shared displayRows helper; expiresAt is pulled out for the countdown.
+ * If the backend sends no instructions, there are no rows.
  */
 export function paymentInstructionsFrom(providerDisplay: FiatOrder["providerDisplay"]): PaymentInstructions {
   const raw = providerDisplay?.paymentInstructions
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { rows: [] }
-  const rows: InstructionRow[] = []
-  let expiresAt: string | undefined
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof value !== "string" && typeof value !== "number") continue
-    if (key === "expiresAt") {
-      expiresAt = String(value)
-      continue
-    }
-    rows.push({
-      key,
-      label: INSTRUCTION_LABELS[key] ?? humanize(key),
-      value: String(value),
-      sensitive: SENSITIVE_KEYS.has(key),
-    })
-  }
-  return { rows, ...(expiresAt ? { expiresAt } : {}) }
+  const rows = displayRows(raw, {
+    labels: INSTRUCTION_LABELS,
+    sensitiveKeys: INSTRUCTION_SENSITIVE_KEYS,
+    skipKeys: new Set(["expiresAt"]),
+  })
+  const expiresAt = (raw as Record<string, unknown>).expiresAt
+  return { rows, ...(typeof expiresAt === "string" ? { expiresAt } : {}) }
 }
 
-/** "••••1234" style mask for a sensitive value, keeping the last four characters. */
-export function maskValue(value: string): string {
-  const visible = value.slice(-4)
-  return `${"•".repeat(Math.max(value.length - 4, 4))}${visible}`
-}
