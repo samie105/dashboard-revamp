@@ -133,6 +133,8 @@ function OfframpOrderStatus({
       ? `${order.expectedDepositAmount} ${order.asset.split(":").at(-1)?.toUpperCase() ?? order.asset}`
       : undefined
   const canDiscard = ["failed", "reversed", "refunded", "expired"].includes(order.state)
+    || (order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash)
+  const stuckBeforeSigning = order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash
   const problemCaption = discardError ? <><FiatErrorDetail error={describeFiatError(discardError)} />{reasonCaption}</> : reasonCaption
 
   if (view.screen === "sign") {
@@ -174,6 +176,7 @@ function OfframpOrderStatus({
           busy={signing}
         />
         <Button variant="outline" onClick={onRefresh} disabled={signing}>Refresh order</Button>
+        {stuckBeforeSigning && <Button variant="outline" onClick={onDiscard} disabled={signing || discarding}>{discarding ? "Discarding…" : "Discard order & start over"}</Button>}
       </div>
     )
   }
