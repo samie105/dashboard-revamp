@@ -513,7 +513,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   const secondsLeft = currentQuote ? quoteSecondsLeft(currentQuote) : 0
   const error = quoteMutation.error && !needsOfframpRequote(quoteMutation.error)
     ? describeFiatError(quoteMutation.error)
-    : orderMutation.error
+    : orderMutation.error && !needsOfframpRequote(orderMutation.error)
       ? describeFiatError(orderMutation.error)
       : createBeneficiary.error
         ? describeFiatError(createBeneficiary.error)
@@ -735,6 +735,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
                 </div>
               )}
               {quoteReceipt && <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">A quote shows the price; it does not reserve funds. If it expires, request a new one.</p>}
+              {needsOfframpRequote(orderMutation.error) && <div className="mt-4 rounded-xl border border-warning/20 bg-warning/10 px-3.5 py-3 text-[13px] leading-relaxed text-warning">That quote is no longer available. Get a fresh quote to continue.</div>}
               {error && <div className="mt-4"><FiatErrorDetail error={error} /></div>}
               <div className="mt-5"><FlowCta label={ctaLabel} onClick={onQuoteOrOrder} disabled={!currentRequest || submitting || !wallet.data?.id} busy={submitting} /></div>
               <p className="mt-3 text-center text-xs leading-relaxed text-subtle">Review the final amount before signing your crypto transfer.</p>
