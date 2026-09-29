@@ -30,17 +30,13 @@ import { OnrampOrderScreen } from "@/components/fiat/buy/OnrampOrderScreen"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { formatCountdown } from "@/components/fiat/shared/format"
 import { refreshWalletBalances } from "@/components/fiat/shared/refreshWalletBalances"
-import { FlowTerminal, OptionRows } from "@/components/flows/flow-terminal"
+import { FlowTerminal } from "@/components/flows/flow-terminal"
 import {
-  AmountField,
   AnnouncementBanner,
-  ChoiceRow,
-  DetailPanel,
   FlowCta,
   FlowHeader,
   FlowShell,
   FlowSkeleton,
-  RouteStrip,
   UnavailablePanel,
   useStageProgress,
 } from "@/components/ui/flow"
@@ -55,7 +51,7 @@ import {
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
 import { buyRails, type BuyRail } from "@/lib/crypto-backend/fiat-bridge-onramp"
-import { countryLabelForCode } from "@/lib/crypto-backend/fiat-country"
+import { countryFlagForCode, countryNameForCode } from "@/lib/crypto-backend/fiat-country"
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backend/fiat-errors"
 import {
@@ -78,8 +74,8 @@ import type { FiatOrder, FiatQuote } from "@/lib/crypto-backend/types"
 import { clearPendingFlow, readPendingFlow, savePendingFlow } from "@/lib/pending-flow"
 
 const WALLET_SETUP_HREF = "/wallet/modern"
-const TITLE = "Buy"
-const SUBTITLE = "Pay from your bank, receive crypto in your Worldstreet wallet"
+const TITLE = "Buy crypto"
+const SUBTITLE = "Pay locally and receive crypto directly in your Worldstreet wallet"
 
 type Props = {
   variant?: "page" | "modal"
@@ -101,6 +97,58 @@ function useNow(active: boolean) {
 const sameRequest = (a: OnrampQuoteRequest | null, b: OnrampQuoteRequest | null) =>
   Boolean(a && b) && JSON.stringify(a) === JSON.stringify(b)
 
+type BuySelectOption = {
+  value: string
+  label: string
+  meta?: string
+  flag?: string
+}
+
+function BuySelect({
+  label,
+  value,
+  options,
+  onChange,
+  disabled = false,
+}: {
+  label: string
+  value: string
+  options: BuySelectOption[]
+  onChange: (value: string) => void
+  disabled?: boolean
+}) {
+  const selected = options.find((option) => option.value === value)
+  return (
+    <label className="block min-w-0">
+      <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.13em] text-subtle">{label}</span>
+      <span className="relative block">
+        {selected?.flag && (
+          <span aria-hidden className="pointer-events-none absolute left-4 top-1/2 z-[1] -translate-y-1/2 text-[22px] leading-none">
+            {selected.flag}
+          </span>
+        )}
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+          aria-label={label}
+          className={`h-14 w-full appearance-none rounded-2xl border border-border/45 bg-background/35 px-4 pr-11 text-sm font-semibold text-foreground outline-none transition focus:border-primary/70 focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60 ${selected?.flag ? "pl-14" : ""}`}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.flag ? `${option.flag} ` : ""}{option.label}{option.meta ? ` · ${option.meta}` : ""}
+            </option>
+          ))}
+        </select>
+        <svg aria-hidden className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </span>
+      {selected?.meta && <span className="mt-1.5 block text-[12px] text-muted-foreground">{selected.meta}</span>}
+    </label>
+  )
+}
+
 export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChange }: Props) {
   const isModal = variant === "modal"
   const router = useRouter()
@@ -121,6 +169,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   const [quote, setQuote] = React.useState<FiatQuote | null>(null)
   const [quotedRequest, setQuotedRequest] = React.useState<OnrampQuoteRequest | null>(null)
   const [requoted, setRequoted] = React.useState(false)
+  const [checkingPayment, setCheckingPayment] = React.useState(false)
 
   /* ── Order (existing or just created) ─────────────────────────────── */
 
@@ -170,6 +219,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       // (guide lines 966-969). The screen follows `state` from here on.
       queryClient.setQueryData(cryptoQueryKeys.fiatOrder(userId, created.id), created)
       savePendingFlow("fiat-buy", created.id)
+      setCheckingPayment(false)
       setOrderId(created.id)
     },
     onError: (error) => {
@@ -222,12 +272,18 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   const stageIndex = order.data ? onrampStageIndex(order.data.state) : null
   const stageProgress = useStageProgress(stageIndex ?? 0, orderId)
 
+  const checkPayment = React.useCallback(() => {
+    setCheckingPayment(true)
+    order.refresh()
+  }, [order.refresh])
+
   function startOver() {
     clearPendingFlow("fiat-buy")
     setOrderId(null)
     setQuote(null)
     setQuotedRequest(null)
     setRequoted(false)
+    setCheckingPayment(false)
     quoteMutation.reset()
     orderMutation.reset()
   }
@@ -238,7 +294,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     isModal ? (
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{content}</div>
     ) : (
-      <FlowShell className="max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+      <FlowShell className="max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         <PageHeader title={TITLE} subtitle={SUBTITLE} back="/" className="mb-4" />
         <div className="flex flex-1 flex-col gap-5">{content}</div>
       </FlowShell>
@@ -277,7 +333,9 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
           figure={quote ? `${quote.destinationAmount} ${quote.destinationCurrency}` : undefined}
           stageIndex={stageIndex}
           stageProgress={stageProgress}
-          onRefresh={order.refresh}
+          checkingPayment={checkingPayment}
+          onRefresh={checkPayment}
+          onViewPaymentDetails={() => setCheckingPayment(false)}
           onStartOver={startOver}
         />
       </>,
@@ -435,6 +493,35 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       ]
     : null
 
+  const corridorValue = `${activeCorridor.countryCode}|${activeCorridor.currencyCode}`
+  const selectedChannel = activeChannel ?? selected.channel
+  const selectedCountryName = countryNameForCode(activeCorridor.countryCode, activeCorridor.countryName)
+  const selectedCountryFlag = countryFlagForCode(activeCorridor.countryCode)
+  const countryOptions: BuySelectOption[] = corridors.map((option) => ({
+    value: `${option.countryCode}|${option.currencyCode}`,
+    label: countryNameForCode(option.countryCode, option.countryName),
+    meta: option.currencyCode,
+    flag: countryFlagForCode(option.countryCode),
+  }))
+  const channelOptions: BuySelectOption[] = channels.map((option) => ({
+    value: option,
+    label: humanizeValue(option),
+    meta: `${activeCorridor.currencyCode} rail`,
+  }))
+  const receiveOptions: BuySelectOption[] = routes.map((option) => ({
+    value: option.key,
+    label: option.symbol,
+    meta: option.network,
+  }))
+
+  const onAmountInput = (value: string) => {
+    if (!/^[0-9]*\.?[0-9]*$/.test(value)) return
+    const [whole = "", fraction] = value.split(".")
+    const normalizedWhole = whole.replace(/^0+(?=\d)/, "")
+    if (fraction !== undefined && fraction.length > 2) return
+    setAmount(fraction !== undefined ? `${normalizedWhole}.${fraction}` : normalizedWhole)
+  }
+
   const ctaLabel = orderMutation.isPending
     ? "Creating your order…"
     : quoteMutation.isPending
@@ -467,11 +554,11 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     (Boolean(currentQuote) && quoteUsable && (!walletId || !holderNameReady))
 
   const route = {
-    from: { label: countryLabelForCode(activeCorridor.countryCode, activeCorridor.countryName), sub: `${activeCorridor.currencyCode} · ${humanizeValue(activeChannel)}` },
+    from: { label: `${selectedCountryFlag} ${selectedCountryName}`, sub: `${activeCorridor.currencyCode} · ${humanizeValue(selectedChannel)}` },
     to: { label: "Worldstreet wallet", sub: `${selected.symbol} on ${selected.network}` },
   }
   const approx = currentQuote ? `≈ ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}` : null
-  const hint = `Pay in ${activeCorridor.currencyCode}`
+  const hint = `Pay in ${activeCorridor.currencyCode} · live quote before you order`
 
   const banners = (
     <>
@@ -482,14 +569,33 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     </>
   )
 
-  const corridorChoices = corridors.map((o) => ({
-    key: `${o.countryCode}|${o.currencyCode}`,
-    label: countryLabelForCode(o.countryCode, o.countryName),
-    sub: o.currencyCode,
-  }))
-  const channelChoices = channels.map((c) => ({ key: c, label: humanizeValue(c) }))
-  const routeChoices = routes.map((o) => ({ key: o.key, label: o.symbol, sub: o.network }))
-  const corridorValue = `${activeCorridor.countryCode}|${activeCorridor.currencyCode}`
+  const selectors = (
+    <div className="flex flex-col gap-4">
+      <BuySelect
+        label="Pay from"
+        value={corridorValue}
+        options={countryOptions}
+        onChange={setCorridorKey}
+        disabled={submitting || countryOptions.length <= 1}
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <BuySelect
+          label="Payment method"
+          value={selectedChannel}
+          options={channelOptions}
+          onChange={setChannel}
+          disabled={submitting || channelOptions.length <= 1}
+        />
+        <BuySelect
+          label="Receive asset"
+          value={selected.key}
+          options={receiveOptions}
+          onChange={setRouteKey}
+          disabled={submitting || receiveOptions.length <= 1}
+        />
+      </div>
+    </div>
+  )
 
   if (isModal) {
     return (
@@ -505,28 +611,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
         route={route}
         topSlot={railTabs}
         banners={banners}
-        picker={
-          <div className="flex flex-col gap-3">
-            {corridorChoices.length > 1 && (
-              <div className="flex flex-col gap-2">
-                <Eyebrow>Pay from</Eyebrow>
-                <OptionRows options={corridorChoices} value={corridorValue} onChange={setCorridorKey} disabled={submitting} />
-              </div>
-            )}
-            {channelChoices.length > 1 && (
-              <div className="flex flex-col gap-2">
-                <Eyebrow>Pay with</Eyebrow>
-                <OptionRows options={channelChoices} value={activeChannel} onChange={setChannel} disabled={submitting} />
-              </div>
-            )}
-            {routeChoices.length > 1 && (
-              <div className="flex flex-col gap-2">
-                <Eyebrow>Receive</Eyebrow>
-                <OptionRows options={routeChoices} value={selected.key} onChange={setRouteKey} disabled={submitting} />
-              </div>
-            )}
-          </div>
-        }
+        picker={selectors}
         receipt={receipt}
         errorSlot={error ? <FiatErrorDetail error={error} /> : undefined}
         cta={<FlowCta label={ctaLabel} onClick={onCta} disabled={ctaDisabled} busy={submitting} />}
@@ -539,48 +624,126 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     <>
       {railTabs}
       {banners}
-      <RouteStrip direction="in" from={route.from} to={route.to} />
-      {/* The hero figure stays unboxed, per the house rule. */}
-      <div className="py-1">
-        <AmountField
-          value={amount}
-          onChange={setAmount}
-          unit={activeCorridor.currencyCode}
-          hint={hint}
-          problem={amountProblem}
-          approx={approx}
-          disabled={submitting}
-        />
-      </div>
-      {corridorChoices.length > 1 && (
-        <div className="flex flex-col gap-2">
-          <Eyebrow>Pay from</Eyebrow>
-          <ChoiceRow options={corridorChoices} value={corridorValue} onChange={setCorridorKey} disabled={submitting} />
-        </div>
-      )}
-      {channelChoices.length > 1 && (
-        <div className="flex flex-col gap-2">
-          <Eyebrow>Pay with</Eyebrow>
-          <ChoiceRow options={channelChoices} value={activeChannel} onChange={setChannel} columns={2} disabled={submitting} />
-        </div>
-      )}
-      {routeChoices.length > 1 && (
-        <div className="flex flex-col gap-2">
-          <Eyebrow>Receive</Eyebrow>
-          <ChoiceRow options={routeChoices} value={selected.key} onChange={setRouteKey} columns={2} disabled={submitting} />
-        </div>
-      )}
-      {receipt && <DetailPanel rows={receipt} />}
-      {receipt && (
-        <p className="text-[13px] text-muted-foreground">A quote shows the price; it doesn&apos;t reserve funds.</p>
-      )}
-      {currentQuote && quoteUsable && !holderNameReady && (
-        <p className="rounded-xl bg-surface-sunken px-3.5 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
-          Add your name to your account before starting an African local-currency buy.
+      <div className="flex flex-col gap-1">
+        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-credit">Local currency rail</span>
+        <h2 className="font-display text-2xl font-semibold tracking-[-0.03em] sm:text-[30px]">Buy with your African bank</h2>
+        <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          Choose your country, enter an amount, and receive {selected.symbol} directly in your Worldstreet wallet.
         </p>
-      )}
-      {error && <FiatErrorDetail error={error} />}
-      <FlowCta label={ctaLabel} onClick={onCta} disabled={ctaDisabled} busy={submitting} />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)] lg:items-start">
+        <div className="flex flex-col gap-5">
+          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">1 · Payment route</span>
+                <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.025em]">Where are you paying from?</h3>
+              </div>
+              <span className="rounded-full bg-credit-chip px-3 py-1.5 text-[11px] font-bold text-credit">OnSwitch</span>
+            </div>
+            {selectors}
+          </section>
+
+          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">2 · Amount</span>
+                <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.025em]">How much do you want to buy?</h3>
+              </div>
+              <span className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-bold tracking-wide text-muted-foreground ring-1 ring-border/25">
+                {activeCorridor.currencyCode}
+              </span>
+            </div>
+            <div className="mt-6 flex items-end gap-3 rounded-2xl border border-border/35 bg-background/30 px-4 py-4 focus-within:border-primary/60 focus-within:ring-4 focus-within:ring-primary/10">
+              <input
+                value={amount}
+                onChange={(event) => onAmountInput(event.target.value)}
+                inputMode="decimal"
+                placeholder="0"
+                aria-label={`Amount in ${activeCorridor.currencyCode}`}
+                disabled={submitting}
+                className="min-w-0 flex-1 bg-transparent font-display text-[clamp(2.75rem,8vw,4.5rem)] font-light leading-none tracking-[-0.05em] tabular-nums outline-none placeholder:text-muted-foreground/25 disabled:opacity-50"
+              />
+              <span className="pb-1 text-sm font-bold text-muted-foreground">{activeCorridor.currencyCode}</span>
+            </div>
+            {amountProblem ? (
+              <p className="mt-2 text-[13px] font-medium text-warning">{amountProblem}</p>
+            ) : currentQuote ? (
+              <p className="mt-2 text-[13px] tabular-nums text-muted-foreground">{approx} at the current provider rate</p>
+            ) : (
+              <p className="mt-2 text-[13px] text-muted-foreground">Your live quote appears here before any order is created.</p>
+            )}
+            {currentQuote && quoteUsable && !holderNameReady && (
+              <p className="mt-4 rounded-2xl bg-surface-sunken/70 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground ring-1 ring-border/25">
+                Add your name to your Worldstreet account before starting an African local-currency buy.
+              </p>
+            )}
+          </section>
+        </div>
+
+        <aside className="lg:sticky lg:top-6">
+          <section className="relative overflow-hidden rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_right,rgba(255,196,0,0.17),transparent_48%),linear-gradient(145deg,rgba(255,255,255,0.07),rgba(255,255,255,0.025))] p-5 shadow-[0_24px_90px_-44px_rgba(255,196,0,0.35)] sm:p-6">
+            <div className="absolute -right-16 -top-16 h-36 w-36 rounded-full bg-primary/10 blur-3xl" aria-hidden />
+            <div className="relative">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-subtle">Your quote</span>
+                <span className="rounded-full bg-background/40 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground ring-1 ring-border/25">
+                  {currentQuote ? (quoteUsable ? "Live" : "Expired") : "Preview"}
+                </span>
+              </div>
+
+              {currentQuote ? (
+                <>
+                  <div className="mt-6">
+                    <p className="text-xs font-medium text-muted-foreground">You receive</p>
+                    <p className="mt-1 break-words font-display text-[clamp(2.1rem,5vw,3.2rem)] font-semibold leading-none tracking-[-0.05em] text-foreground">
+                      {currentQuote.destinationAmount} <span className="text-xl text-muted-foreground">{currentQuote.destinationCurrency}</span>
+                    </p>
+                  </div>
+                  <div className="mt-7 divide-y divide-border/25 rounded-2xl bg-background/25 px-4 ring-1 ring-border/20">
+                    <div className="flex items-center justify-between gap-4 py-3 text-[13px]">
+                      <span className="text-muted-foreground">You pay</span>
+                      <span className="font-semibold tabular-nums">{currentQuote.sourceAmount} {currentQuote.sourceCurrency}</span>
+                    </div>
+                    {currentQuote.providerRate && (
+                      <div className="flex items-center justify-between gap-4 py-3 text-[13px]">
+                        <span className="text-muted-foreground">Rate</span>
+                        <span className="font-semibold tabular-nums">1 {currentQuote.destinationCurrency} = {currentQuote.providerRate} {currentQuote.sourceCurrency}</span>
+                      </div>
+                    )}
+                    {(currentQuote.providerFee || currentQuote.worldstreetFee) && (
+                      <div className="flex items-center justify-between gap-4 py-3 text-[13px]">
+                        <span className="text-muted-foreground">Fees</span>
+                        <span className="font-semibold tabular-nums">{currentQuote.providerFee ?? "0"} + {currentQuote.worldstreetFee ?? "0"} {currentQuote.sourceCurrency}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-4 py-3 text-[13px]">
+                      <span className="text-muted-foreground">Quote expires</span>
+                      <span className="font-semibold tabular-nums">{quoteUsable ? formatCountdown(secondsLeft) : "Expired"}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-6 rounded-2xl bg-background/25 px-4 py-5 ring-1 ring-border/20">
+                  <p className="font-display text-xl font-semibold tracking-[-0.02em]">Ready when you are</p>
+                  <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+                    Enter an amount to see the current rate, fees, and exactly how much crypto will arrive.
+                  </p>
+                </div>
+              )}
+
+              {error && <div className="mt-4"><FiatErrorDetail error={error} /></div>}
+              <div className="mt-5">
+                <FlowCta label={ctaLabel} onClick={onCta} disabled={ctaDisabled} busy={submitting} />
+              </div>
+              <p className="mt-3 text-center text-[11.5px] leading-relaxed text-subtle">
+                Funds are sent to the bank details returned after your order is created. Never reuse expired details.
+              </p>
+            </div>
+          </section>
+        </aside>
+      </div>
     </>,
   )
 }

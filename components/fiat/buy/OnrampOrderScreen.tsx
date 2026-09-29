@@ -36,7 +36,9 @@ export function OnrampOrderScreen({
   figure,
   stageIndex,
   stageProgress,
+  checkingPayment,
   onRefresh,
+  onViewPaymentDetails,
   onStartOver,
 }: {
   order: FiatOrder
@@ -47,7 +49,9 @@ export function OnrampOrderScreen({
   figure?: string
   stageIndex: number | null
   stageProgress: { index: number; since: number }
+  checkingPayment: boolean
   onRefresh: () => void
+  onViewPaymentDetails: () => void
   onStartOver: () => void
 }) {
   const supportLine = `Quote reference ${order.publicReference} if you contact support.`
@@ -58,6 +62,31 @@ export function OnrampOrderScreen({
       <span className="block">{supportLine}</span>
     </>
   )
+
+  if (view.screen === "pay" && checkingPayment) {
+    return (
+      <StatusScreen
+        state="processing"
+        direction="in"
+        figure={figure}
+        headline="Checking your payment"
+        caption={
+          <>
+            <span className="block">We&apos;re checking the bank transfer with OnSwitch now.</span>
+            <span className="mt-1 block">You can leave this page open — we&apos;ll keep checking and update the order when the payment is confirmed.</span>
+            <span className="mt-2 block">{supportLine}</span>
+          </>
+        }
+        stages={stages}
+        activeIndex={stageIndex ?? 1}
+        stageStartedAt={stageProgress.since}
+        reference={order.publicReference}
+        autoUpdating
+        primary={{ label: "Check status now", onClick: onRefresh }}
+        secondary={{ label: "View payment details", onClick: onViewPaymentDetails }}
+      />
+    )
+  }
 
   if (view.screen === "pay") {
     const secondsLeft = instructions.expiresAt ? quoteSecondsLeft({ expiresAt: instructions.expiresAt }, now) : null
@@ -149,23 +178,28 @@ export function OnrampOrderScreen({
   }
 
   // continue / processing / unknown: the backend is still working.
+  const tracking = checkingPayment
   return (
     <StatusScreen
       state="processing"
       direction="in"
       figure={figure}
       headline={
-        view.screen === "continue"
+        tracking
+          ? "Checking your payment"
+          : view.screen === "continue"
           ? "Setting up your order"
           : view.screen === "unknown"
             ? "We're checking on your order"
             : "Your order is being processed"
       }
-      caption="You can close this; the order carries on and you can come back to it."
+      caption={tracking ? "We’re checking the bank transfer and will update this order as soon as the provider confirms it." : "You can close this; the order carries on and you can come back to it."}
       stages={stageIndex !== null ? stages : undefined}
       activeIndex={stageProgress.index}
       stageStartedAt={stageProgress.since}
       reference={order.publicReference}
+      primary={tracking ? { label: "Check status now", onClick: onRefresh } : undefined}
+      secondary={tracking ? { label: "View payment details", onClick: onViewPaymentDetails } : undefined}
     />
   )
 }
