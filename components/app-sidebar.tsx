@@ -39,6 +39,8 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Activity01Icon,
   Award01Icon,
+  ArrowDownLeft01Icon,
+  ArrowUpRight01Icon,
   BalanceScaleIcon,
   BarChartIcon,
   Book01Icon,
@@ -114,6 +116,13 @@ const NAV_GROUPS: NavGroup[] = [
       // two shapes, so there is one row and one page. `/assets` redirects.
       { name: "Portfolio", url: "/portfolio", icon: ChartCandlestickIcon },
       { name: "Transactions", url: "/transactions", icon: File01Icon },
+    ],
+  },
+  {
+    label: "Fiat",
+    items: [
+      { name: "Buy Crypto", url: "/buy", icon: ArrowDownLeft01Icon },
+      { name: "Sell Crypto", url: "/sell", icon: ArrowUpRight01Icon },
     ],
   },
   {

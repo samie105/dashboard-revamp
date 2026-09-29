@@ -16,7 +16,7 @@ const PROVIDER_LABEL: Record<FiatCustomer["provider"], string> = {
   onswitch: "OnSwitch (local currency)",
 }
 
-const humanize = (value: string) => value.replace(/_/g, " ")
+const humanize = (value: string | null | undefined) => value?.replace(/_/g, " ") || "Unavailable"
 
 export function ComplianceStatusList({ records }: { records: FiatCustomer[] | undefined }) {
   if (!records || records.length === 0) {

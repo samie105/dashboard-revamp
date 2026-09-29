@@ -26,8 +26,10 @@ export function humanizeKey(key: string): string {
 }
 
 /** A backend enum value for display: "MOBILE_MONEY" → "Mobile money". */
-export function humanizeValue(value: string): string {
-  return value.toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())
+export function humanizeValue(value: string | null | undefined): string {
+  const normalized = value?.trim()
+  if (!normalized) return "Unavailable"
+  return normalized.toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())
 }
 
 export function displayRows(

@@ -11,12 +11,12 @@ import { readTxHash } from "@/components/crypto/send/send-helpers"
 import { ComplianceStatusList } from "@/components/fiat/compliance/ComplianceStatusList"
 import { OnswitchProfileForm } from "@/components/fiat/compliance/OnswitchProfileForm"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
+import { FiatSelect } from "@/components/fiat/shared/FiatSelect"
 import { formatCountdown } from "@/components/fiat/shared/format"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   AnnouncementBanner,
-  ChoiceRow,
   DetailPanel,
   FlowCta,
   FlowHeader,
@@ -28,7 +28,7 @@ import {
   UnavailablePanel,
   useStageProgress,
 } from "@/components/ui/flow"
-import { Eyebrow, PageHeader } from "@/components/ui/system"
+import { PageHeader } from "@/components/ui/system"
 import { useCreateOnswitchBeneficiary, useFiatBeneficiaries } from "@/hooks/crypto/useFiatBeneficiaries"
 import { useFiatBeneficiaryRequirements } from "@/hooks/crypto/useFiatBeneficiaryRequirements"
 import { useFiatCompliance } from "@/hooks/crypto/useFiatCompliance"
@@ -43,7 +43,8 @@ import {
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
 import { complianceRecordFor, isProviderCustomerApproved } from "@/lib/crypto-backend/fiat-compliance"
-import { countryLabelForCode } from "@/lib/crypto-backend/fiat-country"
+import { countryFlagForCode, countryNameForCode } from "@/lib/crypto-backend/fiat-country"
+import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backend/fiat-errors"
 import { fiatReadRetry } from "@/lib/crypto-backend/fiat-errors"
 import {
@@ -450,10 +451,10 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
       {isModal ? (
         <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{railSwitcher}{content}</div>
       ) : (
-        <FlowShell>
-          <PageHeader title={TITLE} subtitle={SUBTITLE} back="/" className="mb-5" />
+        <FlowShell className="max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+          <PageHeader title={TITLE} subtitle={SUBTITLE} back="/" className="mb-4" />
           {railSwitcher}
-          <div className="flex flex-1 flex-col gap-4">{content}</div>
+          <div className="flex flex-1 flex-col gap-5">{content}</div>
         </FlowShell>
       )}
       <WalletUnlockDialog
@@ -537,16 +538,49 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
       ]
     : null
 
-  const optionsForPicker = options.map((option) => ({
-    key: option.key,
-    label: `${countryLabelForCode(option.countryCode, option.countryName)} · ${option.currencyCode}`,
-    sub: `${option.symbol} · ${option.channel}`,
+  const countryGroups = Array.from(
+    new Map(
+      options.map((option) => [
+        `${option.countryCode}|${option.currencyCode}`,
+        option,
+      ]),
+    ).values(),
+  )
+  const selectedCountryKey = selected ? `${selected.countryCode}|${selected.currencyCode}` : ""
+  const routesForCountry = selected
+    ? options.filter((option) => `${option.countryCode}|${option.currencyCode}` === selectedCountryKey)
+    : []
+  const selectedCountryName = selected ? countryNameForCode(selected.countryCode, selected.countryName) : "African payout account"
+  const selectedCountryFlag = selected ? countryFlagForCode(selected.countryCode) : "🌍"
+  const countryOptions = countryGroups.map((option) => ({
+    value: `${option.countryCode}|${option.currencyCode}`,
+    label: countryNameForCode(option.countryCode, option.countryName),
+    meta: option.currencyCode,
+    flag: countryFlagForCode(option.countryCode),
+  }))
+  const routeOptions = routesForCountry.map((option) => ({
+    value: option.key,
+    label: `${humanizeValue(option.channel)} · ${option.symbol}`,
+    meta: `${option.symbol} on ${option.network}`,
   }))
   const beneficiaryOptions = eligibleBeneficiaries.map((beneficiary) => ({
-    key: beneficiary.id,
+    value: beneficiary.id,
     label: beneficiary.holderName,
-    sub: `${beneficiary.maskedAccount} · ${beneficiary.currency}`,
+    meta: `${beneficiary.maskedAccount} · ${beneficiary.currency}`,
   }))
+
+  const onAmountInput = (value: string) => {
+    if (!/^[0-9]*\.?[0-9]*$/.test(value)) return
+    const [whole = "", fraction] = value.split(".")
+    if (fraction !== undefined && fraction.length > 8) return
+    const normalizedWhole = whole.replace(/^0+(?=\d)/, "")
+    setAmount(fraction !== undefined ? `${normalizedWhole}.${fraction}` : normalizedWhole)
+  }
+
+  const onCountryChange = (value: string) => {
+    const next = options.find((option) => `${option.countryCode}|${option.currencyCode}` === value)
+    if (next) setOptionKey(next.key)
+  }
 
   function onQuoteOrOrder() {
     if (!selected || !currentRequest || !wallet.data?.id) return
@@ -609,25 +643,62 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
       <RouteStrip
         direction="out"
         from={{ label: "Worldstreet wallet", sub: `${selected.symbol} · ${selected.network}` }}
-        to={{ label: countryLabelForCode(selected.countryCode, selected.countryName), sub: `${selected.currencyCode} · ${selected.channel}` }}
+        to={{ label: `${selectedCountryFlag} ${selectedCountryName}`, sub: `${selected.currencyCode} · ${humanizeValue(selected.channel)}` }}
       />
-      <div className="py-1">
-        <label className="flex flex-col gap-1 text-[13px]">
-          <span className="text-muted-foreground">Crypto amount</span>
-          <Input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder="0.00" disabled={submitting} aria-invalid={Boolean(amountProblem) || undefined} />
-        </label>
-        {amountProblem && <p className="mt-1 text-[12px] text-destructive">{amountProblem}</p>}
-      </div>
-      {options.length > 1 && <div className="flex flex-col gap-2"><Eyebrow>Sell to</Eyebrow><ChoiceRow options={optionsForPicker} value={selected.key} onChange={setOptionKey} disabled={submitting} columns={2} /></div>}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3"><Eyebrow>Verified payout account</Eyebrow><Button variant="ghost" size="xs" onClick={() => setShowBeneficiaryForm((value) => !value)}>{showBeneficiaryForm ? "Hide form" : "Add account"}</Button></div>
-        {Boolean(beneficiaries.error) && !beneficiaries.data && <FiatErrorDetail error={describeFiatError(beneficiaries.error)} />}
-        {beneficiaries.isLoading ? <FlowSkeleton /> : beneficiaryOptions.length > 0 ? <ChoiceRow options={beneficiaryOptions} value={beneficiaryId} onChange={setBeneficiaryId} disabled={submitting} /> : <InlineNotice tone="warning">No verified payout account is available for this corridor. Add one below; only a provider-verified account owned by you can be selected.</InlineNotice>}
-      </div>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)] lg:items-start">
+        <div className="flex flex-col gap-5">
+          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">1 · Payout route</span>
+                <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.025em]">Where should we send your money?</h3>
+              </div>
+              <span className="rounded-full bg-debit-chip px-3 py-1.5 text-[11px] font-bold text-debit">OnSwitch</span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FiatSelect label="Payout country" value={selectedCountryKey} options={countryOptions} onChange={onCountryChange} disabled={submitting || countryOptions.length <= 1} />
+              <FiatSelect label="Send route" value={selected.key} options={routeOptions} onChange={setOptionKey} disabled={submitting || routeOptions.length <= 1} />
+            </div>
+            <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">The country flag and full country name show the local account that will receive your payout. Only corridors returned by the live backend are selectable.</p>
+          </section>
+
+          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">2 · Amount</span>
+                <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.025em]">How much crypto do you want to sell?</h3>
+              </div>
+              <span className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-bold tracking-wide text-muted-foreground ring-1 ring-border/25">{selected.symbol}</span>
+            </div>
+            <div className="mt-6 flex items-end gap-3 rounded-2xl border border-border/35 bg-background/30 px-4 py-4 focus-within:border-primary/60 focus-within:ring-4 focus-within:ring-primary/10">
+              <input value={amount} onChange={(event) => onAmountInput(event.target.value)} inputMode="decimal" placeholder="0" aria-label={`Amount in ${selected.symbol}`} disabled={submitting} className="min-w-0 flex-1 bg-transparent font-display text-[clamp(2.75rem,8vw,4.5rem)] font-light leading-none tracking-[-0.05em] tabular-nums outline-none placeholder:text-muted-foreground/25 disabled:opacity-50" />
+              <span className="pb-1 text-sm font-bold text-muted-foreground">{selected.symbol}</span>
+            </div>
+            {amountProblem ? <p className="mt-2 text-[13px] font-medium text-warning">{amountProblem}</p> : currentQuote ? <p className="mt-2 text-[13px] tabular-nums text-muted-foreground">≈ {currentQuote.destinationAmount} {currentQuote.destinationCurrency} at the current provider rate</p> : <p className="mt-2 text-[13px] text-muted-foreground">Your live payout quote appears here before an order is created.</p>}
+          </section>
+          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">3 · Destination</span>
+                <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.025em]">Choose your verified payout account</h3>
+              </div>
+              <Button variant="ghost" size="xs" onClick={() => setShowBeneficiaryForm((value) => !value)}>
+                {showBeneficiaryForm ? "Hide form" : "Add account"}
+              </Button>
+            </div>
+            <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">Payouts can only go to an account that belongs to you and has been verified by OnSwitch.</p>
+            <div className="mt-5">
+              {Boolean(beneficiaries.error) && !beneficiaries.data && <FiatErrorDetail error={describeFiatError(beneficiaries.error)} />}
+              {beneficiaries.isLoading ? <FlowSkeleton /> : beneficiaryOptions.length > 0 ? (
+                <FiatSelect label="Verified payout account" value={beneficiaryId} options={beneficiaryOptions} onChange={setBeneficiaryId} disabled={submitting} />
+              ) : (
+                <InlineNotice tone="warning">No verified payout account is available for this corridor. Add one below; only a provider-verified account owned by you can be selected.</InlineNotice>
+              )}
+            </div>
 
       {showBeneficiaryForm && (
-        <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
-          <div><Eyebrow>Add payout account</Eyebrow><p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">Details stay in this form until the secure create request. We do not persist raw account values in the browser.</p></div>
+        <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-border/35 bg-background/25 p-4 sm:p-5">
+          <div><p className="text-[11px] font-bold uppercase tracking-[0.13em] text-subtle">Add payout account</p><p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">Details stay in this form until the secure create request. We do not persist raw account values in the browser.</p></div>
           <label className="flex flex-col gap-1 text-[13px]"><span>Account holder name</span><Input value={holderName} onChange={(event) => setHolderName(event.target.value)} autoComplete="name" disabled={createBeneficiary.isPending} aria-invalid={formAttempted && holderName.trim().length < 3 || undefined} /></label>
           <label className="flex flex-col gap-1 text-[13px]"><span>Account type</span><select className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm" value={holderType} onChange={(event) => setHolderType(event.target.value)} disabled={createBeneficiary.isPending}><option value="individual">Individual</option><option value="business">Business</option></select></label>
           {requirements.isLoading && <InlineNotice>Loading the fields required for this payout corridor…</InlineNotice>}
@@ -645,10 +716,39 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
         </div>
       )}
 
-      {quoteReceipt && <DetailPanel rows={quoteReceipt} />}
-      {quoteReceipt && <p className="text-[13px] text-muted-foreground">A quote shows the price; it does not reserve funds. If it expires, request a new one.</p>}
-      {error && <FiatErrorDetail error={error} />}
-      <FlowCta label={ctaLabel} onClick={onQuoteOrOrder} disabled={!currentRequest || submitting || !wallet.data?.id || !localProfileReady} busy={submitting} />
+          </section>
+        </div>
+
+        <aside className="lg:sticky lg:top-6">
+          <section className="relative overflow-hidden rounded-[28px] border border-debit/20 bg-[radial-gradient(circle_at_top_right,rgba(255,88,88,0.14),transparent_48%),linear-gradient(145deg,rgba(255,255,255,0.07),rgba(255,255,255,0.025))] p-5 shadow-[0_24px_90px_-44px_rgba(255,88,88,0.25)] sm:p-6">
+            <div className="absolute -right-16 -top-16 h-36 w-36 rounded-full bg-debit/10 blur-3xl" aria-hidden />
+            <div className="relative">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-subtle">Your payout</span>
+                <span className="rounded-full bg-background/40 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground ring-1 ring-border/25">{currentQuote ? (quoteUsable ? "Live" : "Expired") : "Preview"}</span>
+              </div>
+              {currentQuote ? (
+                <>
+                  <div className="mt-6">
+                    <p className="text-xs font-medium text-muted-foreground">You receive</p>
+                    <p className="mt-1 break-words font-display text-[clamp(2.1rem,5vw,3.2rem)] font-semibold leading-none tracking-[-0.05em] text-foreground">{currentQuote.destinationAmount} <span className="text-xl text-muted-foreground">{currentQuote.destinationCurrency}</span></p>
+                  </div>
+                  <div className="mt-7"><DetailPanel rows={quoteReceipt ?? []} /></div>
+                </>
+              ) : (
+                <div className="mt-6 rounded-2xl bg-background/25 px-4 py-5 ring-1 ring-border/20">
+                  <p className="font-display text-xl font-semibold tracking-[-0.02em]">Your payout, at a glance</p>
+                  <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">Enter an amount to see the live rate, fees, expiry, and exactly how much local currency will arrive.</p>
+                </div>
+              )}
+              {quoteReceipt && <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">A quote shows the price; it does not reserve funds. If it expires, request a new one.</p>}
+              {error && <div className="mt-4"><FiatErrorDetail error={error} /></div>}
+              <div className="mt-5"><FlowCta label={ctaLabel} onClick={onQuoteOrOrder} disabled={!currentRequest || submitting || !wallet.data?.id || !localProfileReady} busy={submitting} /></div>
+              <p className="mt-3 text-center text-[11.5px] leading-relaxed text-subtle">The backend remains authoritative for corridor availability, quotes, verification, and payout settlement.</p>
+            </div>
+          </section>
+        </aside>
+      </div>
     </>,
   )
 }

@@ -224,6 +224,7 @@ describe("shared display helpers", () => {
   it("humanizes backend enum values", () => {
     expect(humanizeValue("MOBILE_MONEY")).toBe("Mobile money")
     expect(humanizeValue("completed")).toBe("Completed")
+    expect(humanizeValue(undefined)).toBe("Unavailable")
   })
 })
 
