@@ -43,6 +43,7 @@ import {
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
 import { complianceRecordFor, isProviderCustomerApproved } from "@/lib/crypto-backend/fiat-compliance"
+import { countryLabelForCode } from "@/lib/crypto-backend/fiat-country"
 import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backend/fiat-errors"
 import { fiatReadRetry } from "@/lib/crypto-backend/fiat-errors"
 import {
@@ -538,7 +539,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
 
   const optionsForPicker = options.map((option) => ({
     key: option.key,
-    label: `${option.countryName ?? option.countryCode} · ${option.currencyCode}`,
+    label: `${countryLabelForCode(option.countryCode, option.countryName)} · ${option.currencyCode}`,
     sub: `${option.symbol} · ${option.channel}`,
   }))
   const beneficiaryOptions = eligibleBeneficiaries.map((beneficiary) => ({
@@ -608,7 +609,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
       <RouteStrip
         direction="out"
         from={{ label: "Worldstreet wallet", sub: `${selected.symbol} · ${selected.network}` }}
-        to={{ label: selected.countryName ?? selected.countryCode, sub: `${selected.currencyCode} · ${selected.channel}` }}
+        to={{ label: countryLabelForCode(selected.countryCode, selected.countryName), sub: `${selected.currencyCode} · ${selected.channel}` }}
       />
       <div className="py-1">
         <label className="flex flex-col gap-1 text-[13px]">

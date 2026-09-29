@@ -55,6 +55,7 @@ import {
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
 import { buyRails, type BuyRail } from "@/lib/crypto-backend/fiat-bridge-onramp"
+import { countryLabelForCode } from "@/lib/crypto-backend/fiat-country"
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backend/fiat-errors"
 import {
@@ -458,7 +459,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     (Boolean(currentQuote) && quoteUsable && !walletId)
 
   const route = {
-    from: { label: activeCorridor.countryName ?? activeCorridor.countryCode, sub: `${activeCorridor.currencyCode} · ${humanizeValue(activeChannel)}` },
+    from: { label: countryLabelForCode(activeCorridor.countryCode, activeCorridor.countryName), sub: `${activeCorridor.currencyCode} · ${humanizeValue(activeChannel)}` },
     to: { label: "Worldstreet wallet", sub: `${selected.symbol} on ${selected.network}` },
   }
   const approx = currentQuote ? `≈ ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}` : null
@@ -475,7 +476,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
 
   const corridorChoices = corridors.map((o) => ({
     key: `${o.countryCode}|${o.currencyCode}`,
-    label: o.countryName ?? o.countryCode,
+    label: countryLabelForCode(o.countryCode, o.countryName),
     sub: o.currencyCode,
   }))
   const channelChoices = channels.map((c) => ({ key: c, label: humanizeValue(c) }))
