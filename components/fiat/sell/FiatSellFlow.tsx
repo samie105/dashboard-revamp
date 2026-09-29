@@ -8,8 +8,6 @@ import { useAuth } from "@/components/auth-provider"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { SectionMessage } from "@/components/crypto/primitives"
 import { readTxHash } from "@/components/crypto/send/send-helpers"
-import { ComplianceStatusList } from "@/components/fiat/compliance/ComplianceStatusList"
-import { OnswitchProfileForm } from "@/components/fiat/compliance/OnswitchProfileForm"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { FiatSelect } from "@/components/fiat/shared/FiatSelect"
 import { formatCountdown } from "@/components/fiat/shared/format"
@@ -31,7 +29,6 @@ import {
 import { PageHeader } from "@/components/ui/system"
 import { useCreateOnswitchBeneficiary, useFiatBeneficiaries } from "@/hooks/crypto/useFiatBeneficiaries"
 import { useFiatBeneficiaryRequirements } from "@/hooks/crypto/useFiatBeneficiaryRequirements"
-import { useFiatCompliance } from "@/hooks/crypto/useFiatCompliance"
 import { useFiatConfig } from "@/hooks/crypto/useFiatConfig"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useFiatOrderPoll } from "@/hooks/crypto/useFiatOrderPoll"
@@ -42,7 +39,6 @@ import {
   cryptoQueryKeys,
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
-import { complianceRecordFor, isProviderCustomerApproved } from "@/lib/crypto-backend/fiat-compliance"
 import { countryFlagForCode, countryNameForCode } from "@/lib/crypto-backend/fiat-country"
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backend/fiat-errors"
@@ -251,7 +247,6 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   const userId = user?.userId ?? "anonymous"
   const wallet = useCryptoWalletState()
   const config = useFiatConfig()
-  const compliance = useFiatCompliance()
   const beneficiaries = useFiatBeneficiaries()
   const createBeneficiary = useCreateOnswitchBeneficiary()
 
@@ -287,17 +282,13 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   const currentRequest = selected && isValidAmount(amount) ? buildOfframpQuoteRequest(selected, amount) : null
   const currentQuote = quote && sameRequest(quotedRequest, currentRequest) ? quote : null
   const quoteUsable = currentQuote ? isOfframpQuoteUsable(currentQuote) : false
-  const onswitchCustomer = complianceRecordFor(compliance.data, "onswitch")
-  const profileApproved = isProviderCustomerApproved(onswitchCustomer)
-  const profileChecking = compliance.data === undefined && !compliance.error
-  const profileReadError = Boolean(compliance.error && !compliance.data)
 
   const requirements = useFiatBeneficiaryRequirements({
     country: selected?.countryCode,
     currency: selected?.currencyCode,
     channel: selected?.channel,
     holderType,
-    enabled: Boolean(selected && profileApproved),
+    enabled: Boolean(selected),
   })
 
   const institutionQuery = {
@@ -308,7 +299,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   const institutions = useQuery({
     queryKey: cryptoQueryKeys.fiatInstitutions(userId, institutionQuery),
     queryFn: ({ signal }) => cryptoBackendClient.listFiatInstitutions(institutionQuery, signal),
-    enabled: Boolean(isCryptoBackendEnabled && isLoaded && isSignedIn && selected && profileApproved),
+    enabled: Boolean(isCryptoBackendEnabled && isLoaded && isSignedIn && selected),
     retry: fiatReadRetry,
     staleTime: 5 * 60_000,
   })
@@ -331,7 +322,6 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
     },
     onError: (error) => {
       if (shouldRefetchCapabilities(error)) void config.refetchOnProviderError()
-      if (error instanceof CryptoBackendError && (error.status === 403 || error.status === 404)) void compliance.refetch()
     },
   })
 
@@ -364,7 +354,6 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
     channel: "",
   })
   const selectedBeneficiary = eligibleBeneficiaries.find((beneficiary) => beneficiary.id === beneficiaryId)
-  const localProfileReady = profileApproved
 
   React.useEffect(() => {
     if (selectedBeneficiary) return
@@ -504,18 +493,6 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   if (availability === "blocked") return shell(<UnavailablePanel title="Selling is temporarily unavailable" reason="The backend has paused fiat movement. Try again later." />)
   if (availability === "discovery_only") return shell(<UnavailablePanel title="Selling isn't open yet" tone="muted" reason="The supported corridors are visible to operations, but money movement is not enabled." />)
   if (availability === "unavailable" || !selected) return shell(<UnavailablePanel title="No local payout corridor is available" tone="muted" reason="OnSwitch has not returned an available African offramp for this wallet and deployment." />)
-
-  if (!localProfileReady) {
-    return shell(
-      <>
-        <FlowHeader direction="out" title="Complete your OnSwitch profile" subtitle="An approved provider profile is required before a local payout can be created." />
-        {profileChecking && <InlineNotice>Checking your OnSwitch approval status…</InlineNotice>}
-        {profileReadError && <><FiatErrorDetail error={describeFiatError(compliance.error)} /><FlowCta label="Retry profile check" onClick={() => void compliance.refetch()} /></>}
-        {compliance.data && <ComplianceStatusList records={[...(onswitchCustomer ? [onswitchCustomer] : [])]} />}
-        <OnswitchProfileForm required />
-      </>,
-    )
-  }
 
   const amountProblem = amount.trim() && !isValidAmount(amount) ? "Enter an amount greater than zero." : null
   const secondsLeft = currentQuote ? quoteSecondsLeft(currentQuote) : 0
@@ -743,7 +720,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
               )}
               {quoteReceipt && <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">A quote shows the price; it does not reserve funds. If it expires, request a new one.</p>}
               {error && <div className="mt-4"><FiatErrorDetail error={error} /></div>}
-              <div className="mt-5"><FlowCta label={ctaLabel} onClick={onQuoteOrOrder} disabled={!currentRequest || submitting || !wallet.data?.id || !localProfileReady} busy={submitting} /></div>
+              <div className="mt-5"><FlowCta label={ctaLabel} onClick={onQuoteOrOrder} disabled={!currentRequest || submitting || !wallet.data?.id} busy={submitting} /></div>
               <p className="mt-3 text-center text-[11.5px] leading-relaxed text-subtle">The backend remains authoritative for corridor availability, quotes, verification, and payout settlement.</p>
             </div>
           </section>
