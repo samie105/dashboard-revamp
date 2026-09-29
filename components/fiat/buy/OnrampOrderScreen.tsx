@@ -8,10 +8,11 @@
  * never confirmed (guide §9.3 line 809).
  */
 
+import { FiatAction as FlowCta } from "@/components/fiat/shared/FiatAction"
+import { FiatStatus as StatusScreen } from "@/components/fiat/shared/FiatStatus"
 import { formatCountdown } from "@/components/fiat/shared/format"
-import { SensitiveValue } from "@/components/fiat/shared/SensitiveValue"
-import { DetailPanel, FlowCta, FlowHeader, StatusScreen } from "@/components/ui/flow"
-import { Eyebrow } from "@/components/ui/system"
+import { CopyButton } from "@/components/fiat/shared/SensitiveValue"
+import { FlowHeader } from "@/components/ui/flow"
 import {
   ONRAMP_STAGES,
   quoteSecondsLeft,
@@ -92,22 +93,19 @@ export function OnrampOrderScreen({
     const secondsLeft = instructions.expiresAt ? quoteSecondsLeft({ expiresAt: instructions.expiresAt }, now) : null
     const expired = secondsLeft === 0
     return (
-      <>
+      <section className="mx-auto w-full max-w-xl space-y-5 rounded-2xl border border-border/50 bg-card/60 p-4 sm:p-6">
         <FlowHeader
           direction="in"
           title="Send the bank transfer"
           subtitle={figure ? `${figure} arrives in your wallet once it's confirmed` : "Your crypto arrives once the payment is confirmed"}
         />
         {instructions.rows.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            <Eyebrow>Pay to</Eyebrow>
-            <DetailPanel
-              rows={instructions.rows.map((row) => ({
-                label: row.label,
-                value: <SensitiveValue value={row.value} sensitive={row.sensitive} />,
-              }))}
-            />
-          </div>
+          <dl className="divide-y divide-border/40 rounded-xl border border-border/40 bg-background/40 px-3">
+            {instructions.rows.map((row) => <div key={row.label} className="flex flex-col gap-1 py-3">
+              <dt className="text-xs text-muted-foreground">{row.label}</dt>
+              <dd className="flex items-start gap-2"><span className="min-w-0 flex-1 whitespace-pre-line break-words text-sm font-semibold tabular-nums">{row.value}</span><CopyButton value={row.value} /></dd>
+            </div>)}
+          </dl>
         ) : (
           <p className="rounded-2xl bg-surface-sunken/60 px-4 py-3 text-[13px] text-muted-foreground">
             Payment details aren&apos;t available yet. We&apos;ll keep checking.
@@ -120,13 +118,14 @@ export function OnrampOrderScreen({
         ) : secondsLeft !== null ? (
           <p className="text-[13px] text-muted-foreground">These details expire in {formatCountdown(secondsLeft)}.</p>
         ) : null}
-        <p className="text-[13px] text-muted-foreground">Order reference {order.publicReference}</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">Send the exact amount using the details above. Use this account only for this order.</p>
+        <p className="break-all text-xs text-muted-foreground">Order reference {order.publicReference}</p>
         {expired ? (
           <FlowCta label="Start a new buy" onClick={onStartOver} />
         ) : (
-          <FlowCta label="I've made the transfer" onClick={onRefresh} />
+          <FlowCta label="I've made the transfer" onClick={onRefresh} disabled={instructions.rows.length === 0} />
         )}
-      </>
+      </section>
     )
   }
 

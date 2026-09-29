@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, EyeIcon, HelpCircleIcon, RefreshIcon, Shield01Icon, ViewOffSlashIcon } from "@hugeicons/core-free-icons"
+import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ChartLineData01Icon, DollarCircleIcon, EyeIcon, HelpCircleIcon, RefreshIcon, Shield01Icon, ViewOffSlashIcon } from "@hugeicons/core-free-icons"
 import Link from "next/link"
 
 import { useAuth } from "@/components/auth-provider"
@@ -81,6 +81,7 @@ const AMOUNT_MASK = "••••"
 
 const DepositGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={ArrowDownLeft01Icon} className={className} />
 const SendGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={ArrowUpRight01Icon} className={className} />
+const FiatGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={DollarCircleIcon} className={className} />
 const SecurityGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={Shield01Icon} className={className} />
 const TradeGlyph = ({ className }: { className?: string }) => <HugeiconsIcon icon={ChartLineData01Icon} className={className} />
 
@@ -687,6 +688,8 @@ export function ModernWalletPage() {
             <div className="flex w-full justify-between sm:w-auto sm:justify-start sm:gap-5">
               <RoundAction icon={DepositGlyph} label="Deposit" primary onClick={() => openReceive()} />
               <RoundAction icon={SendGlyph} label="Send" onClick={() => setSendOpen(true)} />
+              <RoundAction icon={FiatGlyph} label="Buy fiat" href="/buy" />
+              <RoundAction icon={FiatGlyph} label="Sell to fiat" href="/sell" />
               <RoundAction icon={TradeGlyph} label="Trade" href="/trade" />
               <RoundAction
                 icon={SecurityGlyph}

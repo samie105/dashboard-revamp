@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { FiatAction as FlowCta } from "@/components/fiat/shared/FiatAction"
+import { FiatStatus as StatusScreen } from "@/components/fiat/shared/FiatStatus"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
@@ -16,13 +18,11 @@ import { Input } from "@/components/ui/input"
 import {
   AnnouncementBanner,
   DetailPanel,
-  FlowCta,
   FlowHeader,
   FlowShell,
   FlowSkeleton,
   InlineNotice,
   RouteStrip,
-  StatusScreen,
   UnavailablePanel,
   useStageProgress,
 } from "@/components/ui/flow"
@@ -45,6 +45,8 @@ import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backe
 import { fiatReadRetry } from "@/lib/crypto-backend/fiat-errors"
 import {
   beneficiaryRequirementLabel,
+  automaticBeneficiaryField,
+  beneficiaryFormValues,
   beneficiaryRequirementMatches,
   buildOfframpQuoteRequest,
   confirmOnswitchOrder,
@@ -67,7 +69,7 @@ import type { FiatBeneficiaryRequirement, FiatOrder, FiatQuote } from "@/lib/cry
 import { clearPendingFlow, readPendingFlow, savePendingFlow } from "@/lib/pending-flow"
 
 const WALLET_SETUP_HREF = "/wallet/modern"
-const TITLE = "Sell"
+const TITLE = "Sell crypto"
 const SUBTITLE = "Send crypto from your Worldstreet wallet, receive local fiat"
 
 type Props = {
@@ -130,12 +132,12 @@ function OfframpOrderStatus({
         <FlowHeader
           direction="out"
           title="Review and sign"
-          subtitle="The backend prepared the exact wallet transaction for this order."
+          subtitle="Review your payout, then approve the crypto transfer."
         />
         <RouteStrip
           direction="out"
           from={{ label: "Worldstreet wallet", sub: figure ?? order.asset }}
-          to={{ label: order.currency, sub: "Verified payout account" }}
+          to={{ label: order.currency, sub: "Payout account" }}
         />
         <DetailPanel
           rows={[
@@ -146,7 +148,7 @@ function OfframpOrderStatus({
           ]}
         />
         <InlineNotice>
-          Review the figures above. The destination, asset, amount and network come from the backend intent and cannot be edited in this screen.
+          Check the amount and network before you sign. Signing submits your crypto transfer for this payout.
         </InlineNotice>
         {Boolean(signError) && <FiatErrorDetail error={describeFiatError(signError)} />}
         {!order.cryptoIntent?.id ? (
@@ -224,7 +226,7 @@ function OfframpOrderStatus({
       direction="out"
       figure={figure}
       headline={view.screen === "continue" ? "Setting up your payout" : "Your payout is being processed"}
-      caption="The order continues on the backend. You can leave this page and return using the order reference."
+      caption="Your payout is in progress. You can return to check it using this order reference."
       stages={stageIndex !== null ? [
         { key: "created", label: "Order created" },
         { key: "crypto_submitted", label: "Crypto transfer submitted" },
@@ -260,7 +262,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   const [beneficiaryId, setBeneficiaryId] = React.useState("")
   const [showBeneficiaryForm, setShowBeneficiaryForm] = React.useState(false)
   const [holderName, setHolderName] = React.useState("")
-  const [holderType, setHolderType] = React.useState("individual")
+  const holderType = "individual"
   const [fieldValues, setFieldValues] = React.useState<Record<string, string>>({})
   const [formAttempted, setFormAttempted] = React.useState(false)
   const [signError, setSignError] = React.useState<unknown>(null)
@@ -343,10 +345,14 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   })
 
   const requiredRequirements = requirements.data ?? []
+  const resolvedValues = beneficiaryFormValues(requiredRequirements, fieldValues, {
+    holderName, channel: selected?.channel ?? "", country: selected?.countryCode ?? "", currency: selected?.currencyCode ?? "",
+  })
+  const visibleRequirements = requiredRequirements.filter((field) => !automaticBeneficiaryField(field.path))
   const formReady = Boolean(
     requirements.isSuccess &&
       holderName.trim().length >= 3 &&
-      requiredRequirements.every((requirement) => beneficiaryRequirementMatches(requirement, fieldValues[requirement.path] ?? "")),
+      requiredRequirements.every((requirement) => beneficiaryRequirementMatches(requirement, resolvedValues[requirement.path] ?? "")),
   )
   const eligibleBeneficiaries = verifiedOnswitchBeneficiaries(beneficiaries.data, selected ?? {
     countryCode: "",
@@ -354,6 +360,15 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
     channel: "",
   })
   const selectedBeneficiary = eligibleBeneficiaries.find((beneficiary) => beneficiary.id === beneficiaryId)
+
+  React.useEffect(() => {
+    setFieldValues({})
+    setBeneficiaryId("")
+    setFormAttempted(false)
+    createBeneficiary.reset()
+  // Reset account fields when the payout destination changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.countryCode, selected?.currencyCode, selected?.channel])
 
   React.useEffect(() => {
     if (selectedBeneficiary) return
@@ -440,7 +455,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
       {isModal ? (
         <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{railSwitcher}{content}</div>
       ) : (
-        <FlowShell className="max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <FlowShell className="max-w-5xl px-3 py-5 sm:px-5 sm:py-8">
           <PageHeader title={TITLE} subtitle={SUBTITLE} back="/" className="mb-4" />
           {railSwitcher}
           <div className="flex flex-1 flex-col gap-5">{content}</div>
@@ -527,8 +542,6 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   const routesForCountry = selected
     ? options.filter((option) => `${option.countryCode}|${option.currencyCode}` === selectedCountryKey)
     : []
-  const selectedCountryName = selected ? countryNameForCode(selected.countryCode, selected.countryName) : "African payout account"
-  const selectedCountryFlag = selected ? countryFlagForCode(selected.countryCode) : "🌍"
   const countryOptions = countryGroups.map((option) => ({
     value: `${option.countryCode}|${option.currencyCode}`,
     label: countryNameForCode(option.countryCode, option.countryName),
@@ -584,10 +597,10 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
       holderName,
       holderType,
       requirements: requiredRequirements,
-      values: fieldValues,
+      values: resolvedValues,
     }, {
       onSuccess: (created) => {
-        if (created.status.toLowerCase() === "verified" && created.ownershipStatus.toLowerCase() === "verified") {
+        if (["ready", "verified"].includes(created.status.toLowerCase())) {
           setBeneficiaryId(created.id)
           setShowBeneficiaryForm(false)
           setFormAttempted(false)
@@ -605,7 +618,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
         : amountProblem
           ? "Enter a valid amount"
           : !beneficiaryId
-            ? "Select a verified payout account"
+            ? "Add a payout account"
             : !currentQuote
               ? "Get a quote"
               : !quoteUsable
@@ -616,15 +629,9 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   return shell(
     <>
       {config.data.environment === "sandbox" && <AnnouncementBanner title="Sandbox" detail="This payout is using the provider test environment. No production fiat is moved." />}
-      <FlowHeader direction="out" title="Sell crypto" subtitle="Your payout is sent only to a verified account you own." />
-      <RouteStrip
-        direction="out"
-        from={{ label: "Worldstreet wallet", sub: `${selected.symbol} · ${selected.network}` }}
-        to={{ label: `${selectedCountryFlag} ${selectedCountryName}`, sub: `${selected.currencyCode} · ${humanizeValue(selected.channel)}` }}
-      />
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)] lg:items-start">
-        <div className="flex flex-col gap-5">
-          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-5">
+          <section className="rounded-2xl border border-border/45 bg-card/60 p-4 sm:p-5">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">1 · Payout route</span>
@@ -632,14 +639,14 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
               </div>
               <span className="rounded-full bg-debit-chip px-3 py-1.5 text-[11px] font-bold text-debit">OnSwitch</span>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
               <FiatSelect label="Payout country" value={selectedCountryKey} options={countryOptions} onChange={onCountryChange} disabled={submitting || countryOptions.length <= 1} />
               <FiatSelect label="Send route" value={selected.key} options={routeOptions} onChange={setOptionKey} disabled={submitting || routeOptions.length <= 1} />
             </div>
-            <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">The country flag and full country name show the local account that will receive your payout. Only corridors returned by the live backend are selectable.</p>
+            <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">Choose the country where the recipient’s account is held.</p>
           </section>
 
-          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+          <section className="rounded-2xl border border-border/45 bg-card/60 p-4 sm:p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">2 · Amount</span>
@@ -648,48 +655,57 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
               <span className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-bold tracking-wide text-muted-foreground ring-1 ring-border/25">{selected.symbol}</span>
             </div>
             <div className="mt-6 flex items-end gap-3 rounded-2xl border border-border/35 bg-background/30 px-4 py-4 focus-within:border-primary/60 focus-within:ring-4 focus-within:ring-primary/10">
-              <input value={amount} onChange={(event) => onAmountInput(event.target.value)} inputMode="decimal" placeholder="0" aria-label={`Amount in ${selected.symbol}`} disabled={submitting} className="min-w-0 flex-1 bg-transparent font-display text-[clamp(2.75rem,8vw,4.5rem)] font-light leading-none tracking-[-0.05em] tabular-nums outline-none placeholder:text-muted-foreground/25 disabled:opacity-50" />
+              <input value={amount} onChange={(event) => onAmountInput(event.target.value)} inputMode="decimal" placeholder="0" aria-label={`Amount in ${selected.symbol}`} disabled={submitting} className="min-w-0 flex-1 bg-transparent font-display text-[clamp(2.25rem,7vw,3.5rem)] font-light leading-none tracking-[-0.05em] tabular-nums outline-none placeholder:text-muted-foreground/25 disabled:opacity-50" />
               <span className="pb-1 text-sm font-bold text-muted-foreground">{selected.symbol}</span>
             </div>
             {amountProblem ? <p className="mt-2 text-[13px] font-medium text-warning">{amountProblem}</p> : currentQuote ? <p className="mt-2 text-[13px] tabular-nums text-muted-foreground">≈ {currentQuote.destinationAmount} {currentQuote.destinationCurrency} at the current provider rate</p> : <p className="mt-2 text-[13px] text-muted-foreground">Your live payout quote appears here before an order is created.</p>}
           </section>
-          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+          <section className="rounded-2xl border border-border/45 bg-card/60 p-4 sm:p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">3 · Destination</span>
-                <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.025em]">Choose your verified payout account</h3>
+                <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.025em]">Where should your payout arrive?</h3>
               </div>
               <Button variant="ghost" size="xs" onClick={() => setShowBeneficiaryForm((value) => !value)}>
                 {showBeneficiaryForm ? "Hide form" : "Add account"}
               </Button>
             </div>
-            <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">Payouts can only go to an account that belongs to you and has been verified by OnSwitch.</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">Individual accounts only. Choose a supported bank and enter the recipient’s details.</p>
             <div className="mt-5">
               {Boolean(beneficiaries.error) && !beneficiaries.data && <FiatErrorDetail error={describeFiatError(beneficiaries.error)} />}
               {beneficiaries.isLoading ? <FlowSkeleton /> : beneficiaryOptions.length > 0 ? (
-                <FiatSelect label="Verified payout account" value={beneficiaryId} options={beneficiaryOptions} onChange={setBeneficiaryId} disabled={submitting} />
+                <FiatSelect label="Payout account" value={beneficiaryId} options={beneficiaryOptions} onChange={setBeneficiaryId} disabled={submitting} />
               ) : (
-                <InlineNotice tone="warning">No verified payout account is available for this corridor. Add one below; only a provider-verified account owned by you can be selected.</InlineNotice>
+                <p className="text-sm text-muted-foreground">Add the account where you want to receive your money.</p>
               )}
             </div>
 
-      {showBeneficiaryForm && (
-        <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-border/35 bg-background/25 p-4 sm:p-5">
-          <div><p className="text-[11px] font-bold uppercase tracking-[0.13em] text-subtle">Add payout account</p><p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">Details stay in this form until the secure create request. We do not persist raw account values in the browser.</p></div>
+      {(showBeneficiaryForm || eligibleBeneficiaries.length === 0) && (
+        <div className="mt-5 flex min-w-0 flex-col gap-4 border-t border-border/35 pt-5">
+          <div><p className="text-[11px] font-bold uppercase tracking-[0.13em] text-subtle">Recipient details</p><p className="mt-1 text-sm text-muted-foreground">Check these details carefully before continuing.</p></div>
           <label className="flex flex-col gap-1 text-[13px]"><span>Account holder name</span><Input value={holderName} onChange={(event) => setHolderName(event.target.value)} autoComplete="name" disabled={createBeneficiary.isPending} aria-invalid={formAttempted && holderName.trim().length < 3 || undefined} /></label>
-          <label className="flex flex-col gap-1 text-[13px]"><span>Account type</span><select className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm" value={holderType} onChange={(event) => setHolderType(event.target.value)} disabled={createBeneficiary.isPending}><option value="individual">Individual</option><option value="business">Business</option></select></label>
           {requirements.isLoading && <InlineNotice>Loading the fields required for this payout corridor…</InlineNotice>}
           {Boolean(requirements.error) && <FiatErrorDetail error={describeFiatError(requirements.error)} />}
           {requirements.isSuccess && requiredRequirements.length === 0 && <InlineNotice>No additional provider fields were returned. OnSwitch will perform the final validation.</InlineNotice>}
-          {requiredRequirements.map((requirement) => {
+          {visibleRequirements.map((requirement) => {
             const value = fieldValues[requirement.path] ?? ""
             const invalid = formAttempted && !beneficiaryRequirementMatches(requirement, value)
             const institutionField = requirementIsInstitutionField(requirement)
             const institutionOptions = institutions.data ?? []
-            return <label key={requirement.path} className="flex flex-col gap-1 text-[13px]"><span>{beneficiaryRequirementLabel(requirement.path)}{requirement.required ? " *" : ""}</span>{institutionField && institutionOptions.length > 0 ? <select className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm" value={value} onChange={(event) => setFieldValues((current) => ({ ...current, [requirement.path]: event.target.value }))} disabled={createBeneficiary.isPending}><option value="">Select an institution</option>{institutionOptions.map((institution) => <option key={institution.id} value={institution.code ?? institution.id}>{institution.name ?? institution.code ?? institution.id}</option>)}</select> : <Input value={value} type={requirementIsAccountField(requirement) ? "tel" : "text"} inputMode={requirementIsAccountField(requirement) ? "numeric" : undefined} placeholder={requirement.example ?? undefined} onChange={(event) => setFieldValues((current) => ({ ...current, [requirement.path]: event.target.value }))} disabled={createBeneficiary.isPending} aria-invalid={invalid || undefined} />}{invalid && <span className="text-destructive">Enter a valid value for this field.</span>}</label>
+            if (institutionField) return (
+              <div key={requirement.path} className="space-y-2">
+                <FiatSelect label="Bank" value={value} options={[
+                  { value: "", label: institutions.isLoading ? "Loading banks…" : "Choose a bank" },
+                  ...institutionOptions.map((bank) => ({ value: bank.code ?? bank.id, label: bank.name ?? "Bank" })),
+                ]} onChange={(code) => setFieldValues((current) => ({ ...current, [requirement.path]: code }))} disabled={createBeneficiary.isPending || institutions.isLoading || institutionOptions.length === 0} />
+                {!institutions.isLoading && institutionOptions.length === 0 && <div className="text-sm text-muted-foreground">We couldn’t load the bank list. <button type="button" className="font-semibold text-primary underline" onClick={() => void institutions.refetch()}>Try again</button></div>}
+                {invalid && <p className="text-sm text-destructive">Choose a bank to continue.</p>}
+              </div>
+            )
+            return <label key={requirement.path} className="flex flex-col gap-2 text-sm"><span>{beneficiaryRequirementLabel(requirement.path)}{requirement.required ? " *" : ""}</span><Input className="h-12 rounded-xl" value={value} type="text" inputMode={requirementIsAccountField(requirement) ? "tel" : undefined} placeholder={requirement.example ?? undefined} onChange={(event) => setFieldValues((current) => ({ ...current, [requirement.path]: event.target.value }))} disabled={createBeneficiary.isPending} aria-invalid={invalid || undefined} />{invalid && <span className="text-destructive">Enter a valid value for this field.</span>}</label>
           })}
-          {createBeneficiary.data && createBeneficiary.data.status.toLowerCase() !== "verified" && <InlineNotice tone="warning">The provider received the account, but it is not verified yet. It cannot be used for a payout until ownership verification completes.</InlineNotice>}
-          <FlowCta label={createBeneficiary.isPending ? "Verifying account…" : "Verify and add account"} onClick={submitBeneficiary} disabled={createBeneficiary.isPending || !requirements.isSuccess || (formAttempted && !formReady)} busy={createBeneficiary.isPending} />
+          {createBeneficiary.error && <FiatErrorDetail error={describeFiatError(createBeneficiary.error)} />}
+          <FlowCta label={createBeneficiary.isPending ? "Adding account…" : "Save payout account"} onClick={submitBeneficiary} disabled={createBeneficiary.isPending || !requirements.isSuccess || (formAttempted && !formReady)} busy={createBeneficiary.isPending} />
         </div>
       )}
 
@@ -697,7 +713,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
         </div>
 
         <aside className="lg:sticky lg:top-6">
-          <section className="relative overflow-hidden rounded-[28px] border border-debit/20 bg-[radial-gradient(circle_at_top_right,rgba(255,88,88,0.14),transparent_48%),linear-gradient(145deg,rgba(255,255,255,0.07),rgba(255,255,255,0.025))] p-5 shadow-[0_24px_90px_-44px_rgba(255,88,88,0.25)] sm:p-6">
+          <section className="relative overflow-hidden rounded-2xl border border-primary/25 bg-card p-4 sm:p-5">
             <div className="absolute -right-16 -top-16 h-36 w-36 rounded-full bg-debit/10 blur-3xl" aria-hidden />
             <div className="relative">
               <div className="flex items-center justify-between gap-3">
@@ -721,7 +737,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
               {quoteReceipt && <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">A quote shows the price; it does not reserve funds. If it expires, request a new one.</p>}
               {error && <div className="mt-4"><FiatErrorDetail error={error} /></div>}
               <div className="mt-5"><FlowCta label={ctaLabel} onClick={onQuoteOrOrder} disabled={!currentRequest || submitting || !wallet.data?.id} busy={submitting} /></div>
-              <p className="mt-3 text-center text-[11.5px] leading-relaxed text-subtle">The backend remains authoritative for corridor availability, quotes, verification, and payout settlement.</p>
+              <p className="mt-3 text-center text-xs leading-relaxed text-subtle">Review the final amount before signing your crypto transfer.</p>
             </div>
           </section>
         </aside>

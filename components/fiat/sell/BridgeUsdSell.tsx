@@ -11,6 +11,8 @@
  */
 
 import * as React from "react"
+import { FiatAction as FlowCta } from "@/components/fiat/shared/FiatAction"
+import { FiatStatus as StatusScreen } from "@/components/fiat/shared/FiatStatus"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
@@ -26,13 +28,11 @@ import { Button } from "@/components/ui/button"
 import {
   AnnouncementBanner,
   DetailPanel,
-  FlowCta,
   FlowHeader,
   FlowShell,
   FlowSkeleton,
   InlineNotice,
   RouteStrip,
-  StatusScreen,
   UnavailablePanel,
   useStageProgress,
 } from "@/components/ui/flow"
@@ -407,7 +407,7 @@ export function BridgeUsdSell({
       {isModal ? (
         <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{railSwitcher}{content}</div>
       ) : (
-        <FlowShell className="max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <FlowShell className="max-w-5xl px-3 py-5 sm:px-5 sm:py-8">
           <PageHeader title="Sell" subtitle="Send USDC from your Worldstreet wallet, receive USD" back="/" className="mb-4" />
           {railSwitcher}
           <div className="flex flex-1 flex-col gap-5">{content}</div>
@@ -530,9 +530,9 @@ export function BridgeUsdSell({
         from={{ label: "Worldstreet wallet", sub: `${selectedNetwork.networkName} · USDC` }}
         to={{ label: "Your USD account", sub: selectedChannelLabel }}
       />
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)] lg:items-start">
-        <div className="flex flex-col gap-5">
-          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-5">
+          <section className="rounded-2xl border border-border/45 bg-card/60 p-4 sm:p-5">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">1 · Transfer route</span>
@@ -540,13 +540,13 @@ export function BridgeUsdSell({
               </div>
               <span className="rounded-full bg-credit-chip px-3 py-1.5 text-[11px] font-bold text-credit">Bridge</span>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
               <FiatSelect label="Send from" value={selectedNetwork.networkId} options={networkOptions} onChange={setNetworkId} disabled={orderMutation.isPending || networkOptions.length <= 1} />
               <FiatSelect label="USD payout rail" value={activeChannel ?? ""} options={channelOptions} onChange={(value) => setChannel(value as BridgeWithdrawalChannel)} disabled={orderMutation.isPending || channelOptions.length <= 1} />
             </div>
           </section>
 
-          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+          <section className="rounded-2xl border border-border/45 bg-card/60 p-4 sm:p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">2 · Amount</span>
@@ -555,13 +555,13 @@ export function BridgeUsdSell({
               <span className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-bold tracking-wide text-muted-foreground ring-1 ring-border/25">USDC</span>
             </div>
             <div className="mt-6 flex items-end gap-3 rounded-2xl border border-border/35 bg-background/30 px-4 py-4 focus-within:border-primary/60 focus-within:ring-4 focus-within:ring-primary/10">
-              <input value={amount} onChange={(event) => onAmountInput(event.target.value)} inputMode="decimal" placeholder="0" aria-label="Amount in USDC" disabled={orderMutation.isPending} className="min-w-0 flex-1 bg-transparent font-display text-[clamp(2.75rem,8vw,4.5rem)] font-light leading-none tracking-[-0.05em] tabular-nums outline-none placeholder:text-muted-foreground/25 disabled:opacity-50" />
+              <input value={amount} onChange={(event) => onAmountInput(event.target.value)} inputMode="decimal" placeholder="0" aria-label="Amount in USDC" disabled={orderMutation.isPending} className="min-w-0 flex-1 bg-transparent font-display text-[clamp(2.25rem,7vw,3.5rem)] font-light leading-none tracking-[-0.05em] tabular-nums outline-none placeholder:text-muted-foreground/25 disabled:opacity-50" />
               <span className="pb-1 text-sm font-bold text-muted-foreground">USDC</span>
             </div>
             {amountProblem ? <p className="mt-2 text-[13px] font-medium text-warning">{amountProblem}</p> : <p className="mt-2 text-[13px] text-muted-foreground">Bridge uses the exact source amount you approve; the final USD settlement is handled by the payout rail.</p>}
           </section>
 
-          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+          <section className="rounded-2xl border border-border/45 bg-card/60 p-4 sm:p-5">
             <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">3 · Destination</span>
             <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.025em]">Choose your verified USD account</h3>
             <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">Only your own verified external account can receive this payout.</p>
@@ -576,7 +576,7 @@ export function BridgeUsdSell({
         </div>
 
         <aside className="lg:sticky lg:top-6">
-          <section className="relative overflow-hidden rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_right,rgba(255,196,0,0.17),transparent_48%),linear-gradient(145deg,rgba(255,255,255,0.07),rgba(255,255,255,0.025))] p-5 shadow-[0_24px_90px_-44px_rgba(255,196,0,0.35)] sm:p-6">
+          <section className="relative overflow-hidden rounded-2xl border border-primary/25 bg-card p-4 sm:p-5">
             <div className="absolute -right-16 -top-16 h-36 w-36 rounded-full bg-primary/10 blur-3xl" aria-hidden />
             <div className="relative">
               <div className="flex items-center justify-between gap-3">
@@ -593,7 +593,7 @@ export function BridgeUsdSell({
               <div className="mt-5">
                 <FlowCta label={orderMutation.isPending ? "Creating withdrawal…" : !amount.trim() ? "Enter a USDC amount" : amountProblem ? "Enter a valid amount" : !selectedBeneficiary ? "Select a verified USD account" : "Create USD withdrawal"} onClick={createOrder} disabled={!canCreateOrder} busy={orderMutation.isPending} />
               </div>
-              <p className="mt-3 text-center text-[11.5px] leading-relaxed text-subtle">The backend remains authoritative for limits, beneficiary verification, and settlement status.</p>
+              <p className="mt-3 text-center text-[11.5px] leading-relaxed text-subtle">You’ll review and sign the crypto transfer before the payout begins.</p>
             </div>
           </section>
         </aside>

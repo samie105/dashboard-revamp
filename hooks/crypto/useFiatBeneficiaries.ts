@@ -10,6 +10,7 @@ import {
 } from "@/lib/crypto-backend"
 import { createOnswitchBeneficiary } from "@/lib/crypto-backend/fiat-offramp"
 import { fiatReadRetry } from "@/lib/crypto-backend/fiat-errors"
+import type { FiatBeneficiary } from "@/lib/crypto-backend/types"
 
 function useBeneficiaryKey() {
   const { user, isLoaded, isSignedIn } = useAuth()
@@ -39,7 +40,8 @@ export function useCreateOnswitchBeneficiary() {
     mutationFn: (input: Parameters<typeof createOnswitchBeneficiary>[1]) =>
       createOnswitchBeneficiary(cryptoBackendClient, input),
     retry: false,
-    onSuccess: () => {
+    onSuccess: (created) => {
+      queryClient.setQueryData<FiatBeneficiary[]>(key, (existing) => [...(existing ?? []).filter((item) => item.id !== created.id), created])
       void queryClient.invalidateQueries({ queryKey: key })
       void queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.fiatBeneficiaries(userId) })
     },

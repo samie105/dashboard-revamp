@@ -7,6 +7,8 @@ import {
 } from "@/lib/crypto-backend/__fixtures__/fiat"
 import {
   beneficiaryRequirementMatches,
+  beneficiaryFormValues,
+  automaticBeneficiaryField,
   buildOfframpQuoteRequest,
   buildOnswitchBeneficiaryPayload,
   isOfframpQuoteUsable,
@@ -31,7 +33,13 @@ describe("OnSwitch offramp contract", () => {
     })
   })
 
-  it("only permits verified, owned beneficiaries for the selected corridor", () => {
+  it("accepts provider-created ready destinations without claiming ownership verification", () => {
+    const ready = { ...FIAT_BENEFICIARIES_LIST[0], status: "ready", ownershipStatus: "unknown" }
+    expect(verifiedOnswitchBeneficiaries([ready], { countryCode: "NG", currencyCode: "NGN", channel: "BANK" })).toEqual([ready])
+    expect(verifiedOnswitchBeneficiaries([ready], { countryCode: "GH", currencyCode: "GHS", channel: "MOBILEMONEY" })).toEqual([])
+  })
+
+  it("keeps pending and rejected destinations unavailable", () => {
     const [verified] = verifiedOnswitchBeneficiaries(FIAT_BENEFICIARIES_LIST, {
       countryCode: "NG",
       currencyCode: "NGN",
@@ -42,6 +50,14 @@ describe("OnSwitch offramp contract", () => {
       { ...FIAT_BENEFICIARIES_LIST[0], ownershipStatus: "pending" },
       { ...FIAT_BENEFICIARIES_LIST[0], status: "pending" },
     ], { countryCode: "NG", currencyCode: "NGN", channel: "BANK" })).toEqual([])
+  })
+
+  it("fills technical fields automatically and prevents duplicate name/type inputs overriding the recipient", () => {
+    const requirements = ["holder_type", "holder_name", "channel", "bank_code", "account_number"].map((path) => ({ path, required: true }))
+    const values = beneficiaryFormValues(requirements, { holder_type: "BUSINESS", holder_name: "Wrong name", channel: "Opay", bank_code: "000013", account_number: "0123456789" }, { holderName: "Recipient Name", channel: "BANK", country: "NG", currency: "NGN" })
+    expect(values).toMatchObject({ holder_type: "INDIVIDUAL", holder_name: "Recipient Name", channel: "BANK" })
+    expect(requirements.filter((field) => !automaticBeneficiaryField(field.path)).map((field) => field.path)).toEqual(["bank_code", "account_number"])
+    expect(buildOnswitchBeneficiaryPayload({ country: "NG", holderName: "Recipient Name", holderType: "individual", channel: "BANK", requirements, values })).toMatchObject({ beneficiary: { holder_type: "INDIVIDUAL", holder_name: "Recipient Name", channel: "BANK", bank_code: "000013", account_number: "0123456789" } })
   })
 
   it("maps provider requirement paths to the lookup payload without persisting raw values", () => {

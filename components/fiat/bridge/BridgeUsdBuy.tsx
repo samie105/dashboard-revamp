@@ -14,6 +14,7 @@
  */
 
 import * as React from "react"
+import { FiatAction as FlowCta } from "@/components/fiat/shared/FiatAction"
 import { useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/components/auth-provider"
@@ -22,7 +23,7 @@ import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { refreshWalletBalances } from "@/components/fiat/shared/refreshWalletBalances"
 import { SensitiveValue } from "@/components/fiat/shared/SensitiveValue"
 import { Button } from "@/components/ui/button"
-import { AnnouncementBanner, DetailPanel, FlowCta, FlowSkeleton, RouteStrip } from "@/components/ui/flow"
+import { AnnouncementBanner, DetailPanel, FlowSkeleton, RouteStrip } from "@/components/ui/flow"
 import { Eyebrow } from "@/components/ui/system"
 import { useFiatCompliance } from "@/hooks/crypto/useFiatCompliance"
 import {

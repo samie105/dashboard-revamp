@@ -616,6 +616,20 @@ export function DashboardHero({
           vividLabel="Show your wallet addresses to deposit crypto"
         />
         <RailButton
+          icon={DollarCircleIcon}
+          label="Buy fiat"
+          href="/buy"
+          vivid="go-fiat-buy"
+          vividLabel="Buy crypto with African local currency or USD"
+        />
+        <RailButton
+          icon={DollarCircleIcon}
+          label="Sell to fiat"
+          href="/sell"
+          vivid="go-fiat-sell"
+          vividLabel="Sell crypto to African local currency or USD"
+        />
+        <RailButton
           icon={ArrowUpRight01Icon}
           label="Send"
           onClick={() => setSendOpen(true)}

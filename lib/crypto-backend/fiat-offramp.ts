@@ -122,13 +122,21 @@ export function verifiedOnswitchBeneficiaries(
     same(beneficiary.country, option.countryCode) &&
     same(beneficiary.currency, option.currencyCode) &&
     same(beneficiary.channel, option.channel) &&
-    same(beneficiary.status, "verified") &&
-    same(beneficiary.ownershipStatus, "verified"),
+    (same(beneficiary.status, "ready") || (same(beneficiary.status, "verified") && same(beneficiary.ownershipStatus, "verified"))),
   )
 }
 
 function leaf(path: string): string {
   return path.split(/[.\[\]]/).filter(Boolean).at(-1) ?? path
+}
+
+export function automaticBeneficiaryField(path: string): boolean {
+  return ["holder_type", "holder_name", "account_holder_name", "channel", "country", "currency"].includes(leaf(path))
+}
+
+export function beneficiaryFormValues(requirements: FiatBeneficiaryRequirement[], values: Readonly<Record<string, string>>, context: { holderName: string; channel: string; country: string; currency: string }): Record<string, string> {
+  const automatic: Record<string, string> = { holder_type: "INDIVIDUAL", holder_name: context.holderName.trim(), account_holder_name: context.holderName.trim(), channel: context.channel, country: context.country, currency: context.currency }
+  return Object.fromEntries(requirements.map((field) => [field.path, automatic[leaf(field.path)] ?? values[field.path] ?? ""]))
 }
 
 /** Provider lookup uses a country plus a beneficiary object. Raw values stay
@@ -137,17 +145,20 @@ export function buildOnswitchBeneficiaryPayload(input: {
   country: string
   holderName: string
   holderType: string
+  channel?: string
   requirements: FiatBeneficiaryRequirement[]
   values: Readonly<Record<string, string>>
 }): Record<string, unknown> {
   const beneficiary: Record<string, unknown> = {
-    holder_type: input.holderType.trim().toUpperCase(),
+    holder_type: "INDIVIDUAL",
     holder_name: input.holderName.trim(),
+    ...(input.channel ? { channel: input.channel.toUpperCase() } : {}),
   }
   for (const requirement of input.requirements) {
     const value = input.values[requirement.path]?.trim()
     if (!value) continue
     const key = leaf(requirement.path)
+    if (automaticBeneficiaryField(requirement.path)) continue
     const normalizedKey = key === "nuban_code" ? "bank_code" : key
     beneficiary[normalizedKey] = value
   }
@@ -191,7 +202,7 @@ export function createOnswitchBeneficiary(
     currency: input.currency.trim().toUpperCase(),
     channel: input.channel.trim().toUpperCase(),
     holderName: input.holderName.trim(),
-    holderType: input.holderType.trim().toLowerCase(),
+    holderType: "individual",
     providerPayload,
   }
   return runIdempotentMutation(

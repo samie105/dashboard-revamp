@@ -20,6 +20,7 @@
  */
 
 import * as React from "react"
+import { FiatAction as FlowCta } from "@/components/fiat/shared/FiatAction"
 import { useRouter } from "next/navigation"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
@@ -28,12 +29,12 @@ import { SectionMessage } from "@/components/crypto/primitives"
 import { BridgeUsdBuy } from "@/components/fiat/bridge/BridgeUsdBuy"
 import { OnrampOrderScreen } from "@/components/fiat/buy/OnrampOrderScreen"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
+import { FiatSelect as BuySelect, type FiatSelectOption as BuySelectOption } from "@/components/fiat/shared/FiatSelect"
 import { formatCountdown } from "@/components/fiat/shared/format"
 import { refreshWalletBalances } from "@/components/fiat/shared/refreshWalletBalances"
 import { FlowTerminal } from "@/components/flows/flow-terminal"
 import {
   AnnouncementBanner,
-  FlowCta,
   FlowHeader,
   FlowShell,
   FlowSkeleton,
@@ -96,58 +97,6 @@ function useNow(active: boolean) {
 
 const sameRequest = (a: OnrampQuoteRequest | null, b: OnrampQuoteRequest | null) =>
   Boolean(a && b) && JSON.stringify(a) === JSON.stringify(b)
-
-type BuySelectOption = {
-  value: string
-  label: string
-  meta?: string
-  flag?: string
-}
-
-function BuySelect({
-  label,
-  value,
-  options,
-  onChange,
-  disabled = false,
-}: {
-  label: string
-  value: string
-  options: BuySelectOption[]
-  onChange: (value: string) => void
-  disabled?: boolean
-}) {
-  const selected = options.find((option) => option.value === value)
-  return (
-    <label className="block min-w-0">
-      <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.13em] text-subtle">{label}</span>
-      <span className="relative block">
-        {selected?.flag && (
-          <span aria-hidden className="pointer-events-none absolute left-4 top-1/2 z-[1] -translate-y-1/2 text-[22px] leading-none">
-            {selected.flag}
-          </span>
-        )}
-        <select
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          disabled={disabled}
-          aria-label={label}
-          className={`h-14 w-full appearance-none rounded-2xl border border-border/45 bg-background/35 px-4 pr-11 text-sm font-semibold text-foreground outline-none transition focus:border-primary/70 focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60 ${selected?.flag ? "pl-14" : ""}`}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.flag ? `${option.flag} ` : ""}{option.label}{option.meta ? ` · ${option.meta}` : ""}
-            </option>
-          ))}
-        </select>
-        <svg aria-hidden className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </span>
-      {selected?.meta && <span className="mt-1.5 block text-[12px] text-muted-foreground">{selected.meta}</span>}
-    </label>
-  )
-}
 
 export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChange }: Props) {
   const isModal = variant === "modal"
@@ -272,10 +221,10 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   const stageIndex = order.data ? onrampStageIndex(order.data.state) : null
   const stageProgress = useStageProgress(stageIndex ?? 0, orderId)
 
-  const checkPayment = React.useCallback(() => {
+  const checkPayment = () => {
     setCheckingPayment(true)
     order.refresh()
-  }, [order.refresh])
+  }
 
   function startOver() {
     clearPendingFlow("fiat-buy")
@@ -294,7 +243,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     isModal ? (
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{content}</div>
     ) : (
-      <FlowShell className="max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+      <FlowShell className="max-w-5xl px-3 py-5 sm:px-5 sm:py-8">
         <PageHeader title={TITLE} subtitle={SUBTITLE} back="/" className="mb-4" />
         <div className="flex flex-1 flex-col gap-5">{content}</div>
       </FlowShell>
@@ -578,7 +527,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
         onChange={setCorridorKey}
         disabled={submitting || countryOptions.length <= 1}
       />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
         <BuySelect
           label="Payment method"
           value={selectedChannel}
@@ -624,17 +573,9 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     <>
       {railTabs}
       {banners}
-      <div className="flex flex-col gap-1">
-        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-credit">Local currency rail</span>
-        <h2 className="font-display text-2xl font-semibold tracking-[-0.03em] sm:text-[30px]">Buy with your African bank</h2>
-        <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          Choose your country, enter an amount, and receive {selected.symbol} directly in your Worldstreet wallet.
-        </p>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)] lg:items-start">
-        <div className="flex flex-col gap-5">
-          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-5">
+          <section className="rounded-2xl border border-border/45 bg-card/60 p-4 sm:p-5">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">1 · Payment route</span>
@@ -645,7 +586,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
             {selectors}
           </section>
 
-          <section className="rounded-[28px] border border-border/45 bg-card/65 p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.85)] sm:p-6">
+          <section className="rounded-2xl border border-border/45 bg-card/60 p-4 sm:p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-subtle">2 · Amount</span>
@@ -663,7 +604,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
                 placeholder="0"
                 aria-label={`Amount in ${activeCorridor.currencyCode}`}
                 disabled={submitting}
-                className="min-w-0 flex-1 bg-transparent font-display text-[clamp(2.75rem,8vw,4.5rem)] font-light leading-none tracking-[-0.05em] tabular-nums outline-none placeholder:text-muted-foreground/25 disabled:opacity-50"
+                className="min-w-0 flex-1 bg-transparent font-display text-[clamp(2.25rem,7vw,3.5rem)] font-light leading-none tracking-[-0.05em] tabular-nums outline-none placeholder:text-muted-foreground/25 disabled:opacity-50"
               />
               <span className="pb-1 text-sm font-bold text-muted-foreground">{activeCorridor.currencyCode}</span>
             </div>
@@ -683,7 +624,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
         </div>
 
         <aside className="lg:sticky lg:top-6">
-          <section className="relative overflow-hidden rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_right,rgba(255,196,0,0.17),transparent_48%),linear-gradient(145deg,rgba(255,255,255,0.07),rgba(255,255,255,0.025))] p-5 shadow-[0_24px_90px_-44px_rgba(255,196,0,0.35)] sm:p-6">
+          <section className="relative overflow-hidden rounded-2xl border border-primary/25 bg-card p-4 sm:p-5">
             <div className="absolute -right-16 -top-16 h-36 w-36 rounded-full bg-primary/10 blur-3xl" aria-hidden />
             <div className="relative">
               <div className="flex items-center justify-between gap-3">
