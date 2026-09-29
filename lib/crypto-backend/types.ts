@@ -327,6 +327,12 @@ export interface FiatOrder {
   observedDepositAsset?: string
   observedDepositNetwork?: string
   observedDepositTxHash?: string
+  cryptoIntentPreparation?: {
+    state: "pending" | "blocked" | string
+    code?: string
+    message?: string
+    updatedAt?: string
+  }
   providerStatus?: string
   state: string
   providerDisplay?: Record<string, unknown>

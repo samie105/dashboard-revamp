@@ -33,6 +33,23 @@ describe("OnSwitch offramp contract", () => {
     })
   })
 
+  it("keeps the African payout selector on the product's Ethereum/Solana allowlist", () => {
+    const config = {
+      ...FIAT_CONFIG_AVAILABLE,
+      assetRoutes: [
+        ...FIAT_CONFIG_AVAILABLE.assetRoutes,
+        {
+          ...FIAT_CONFIG_AVAILABLE.assetRoutes[0],
+          providerAssetId: "arbitrum:usdc",
+          providerChain: "arbitrum",
+          localNetworkId: "arbitrum-one",
+        },
+      ],
+    }
+
+    expect(offrampOptions(config).every((option) => option.network !== "arbitrum-one")).toBe(true)
+  })
+
   it("accepts provider-created ready destinations without claiming ownership verification", () => {
     const ready = { ...FIAT_BENEFICIARIES_LIST[0], status: "ready", ownershipStatus: "unknown" }
     expect(verifiedOnswitchBeneficiaries([ready], { countryCode: "NG", currencyCode: "NGN", channel: "BANK" })).toEqual([ready])

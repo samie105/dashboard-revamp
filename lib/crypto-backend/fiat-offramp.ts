@@ -9,7 +9,7 @@ import { CryptoBackendError } from "./errors"
 import { isOnswitchOfframpAvailable, onswitchCorridors } from "./fiat-capabilities"
 import { fiatFingerprint, runIdempotentMutation } from "./fiat-idempotency"
 import { FIAT_ORDER_TERMINAL_STATES } from "./fiat-poll-schedule"
-import { isValidAmount } from "./fiat-onramp"
+import { AFRICAN_BUY_NETWORKS, isValidAmount } from "./fiat-onramp"
 import type {
   FiatBeneficiary,
   FiatBeneficiaryRequirement,
@@ -35,12 +35,14 @@ export interface OfframpOption {
   symbol: string
 }
 
+const AFRICAN_FIAT_NETWORK_SET: ReadonlySet<string> = new Set(AFRICAN_BUY_NETWORKS)
+
 export function offrampOptions(config: FiatCapabilitySnapshot | undefined): OfframpOption[] {
   const options: OfframpOption[] = []
   for (const { coverage, assetRoutes } of onswitchCorridors(config, "offramp")) {
     for (const channel of coverage.channels) {
       for (const route of assetRoutes) {
-        if (!route.localNetworkId) continue
+        if (!route.localNetworkId || !AFRICAN_FIAT_NETWORK_SET.has(route.localNetworkId)) continue
         options.push({
           key: [coverage.countryCode, coverage.currencyCode, channel, route.providerAssetId, route.localNetworkId].join("|"),
           countryCode: coverage.countryCode,

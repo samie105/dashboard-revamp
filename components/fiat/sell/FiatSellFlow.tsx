@@ -163,7 +163,11 @@ function OfframpOrderStatus({
         </InlineNotice>
         {Boolean(signError) && <FiatErrorDetail error={describeFiatError(signError)} />}
         {!order.cryptoIntent?.id ? (
-          <InlineNotice tone="warning">Your payout request is created. We&apos;re preparing the wallet transaction now; signing will unlock automatically when it&apos;s ready. You can refresh this order.</InlineNotice>
+          <InlineNotice tone="warning">
+            {order.cryptoIntentPreparation?.state === "blocked"
+              ? order.cryptoIntentPreparation.message ?? "The wallet transaction could not be prepared yet. Add the required funds and network gas, then refresh this order."
+              : "Your payout request is created. We&apos;re preparing the wallet transaction now; signing will unlock automatically when it&apos;s ready. You can refresh this order."}
+          </InlineNotice>
         ) : !canSign ? (
           <InlineNotice>
             Signing details are still loading. Keep this order open and try again in a moment.
