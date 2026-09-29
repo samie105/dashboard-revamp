@@ -63,6 +63,7 @@ import {
   createOnrampOrder,
   isQuoteUsable,
   isValidAmount,
+  normalizeOnswitchHolderName,
   needsRequote,
   onrampOptions,
   onrampOrderView,
@@ -406,10 +407,10 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   const secondsLeft = currentQuote ? quoteSecondsLeft(currentQuote, now) : 0
   const quoteUsable = currentQuote ? isQuoteUsable(currentQuote, now) : false
   const walletId = wallet.data?.id
-  const holderName = [user?.firstName, user?.lastName]
+  const holderName = normalizeOnswitchHolderName([user?.firstName, user?.lastName]
     .map((part) => part?.trim())
     .filter((part): part is string => Boolean(part))
-    .join(" ")
+    .join(" "))
   const holderNameReady = holderName.length >= 3
   const amountProblem = amount.trim() && !isValidAmount(amount) ? "Enter an amount greater than zero." : null
   const error =

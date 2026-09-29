@@ -20,6 +20,7 @@ import {
   AFRICAN_BUY_NETWORKS,
   isQuoteUsable,
   isValidAmount,
+  normalizeOnswitchHolderName,
   ONRAMP_STAGES,
   needsRequote,
   onrampAvailability,
@@ -169,6 +170,11 @@ describe("options come only from /fiat/config (guide lines 364-366, 375-377)", (
 })
 
 describe("quote request (guide §9.1 lines 646-657)", () => {
+  it("sanitizes provider-bound holder names to alphanumeric characters", () => {
+    expect(normalizeOnswitchHolderName("_dev Tomiwa")).toBe("devTomiwa")
+    expect(normalizeOnswitchHolderName("Chidínma O. Okafor")).toBe("ChidinmaOOkafor")
+  })
+
   it("matches the guide's onramp example body exactly", () => {
     expect(buildOnrampQuoteRequest(NG_BANK(), " 100000 ")).toEqual({
       provider: "onswitch",

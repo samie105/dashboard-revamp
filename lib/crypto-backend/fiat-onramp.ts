@@ -28,6 +28,14 @@ type OnrampClient = Pick<CryptoBackendClient, "createFiatQuote" | "createFiatOrd
  */
 export const AFRICAN_BUY_NETWORKS = ["ethereum-mainnet", "solana-mainnet-beta"] as const
 
+/** OnSwitch accepts only ASCII alphanumeric characters for inline holder names. */
+export function normalizeOnswitchHolderName(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+}
+
 const AFRICAN_BUY_NETWORK_SET: ReadonlySet<string> = new Set(AFRICAN_BUY_NETWORKS)
 
 /* ── Availability (guide §5 lines 368-377) ────────────────────────────── */
@@ -154,7 +162,7 @@ export function createOnrampOrder(
   client: OnrampClient,
   input: { walletId: string; quoteId: string; holderName?: string },
 ): Promise<FiatOrder> {
-  const holderName = input.holderName?.trim()
+  const holderName = input.holderName ? normalizeOnswitchHolderName(input.holderName) : undefined
   const body = {
     provider: "onswitch" as const,
     walletId: input.walletId,
