@@ -3,6 +3,7 @@ import type { CryptoWalletPackageDocument } from "@/lib/crypto-backend"
 
 import {
   WalletUnlockError,
+  createRecoveryProof,
   unlockWalletWithPassphrase,
   unlockWalletWithRecoverySecret,
 } from "@/lib/crypto-wallet/wallet-security"
@@ -146,6 +147,33 @@ describe("unlockWalletWithRecoverySecret — error classification", () => {
       expect(error).toBeInstanceOf(WalletUnlockError)
       expect(error).toBeInstanceOf(Error)
       expect((error as WalletUnlockError).reason).toBe("malformed-package")
+    }
+  })
+})
+
+describe("createRecoveryProof — recovery secret validation", () => {
+  it("turns an invalid-length secret into an actionable error", () => {
+    expect.assertions(4)
+
+    try {
+      createRecoveryProof(toBase64Url(randomBytes(31)), "challenge")
+    } catch (error) {
+      expect(error).toBeInstanceOf(WalletUnlockError)
+      expect((error as WalletUnlockError).reason).toBe("wrong-passphrase")
+      expect((error as Error).message).toContain("original 32-byte recovery secret")
+      expect((error as Error).message).not.toContain("bad seed size")
+    }
+  })
+
+  it("turns malformed text into an actionable error", () => {
+    expect.assertions(3)
+
+    try {
+      createRecoveryProof("not-a-recovery-secret", "challenge")
+    } catch (error) {
+      expect(error).toBeInstanceOf(WalletUnlockError)
+      expect((error as Error).message).toContain("Paste the original recovery secret")
+      expect((error as Error).message).not.toContain("bad seed size")
     }
   })
 })

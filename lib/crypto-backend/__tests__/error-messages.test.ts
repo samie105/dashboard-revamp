@@ -80,6 +80,17 @@ describe("describeCryptoError", () => {
     expect(d.message.toLowerCase()).not.toContain("fetch failed")
     expect(d.message.toLowerCase()).not.toContain("http")
   })
+  it("labels an invalid recovery secret instead of showing a generic error", () => {
+    const raw = new Error(
+      "That recovery secret is invalid or incomplete. Use the original 32-byte recovery secret created for this wallet."
+    )
+    raw.name = "WalletUnlockError"
+
+    const d = describeCryptoError(raw)
+    expect(d.title).toBe("Recovery secret not accepted")
+    expect(d.message).toContain("original 32-byte recovery secret")
+    expect(d.message).not.toContain("bad seed size")
+  })
 })
 
 describe("existingOperationIdFrom", () => {

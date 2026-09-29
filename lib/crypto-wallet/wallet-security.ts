@@ -48,6 +48,33 @@ function validatePin(pin: string) {
   if (!/^\d{6,12}$/.test(pin)) throw new Error("Use a 6 to 12 digit PIN")
 }
 
+const INVALID_RECOVERY_SECRET_MESSAGE =
+  "That recovery secret is invalid. Paste the original recovery secret exactly as it was created for this wallet."
+const INCOMPLETE_RECOVERY_SECRET_MESSAGE =
+  "That recovery secret is invalid or incomplete. Use the original 32-byte recovery secret created for this wallet."
+
+/**
+ * Recovery secrets are generated as exactly 32 random bytes and encoded as
+ * base64url. Validate that contract before any crypto primitive sees the
+ * value; otherwise tweetnacl exposes its internal `bad seed size` error to
+ * the user.
+ */
+function decodeRecoverySecret(recoverySecret: string) {
+  let secret: Uint8Array
+  try {
+    secret = fromBase64Url(recoverySecret)
+  } catch {
+    throw new WalletUnlockError(INVALID_RECOVERY_SECRET_MESSAGE, "wrong-passphrase")
+  }
+
+  if (secret.byteLength !== 32) {
+    secret.fill(0)
+    throw new WalletUnlockError(INCOMPLETE_RECOVERY_SECRET_MESSAGE, "wrong-passphrase")
+  }
+
+  return secret
+}
+
 const pinFailures = new Map<string, { count: number; lockedUntil: number }>()
 const PIN_MAX_ATTEMPTS = 5
 const PIN_LOCK_MS = 60_000
@@ -107,7 +134,7 @@ export async function unlockWalletWithRecoverySecret(
   packageValue: CryptoWalletPackageDocument,
   recoverySecret: string,
 ) {
-  const secret = fromBase64Url(recoverySecret)
+  const secret = decodeRecoverySecret(recoverySecret)
   const envelope = packageEnvelopes(packageValue).find((candidate) => candidate.purpose === "recovery")
   if (!envelope) {
     secret.fill(0)
@@ -180,7 +207,7 @@ export async function adoptExistingWalletPasskeyWithRecovery(
   recoverySecret: string,
   client: CryptoBackendClient = cryptoBackendClient,
 ) {
-  const secret = fromBase64Url(recoverySecret)
+  const secret = decodeRecoverySecret(recoverySecret)
   const existingRecovery = packageEnvelopes(packageValue).find((candidate) => candidate.purpose === "recovery")
   if (!existingRecovery) {
     secret.fill(0)
@@ -381,7 +408,7 @@ export async function setWalletPassphraseWithRecovery(
 ) {
   if (passphrase.trim().length < 12) throw new Error("Choose a wallet passphrase with at least 12 characters")
 
-  const secret = fromBase64Url(recoverySecret)
+  const secret = decodeRecoverySecret(recoverySecret)
   const existingRecovery = packageEnvelopes(packageValue).find((candidate) => candidate.purpose === "recovery")
   if (!existingRecovery) {
     wipeBytes(secret)
@@ -443,7 +470,7 @@ export async function replaceWalletPasskeyWithRecovery(
   recoverySecret: string,
   client: CryptoBackendClient = cryptoBackendClient,
 ) {
-  const secret = fromBase64Url(recoverySecret)
+  const secret = decodeRecoverySecret(recoverySecret)
   const existingRecovery = packageEnvelopes(packageValue).find((candidate) => candidate.purpose === "recovery")
   if (!existingRecovery) {
     secret.fill(0)
@@ -510,7 +537,7 @@ export async function buildRecoveryPackage(
   client: CryptoBackendClient = cryptoBackendClient,
 ) {
   const wallet = await client.getWallet()
-  const secret = fromBase64Url(recoverySecret)
+  const secret = decodeRecoverySecret(recoverySecret)
   const existingRecovery = packageEnvelopes(packageValue).find((candidate) => candidate.purpose === "recovery")
   if (!existingRecovery) throw new Error("No recovery envelope is configured")
 
@@ -545,14 +572,16 @@ export async function buildRecoveryPackage(
 }
 
 export function createRecoveryProof(recoverySecret: string, challenge: string) {
-  const secret = fromBase64Url(recoverySecret)
-  const keypair = nacl.sign.keyPair.fromSeed(secret)
-  const proof = {
-    recoveryPublicKey: toBase64Url(keypair.publicKey),
-    signature: signEd25519Message(secret, challenge),
+  const secret = decodeRecoverySecret(recoverySecret)
+  try {
+    const keypair = nacl.sign.keyPair.fromSeed(secret)
+    return {
+      recoveryPublicKey: toBase64Url(keypair.publicKey),
+      signature: signEd25519Message(secret, challenge),
+    }
+  } finally {
+    secret.fill(0)
   }
-  secret.fill(0)
-  return proof
 }
 
 /** Re-encrypts every account with a fresh DEK and replaces both root envelopes. */
@@ -570,7 +599,7 @@ export async function rotateWalletPackage(
   if (!state) throw new Error("Wallet could not be unlocked for rotation")
 
   const wallet = await client.getWallet()
-  const recoverySeed = fromBase64Url(recoverySecret)
+  const recoverySeed = decodeRecoverySecret(recoverySecret)
   const nextDek = randomBytes(32)
   let passphraseSalt: Uint8Array | undefined
   let passphraseWrappingKey: Uint8Array | undefined

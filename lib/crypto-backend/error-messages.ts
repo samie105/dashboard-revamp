@@ -283,6 +283,17 @@ export function describeCryptoError(error: unknown): CryptoErrorDescription {
       requestId,
     }
   }
+  if (
+    error instanceof Error &&
+    error.name === "WalletUnlockError" &&
+    /recovery secret/i.test(error.message)
+  ) {
+    return {
+      title: "Recovery secret not accepted",
+      message: error.message,
+      action: "retry",
+    }
+  }
   if (error instanceof Error && error.name === "AbortError") {
     return {
       title: "Cancelled",
