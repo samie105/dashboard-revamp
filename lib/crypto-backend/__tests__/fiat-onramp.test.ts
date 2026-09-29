@@ -363,6 +363,30 @@ describe("payment instructions render only what the backend returns (guide lines
     expect(expiresAt).toBe("2026-09-26T11:00:00.000Z")
   })
 
+  it("reads the live OnSwitch nested deposit response shape", () => {
+    const { rows, expiresAt } = paymentInstructionsFrom({
+      deposit: {
+        amount: 1500,
+        expires_at: "2026-09-29T01:37:43.228Z",
+        account_number: "6010203906",
+        account_name: "Switchlabsltd Checkout",
+        bank_name: "Safthaven Microfinance Bank",
+        asset: "solana:usdc",
+        note: ["Kindly send the exact amount to the bank account"],
+      },
+    })
+    expect(rows.map((row) => [row.label, row.value])).toEqual([
+      ["Amount", "1500"],
+      ["Account number", "6010203906"],
+      ["Account name", "Switchlabsltd Checkout"],
+      ["Bank", "Safthaven Microfinance Bank"],
+      ["Asset", "solana:usdc"],
+      ["Note", "Kindly send the exact amount to the bank account"],
+    ])
+    expect(rows.find((row) => row.key === "account_number")?.sensitive).toBe(true)
+    expect(expiresAt).toBe("2026-09-29T01:37:43.228Z")
+  })
+
   it("marks the account number as sensitive (masked until revealed)", () => {
     const { rows } = paymentInstructionsFrom(FIAT_ORDER_ONSWITCH_ONRAMP.providerDisplay)
     expect(rows.filter((r) => r.sensitive).map((r) => r.key)).toEqual(["accountNumber"])

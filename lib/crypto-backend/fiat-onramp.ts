@@ -295,31 +295,48 @@ const INSTRUCTION_LABELS: Record<string, string> = {
   amount: "Amount",
   currency: "Currency",
   bankName: "Bank",
+  bank_name: "Bank",
   accountName: "Account name",
+  account_name: "Account name",
   accountNumber: "Account number",
+  account_number: "Account number",
   reference: "Reference",
+  expires_at: "Expires at",
+  asset: "Asset",
+  note: "Note",
 }
 
-const INSTRUCTION_SENSITIVE_KEYS: ReadonlySet<string> = new Set(["accountNumber", "iban", "routingNumber"])
+const INSTRUCTION_SENSITIVE_KEYS: ReadonlySet<string> = new Set(["accountNumber", "account_number", "iban", "routingNumber", "routing_number"])
+
+function instructionRecord(providerDisplay: FiatOrder["providerDisplay"]): Record<string, unknown> | undefined {
+  if (!providerDisplay || typeof providerDisplay !== "object" || Array.isArray(providerDisplay)) return undefined
+  const display = providerDisplay as Record<string, unknown>
+  for (const key of ["paymentInstructions", "payment_instructions", "deposit", "source_deposit_instructions"]) {
+    const value = display[key]
+    if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>
+  }
+  return undefined
+}
 
 /**
  * "providerDisplay is a sanitized display object. Render only the fields
  * returned by the backend and treat the instructions as expiring. Do not
  * infer bank details from the quote." (guide lines 755-757)
  *
- * Reads providerDisplay.paymentInstructions (the documented shape) through
- * the shared displayRows helper; expiresAt is pulled out for the countdown.
- * If the backend sends no instructions, there are no rows.
+ * Reads the documented paymentInstructions shape and the provider's current
+ * nested deposit shape (`providerDisplay.deposit`, with snake_case fields)
+ * through the shared displayRows helper. expiresAt/expires_at is pulled out
+ * for the countdown. If the backend sends no instructions, there are no rows.
  */
 export function paymentInstructionsFrom(providerDisplay: FiatOrder["providerDisplay"]): PaymentInstructions {
-  const raw = providerDisplay?.paymentInstructions
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { rows: [] }
+  const raw = instructionRecord(providerDisplay)
+  if (!raw) return { rows: [] }
   const rows = displayRows(raw, {
     labels: INSTRUCTION_LABELS,
     sensitiveKeys: INSTRUCTION_SENSITIVE_KEYS,
-    skipKeys: new Set(["expiresAt"]),
+    skipKeys: new Set(["expiresAt", "expires_at"]),
   })
-  const expiresAt = (raw as Record<string, unknown>).expiresAt
+  const expiresAt = raw.expiresAt ?? raw.expires_at
   return { rows, ...(typeof expiresAt === "string" ? { expiresAt } : {}) }
 }
 
