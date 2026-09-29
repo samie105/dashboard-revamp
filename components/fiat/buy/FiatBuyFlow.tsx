@@ -162,7 +162,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   })
 
   const orderMutation = useMutation({
-    mutationFn: (input: { walletId: string; quoteId: string }) => createOnrampOrder(cryptoBackendClient, input),
+    mutationFn: (input: { walletId: string; quoteId: string; holderName?: string }) => createOnrampOrder(cryptoBackendClient, input),
     retry: false,
     onSuccess: (created: FiatOrder) => {
       // 201 and a 200 replay both return the order; neither means paid
@@ -406,6 +406,11 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   const secondsLeft = currentQuote ? quoteSecondsLeft(currentQuote, now) : 0
   const quoteUsable = currentQuote ? isQuoteUsable(currentQuote, now) : false
   const walletId = wallet.data?.id
+  const holderName = [user?.firstName, user?.lastName]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" ")
+  const holderNameReady = holderName.length >= 3
   const amountProblem = amount.trim() && !isValidAmount(amount) ? "Enter an amount greater than zero." : null
   const error =
     orderMutation.error && !needsRequote(orderMutation.error)
@@ -441,7 +446,9 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
             ? "Get a quote"
             : !quoteUsable
               ? "Get a new quote"
-              : `Buy ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}`
+              : !holderNameReady
+                ? "Add your name to continue"
+                : `Buy ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}`
 
   const onCta = () => {
     if (!currentRequest) return
@@ -451,12 +458,12 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       quoteMutation.mutate(currentRequest)
       return
     }
-    if (walletId) orderMutation.mutate({ walletId, quoteId: currentQuote.id })
+    if (walletId && holderNameReady) orderMutation.mutate({ walletId, quoteId: currentQuote.id, holderName })
   }
   const ctaDisabled =
     !currentRequest ||
     submitting ||
-    (Boolean(currentQuote) && quoteUsable && !walletId)
+    (Boolean(currentQuote) && quoteUsable && (!walletId || !holderNameReady))
 
   const route = {
     from: { label: countryLabelForCode(activeCorridor.countryCode, activeCorridor.countryName), sub: `${activeCorridor.currencyCode} · ${humanizeValue(activeChannel)}` },
@@ -565,6 +572,11 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       {receipt && <DetailPanel rows={receipt} />}
       {receipt && (
         <p className="text-[13px] text-muted-foreground">A quote shows the price; it doesn&apos;t reserve funds.</p>
+      )}
+      {currentQuote && quoteUsable && !holderNameReady && (
+        <p className="rounded-xl bg-surface-sunken px-3.5 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
+          Add your name to your account before starting an African local-currency buy.
+        </p>
       )}
       {error && <FiatErrorDetail error={error} />}
       <FlowCta label={ctaLabel} onClick={onCta} disabled={ctaDisabled} busy={submitting} />

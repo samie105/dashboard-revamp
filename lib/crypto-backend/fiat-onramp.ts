@@ -152,9 +152,15 @@ export function isQuoteUsable(quote: Pick<FiatQuote, "expiresAt" | "state">, now
  */
 export function createOnrampOrder(
   client: OnrampClient,
-  input: { walletId: string; quoteId: string },
+  input: { walletId: string; quoteId: string; holderName?: string },
 ): Promise<FiatOrder> {
-  const body = { provider: "onswitch" as const, walletId: input.walletId, quoteId: input.quoteId }
+  const holderName = input.holderName?.trim()
+  const body = {
+    provider: "onswitch" as const,
+    walletId: input.walletId,
+    quoteId: input.quoteId,
+    ...(holderName ? { holderName } : {}),
+  }
   return runIdempotentMutation("order", body, (key) => client.createFiatOrder(body, key))
 }
 

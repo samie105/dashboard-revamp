@@ -347,6 +347,7 @@ export class CryptoBackendClient {
     provider: "onswitch"
     walletId: string
     quoteId: string
+    holderName?: string
     beneficiaryId?: string
   } | {
     provider: "bridge"
