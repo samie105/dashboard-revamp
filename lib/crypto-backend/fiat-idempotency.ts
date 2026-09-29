@@ -35,6 +35,7 @@ export type FiatMutationOperation =
   | "quote"
   | "order"
   | "confirm"
+  | "discard"
   | "virtual-account"
   | "kyc-link"
   | "customer"

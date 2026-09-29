@@ -18,6 +18,7 @@ import { FIAT_ORDER_TERMINAL_STATES } from "./fiat-poll-schedule"
 import type { FiatCapabilitySnapshot, FiatOrder, FiatQuote } from "./types"
 
 type OnrampClient = Pick<CryptoBackendClient, "createFiatQuote" | "createFiatOrder">
+type OnrampDiscardClient = Pick<CryptoBackendClient, "discardFiatOrder">
 
 /**
  * Networks currently exposed by the African local-currency buy UI.
@@ -172,6 +173,10 @@ export function createOnrampOrder(
   return runIdempotentMutation("order", body, (key) => client.createFiatOrder(body, key))
 }
 
+export function discardOnrampOrder(client: OnrampDiscardClient, orderId: string): Promise<FiatOrder> {
+  return runIdempotentMutation("discard", { orderId }, (key) => client.discardFiatOrder(orderId, key))
+}
+
 /** Guide line 970-971: "Re-quote when the backend returns FIAT_QUOTE_NOT_ACTIVE." */
 export function needsRequote(error: unknown): boolean {
   return error instanceof CryptoBackendError && error.code === "FIAT_QUOTE_NOT_ACTIVE"
@@ -212,6 +217,8 @@ const SCREEN_BY_STATE: Record<string, OnrampOrderScreen> = {
   provider_processing: "processing",
   scheduled: "processing",
   completed: "completed",
+  expired: "problem",
+  cancelled: "problem",
   manual_review: "review",
   blocked: "review",
   failed: "problem",

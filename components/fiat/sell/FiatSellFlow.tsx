@@ -51,6 +51,7 @@ import {
   buildOfframpQuoteRequest,
   confirmOnswitchOrder,
   createOfframpOrder,
+  discardOfframpOrder,
   isOfframpQuoteUsable,
   isValidAmount,
   needsOfframpRequote,
@@ -101,6 +102,9 @@ function OfframpOrderStatus({
   onSign,
   onRefresh,
   onStartOver,
+  onDiscard,
+  discarding,
+  discardError,
 }: {
   order: FiatOrder
   view: ReturnType<typeof offrampOrderView>
@@ -112,6 +116,9 @@ function OfframpOrderStatus({
   onSign: () => void
   onRefresh: () => void
   onStartOver: () => void
+  onDiscard: () => void
+  discarding: boolean
+  discardError?: unknown
 }) {
   const supportLine = `Order reference ${order.publicReference} if you contact support.`
   const reasonCaption = (
@@ -125,6 +132,8 @@ function OfframpOrderStatus({
     : order.expectedDepositAmount
       ? `${order.expectedDepositAmount} ${order.asset.split(":").at(-1)?.toUpperCase() ?? order.asset}`
       : undefined
+  const canDiscard = ["failed", "reversed", "refunded", "expired"].includes(order.state)
+  const problemCaption = discardError ? <><FiatErrorDetail error={describeFiatError(discardError)} />{reasonCaption}</> : reasonCaption
 
   if (view.screen === "sign") {
     return (
@@ -152,7 +161,7 @@ function OfframpOrderStatus({
         </InlineNotice>
         {Boolean(signError) && <FiatErrorDetail error={describeFiatError(signError)} />}
         {!order.cryptoIntent?.id ? (
-          <InlineNotice tone="error">The signing intent is not available yet. We&apos;ll keep checking this order.</InlineNotice>
+          <InlineNotice tone="warning">Your payout request is created. We&apos;re preparing the wallet transaction now; signing will unlock automatically when it&apos;s ready. You can refresh this order.</InlineNotice>
         ) : !canSign ? (
           <InlineNotice>
             Signing details are still loading. Keep this order open and try again in a moment.
@@ -191,10 +200,14 @@ function OfframpOrderStatus({
         direction="out"
         figure={figure}
         headline={order.state === "reversed" ? "This payout was reversed" : "This payout did not complete"}
-        caption={reasonCaption}
+        caption={problemCaption}
         reference={order.publicReference}
         autoUpdating={!view.terminal}
         primary={{ label: "Start a new sell", onClick: onStartOver }}
+        secondary={canDiscard ? {
+          label: discarding ? "Discarding…" : order.state === "expired" ? "Discard expired order" : "Discard failed payout",
+          onClick: discarding ? () => undefined : onDiscard,
+        } : undefined}
       />
     )
   }
@@ -344,6 +357,15 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
     },
   })
 
+  const discardMutation = useMutation({
+    mutationFn: (currentOrderId: string) => discardOfframpOrder(cryptoBackendClient, currentOrderId),
+    retry: false,
+    onSuccess: (discarded) => {
+      queryClient.setQueryData(cryptoQueryKeys.fiatOrder(userId, discarded.id), discarded)
+      startOver()
+    },
+  })
+
   const requiredRequirements = requirements.data ?? []
   const resolvedValues = beneficiaryFormValues(requiredRequirements, fieldValues, {
     holderName, channel: selected?.channel ?? "", country: selected?.countryCode ?? "", currency: selected?.currencyCode ?? "",
@@ -442,11 +464,12 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
     setSignError(null)
     quoteMutation.reset()
     orderMutation.reset()
+    discardMutation.reset()
     transfer.reset()
     adoptedIntentId.current = null
   }
 
-  const inFlight = quoteMutation.isPending || orderMutation.isPending || (showingOrder && !view?.terminal) || transfer.isSubmitting
+  const inFlight = quoteMutation.isPending || orderMutation.isPending || discardMutation.isPending || (showingOrder && !view?.terminal) || transfer.isSubmitting
   React.useEffect(() => onInFlightChange?.(inFlight), [inFlight, onInFlightChange])
   React.useEffect(() => onCompactChange?.(!showingOrder), [showingOrder, onCompactChange])
 
@@ -490,9 +513,14 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
           signing={transfer.isSubmitting}
           signError={signError ?? transfer.error}
           onSign={pressSign}
-          onRefresh={order.refresh}
-          onStartOver={startOver}
-        />
+           onRefresh={order.refresh}
+           onStartOver={startOver}
+           onDiscard={() => {
+             if (orderId) discardMutation.mutate(orderId)
+           }}
+           discarding={discardMutation.isPending}
+           discardError={discardMutation.error}
+         />
       </>,
     )
   }

@@ -10,9 +10,11 @@
 
 import { FiatAction as FlowCta } from "@/components/fiat/shared/FiatAction"
 import { FiatStatus as StatusScreen } from "@/components/fiat/shared/FiatStatus"
+import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { formatCountdown } from "@/components/fiat/shared/format"
 import { CopyButton } from "@/components/fiat/shared/SensitiveValue"
 import { FlowHeader } from "@/components/ui/flow"
+import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
 import {
   ONRAMP_STAGES,
   quoteSecondsLeft,
@@ -27,6 +29,8 @@ const PROBLEM_HEADLINE: Record<string, string> = {
   refund_in_flight: "A refund is in progress",
   refunded: "This order was refunded",
   refund_failed: "The refund didn't go through",
+  expired: "This order expired",
+  cancelled: "This order was discarded",
 }
 
 export function OnrampOrderScreen({
@@ -41,6 +45,9 @@ export function OnrampOrderScreen({
   onRefresh,
   onViewPaymentDetails,
   onStartOver,
+  onDiscard,
+  discarding,
+  discardError,
 }: {
   order: FiatOrder
   view: OnrampOrderView
@@ -54,6 +61,9 @@ export function OnrampOrderScreen({
   onRefresh: () => void
   onViewPaymentDetails: () => void
   onStartOver: () => void
+  onDiscard: () => void
+  discarding: boolean
+  discardError?: unknown
 }) {
   const supportLine = `Quote reference ${order.publicReference} if you contact support.`
   const stages = [...ONRAMP_STAGES]
@@ -63,6 +73,8 @@ export function OnrampOrderScreen({
       <span className="block">{supportLine}</span>
     </>
   )
+  const canDiscard = ["failed", "reversed", "refunded", "expired"].includes(order.state)
+  const problemCaption = discardError ? <><FiatErrorDetail error={describeFiatError(discardError)} />{reasonCaption}</> : reasonCaption
 
   if (view.screen === "pay" && checkingPayment) {
     return (
@@ -151,11 +163,15 @@ export function OnrampOrderScreen({
         direction="in"
         figure={figure}
         headline={PROBLEM_HEADLINE[order.state] ?? "This order didn't complete"}
-        caption={reasonCaption}
+        caption={problemCaption}
         reference={order.publicReference}
         // refund_in_flight isn't terminal and is still being polled.
         autoUpdating={!view.terminal}
         primary={{ label: "Start a new buy", onClick: onStartOver }}
+        secondary={canDiscard ? {
+          label: discarding ? "Discarding…" : order.state === "expired" ? "Discard expired order" : "Discard failed order",
+          onClick: discarding ? () => undefined : onDiscard,
+        } : undefined}
       />
     )
   }

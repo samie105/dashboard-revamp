@@ -58,6 +58,7 @@ import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backe
 import {
   buildOnrampQuoteRequest,
   createOnrampOrder,
+  discardOnrampOrder,
   isQuoteUsable,
   isValidAmount,
   normalizeOnswitchHolderName,
@@ -184,6 +185,15 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     },
   })
 
+  const discardMutation = useMutation({
+    mutationFn: (currentOrderId: string) => discardOnrampOrder(cryptoBackendClient, currentOrderId),
+    retry: false,
+    onSuccess: (discarded) => {
+      queryClient.setQueryData(cryptoQueryKeys.fiatOrder(userId, discarded.id), discarded)
+      startOver()
+    },
+  })
+
   /* ── Effects ──────────────────────────────────────────────────────── */
 
   // Finished orders stop being "in flight": clear the stored id, and on
@@ -204,7 +214,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   }, [orderMissing])
 
   const submitting = quoteMutation.isPending || orderMutation.isPending
-  const inFlight = submitting || (showingOrder && !view?.terminal)
+  const inFlight = submitting || discardMutation.isPending || (showingOrder && !view?.terminal)
   const formReady =
     !showingOrder &&
     isCryptoBackendEnabled &&
@@ -235,6 +245,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     setCheckingPayment(false)
     quoteMutation.reset()
     orderMutation.reset()
+    discardMutation.reset()
   }
 
   /* ── Layout ───────────────────────────────────────────────────────── */
@@ -284,9 +295,14 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
           stageProgress={stageProgress}
           checkingPayment={checkingPayment}
           onRefresh={checkPayment}
-          onViewPaymentDetails={() => setCheckingPayment(false)}
-          onStartOver={startOver}
-        />
+           onViewPaymentDetails={() => setCheckingPayment(false)}
+           onStartOver={startOver}
+           onDiscard={() => {
+             if (orderId) discardMutation.mutate(orderId)
+           }}
+           discarding={discardMutation.isPending}
+           discardError={discardMutation.error}
+         />
       </>,
     )
   }

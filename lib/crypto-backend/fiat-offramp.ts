@@ -22,6 +22,7 @@ type OfframpClient = Pick<
   CryptoBackendClient,
   "createFiatQuote" | "createFiatOrder" | "createFiatBeneficiary" | "confirmFiatOrder"
 >
+type OfframpDiscardClient = Pick<CryptoBackendClient, "discardFiatOrder">
 
 export interface OfframpOption {
   key: string
@@ -92,6 +93,10 @@ export function createOfframpOrder(
 ): Promise<FiatOrder> {
   const body = { provider: "onswitch" as const, ...input }
   return runIdempotentMutation("order", body, (key) => client.createFiatOrder(body, key))
+}
+
+export function discardOfframpOrder(client: OfframpDiscardClient, orderId: string): Promise<FiatOrder> {
+  return runIdempotentMutation("discard", { orderId }, (key) => client.discardFiatOrder(orderId, key))
 }
 
 export function isOfframpQuoteUsable(quote: Pick<FiatQuote, "expiresAt" | "state">, now = Date.now()): boolean {
@@ -247,6 +252,8 @@ const SCREEN_BY_STATE: Record<string, OfframpOrderScreen> = {
   provider_processing: "processing",
   scheduled: "processing",
   completed: "completed",
+  expired: "problem",
+  cancelled: "problem",
   manual_review: "review",
   blocked: "review",
   failed: "problem",

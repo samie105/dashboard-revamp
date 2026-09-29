@@ -373,6 +373,10 @@ export class CryptoBackendClient {
     return this.request<FiatOrder>(`/fiat/orders/${encodeURIComponent(orderId)}/confirm`, { method: "POST", body: JSON.stringify({ transactionHash }) }, { signal, idempotencyKey })
   }
 
+  async discardFiatOrder(orderId: string, idempotencyKey: string, signal?: AbortSignal): Promise<FiatOrder> {
+    return this.request<FiatOrder>(`/fiat/orders/${encodeURIComponent(orderId)}/discard`, { method: "POST", body: JSON.stringify({ orderId }) }, { signal, idempotencyKey })
+  }
+
   async createBridgeVirtualAccount(input: { walletId: string; networkId: string; asset?: string }, idempotencyKey: string, signal?: AbortSignal): Promise<FiatVirtualAccount> {
     return this.request<FiatVirtualAccount>("/fiat/bridge/virtual-accounts", { method: "POST", body: JSON.stringify(input) }, { signal, idempotencyKey })
   }

@@ -32,6 +32,8 @@ const VIRTUAL_ACCOUNT_INTERVAL_MS = 20_000 // guide §11: 15-30s while the accou
 /** End states — polling stops entirely. Not a guide-given list (open question 10). */
 export const FIAT_ORDER_TERMINAL_STATES: ReadonlySet<string> = new Set([
   "completed",
+  "expired",
+  "cancelled",
   "failed",
   "reversed",
   "refunded",
