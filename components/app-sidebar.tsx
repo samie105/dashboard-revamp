@@ -170,7 +170,7 @@ const ECOSYSTEM: NavItem[] = [
   { name: "Store", url: "https://shop.worldstreetgold.com", icon: Store01Icon },
   { name: "Academy", url: "https://academy.worldstreetgold.com", icon: Book01Icon },
   { name: "Social", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon },
-  { name: "Xstream", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
+  { name: "Xstream", url: "https://xtream.worldstreetgold.com", icon: Video01Icon },
   { name: "Forex Trading", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
   { name: "Vivid AI", url: "/vivid", icon: Brain01Icon },
   { name: "Vision", url: "https://vision.worldstreetgold.com", icon: EyeIcon },
