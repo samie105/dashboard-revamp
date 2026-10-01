@@ -67,7 +67,7 @@ const ECOSYSTEM_APPS: readonly EcosystemApp[] = [
   { name: "Store", url: "https://shop.worldstreetgold.com", icon: Store01Icon },
   { name: "Academy", url: "https://academy.worldstreetgold.com", icon: Book01Icon },
   { name: "Social", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon },
-  { name: "Xstream", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon },
+  { name: "Xstream", url: "https://xtream.worldstreetgold.com", icon: Video01Icon },
   { name: "Forex", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon },
   { name: "Vision", url: "https://vision.worldstreetgold.com", icon: EyeIcon },
   // The Expo super-app mounts nine platforms; the two below were missing from
