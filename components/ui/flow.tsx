@@ -662,6 +662,25 @@ export function StageList({
 
 /* ── StatusScreen — processing / success / failure, one presentation ───── */
 
+export type StatusScreenProps = {
+  state: "processing" | "success" | "failure"
+  direction?: "in" | "out"
+  figure?: string
+  headline: string
+  caption?: React.ReactNode
+  stages?: Stage[]
+  activeIndex?: number
+  stageStartedAt?: number | null
+  reference?: string | null
+  txHash?: string | null
+  notice?: React.ReactNode
+  autoUpdating?: boolean
+  primary?: { label: string; onClick?: () => void; href?: string }
+  secondary?: { label: string; onClick?: () => void; href?: string }
+  /** Use a wide two-column status treatment on desktop. */
+  layout?: "stacked" | "landscape"
+}
+
 export function StatusScreen({
   state,
   headline,
@@ -677,37 +696,35 @@ export function StatusScreen({
   secondary,
   direction,
   figure,
-}: {
-  state: "processing" | "success" | "failure"
-  /** Tints the transfer core in the money's colour; gold when omitted. */
-  direction?: "in" | "out"
-  /** The amount in transit ("250.75 USDT") — sits at the core's heart. */
-  figure?: string
-  headline: string
-  caption?: React.ReactNode
-  stages?: Stage[]
-  activeIndex?: number
-  /** When the CURRENT stage began, epoch ms — drives the live counter. */
-  stageStartedAt?: number | null
-  /** The order reference. Always shown while processing: a user who closes the
-   *  modal mid-transfer needs something to quote, and burying it in a
-   *  timeout-only notice meant it appeared exactly when it was too late. */
-  reference?: string | null
-  txHash?: string | null
-  /** Extra warning line (e.g. partial delivery). */
-  notice?: React.ReactNode
-  /** False once the caller has stopped polling — the "updates automatically"
-   *  line is a promise, so it goes away when it stops being kept. */
-  autoUpdating?: boolean
-  primary?: { label: string; onClick?: () => void; href?: string }
-  secondary?: { label: string; onClick?: () => void; href?: string }
-}) {
+  layout = "stacked",
+}: StatusScreenProps) {
   const [copied, setCopied] = React.useState(false)
   const [refCopied, setRefCopied] = React.useState(false)
 
   /* The stream and the current-stage accents wear the money's colour. */
   const tone =
     direction === "in" ? "var(--credit)" : direction === "out" ? "var(--debit)" : "var(--primary)"
+
+  if (layout === "landscape") {
+    return (
+      <LandscapeStatusScreen
+        state={state}
+        headline={headline}
+        caption={caption}
+        stages={stages}
+        activeIndex={activeIndex}
+        stageStartedAt={stageStartedAt}
+        reference={reference}
+        txHash={txHash}
+        notice={notice}
+        autoUpdating={autoUpdating}
+        primary={primary}
+        secondary={secondary}
+        direction={direction}
+        figure={figure}
+      />
+    )
+  }
 
   return (
     // No card fill of its own — this screen IS the surface it sits on, whether
@@ -949,6 +966,160 @@ export function StatusScreen({
             ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/* ── LandscapeStatusScreen — wide desktop treatment for fiat orders ────── */
+
+function LandscapeStatusScreen({
+  state,
+  headline,
+  caption,
+  stages,
+  activeIndex = 0,
+  stageStartedAt = null,
+  reference,
+  txHash,
+  notice,
+  autoUpdating = true,
+  primary,
+  secondary,
+  direction,
+  figure,
+}: Omit<StatusScreenProps, "layout">) {
+  const [copied, setCopied] = React.useState(false)
+  const [refCopied, setRefCopied] = React.useState(false)
+  const tone = direction === "in" ? "var(--credit)" : direction === "out" ? "var(--debit)" : "var(--primary)"
+  const stateLabel = state === "success" ? "Complete" : state === "failure" ? "Needs attention" : "Live status"
+
+  const copy = async (value: string, kind: "transaction" | "reference") => {
+    try {
+      await navigator.clipboard.writeText(value)
+      if (kind === "transaction") {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1500)
+      } else {
+        setRefCopied(true)
+        window.setTimeout(() => setRefCopied(false), 1500)
+      }
+    } catch {
+      // Clipboard access is best-effort; the value remains selectable.
+    }
+  }
+
+  const visual = state === "success" ? (
+    <span className="relative flex h-20 w-20">
+      <span aria-hidden className="ws-ripple absolute inset-0 rounded-full bg-credit/25" />
+      <span aria-hidden className="ws-ripple absolute inset-0 rounded-full bg-credit/15" style={{ animationDelay: "0.18s" }} />
+      <span className="ws-pop-in relative flex h-20 w-20 items-center justify-center rounded-full bg-credit-chip">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-credit"><path d="M20 6L9 17l-5-5" /></svg>
+      </span>
+    </span>
+  ) : state === "failure" ? (
+    <span className="ws-pop-in flex h-20 w-20 items-center justify-center rounded-full bg-debit-chip">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-debit"><path d="M18 6L6 18M6 6l12 12" /></svg>
+    </span>
+  ) : (
+    <div
+      className="relative flex h-36 w-36 items-center justify-center"
+      style={{ "--ws-stream-tone": tone } as React.CSSProperties}
+    >
+      <span aria-hidden className="ws-glow-breathe absolute -inset-8 rounded-full" style={{ background: `radial-gradient(closest-side, color-mix(in oklab, ${tone} 22%, transparent), transparent 70%)` }} />
+      <span key={activeIndex} aria-hidden className="ws-ripple absolute inset-2 rounded-full" style={{ background: `color-mix(in oklab, ${tone} 16%, transparent)` }} />
+      <span aria-hidden className="ws-core-arc" />
+      <span aria-hidden className="ws-orbit absolute inset-[10px] rounded-full border border-dashed" style={{ borderColor: `color-mix(in oklab, ${tone} 30%, transparent)`, "--ws-orbit-dur": "17s" } as React.CSSProperties} />
+      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
+        <circle cx="50" cy="50" r="46" fill="none" strokeWidth="1.5" className="stroke-border/50" />
+        <circle cx="50" cy="50" r="46" fill="none" strokeWidth="3" strokeLinecap="round" stroke={tone} strokeDasharray={2 * Math.PI * 46} strokeDashoffset={2 * Math.PI * 46 * (1 - (stages && stages.length > 0 ? Math.min(1, (activeIndex + 0.45) / stages.length) : 0.12))} className="transition-[stroke-dashoffset] duration-1000 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none" />
+      </svg>
+      <div className="ws-core-breathe relative flex flex-col items-center gap-1">
+        {figure ? <span className="max-w-[122px] break-words px-1 text-center font-display text-[clamp(1rem,2.7vw,1.5rem)] font-light leading-none tracking-[-0.01em] tabular-nums">{figure}</span> : <span className="h-3 w-3 rounded-full" style={{ background: tone }} />}
+        <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground">in transit</span>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="grid w-full gap-4 p-3 sm:gap-5 sm:p-5 md:grid-cols-[minmax(260px,0.86fr)_minmax(0,1.14fr)] md:gap-0 md:p-0">
+      <section className="relative flex min-h-[360px] flex-col justify-between overflow-hidden rounded-2xl bg-surface-sunken/60 p-5 ring-1 ring-border/30 sm:p-7 md:min-h-[430px] md:rounded-none md:rounded-l-3xl md:border-r md:border-border/30 md:ring-0">
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="absolute inset-0" style={{ background: `radial-gradient(130% 100% at 20% 0%, color-mix(in oklab, ${tone} 13%, transparent) 0%, transparent 62%)` }} />
+          <div className="ws-aurora-a absolute -left-12 top-6 h-40 w-64 rounded-full blur-2xl" style={{ background: `radial-gradient(closest-side, color-mix(in oklab, ${tone} 17%, transparent), transparent)` }} />
+        </div>
+
+        <div className="relative flex items-center justify-between gap-3">
+          <span className="text-[10.5px] font-bold uppercase tracking-[0.14em]" style={{ color: tone }}>
+            {direction === "out" ? "Money out" : "Money in"}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-background/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground ring-1 ring-border/30">
+            {state === "processing" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />}
+            {stateLabel}
+          </span>
+        </div>
+
+        <div className="relative flex flex-1 flex-col items-center justify-center gap-5 py-8 text-center">
+          {visual}
+          <div className="max-w-sm">
+            <h2 className="font-display text-2xl font-bold tracking-[-0.02em] sm:text-[28px]">{headline}</h2>
+            {caption && <div className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{caption}</div>}
+          </div>
+        </div>
+
+        <div className="relative flex items-center justify-between gap-3 border-t border-border/30 pt-4 text-[11px] text-muted-foreground">
+          <span>{state === "processing" && autoUpdating ? "Monitoring automatically" : "Order state"}</span>
+          {figure && <span className="font-semibold tabular-nums text-foreground/80">{figure}</span>}
+        </div>
+      </section>
+
+      <section className="flex min-w-0 flex-col justify-center gap-4 p-2 sm:p-3 md:p-7 lg:p-9">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-subtle">Order progress</p>
+            <h3 className="mt-1 font-display text-lg font-semibold tracking-[-0.01em]">{state === "processing" ? "We're on it" : stateLabel}</h3>
+          </div>
+          {state === "processing" && autoUpdating && <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">Updating live</span>}
+        </div>
+
+        {stages && stages.length > 0 && (
+          <div className="rounded-2xl bg-surface-sunken/55 p-4 ring-1 ring-border/30 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <span className="text-[13px] font-semibold">What&apos;s happening</span>
+              <span className="text-[11px] tabular-nums text-muted-foreground">Step {Math.min(activeIndex + 1, stages.length)} of {stages.length}</span>
+            </div>
+            <StageList stages={stages} activeIndex={activeIndex} stageStartedAt={state === "processing" ? stageStartedAt : null} cascade={state === "processing"} />
+          </div>
+        )}
+
+        {notice && <InlineNotice className="w-full text-left">{notice}</InlineNotice>}
+
+        {txHash && (
+          <div className="w-full rounded-2xl bg-surface-sunken/80 p-3.5 text-left ring-1 ring-border/35">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-subtle">Transaction hash</span>
+              <button type="button" onClick={() => void copy(txHash, "transaction")} className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors", copied ? "bg-credit-chip text-credit" : "bg-foreground/[0.08] text-foreground hover:bg-foreground/[0.14]")}>{copied ? "Copied" : "Copy"}</button>
+            </div>
+            <p className="select-all break-all font-mono text-[12.5px] leading-relaxed text-foreground/90">{txHash}</p>
+          </div>
+        )}
+
+        {reference && state !== "success" && (
+          <button type="button" onClick={() => void copy(reference, "reference")} className="inline-flex max-w-full items-center gap-1.5 self-start text-[11px] text-subtle transition-colors hover:text-muted-foreground" title="Copy reference">
+            <span className="shrink-0">Order reference</span>
+            <span className="truncate font-mono">{reference}</span>
+            <span className={cn("shrink-0 font-semibold", refCopied ? "text-credit" : "text-subtle")}>{refCopied ? "Copied" : "Copy"}</span>
+          </button>
+        )}
+
+        {state === "processing" && autoUpdating && <p className="text-[11px] text-subtle">Updates automatically — you can leave this page.</p>}
+
+        {(primary || secondary) && (
+          <div className="flex w-full flex-col gap-2.5 pt-1 sm:flex-row-reverse">
+            {primary && (primary.href ? <Link href={primary.href} target={primary.href.startsWith("http") ? "_blank" : undefined} rel={primary.href.startsWith("http") ? "noopener noreferrer" : undefined} className="flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-[15px] font-bold text-primary-foreground shadow-[0_8px_24px_color-mix(in_srgb,var(--primary)_22%,transparent)] transition-[transform,background-color] hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]">{primary.label}</Link> : <button type="button" onClick={primary.onClick} className="flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-[15px] font-bold text-primary-foreground shadow-[0_8px_24px_color-mix(in_srgb,var(--primary)_22%,transparent)] transition-[transform,background-color] hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]">{primary.label}</button>)}
+            {secondary && (secondary.href ? <Link href={secondary.href} className="flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl bg-surface-sunken px-4 text-[15px] font-semibold text-foreground ring-1 ring-border/50 transition-[transform,background-color] hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]">{secondary.label}</Link> : <button type="button" onClick={secondary.onClick} className="flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl bg-surface-sunken px-4 text-[15px] font-semibold text-foreground ring-1 ring-border/50 transition-[transform,background-color] hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]">{secondary.label}</button>)}
+          </div>
+        )}
+      </section>
     </div>
   )
 }
