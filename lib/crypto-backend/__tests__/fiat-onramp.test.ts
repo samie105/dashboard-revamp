@@ -20,6 +20,7 @@ import {
   AFRICAN_BUY_NETWORKS,
   isQuoteUsable,
   isValidAmount,
+  MINIMUM_BUY_USD,
   normalizeOnswitchHolderName,
   ONRAMP_STAGES,
   needsRequote,
@@ -29,6 +30,7 @@ import {
   onrampStageIndex,
   paymentInstructionsFrom,
   quoteSecondsLeft,
+  quoteMeetsMinimum,
   requestOnrampQuote,
 } from "@/lib/crypto-backend/fiat-onramp"
 import type { FiatCapabilitySnapshot } from "@/lib/crypto-backend/types"
@@ -202,6 +204,14 @@ describe("quote request (guide §9.1 lines 646-657)", () => {
     ["1,000", false],
   ])("amount %j valid: %s", (amount, valid) => {
     expect(isValidAmount(amount)).toBe(valid)
+  })
+
+  it("enforces the $5 minimum against the live stablecoin quote", () => {
+    expect(MINIMUM_BUY_USD).toBe(5)
+    expect(quoteMeetsMinimum({ destinationAmount: "4.999999", destinationCurrency: "USDC" })).toBe(false)
+    expect(quoteMeetsMinimum({ destinationAmount: "5", destinationCurrency: "USDC" })).toBe(true)
+    expect(quoteMeetsMinimum({ destinationAmount: "5", destinationCurrency: "USDT" })).toBe(true)
+    expect(quoteMeetsMinimum({ destinationAmount: "4", destinationCurrency: "SOL" })).toBe(true)
   })
 
   it("posts the quote with an idempotency key", async () => {

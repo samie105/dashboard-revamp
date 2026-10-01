@@ -61,12 +61,14 @@ import {
   discardOnrampOrder,
   isQuoteUsable,
   isValidAmount,
+  MINIMUM_BUY_USD,
   normalizeOnswitchHolderName,
   needsRequote,
   onrampOptions,
   onrampOrderView,
   onrampStageIndex,
   paymentInstructionsFrom,
+  quoteMeetsMinimum,
   quoteSecondsLeft,
   requestOnrampQuote,
   type OnrampOption,
@@ -435,7 +437,10 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     .filter((part): part is string => Boolean(part))
     .join(" "))
   const holderNameReady = holderName.length >= 3
-  const amountProblem = amount.trim() && !isValidAmount(amount) ? "Enter an amount greater than zero." : null
+  const quoteMinimumProblem = currentQuote && !quoteMeetsMinimum(currentQuote)
+    ? `Minimum buy is $${MINIMUM_BUY_USD} USD equivalent. Increase the amount to continue.`
+    : null
+  const amountProblem = quoteMinimumProblem ?? (amount.trim() && !isValidAmount(amount) ? "Enter an amount greater than zero." : null)
   const error =
     orderMutation.error && !needsRequote(orderMutation.error)
       ? describeFiatError(orderMutation.error)
@@ -449,6 +454,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
         ...(currentQuote.providerRate ? [{ label: "Rate", value: currentQuote.providerRate }] : []),
         ...(currentQuote.providerFee ? [{ label: "Provider fee", value: currentQuote.providerFee }] : []),
         ...(currentQuote.worldstreetFee ? [{ label: "Worldstreet fee", value: currentQuote.worldstreetFee }] : []),
+        { label: "Minimum buy", value: `$${MINIMUM_BUY_USD} USD equivalent` },
         { label: "Network", value: currentQuote.network },
         ...(currentQuote.expectedSettlementSeconds
           ? [{ label: "Usually arrives in", value: `about ${Math.max(1, Math.round(currentQuote.expectedSettlementSeconds / 60))} min` }]
@@ -494,7 +500,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       : !amount.trim()
         ? "Enter an amount"
         : amountProblem
-          ? "Enter a valid amount"
+          ? quoteMinimumProblem ? `Increase to $${MINIMUM_BUY_USD} minimum` : "Enter a valid amount"
           : !currentQuote
             ? "Get a quote"
             : !quoteUsable
@@ -511,11 +517,13 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
       quoteMutation.mutate(currentRequest)
       return
     }
+    if (!quoteMeetsMinimum(currentQuote)) return
     if (walletId && holderNameReady) orderMutation.mutate({ walletId, quoteId: currentQuote.id, holderName })
   }
   const ctaDisabled =
     !currentRequest ||
     submitting ||
+    Boolean(currentQuote && !quoteMeetsMinimum(currentQuote)) ||
     (Boolean(currentQuote) && quoteUsable && (!walletId || !holderNameReady))
 
   const route = {
@@ -523,7 +531,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     to: { label: "Worldstreet wallet", sub: `${selected.symbol} on ${selected.network}` },
   }
   const approx = currentQuote ? `≈ ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}` : null
-  const hint = `Pay in ${activeCorridor.currencyCode} · live quote before you order`
+  const hint = `Pay in ${activeCorridor.currencyCode} · minimum $${MINIMUM_BUY_USD} USD equivalent`
 
   const banners = (
     <>
@@ -685,7 +693,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
                 <div className="mt-6 rounded-2xl bg-background/25 px-4 py-5 ring-1 ring-border/20">
                   <p className="font-display text-xl font-semibold tracking-[-0.02em]">Ready when you are</p>
                   <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-                    Enter an amount to see the current rate, fees, and exactly how much crypto will arrive.
+                    Enter an amount to see the current rate, fees, and exactly how much crypto will arrive. The minimum buy is ${MINIMUM_BUY_USD} USD equivalent.
                   </p>
                 </div>
               )}

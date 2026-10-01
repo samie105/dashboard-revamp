@@ -106,6 +106,23 @@ export function onrampOptions(config: FiatCapabilitySnapshot | undefined): Onram
 
 export type OnrampQuoteRequest = Parameters<OnrampClient["createFiatQuote"]>[0]
 
+/** Product minimum for a crypto buy, expressed in the received USD-pegged asset. */
+export const MINIMUM_BUY_USD = 5
+
+const USD_PEGGED_DESTINATIONS = new Set(["USD", "USDC", "USDT"])
+
+/**
+ * Local-currency inputs cannot use a fixed numeric minimum: 5 NGN and 5 GHS
+ * are not $5. Check the live quote's received USD-pegged amount instead.
+ * Unknown destination currencies are left to the provider/backend because a
+ * token amount cannot safely be compared to dollars without a price feed.
+ */
+export function quoteMeetsMinimum(quote: Pick<FiatQuote, "destinationAmount" | "destinationCurrency">): boolean {
+  if (!USD_PEGGED_DESTINATIONS.has(quote.destinationCurrency.trim().toUpperCase())) return true
+  const received = Number(quote.destinationAmount)
+  return Number.isFinite(received) && received >= MINIMUM_BUY_USD
+}
+
 /** A positive decimal. Anything finer (limits, precision) is the backend's call. */
 export function isValidAmount(amount: string): boolean {
   return /^\d+(\.\d+)?$/.test(amount.trim()) && Number(amount) > 0

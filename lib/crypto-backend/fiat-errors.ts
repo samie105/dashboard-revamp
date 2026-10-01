@@ -128,6 +128,8 @@ export function describeFiatError(
         requestId,
       )
     case "FIAT_AMOUNT_INVALID":
+    case "FIAT_MINIMUM_AMOUNT":
+      return userMessage("The minimum crypto buy is $5 USD equivalent. Increase the amount and try again.", "fix-input", requestId)
     case "BENEFICIARY_REQUIRED":
     case "INVALID_REQUEST":
       return userMessage("Check the details and try again.", "fix-input", requestId)
