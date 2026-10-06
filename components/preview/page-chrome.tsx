@@ -17,11 +17,11 @@ export { SectionRule } from "@/components/ui/system"
  */
 export function PreviewNotice({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-primary/25 bg-primary/[0.06] px-3.5 py-2.5">
+    <div className="preview-notice flex items-start gap-2.5 rounded-xl px-3.5 py-2.5">
       <svg
         aria-hidden
         viewBox="0 0 16 16"
-        className="mt-0.5 h-4 w-4 shrink-0 fill-none stroke-primary"
+        className="preview-notice-icon mt-0.5 h-4 w-4 shrink-0 fill-none"
         strokeWidth="1.5"
         strokeLinecap="round"
       >
@@ -29,7 +29,7 @@ export function PreviewNotice({ children }: { children: React.ReactNode }) {
         <path d="M8 5.2v.01M8 7.4v3.4" />
       </svg>
       <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-        <span className="font-semibold text-foreground">Design preview.</span> {children}
+        <span className="font-semibold text-foreground">Public exchange preview.</span> {children}
       </p>
     </div>
   )

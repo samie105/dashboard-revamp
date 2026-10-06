@@ -191,14 +191,20 @@ export function SendFlow({
 
   /* ── Accounts × networks ───────────────────────────────────────────────── */
 
-  const accounts = React.useMemo(() => wallet.data?.accounts ?? [], [wallet.data])
+  const accounts = React.useMemo(
+    () => (wallet.data?.accounts ?? []).filter((account) => account.chainFamily !== "bitcoin"),
+    [wallet.data],
+  )
   const accountByFamily = React.useMemo(() => {
     const map = new Map<string, CryptoWalletAccount>()
     for (const account of accounts) if (!map.has(account.chainFamily)) map.set(account.chainFamily, account)
     return map
   }, [accounts])
 
-  const networkList = React.useMemo(() => networks.data ?? [], [networks.data])
+  const networkList = React.useMemo(
+    () => (networks.data ?? []).filter((network) => network.family !== "bitcoin"),
+    [networks.data],
+  )
   const networkOptions: ChoiceOption[] = React.useMemo(
     () =>
       networkList

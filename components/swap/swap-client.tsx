@@ -59,7 +59,7 @@ import { describeLedgerRecord } from "@/lib/ledger-rows"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useAuth } from "@/components/auth-provider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled, CryptoBackendError } from "@/lib/crypto-backend"
-import { signBitcoinIntent, signEvmIntent, signSolanaIntent, signSuiIntent, signTronIntent } from "@/lib/crypto-wallet"
+import { signEvmIntent, signSolanaIntent, signSuiIntent, signTronIntent } from "@/lib/crypto-wallet"
 import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { toBaseUnits } from "@/lib/crypto-wallet/address-validation"
@@ -938,9 +938,7 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
           ? await signSuiIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
           : sourceFamily === "tron"
               ? await signTronIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
-              : sourceFamily === "bitcoin"
-                ? await signBitcoinIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
-                : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
+              : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
       const submitted = await cryptoBackendClient.submitIntent(intent.id, signed)
       setSwapResult({ success: true, status: "PENDING", txHash: submitted.txHash })
       // Balance snapshots are intentionally cached between explicit refreshes.

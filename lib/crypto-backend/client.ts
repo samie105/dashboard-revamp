@@ -974,14 +974,12 @@ export class CryptoBackendClient {
         | "solana-mainnet-beta"
         | "sui-mainnet"
         | "tron-mainnet"
-        | "bitcoin-mainnet"
       destinationNetworkId:
         | "ethereum-mainnet"
         | "arbitrum-one"
         | "solana-mainnet-beta"
         | "sui-mainnet"
         | "tron-mainnet"
-        | "bitcoin-mainnet"
       sellToken: string
       buyToken: string
       sellAmountBaseUnits: string
