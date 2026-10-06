@@ -693,7 +693,6 @@ export function validateDraft(d: Draft): DraftCheck[] {
     !v.trim() || /^https:\/\/[^\s.]+\.[^\s]{2,}$/i.test(v.trim())
   const handleOk = (v: string) =>
     !v.trim() || /^@?[A-Za-z0-9_]{1,32}$/.test(v.trim())
-  const taken = LAUNCHES.some((l) => l.symbol === symbol)
 
   return [
     {
@@ -712,12 +711,6 @@ export function validateDraft(d: Draft): DraftCheck[] {
       key: "reserved",
       ok: !RESERVED_SYMBOLS.has(symbol),
       label: "Symbol isn't a listed asset",
-      blocking: true,
-    },
-    {
-      key: "taken",
-      ok: !taken,
-      label: "Symbol isn't already launched here",
       blocking: true,
     },
     {
@@ -745,6 +738,19 @@ export function validateDraft(d: Draft): DraftCheck[] {
       blocking: true,
     },
   ]
+}
+
+/**
+ * Launches already using this ticker. NOT a validation failure: on Solana
+ * two tokens can share a name and a ticker — the MINT ADDRESS is what tells
+ * them apart, and every card and token page shows it for exactly that reason.
+ * The form mentions the overlap so the creator isn't surprised; it doesn't
+ * block on it. (The reserved list still blocks: impersonating a LISTED asset
+ * like USDC is a different problem from two memes picking the same word.)
+ */
+export function sameTicker(symbol: string): Launch[] {
+  const s = symbol.trim().toUpperCase()
+  return s ? LAUNCHES.filter((l) => l.symbol === s) : []
 }
 
 /** The draft rendered as a launch, so the preview card is the real card. */

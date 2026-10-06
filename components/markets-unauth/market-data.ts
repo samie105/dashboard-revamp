@@ -17,6 +17,8 @@
  * its percentage because the percentage comes from the chart.
  */
 
+import { PREVIEW_ROUTES } from "@/components/preview/routes"
+
 /* ── Seeded series ──────────────────────────────────────────────────────── */
 
 function mulberry32(seed: number) {
@@ -272,5 +274,7 @@ export type SortKey = "rank" | "price" | "changePct" | "high" | "low" | "volumeU
 /** Where a Trade click goes. The live page shows "Not listed" on rows it has
  *  no venue for, which is a dead end where an action belongs. */
 export function tradeHref(m: Market): string {
-  return `/trade?symbol=${encodeURIComponent(m.base)}&quote=${encodeURIComponent(m.quote)}`
+  // Into the redesigned terminal, on this exact pair. It used to point at the
+  // live /trade, which bounces anyone without a session to sign-in.
+  return `${PREVIEW_ROUTES.trade}?market=spot&pair=${encodeURIComponent(m.id)}`
 }

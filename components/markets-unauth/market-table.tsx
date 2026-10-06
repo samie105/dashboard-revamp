@@ -1,33 +1,24 @@
 "use client"
 
 /**
- * All markets.
+ * All markets — the full list, in the dashboard's table language.
  *
- * The live table's problems, in order of how much they cost:
- *
- *   · Market Cap and Volume are "—" on every row, and both are sortable
- *     columns, so two of the seven columns are furniture.
- *   · The 7D chart is red on every row regardless of direction. Here the
- *     curve takes tone="direction" and reads the series that produced the
- *     percentage beside it, so the two cannot disagree.
- *   · The Trade column reads "Not listed" on a third of the rows — a dead end
- *     where the page's primary action belongs — and on the rows that do have
- *     venues it prints a run of chain links with duplicates ("Solana ↗
- *     Ethereum ↗ Arbitrum ↗ Arbitrum ↗"). Every row here has one Trade button;
- *     the chains it routes through are a tooltip on that button.
- *   · No high/low, so the day's range is invisible.
- *   · The star column has no favourites filter to feed.
+ *  · Every row has one Trade action; the chains it routes through are its
+ *    tooltip, not a run of links.
+ *  · The 7d curve reads the same series that produced the 24h figure, so a
+ *    green row never carries a red chart.
+ *  · Columns sort; money columns sort high-to-low first, rank low-to-high.
+ *  · Favourites feed their own tab.
+ *  · On a phone the table becomes a list with a sort control, because nine
+ *    columns at 375px is a spreadsheet, not a screen.
  */
 
 import * as React from "react"
 import Link from "next/link"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { StarIcon, Search01Icon, Cancel01Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons"
+import { AnimatePresence, motion } from "motion/react"
+import { ArrowDown01Icon, Cancel01Icon, Search01Icon, StarIcon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
-import { CardShell, CardHeader, EmptyState, Segmented } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { CARD_HUE } from "@/components/ui/surface"
-import { MiniSpark } from "@/components/ui/charts"
 import {
   MARKETS,
   QUOTE_TABS,
@@ -38,18 +29,55 @@ import {
   type Quote,
   type SortKey,
 } from "@/components/markets-unauth/market-data"
+import { ChangeChip, Icon, Panel, PanelTitle, PillTabs, Spark, UnderlineTabs } from "@/components/redesign/ui"
 
 type Tab = Quote | "all" | "favorites"
 
-const COLUMNS: { key: SortKey; label: string; align: "left" | "right"; hideBelow?: "sm" | "lg" }[] = [
-  { key: "rank", label: "#", align: "left" },
-  { key: "price", label: "Price", align: "right" },
-  { key: "changePct", label: "24h", align: "right" },
-  { key: "high", label: "24h high", align: "right", hideBelow: "lg" },
-  { key: "low", label: "24h low", align: "right", hideBelow: "lg" },
-  { key: "volumeUsd", label: "Volume", align: "right", hideBelow: "sm" },
-  { key: "marketCapUsd", label: "Market cap", align: "right", hideBelow: "lg" },
+type Column = { key: SortKey; label: string; className?: string }
+
+/* Responsive columns: high/low and market cap appear only where they fit. */
+const COLUMNS: Column[] = [
+  { key: "price", label: "Price" },
+  { key: "changePct", label: "24h Change" },
+  { key: "high", label: "24h High", className: "hidden 2xl:table-cell" },
+  { key: "low", label: "24h Low", className: "hidden 2xl:table-cell" },
+  { key: "volumeUsd", label: "24h Volume", className: "hidden lg:table-cell" },
+  { key: "marketCapUsd", label: "Market Cap", className: "hidden xl:table-cell" },
 ]
+
+const MOBILE_SORTS: { key: SortKey; label: string }[] = [
+  { key: "marketCapUsd", label: "Market cap" },
+  { key: "volumeUsd", label: "Volume" },
+  { key: "changePct", label: "Change" },
+]
+
+/** USDT pairs read in dollars; BTC/ETH pairs in their quote. */
+function Price({ m, className }: { m: Market; className?: string }) {
+  return (
+    <span className={cn("tabular-nums", className)}>
+      {m.quote === "USDT" && "$"}
+      {formatPrice(m.price)}
+      {m.quote !== "USDT" && <span className="ml-1 text-[11px] font-medium text-muted-foreground">{m.quote}</span>}
+    </span>
+  )
+}
+
+function FavoriteButton({ m, on, onToggle }: { m: Market; on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={on}
+      aria-label={on ? `Remove ${m.base}/${m.quote} from favourites` : `Add ${m.base}/${m.quote} to favourites`}
+      className={cn(
+        "flex size-7 items-center justify-center rounded-lg transition-all duration-200 hover:bg-white/[0.05] active:scale-90",
+        on ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground",
+      )}
+    >
+      <Icon icon={StarIcon} className={cn("size-4 transition-transform duration-300", on && "scale-110 fill-primary")} />
+    </button>
+  )
+}
 
 export function MarketTable() {
   const [tab, setTab] = React.useState<Tab>("all")
@@ -58,15 +86,12 @@ export function MarketTable() {
   const [desc, setDesc] = React.useState(true)
   const [favorites, setFavorites] = React.useState<string[]>(["BTC-USDT", "SOL-USDT", "TON-USDT"])
 
-  const toggleFavorite = (id: string) =>
-    setFavorites((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))
+  const toggleFavorite = (id: string) => setFavorites((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))
 
   const sortBy = (key: SortKey) => {
     if (key === sort) setDesc((d) => !d)
     else {
       setSort(key)
-      // Rank ascends by default; every money column descends, because the
-      // question is always "which is biggest".
       setDesc(key !== "rank")
     }
   }
@@ -76,216 +101,196 @@ export function MarketTable() {
     const filtered = MARKETS.filter((m) => {
       if (tab === "favorites" && !favorites.includes(m.id)) return false
       if (tab !== "all" && tab !== "favorites" && m.quote !== tab) return false
-      if (!q) return true
-      return m.base.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)
+      return !q || m.base.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)
     })
     if (sort === "rank") return desc ? [...filtered].reverse() : filtered
     return [...filtered].sort((a, b) => (desc ? b[sort] - a[sort] : a[sort] - b[sort]))
   }, [tab, query, sort, desc, favorites])
 
-  return (
-    <CardShell className={CARD_HUE}>
-      <CardHeader title="All markets" subtitle={`${rows.length} of ${MARKETS.length} pairs`} />
-
-      <div className="scrollbar-none overflow-x-auto border-t border-border/40 px-4 py-2.5">
-        <Segmented
-          size="sm"
-          options={QUOTE_TABS.map((t) => ({
-            key: t.key,
-            label: t.key === "favorites" ? `${t.label} (${favorites.length})` : t.label,
-          }))}
-          value={tab}
-          onChange={(k) => setTab(k as Tab)}
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 border-y border-border/40 px-4 py-2.5">
-        <label className="relative flex w-full min-w-[12rem] items-center sm:w-auto sm:max-w-xs sm:flex-1">
-          <HugeiconsIcon
-            icon={Search01Icon}
-            className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-muted-foreground"
-          />
-          <span className="sr-only">Search markets</span>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name or symbol"
-            className="h-9 w-full min-w-0 rounded-full bg-foreground/[0.05] pl-8 pr-8 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Clear search"
-              className="ws-icon-mono absolute right-3 text-muted-foreground hover:text-foreground"
-            >
-              <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </label>
-        <span className="ml-auto hidden text-[12px] tabular-nums text-muted-foreground/70 sm:block">
-          Sorted by {COLUMNS.find((c) => c.key === sort)?.label ?? sort} · {desc ? "high to low" : "low to high"}
+  const tabs = QUOTE_TABS.map((t) => ({
+    key: t.key as Tab,
+    label:
+      t.key === "favorites" ? (
+        <span className="inline-flex items-center gap-1.5">
+          Favorites
+          <span className="rounded-md bg-white/[0.07] px-1.5 text-[11px] tabular-nums text-muted-foreground">{favorites.length}</span>
         </span>
+      ) : (
+        t.label
+      ),
+  }))
+
+  return (
+    <Panel className="pb-2">
+      <div className="flex flex-col gap-4 px-4 pt-5 md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-baseline gap-2.5">
+            <PanelTitle className="text-[17px]">All markets</PanelTitle>
+            <span className="text-[13px] tabular-nums text-muted-foreground">
+              {rows.length} of {MARKETS.length} pairs
+            </span>
+          </div>
+          <label className="group flex h-10 w-full items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3.5 transition-colors focus-within:border-primary/40 sm:w-[260px]">
+            <Icon icon={Search01Icon} className="size-4 text-muted-foreground group-focus-within:text-primary" />
+            <span className="sr-only">Search markets</span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name or symbol"
+              className="min-w-0 flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground/70"
+            />
+            {query && (
+              <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="text-muted-foreground hover:text-foreground">
+                <Icon icon={Cancel01Icon} className="size-4" />
+              </button>
+            )}
+          </label>
+        </div>
+
+        <div className="flex items-end justify-between gap-3 border-b border-white/[0.06]">
+          <UnderlineTabs id="market-quote" options={tabs} value={tab} onChange={setTab} className="scrollbar-none -mx-1 overflow-x-auto" />
+        </div>
+
+        {/* Phone-only sort: the table headers that do this on desktop aren't there. */}
+        <div className="flex items-center justify-between gap-2 md:hidden">
+          <span className="text-[12px] font-medium text-muted-foreground">Sort by</span>
+          <PillTabs
+            id="market-sort-mobile"
+            size="sm"
+            options={MOBILE_SORTS.map((s) => ({ key: s.key, label: s.label }))}
+            value={MOBILE_SORTS.some((s) => s.key === sort) ? sort : "marketCapUsd"}
+            onChange={(k) => {
+              setSort(k)
+              setDesc(true)
+            }}
+          />
+        </div>
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState
-          title={tab === "favorites" ? "No favourites yet" : "No markets match"}
-          description={
-            tab === "favorites"
-              ? "Star a market in the table to pin it here."
-              : "Try a different symbol, or switch the quote-currency tab."
-          }
-        />
-      ) : (
-        <div className="slim-scroll min-w-0 flex-1 overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-left lg:min-w-[980px]">
-            <thead>
-              <tr className="border-b border-border/40 text-[11px] uppercase tracking-[0.07em] text-muted-foreground">
-                <th className="w-8 px-2 py-2.5" />
-                <th className="px-4 py-2.5 font-semibold">Market</th>
-                {COLUMNS.filter((c) => c.key !== "rank").map((c) => (
-                  <th
-                    key={c.key}
-                    className={cn(
-                      "px-4 py-2.5 font-semibold",
-                      c.align === "right" && "text-right",
-                      c.hideBelow === "sm" && "hidden sm:table-cell",
-                      c.hideBelow === "lg" && "hidden lg:table-cell",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => sortBy(c.key)}
-                      className={cn(
-                        "ws-icon-mono inline-flex items-center gap-1 uppercase tracking-[0.07em] transition-colors hover:text-foreground",
-                        sort === c.key && "text-foreground",
-                      )}
-                    >
-                      {c.label}
-                      {sort === c.key && (
-                        <HugeiconsIcon
-                          icon={ArrowDown01Icon}
-                          className={cn("h-3 w-3 transition-transform", !desc && "rotate-180")}
-                        />
-                      )}
-                    </button>
-                  </th>
-                ))}
-                <th className="px-4 py-2.5 text-right font-semibold">7d</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Trade</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/25">
-              {rows.map((m, i) => (
-                <Row
-                  key={m.id}
-                  m={m}
-                  index={i}
-                  favorite={favorites.includes(m.id)}
-                  onToggleFavorite={() => toggleFavorite(m.id)}
-                />
-              ))}
-            </tbody>
-          </table>
+        <div className="flex flex-col items-center gap-1 px-6 py-16 text-center">
+          <p className="text-[14px] font-semibold text-foreground">{tab === "favorites" ? "No favourites yet" : `No markets match “${query}”`}</p>
+          <p className="text-[13px] text-muted-foreground">
+            {tab === "favorites" ? "Tap the star on any market to pin it here." : "Try a ticker like SOL, or switch the quote tab."}
+          </p>
         </div>
+      ) : (
+        <>
+          {/* Desktop table */}
+          <div className="hidden pt-2 md:block">
+            <table className="w-full border-separate border-spacing-0 text-left">
+              <thead>
+                <tr className="text-[12px] font-medium text-muted-foreground">
+                  <th className="w-[52px] py-3 pl-5" />
+                  <th className="w-[44px] py-3 font-medium">#</th>
+                  <th className="py-3 font-medium">Market</th>
+                  {COLUMNS.map((c) => (
+                    <th key={c.key} className={cn("py-3 pr-5 text-right font-medium", c.className)}>
+                      <button
+                        type="button"
+                        onClick={() => sortBy(c.key)}
+                        className={cn("inline-flex items-center gap-1 transition-colors hover:text-foreground", sort === c.key && "text-foreground")}
+                      >
+                        {c.label}
+                        <Icon
+                          icon={ArrowDown01Icon}
+                          className={cn(
+                            "size-3.5 transition-all duration-300",
+                            sort === c.key ? "opacity-100" : "opacity-0",
+                            sort === c.key && !desc && "rotate-180",
+                          )}
+                          strokeWidth={2}
+                        />
+                      </button>
+                    </th>
+                  ))}
+                  <th className="py-3 pr-5 text-right font-medium">Last 7 days</th>
+                  <th className="w-[112px] py-3 pr-6 text-right font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <AnimatePresence initial={false}>
+                  {rows.map((m, i) => (
+                    <motion.tr
+                      key={m.id}
+                      layout="position"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                      className="group text-[13.5px] tabular-nums"
+                    >
+                      <td className="dash-cell h-[64px] pl-5">
+                        <FavoriteButton m={m} on={favorites.includes(m.id)} onToggle={() => toggleFavorite(m.id)} />
+                      </td>
+                      <td className="dash-cell text-muted-foreground">{i + 1}</td>
+                      <td className="dash-cell">
+                        <Link href={tradeHref(m)} className="flex items-center gap-3">
+                          <CoinAvatar symbol={m.base} size="lg" className="size-8 ring-1 ring-white/10" />
+                          <span className="flex min-w-0 flex-col leading-tight">
+                            <span className="font-semibold text-foreground">
+                              {m.base}
+                              <span className="font-medium text-muted-foreground">/{m.quote}</span>
+                            </span>
+                            <span className="truncate text-[12px] text-muted-foreground">{m.name}</span>
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="dash-cell pr-5 text-right font-semibold text-foreground">
+                        <Price m={m} />
+                      </td>
+                      <td className="dash-cell pr-5 text-right">
+                        <ChangeChip value={m.changePct} size="sm" />
+                      </td>
+                      <td className="dash-cell hidden pr-5 text-right text-foreground/70 2xl:table-cell">{formatPrice(m.high)}</td>
+                      <td className="dash-cell hidden pr-5 text-right text-foreground/70 2xl:table-cell">{formatPrice(m.low)}</td>
+                      <td className="dash-cell hidden pr-5 text-right text-foreground/90 lg:table-cell">${formatCompact(m.volumeUsd)}</td>
+                      <td className="dash-cell hidden pr-5 text-right text-foreground/70 xl:table-cell">${formatCompact(m.marketCapUsd)}</td>
+                      <td className="dash-cell pr-5">
+                        <span className="flex justify-end">
+                          <Spark points={m.series} width={96} height={30} />
+                        </span>
+                      </td>
+                      <td className="dash-cell pr-6 text-right">
+                        <Link
+                          href={tradeHref(m)}
+                          title={`Trade ${m.base}/${m.quote} on ${m.chains.join(", ")}`}
+                          className="inline-flex h-8 items-center rounded-[10px] border border-primary/50 px-4 text-[12.5px] font-semibold text-primary transition-all duration-200 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-[0_6px_18px_-6px_rgb(250_190_20/0.6)]"
+                        >
+                          Trade
+                        </Link>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Phone list */}
+          <ul className="flex flex-col pt-2 md:hidden">
+            {rows.map((m) => (
+              <li key={m.id} className="flex items-center gap-2 border-t border-white/[0.05] py-1 pl-2 pr-4 first:border-t-0">
+                <FavoriteButton m={m} on={favorites.includes(m.id)} onToggle={() => toggleFavorite(m.id)} />
+                <Link href={tradeHref(m)} className="flex min-w-0 flex-1 items-center gap-3 py-2.5">
+                  <CoinAvatar symbol={m.base} size="lg" className="size-9 ring-1 ring-white/10" />
+                  <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                    <span className="truncate text-[14px] font-semibold text-foreground">
+                      {m.base}
+                      <span className="font-medium text-muted-foreground">/{m.quote}</span>
+                    </span>
+                    <span className="truncate text-[12px] text-muted-foreground">Vol ${formatCompact(m.volumeUsd)}</span>
+                  </span>
+                  <span className="flex flex-col items-end gap-1">
+                    <Price m={m} className="text-[14px] font-semibold text-foreground" />
+                    <ChangeChip value={m.changePct} size="sm" className="h-5 min-w-[58px] text-[11px]" />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
-    </CardShell>
-  )
-}
-
-function Row({
-  m,
-  index,
-  favorite,
-  onToggleFavorite,
-}: {
-  m: Market
-  index: number
-  favorite: boolean
-  onToggleFavorite: () => void
-}) {
-  const up = m.changePct >= 0
-  return (
-    <tr className="group transition-colors hover:bg-accent/40">
-      <td className="px-2 py-3">
-        <button
-          type="button"
-          onClick={onToggleFavorite}
-          aria-pressed={favorite}
-          aria-label={favorite ? `Unstar ${m.base}` : `Star ${m.base}`}
-          className={cn(
-            // The star's COLOUR is its state, so it opts out of the two-tone rule.
-            "ws-icon-mono mx-auto flex h-6 w-6 items-center justify-center rounded-full transition-colors",
-            favorite ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground",
-          )}
-        >
-          <HugeiconsIcon icon={StarIcon} className={cn("h-3.5 w-3.5", favorite && "fill-primary")} />
-        </button>
-      </td>
-
-      {/* The cell is a link too, not just the Trade button — a row you can
-          read but not click is the thing the reference gets right. */}
-      <td className="px-4 py-3">
-        <Link href={tradeHref(m)} className="flex items-center gap-2.5">
-          <span className="w-5 shrink-0 text-[11.5px] tabular-nums text-muted-foreground/50">
-            {index + 1}
-          </span>
-          <CoinAvatar symbol={m.base} size="lg" />
-          <span className="flex min-w-0 flex-col">
-            <span className="flex items-baseline gap-1 leading-tight">
-              <span className="text-[13.5px] font-semibold">{m.base}</span>
-              <span className="text-[11px] text-muted-foreground">/{m.quote}</span>
-            </span>
-            <span className="truncate text-[11.5px] leading-tight text-muted-foreground">{m.name}</span>
-          </span>
-        </Link>
-      </td>
-
-      <td className="whitespace-nowrap px-4 py-3 text-right text-[13.5px] font-medium tabular-nums">
-        {formatPrice(m.price)}
-      </td>
-      <td
-        className={cn(
-          "whitespace-nowrap px-4 py-3 text-right text-[13.5px] font-semibold tabular-nums",
-          up ? "text-credit" : "text-debit",
-        )}
-      >
-        {up ? "+" : ""}
-        {m.changePct.toFixed(2)}%
-      </td>
-      <td className="hidden whitespace-nowrap px-4 py-3 text-right text-[13px] tabular-nums text-muted-foreground lg:table-cell">
-        {formatPrice(m.high)}
-      </td>
-      <td className="hidden whitespace-nowrap px-4 py-3 text-right text-[13px] tabular-nums text-muted-foreground lg:table-cell">
-        {formatPrice(m.low)}
-      </td>
-      <td className="hidden whitespace-nowrap px-4 py-3 text-right text-[13px] tabular-nums sm:table-cell">
-        ${formatCompact(m.volumeUsd)}
-      </td>
-      <td className="hidden whitespace-nowrap px-4 py-3 text-right text-[13px] tabular-nums text-muted-foreground lg:table-cell">
-        ${formatCompact(m.marketCapUsd)}
-      </td>
-
-      <td className="px-4 py-3">
-        <span className="flex justify-end">
-          <MiniSpark points={m.series} tone="direction" width={76} height={26} />
-        </span>
-      </td>
-
-      <td className="px-4 py-3">
-        <span className="flex justify-end">
-          {/* One destination, always. The chains it routes through are a title,
-              not eight links competing with each other. */}
-          <Link
-            href={tradeHref(m)}
-            title={`Trade ${m.base}/${m.quote} on ${m.chains.join(", ")}`}
-            className="inline-flex items-center rounded-full border border-primary/40 px-3.5 py-1.5 text-[12.5px] font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
-          >
-            Trade
-          </Link>
-        </span>
-      </td>
-    </tr>
+    </Panel>
   )
 }

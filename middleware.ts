@@ -27,6 +27,9 @@ const isPublicRoute = createRouteMatcher([
   "/trade-unauth",
   "/swap-unauth",
   "/bridge-unauth",
+  "/buy-unauth",
+  "/sell-unauth",
+  "/settings-unauth",
   // (.*) because this preview has sub-routes — /create and /[launchId].
   "/launchpad-unauth(.*)",
 ])

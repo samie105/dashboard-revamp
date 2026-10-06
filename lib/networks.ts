@@ -109,7 +109,9 @@ export const NETWORK_ICON: Record<string, string> = {
   sui: "https://coin-images.coingecko.com/coins/images/26375/small/sui-ocean-square.png",
   ton: "https://coin-images.coingecko.com/coins/images/17980/small/photo_2024-09-10_17.09.00.jpeg",
   tron: "https://coin-images.coingecko.com/coins/images/1094/small/tron-logo.png",
-  // Prefer the canonical IPFS asset; CoinAvatar falls back to the bundled
-  // WSK mark when a public gateway is unavailable.
-  intertrain: "https://ipfs.io/ipfs/bafkreicjmwxhgwcvpldndx3ybxjncngmlqnesgzxn6a4pkivhaqpznabxq",
+  // The gold mark, bundled. This pointed at an IPFS CID that public gateways
+  // rate-limit or cannot resolve (worldstreet-chain's chain-registry/README.md
+  // records why the pin never became reachable), and on every failure the
+  // avatar fell back to an old "W" coin that is not Intertrain's mark at all.
+  intertrain: "/intertrain/intertrain-icon.png",
 }

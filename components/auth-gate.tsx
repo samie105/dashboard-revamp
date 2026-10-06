@@ -16,6 +16,9 @@ const PUBLIC_ROUTES = [
   "/trade-unauth",
   "/swap-unauth",
   "/bridge-unauth",
+  "/buy-unauth",
+  "/sell-unauth",
+  "/settings-unauth",
   "/launchpad-unauth",
 ]
 const LOGIN_URL =

@@ -1,489 +1,422 @@
 "use client"
 
 /**
- * The history list.
+ * Transaction history with its detail — a list on the left, the selected
+ * transaction on the right.
  *
- * Read the live page's rows and the faults are all in one place:
+ * ≥1536px  the detail is a sticky side column; selecting a row just swaps it
+ * <1536px  selecting a row opens the same detail in a sheet (a bottom sheet
+ *          on a phone, a side drawer on a tablet)
  *
- *   · a swap renders as "→ 0x0000…0000" — the zero address, printed in full,
- *     where the PAIR belongs. A swap's content is "0.0016 ETH became 5.40
- *     USDC"; the counterparty of an AMM trade is not a fact anyone wants.
- *   · amounts carry no dollar value, so every row has to be priced in the
- *     reader's head
- *   · one row reads "-0.00 Unknown" — an unresolved symbol and an amount
- *     rounded past the point of meaning
- *   · fees appear nowhere
- *   · every status is a green "Completed" pill, which spends the money-in
- *     colour on the fact that nothing went wrong
- *   · the row is a label on the far left and figures on the far right with a
- *     third of the screen of nothing in between
- *
- * So: swaps show both legs, every row carries its USD value, fees and hashes
- * live in an expandable detail, and only a genuine exception takes a colour.
+ * Filters stack: type tab × status × date range × search. Every count shown
+ * (tab badges, the "n of m" line, each day's entry count) is computed from the
+ * same filtered list, so none of them can disagree.
  */
 
 import * as React from "react"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  ArrowDownLeft01Icon,
-  ArrowUpRight01Icon,
-  ArrowDataTransferHorizontalIcon,
-  CoinsSwapIcon,
-  ChartLineData01Icon,
-  Search01Icon,
-  Cancel01Icon,
-  ArrowDown01Icon,
-  LinkSquare02Icon,
-  Copy01Icon,
-  Tick02Icon,
-} from "@hugeicons/core-free-icons"
+import { createPortal } from "react-dom"
+import { AnimatePresence, motion } from "motion/react"
+import { ArrowRight01Icon, Cancel01Icon, FileExportIcon, Search01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
-import { CardShell, CardHeader, EmptyState, Segmented, Eyebrow } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { CARD_HUE } from "@/components/ui/surface"
 import {
   KIND_FILTERS,
-  RANGE_FILTERS,
-  STATUS_FILTERS,
   TRANSACTIONS,
   directionOf,
-  formatAmount,
   formatUSD,
   usdOf,
   type Tx,
   type TxKind,
   type TxStatus,
 } from "@/components/transactions-unauth/tx-data"
+import {
+  KIND_META,
+  StatusChip,
+  TxDetail,
+  amountText,
+  kindTone,
+  truncateMiddle,
+  useDayLabel,
+} from "@/components/transactions-unauth/tx-detail"
+import { Figure, Icon, Panel, PanelTitle, PillTabs, UnderlineTabs } from "@/components/redesign/ui"
 
-const KIND_ICON = {
-  deposit: ArrowDownLeft01Icon,
-  withdrawal: ArrowUpRight01Icon,
-  swap: CoinsSwapIcon,
-  trade: ChartLineData01Icon,
-  transfer: ArrowDataTransferHorizontalIcon,
-} as const
+type KindKey = TxKind | "all"
+type StatusKey = TxStatus | "any"
+type RangeKey = "7d" | "30d" | "all"
 
-const KIND_LABEL: Record<TxKind, string> = {
-  deposit: "Deposit",
-  withdrawal: "Withdrawal",
-  swap: "Swap",
-  trade: "Trade",
-  transfer: "Transfer",
-}
+const RANGE_DAYS: Record<RangeKey, number> = { "7d": 7, "30d": 30, all: Infinity }
+const WIDE = "(min-width: 1536px)"
 
-function truncate(s: string, head = 6, tail = 4) {
-  return s.length <= head + tail + 1 ? s : `${s.slice(0, head)}…${s.slice(-tail)}`
-}
+/* ── CSV ──────────────────────────────────────────────────────────────── */
 
-/**
- * Day-group headings.
- *
- * "Today" and "Yesterday" are facts about the DATA (offset 0 and 1) so they
- * render on the server. A real date is a fact about the viewer's calendar, so
- * offsets of 2 or more start as "5 days ago" and become "Mon, Sep 14" once
- * mounted. Formatting a date during SSR is the classic hydration mismatch.
- */
-function useDayLabel() {
-  const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => setMounted(true), [])
-  return React.useCallback(
-    (offset: number) => {
-      if (offset === 0) return "Today"
-      if (offset === 1) return "Yesterday"
-      if (!mounted) return `${offset} days ago`
-      const d = new Date()
-      d.setDate(d.getDate() - offset)
-      return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(d)
-    },
-    [mounted],
+function exportCsv(rows: Tx[]) {
+  const head = ["Reference", "Days ago", "Time", "Type", "Status", "Asset", "Amount", "To asset", "To amount", "Network", "Counterparty", "Hash", "Fee", "Fee asset", "USD value"]
+  const esc = (v: unknown) => {
+    const s = String(v ?? "")
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const body = rows.map((t) =>
+    [t.id, t.dayOffset, t.time, t.kind, t.status, t.asset, t.amount, t.toAsset, t.toAmount, t.network, t.counterparty, t.hash, t.fee, t.feeAsset, usdOf(t.asset, t.amount).toFixed(2)].map(esc).join(","),
   )
+  const blob = new Blob([[head.join(","), ...body].join("\n")], { type: "text/csv;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = "worldstreet-transactions-demo.csv"
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
-/* ── Status ───────────────────────────────────────────────────────────────── */
+/* ── Row ──────────────────────────────────────────────────────────────── */
 
-function StatusPill({ tx }: { tx: Tx }) {
-  if (tx.status === "pending" && tx.confirmations) {
-    const [seen, need] = tx.confirmations
-    return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warning-chip px-2 py-1 text-[11.5px] font-semibold text-warning">
-        <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-60" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-warning" />
+function TxRow({ tx, selected, onSelect }: { tx: Tx; selected: boolean; onSelect: () => void }) {
+  const meta = KIND_META[tx.kind]
+  const d = directionOf(tx.kind)
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={cn(
+        "group relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_112px_minmax(0,1fr)_16px] md:gap-4",
+        selected ? "bg-primary/[0.06]" : "hover:bg-white/[0.03]",
+      )}
+    >
+      {selected && (
+        <motion.span layoutId="tx-selected" transition={{ type: "spring", stiffness: 500, damping: 40 }} className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-primary shadow-[0_0_10px_var(--primary)]" />
+      )}
+
+      {/* Type + assets */}
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="relative shrink-0">
+          <span className={cn("flex size-10 items-center justify-center rounded-xl border", kindTone(tx.kind))}>
+            <Icon icon={meta.icon} className="size-[18px]" strokeWidth={2} />
+          </span>
+          <CoinAvatar symbol={tx.asset} size="sm" className="absolute -bottom-1 -right-1 size-[18px] ring-2 ring-[#0f0f0f]" />
         </span>
-        {seen}/{need}
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-foreground">
+            {meta.label}
+            <span className="font-medium text-muted-foreground">
+              {tx.asset}
+              {tx.toAsset && <> → {tx.toAsset}</>}
+            </span>
+          </span>
+          <span className="truncate text-[12px] text-muted-foreground">
+            {tx.time}
+            <span className="md:hidden"> · {tx.network}</span>
+          </span>
+        </span>
       </span>
-    )
-  }
-  if (tx.status === "failed") {
-    return (
-      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-debit-chip px-2 py-1 text-[11.5px] font-semibold text-debit">
-        Failed
+
+      {/* Network + counterparty */}
+      <span className="hidden min-w-0 flex-col gap-0.5 md:flex">
+        <span className="truncate text-[13px] text-foreground/85">{tx.network}</span>
+        <span className="truncate font-mono text-[11.5px] text-muted-foreground">
+          {tx.counterparty ? `${tx.kind === "deposit" ? "from" : "to"} ${truncateMiddle(tx.counterparty, 6, 4)}` : tx.kind === "transfer" ? "internal" : tx.kind === "trade" ? "order book" : "—"}
+        </span>
       </span>
-    )
-  }
-  // Neutral on purpose. "Nothing went wrong" is the default case, and a green
-  // pill on 28 of 30 rows makes the two that DID go wrong harder to find.
-  return (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-foreground/[0.07] px-2 py-1 text-[11.5px] font-medium text-muted-foreground">
-      Completed
-    </span>
-  )
-}
 
-/* ── One row ──────────────────────────────────────────────────────────────── */
+      {/* Status */}
+      <span className="hidden md:block">
+        <StatusChip tx={tx} />
+      </span>
 
-function Row({ tx, dayLabel }: { tx: Tx; dayLabel: string }) {
-  const [open, setOpen] = React.useState(false)
-  const [copied, setCopied] = React.useState(false)
-  const dir = directionOf(tx.kind)
-  const usd = usdOf(tx.asset, tx.amount)
-  const isPair = Boolean(tx.toAsset && tx.toAmount)
-  const sign = dir === "credit" ? "+" : dir === "debit" ? "−" : ""
-
-  const copyHash = () => {
-    navigator.clipboard?.writeText(tx.hash).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1600)
-  }
-
-  return (
-    <div className={cn("transition-colors", open ? "bg-accent/30" : "hover:bg-accent/40")}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
-      >
+      {/* Amount */}
+      <span className="flex flex-col items-end gap-0.5 tabular-nums">
         <span
-          // Direction is what the glyph means, so it opts out of the global
-          // two-tone gold treatment.
           className={cn(
-            "ws-icon-mono flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-            dir === "credit" && "bg-credit-chip text-credit",
-            dir === "debit" && "bg-debit-chip text-debit",
-            dir === "neutral" && "bg-convert-chip text-primary",
+            "whitespace-nowrap text-[13.5px] font-semibold",
+            tx.status === "failed" ? "text-muted-foreground line-through decoration-debit/60" : d === "credit" ? "text-credit" : "text-foreground",
           )}
         >
-          <HugeiconsIcon icon={KIND_ICON[tx.kind]} className="h-[17px] w-[17px]" />
+          <Figure mask="••••">{amountText(tx)}</Figure>
         </span>
-
-        {/* What happened. A swap says what it BECAME — the live page prints the
-            zero address here instead. */}
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="flex min-w-0 items-center gap-2">
-            {/* nowrap, not truncate: these five labels are short and known, and
-                a clipped "Withdraw…" tells you less than a slightly narrower
-                meta line below it. */}
-            <span className="whitespace-nowrap text-[13.5px] font-semibold leading-tight">
-              {KIND_LABEL[tx.kind]}
-            </span>
-            {/* The pair with its coin marks needs ~120px it does not have on a
-                phone — at 375px the symbols were rendering 5px wide. It moves
-                into the meta line as plain text below `sm`. */}
-            {isPair && (
-              <span className="hidden min-w-0 items-center gap-1.5 text-[12.5px] text-muted-foreground sm:flex">
-                <CoinAvatar symbol={tx.asset} size="sm" />
-                <span className="truncate">{tx.asset}</span>
-                <span aria-hidden>→</span>
-                <CoinAvatar symbol={tx.toAsset!} size="sm" />
-                <span className="truncate">{tx.toAsset}</span>
-              </span>
-            )}
-          </span>
-          <span className="truncate text-[11.5px] leading-tight text-muted-foreground">
-            {isPair && (
-              <span className="sm:hidden">
-                {tx.asset} → {tx.toAsset} ·{" "}
-              </span>
-            )}
-            {tx.network} · {tx.time}
-            {tx.counterparty && !isPair && (
-              // Hidden on a phone: it was eating the line and it is one tap
-              // away in the row detail, in full, with a copy control.
-              <span className="hidden sm:inline">
-                {" · "}
-                {tx.kind === "deposit" ? "from" : "to"}{" "}
-                <span className="font-mono">{truncate(tx.counterparty)}</span>
-              </span>
-            )}
-          </span>
+        <span className="flex items-center gap-1.5 whitespace-nowrap text-[12px] text-muted-foreground">
+          {/* On a phone the status column is gone, so non-routine states ride here. */}
+          {tx.status !== "completed" && <StatusChip tx={tx} className="md:hidden" />}
+          <Figure mask="••••">{tx.toAsset ? `→ ${tx.toAmount} ${tx.toAsset}` : formatUSD(usdOf(tx.asset, tx.amount))}</Figure>
         </span>
+      </span>
 
-        <span className="hidden shrink-0 sm:block">
-          <StatusPill tx={tx} />
-        </span>
+      <Icon icon={ArrowRight01Icon} className={cn("hidden size-4 transition-all duration-200 md:block", selected ? "text-primary" : "text-muted-foreground/30 group-hover:translate-x-0.5 group-hover:text-muted-foreground")} />
+    </button>
+  )
+}
 
-        {/* The figures. Token amount AND dollar value — the live page gives
-            only the first, so every row has to be priced in your head. */}
-        <span className="flex shrink-0 flex-col items-end">
-          <span
+/* ── Sheet (below 1536px) ─────────────────────────────────────────────── */
+
+function DetailSheet({ tx, onClose }: { tx: Tx | null; onClose: () => void }) {
+  // Portalled to the frame root. Rendered in place, the sheet sits inside the
+  // page's <Rise> entrance wrapper, whose animation uses `transform` — and a
+  // transformed ancestor becomes the containing block for `position: fixed`.
+  // The "fixed" sheet was pinned to the bottom of the (long) list instead of
+  // the screen. `.dash-root` carries the fonts and isn't transformed, so the
+  // sheet keeps the page's type and finally sits on the viewport.
+  const [host, setHost] = React.useState<Element | null>(null)
+  React.useEffect(() => setHost(document.querySelector(".dash-root") ?? document.body), [])
+
+  // Lock the page's scroller while the sheet is up, so a swipe inside the
+  // sheet doesn't scroll the list behind it.
+  React.useEffect(() => {
+    if (!tx) return
+    const main = document.querySelector<HTMLElement>(".dash-root main")
+    if (!main) return
+    const prev = main.style.overflowY
+    main.style.overflowY = "hidden"
+    return () => {
+      main.style.overflowY = prev
+    }
+  }, [tx])
+
+  React.useEffect(() => {
+    if (!tx) return
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [tx, onClose])
+
+  if (!host) return null
+  return createPortal(
+    <AnimatePresence>
+      {tx && (
+        <>
+          <motion.div
+            key="scrim"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onClose}
+            className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm 2xl:hidden"
+          />
+          <motion.div
+            key="sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Transaction details"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            transition={{ type: "spring", stiffness: 420, damping: 38 }}
             className={cn(
-              "whitespace-nowrap text-[13.5px] font-semibold tabular-nums",
-              dir === "credit" && "text-credit",
-              dir === "debit" && "text-debit",
-              dir === "neutral" && "text-foreground",
-              tx.status === "failed" && "text-muted-foreground line-through",
+              "slim-scroll fixed z-50 overflow-y-auto border-white/[0.08] bg-[#0f0f0f] p-5 shadow-[0_-20px_60px_-10px_rgb(0_0_0/0.8)] 2xl:hidden",
+              // Phone: bottom sheet. Tablet: right-hand drawer.
+              "inset-x-0 bottom-0 max-h-[88dvh] rounded-t-[24px] border-t pb-[max(1.25rem,env(safe-area-inset-bottom))]",
+              "md:inset-y-3 md:left-auto md:right-3 md:max-h-none md:w-[440px] md:rounded-[24px] md:border",
             )}
           >
-            {sign}
-            {formatAmount(tx.amount)} {tx.asset}
-          </span>
-          <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">
-            {isPair ? `→ ${formatAmount(tx.toAmount!)} ${tx.toAsset}` : formatUSD(usd)}
-          </span>
-        </span>
-
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
-          className={cn(
-            "ws-icon-mono h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-            open && "rotate-180",
-          )}
-        />
-      </button>
-
-      {open && (
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border/25 px-4 pb-4 pt-3 sm:grid-cols-4 sm:pl-16">
-          <Detail label="Status">
-            <StatusPill tx={tx} />
-          </Detail>
-          <Detail label="Network fee">
-            <span className="text-[12.5px] tabular-nums">
-              {formatAmount(tx.fee)} {tx.feeAsset}
-              <span className="text-muted-foreground"> · {formatUSD(usdOf(tx.feeAsset, tx.fee))}</span>
-            </span>
-          </Detail>
-          <Detail label="Value then">
-            <span className="text-[12.5px] tabular-nums">{formatUSD(usd)}</span>
-          </Detail>
-          <Detail label="Date">
-            <span className="text-[12.5px]">
-              {dayLabel} · {tx.time}
-            </span>
-          </Detail>
-          {tx.counterparty && (
-            <Detail label={tx.kind === "deposit" ? "From" : "To"} span>
-              <span className="break-all font-mono text-[12px] text-muted-foreground">{tx.counterparty}</span>
-            </Detail>
-          )}
-          <Detail label="Transaction hash" span>
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="break-all font-mono text-[12px] text-muted-foreground">{tx.hash}</span>
-              <button
-                type="button"
-                onClick={copyHash}
-                className={cn(
-                  "ws-icon-mono inline-flex items-center gap-1 text-[11.5px] font-semibold transition-colors",
-                  copied ? "text-credit" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <HugeiconsIcon icon={copied ? Tick02Icon : Copy01Icon} className="h-3 w-3" />
-                {copied ? "Copied" : "Copy"}
-              </button>
-              <button
-                type="button"
-                className="ws-icon-mono inline-flex items-center gap-1 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Explorer
-                <HugeiconsIcon icon={LinkSquare02Icon} className="h-3 w-3" />
-              </button>
-            </span>
-          </Detail>
-        </div>
+            <span aria-hidden className="mx-auto mb-4 block h-1 w-10 rounded-full bg-white/15 md:hidden" />
+            <TxDetail tx={tx} onClose={onClose} />
+          </motion.div>
+        </>
       )}
-    </div>
+    </AnimatePresence>,
+    host,
   )
 }
 
-function Detail({
-  label,
-  span,
-  children,
-}: {
-  label: string
-  span?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <div className={cn("flex min-w-0 flex-col gap-1", span && "col-span-2 sm:col-span-4")}>
-      <Eyebrow className="text-[10.5px]">{label}</Eyebrow>
-      {children}
-    </div>
-  )
-}
-
-/* ── The list ─────────────────────────────────────────────────────────────── */
-
-const PAGE = 12
+/* ── Workspace ────────────────────────────────────────────────────────── */
 
 export function History() {
-  const [kind, setKind] = React.useState<TxKind | "all">("all")
-  const [status, setStatus] = React.useState<TxStatus | "any">("any")
-  const [range, setRange] = React.useState("30d")
+  const [kind, setKind] = React.useState<KindKey>("all")
+  const [status, setStatus] = React.useState<StatusKey>("any")
+  const [range, setRange] = React.useState<RangeKey>("30d")
   const [query, setQuery] = React.useState("")
-  const [shown, setShown] = React.useState(PAGE)
+  const [selectedId, setSelectedId] = React.useState<string>(TRANSACTIONS[0].id)
+  const [sheetTx, setSheetTx] = React.useState<Tx | null>(null)
   const dayLabel = useDayLabel()
 
-  const days = RANGE_FILTERS.find((r) => r.key === range)?.days ?? Infinity
-
-  const rows = React.useMemo(() => {
+  // Everything except the type tab — so each tab's badge counts what it
+  // would show under the other filters.
+  const base = React.useMemo(() => {
     const q = query.trim().toLowerCase()
-    return TRANSACTIONS.filter((t) => {
-      if (kind !== "all" && t.kind !== kind) return false
-      if (status !== "any" && t.status !== status) return false
-      if (t.dayOffset >= days) return false
-      if (!q) return true
-      return (
-        t.asset.toLowerCase().includes(q) ||
-        (t.toAsset ?? "").toLowerCase().includes(q) ||
-        t.network.toLowerCase().includes(q) ||
-        t.hash.toLowerCase().includes(q) ||
-        (t.counterparty ?? "").toLowerCase().includes(q)
-      )
-    })
-  }, [kind, status, days, query])
+    return TRANSACTIONS.filter(
+      (t) =>
+        (status === "any" || t.status === status) &&
+        t.dayOffset < RANGE_DAYS[range] &&
+        (!q ||
+          [t.asset, t.toAsset, t.hash, t.counterparty, t.network, KIND_META[t.kind].label]
+            .filter(Boolean)
+            .some((v) => v!.toLowerCase().includes(q))),
+    )
+  }, [status, range, query])
 
-  // Narrowing the filter while paged deep would otherwise leave "Load more"
-  // visible over a list that is already complete.
-  React.useEffect(() => setShown(PAGE), [kind, status, range, query])
+  const rows = kind === "all" ? base : base.filter((t) => t.kind === kind)
+  const groups = React.useMemo(() => {
+    const m = new Map<number, Tx[]>()
+    rows.forEach((t) => m.set(t.dayOffset, [...(m.get(t.dayOffset) ?? []), t]))
+    return [...m.entries()]
+  }, [rows])
 
-  const page = rows.slice(0, shown)
+  const selected = TRANSACTIONS.find((t) => t.id === selectedId) ?? TRANSACTIONS[0]
+  const filtersOn = status !== "any" || range !== "30d" || !!query
 
-  // Group by day, preserving order — the rows are already newest first.
-  const groups: { offset: number; items: Tx[] }[] = []
-  for (const t of page) {
-    const last = groups[groups.length - 1]
-    if (last && last.offset === t.dayOffset) last.items.push(t)
-    else groups.push({ offset: t.dayOffset, items: [t] })
+  const select = (tx: Tx) => {
+    setSelectedId(tx.id)
+    if (!window.matchMedia(WIDE).matches) setSheetTx(tx)
   }
+  const closeSheet = React.useCallback(() => setSheetTx(null), [])
 
-  const filtering = kind !== "all" || status !== "any" || query.trim() !== "" || range !== "30d"
-
-  return (
-    <CardShell className={CARD_HUE}>
-      {/* The kind tabs used to live in CardHeader's `right` slot. Six tabs and
-          a subtitle cannot share one line on a 375px phone: the subtitle got
-          squeezed to a four-line column ("30 / of / 30 / transactions") and
-          the tabs still overflowed the card. They get their own scrollable
-          row instead — which also reads better on desktop. */}
-      <CardHeader title="History" subtitle={`${rows.length} of ${TRANSACTIONS.length} transactions`} />
-
-      <div className="scrollbar-none overflow-x-auto border-t border-border/40 px-4 py-2.5">
-        <Segmented size="sm" options={KIND_FILTERS} value={kind} onChange={setKind} />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 border-y border-border/40 px-4 py-2.5">
-        {/* w-full on a phone: as a flex-1 sibling of two selects it collapsed
-            to the width of its own magnifier icon. */}
-        <label className="relative flex w-full min-w-[12rem] items-center sm:w-auto sm:flex-1 sm:max-w-xs">
-          <HugeiconsIcon
-            icon={Search01Icon}
-            className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-muted-foreground"
-          />
-          <span className="sr-only">Search transactions</span>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search hash, token, address…"
-            className="h-9 w-full min-w-0 rounded-full bg-foreground/[0.05] pl-8 pr-8 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Clear search"
-              className="ws-icon-mono absolute right-3 text-muted-foreground hover:text-foreground"
-            >
-              <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </label>
-
-        <Select value={status} onChange={(v) => setStatus(v as TxStatus | "any")} options={STATUS_FILTERS} />
-        <Select value={range} onChange={setRange} options={RANGE_FILTERS} />
-
-        <span className="ml-auto hidden text-[12px] tabular-nums text-muted-foreground/70 sm:block">
-          {rows.length === TRANSACTIONS.length ? "No filters" : `${TRANSACTIONS.length - rows.length} filtered out`}
+  const tabs = KIND_FILTERS.map((f) => ({
+    key: f.key as KindKey,
+    label: (
+      <span className="inline-flex items-center gap-1.5">
+        {f.label}
+        <span className="rounded-md bg-white/[0.07] px-1.5 text-[11px] tabular-nums text-muted-foreground">
+          {f.key === "all" ? base.length : base.filter((t) => t.kind === f.key).length}
         </span>
-      </div>
+      </span>
+    ),
+  }))
 
-      {rows.length === 0 ? (
-        <EmptyState
-          title="Nothing matches"
-          description={
-            filtering
-              ? "No transaction fits those filters. Widen the date range or clear the search."
-              : "Transactions appear here as soon as money moves."
-          }
-        />
-      ) : (
-        <div className="flex flex-1 flex-col">
-          {groups.map((g) => (
-            <div key={g.offset} className="flex flex-col">
-              {/* Sticky day heading — scrolling a long ledger without one means
-                  losing track of what day you are reading. */}
-              <div className="sticky top-0 z-10 flex items-center gap-3 bg-card/85 px-4 py-1.5 backdrop-blur-sm">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                  {dayLabel(g.offset)}
-                </span>
-                <span aria-hidden className="h-px flex-1 bg-border/40" />
-                <span className="text-[11px] tabular-nums text-muted-foreground/70">
-                  {g.items.length} {g.items.length === 1 ? "entry" : "entries"}
-                </span>
-              </div>
-              <div className="flex flex-col divide-y divide-border/25">
-                {g.items.map((t) => (
-                  <Row key={t.id} tx={t} dayLabel={dayLabel(t.dayOffset)} />
-                ))}
-              </div>
+  return (
+    <div className="grid grid-cols-1 gap-4 md:gap-5 2xl:grid-cols-[minmax(0,1fr)_408px]">
+      {/* overflow-clip, not hidden: hidden makes the panel a scroll
+          container, and the sticky day headings would stick to it (i.e.
+          never) instead of to the page. clip rounds the corners just the same. */}
+      <Panel className="overflow-clip pb-2">
+        <div className="flex flex-col gap-4 px-4 pt-5 md:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-baseline gap-2.5">
+              <PanelTitle className="text-[17px]">History</PanelTitle>
+              <span className="text-[13px] tabular-nums text-muted-foreground">
+                {rows.length} of {TRANSACTIONS.length}
+              </span>
             </div>
-          ))}
-
-          {shown < rows.length && (
             <button
               type="button"
-              onClick={() => setShown((n) => n + PAGE)}
-              className="border-t border-border/40 px-4 py-3 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+              onClick={() => exportCsv(rows)}
+              disabled={rows.length === 0}
+              className="flex h-9 items-center gap-2 rounded-xl border border-white/[0.08] px-3.5 text-[13px] font-semibold text-foreground/85 transition-colors hover:border-primary/35 hover:text-primary disabled:opacity-40"
             >
-              Show {Math.min(PAGE, rows.length - shown)} more
-              <span className="text-muted-foreground/60"> · {rows.length - shown} remaining</span>
+              <Icon icon={FileExportIcon} className="size-4" />
+              Export CSV
             </button>
-          )}
-        </div>
-      )}
-    </CardShell>
-  )
-}
+          </div>
 
-/** A styled native select — keeps keyboard and mobile behaviour for free, and
- *  avoids putting a popover inside a card that scrolls. */
-function Select({
-  value,
-  onChange,
-  options,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: { key: string; label: string }[]
-}) {
-  return (
-    <span className="relative inline-flex shrink-0 items-center">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={options[0]?.label}
-        className="h-9 appearance-none rounded-full bg-foreground/[0.05] pl-3.5 pr-8 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-      >
-        {options.map((o) => (
-          <option key={o.key} value={o.key} className="bg-popover text-popover-foreground">
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <HugeiconsIcon
-        icon={ArrowDown01Icon}
-        className="ws-icon-mono pointer-events-none absolute right-3 h-3.5 w-3.5 text-muted-foreground"
-      />
-    </span>
+          <div className="border-b border-white/[0.06]">
+            <UnderlineTabs id="tx-kinds" options={tabs} value={kind} onChange={setKind} className="scrollbar-none -mx-1 overflow-x-auto" />
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <label className="group flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3.5 transition-colors focus-within:border-primary/40">
+              <Icon icon={Search01Icon} className="size-4 text-muted-foreground group-focus-within:text-primary" />
+              <span className="sr-only">Search transactions</span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search coin, network, hash or address"
+                className="min-w-0 flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground/70"
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="text-muted-foreground hover:text-foreground">
+                  <Icon icon={Cancel01Icon} className="size-4" />
+                </button>
+              )}
+            </label>
+            <div className="scrollbar-none -mx-1 flex items-center gap-2 overflow-x-auto px-1">
+              <PillTabs
+                id="tx-status"
+                size="sm"
+                options={[
+                  { key: "any", label: "Any" },
+                  { key: "completed", label: "Completed" },
+                  { key: "pending", label: "Pending" },
+                  { key: "failed", label: "Failed" },
+                ]}
+                value={status}
+                onChange={setStatus}
+              />
+              <PillTabs
+                id="tx-range"
+                size="sm"
+                options={[
+                  { key: "7d", label: "7D" },
+                  { key: "30d", label: "30D" },
+                  { key: "all", label: "All" },
+                ]}
+                value={range}
+                onChange={setRange}
+              />
+              {filtersOn && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatus("any")
+                    setRange("30d")
+                    setQuery("")
+                  }}
+                  className="shrink-0 whitespace-nowrap px-1 text-[12.5px] font-semibold text-primary hover:opacity-85"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="flex flex-col items-center gap-1 px-6 py-16 text-center">
+            <p className="text-[14px] font-semibold text-foreground">No transactions match</p>
+            <p className="text-[13px] text-muted-foreground">Try another type, widen the date range, or clear the search.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col pt-3">
+            {/* Column heads, desktop only — they line up with the row grid. */}
+            <div className="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_112px_minmax(0,1fr)_16px] gap-4 px-7 pb-2 text-[12px] font-medium text-muted-foreground md:grid">
+              <span>Transaction</span>
+              <span>Network</span>
+              <span>Status</span>
+              <span className="text-right">Amount</span>
+              <span />
+            </div>
+            <AnimatePresence initial={false} mode="popLayout">
+              {groups.map(([day, list]) => (
+                <motion.section
+                  key={day}
+                  layout="position"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="sticky top-0 z-10 flex items-center justify-between border-y border-white/[0.04] bg-[#111]/95 px-4 py-2 backdrop-blur md:px-7">
+                    <span className="text-[12px] font-semibold text-foreground/80">{dayLabel(day)}</span>
+                    <span className="text-[11.5px] tabular-nums text-muted-foreground">
+                      {list.length} {list.length === 1 ? "entry" : "entries"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 px-1 py-1.5 md:px-3">
+                    {list.map((t) => (
+                      <TxRow key={t.id} tx={t} selected={t.id === selected.id} onSelect={() => select(t)} />
+                    ))}
+                  </div>
+                </motion.section>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </Panel>
+
+      {/* Wide screens: the detail lives beside the list and follows the scroll. */}
+      <div className="hidden 2xl:block">
+        <Panel className="sticky top-6 p-5">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={selected.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <TxDetail tx={selected} />
+            </motion.div>
+          </AnimatePresence>
+        </Panel>
+      </div>
+
+      <DetailSheet tx={sheetTx} onClose={closeSheet} />
+    </div>
   )
 }

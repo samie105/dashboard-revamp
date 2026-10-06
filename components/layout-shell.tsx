@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { PreviewSidebar } from "@/components/preview/sidebar"
-import { PREVIEW_ROUTES, isPreviewPath } from "@/components/preview/routes"
+import { PREVIEW_ROUTES, isPreviewPath, isRedesignPath } from "@/components/preview/routes"
 import { Navbar } from "@/components/navbar"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { IncomingCallProvider } from "@/components/community/incoming-call-provider"
@@ -16,16 +16,18 @@ import { prefetchSpotMarkets } from "@/lib/spot-markets"
 import { MigrationNoticePopup } from "@/components/crypto/MigrationNotice"
 
 /** Routes that render full-bleed (no sidebar / top-nav / navbar).
- *  The trading preview joins them for the same reason /trade is here: the
- *  market rail, the chart and the book need the width, and a nav rail beside
- *  a four-column workspace leaves the chart as the narrowest panel. */
-const FULL_BLEED_ROUTES = ["/trade", "/trade-unauth", "/vivid"]
+ *  /trade is here because the market rail, the chart and the book need the
+ *  width. The redesigned previews (isRedesignPath) are full-bleed too: they
+ *  bring their OWN frame from app/(redesign)/layout.tsx — including the
+ *  trading preview, whose rail stays an icon strip to give the chart room. */
+const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
 const AUTH_ROUTES = ["/login", "/register"]
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
-  const isFullBleed = FULL_BLEED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
+  const isFullBleed =
+    isRedesignPath(pathname) || FULL_BLEED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
 
   /* Warm the spot registry once the app has finished its own work. It is the
      slowest thing /trade waits on — 9,000+ rows — and fetching it only when
@@ -81,8 +83,10 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
               one back arrow in the page's own header. The bar is the only
               navigation a phone has here, so it stays. These routes own their
               full height, so each reserves its own clearance for the floating
-              capsule (see the trade workspace's bottom padding). */}
-          <MobileBottomNav />
+              capsule (see the trade workspace's bottom padding).
+              The redesigned previews are the exception: their frame's drawer
+              (the menu button in its top bar) carries the phone's navigation. */}
+          {!isRedesignPath(pathname) && <MobileBottomNav />}
         </MoneyFlowProvider>
       </IncomingCallProvider>
     )

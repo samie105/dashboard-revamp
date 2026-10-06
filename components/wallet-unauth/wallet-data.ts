@@ -185,3 +185,46 @@ export const SECURITY_FLAGS: { label: string; done: boolean }[] = [
   { label: "Anti-phishing code", done: true },
   { label: "Withdrawal whitelist", done: false },
 ]
+
+/* ── Accounts ───────────────────────────────────────────────────────────────
+   The four places money sits, summed from BALANCE_ROWS — so the split bar,
+   the account cards and the table's account tabs all reconcile with the
+   headline total by construction. */
+
+export const ACCOUNTS: { key: AccountKey; label: string; caption: string }[] = [
+  { key: "spot", label: "Spot", caption: "Ready to trade" },
+  { key: "funding", label: "Funding", caption: "Deposits land here" },
+  { key: "futures", label: "Futures", caption: "Margin collateral" },
+  { key: "earn", label: "Earn", caption: "Staked · 5.4% APY" },
+]
+
+export const ACCOUNT_TOTALS: Record<AccountKey, number> = BALANCE_ROWS.reduce(
+  (acc, r) => ({ ...acc, [r.account]: acc[r.account] + r.value }),
+  { spot: 0, funding: 0, futures: 0, earn: 0 } as Record<AccountKey, number>,
+)
+
+/** Breakdown by state: what you can move now, what is resting in orders, and
+ *  what is locked (staking, margin). Sums to WALLET_TOTAL. */
+export const STATE_TOTALS = BALANCE_ROWS.reduce(
+  (acc, r) => ({
+    available: acc.available + r.available * r.price,
+    inOrder: acc.inOrder + r.inOrder * r.price,
+    locked: acc.locked + r.locked * r.price,
+  }),
+  { available: 0, inOrder: 0, locked: 0 },
+)
+
+/** Network fee shown on the withdraw form, per chain family. Illustrative. */
+export const WITHDRAW_FEES: Record<string, { fee: number; symbol: string; eta: string }> = {
+  evm: { fee: 0.00042, symbol: "ETH", eta: "~2 min" },
+  bitcoin: { fee: 0.00008, symbol: "BTC", eta: "~30 min" },
+  solana: { fee: 0.000005, symbol: "SOL", eta: "~15 sec" },
+  tron: { fee: 1, symbol: "TRX", eta: "~1 min" },
+  ton: { fee: 0.01, symbol: "TON", eta: "~10 sec" },
+  sui: { fee: 0.002, symbol: "SUI", eta: "~5 sec" },
+}
+
+/** Which chain family a balance row moves on. */
+export function chainFor(row: { network: string }): ChainGroup | undefined {
+  return CHAIN_GROUPS.find((c) => c.networks.includes(row.network))
+}
