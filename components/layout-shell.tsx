@@ -5,12 +5,11 @@ import { usePathname } from "next/navigation"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { PreviewSidebar } from "@/components/preview/sidebar"
-import { PREVIEW_ROUTES, isPreviewPath, isRedesignPath } from "@/components/preview/routes"
+import { isPreviewPath, isRedesignPath } from "@/components/preview/routes"
 import { Navbar } from "@/components/navbar"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { IncomingCallProvider } from "@/components/community/incoming-call-provider"
 import { MoneyFlowProvider } from "@/components/flows/money-flow-modal"
-import { SilkBackdrop } from "@/components/ui/silk-backdrop"
 import { LiquidGlassPointer } from "@/components/liquid-glass"
 import { prefetchSpotMarkets } from "@/lib/spot-markets"
 import { MigrationNoticePopup } from "@/components/crypto/MigrationNotice"
@@ -54,21 +53,10 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     rootRef.current?.toggleAttribute("data-ws-scrolled", (e.target as HTMLElement).scrollTop > 8)
   }, [])
   if (isAuthRoute) return <>{children}</>
-  // The silk atmosphere belongs to the hero pages only — the dashboard and
-  // the wallet home (both lead with a Balance hero; DS §atmosphere) — but it
-  // must live HERE, under the z-10 content layer, so the translucent sidebar
-  // and navbar blur it through — inside <main> it could never reach behind
-  // the rail.
-  // The *-unauth previews lead with the same Balance hero as the pages they
-  // redesign, so they get the same atmosphere.
   const isPreview = isPreviewPath(pathname)
-  // The atmosphere belongs to pages that LEAD with a balance hero. The
-  // transactions preview leads with a table, so it stays out of the list.
-  const isDashboard =
-    pathname === "/" ||
-    pathname === "/wallet/modern" ||
-    pathname === PREVIEW_ROUTES.dashboard ||
-    pathname === PREVIEW_ROUTES.wallet
+  // The gold "silk" atmosphere that sat behind the dashboard and wallet hero
+  // (components/ui/silk-backdrop.tsx) was removed at the lead's request, in
+  // favour of the redesign frame's static gold bloom (below).
 
   if (isFullBleed) {
     return (
@@ -103,23 +91,13 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
             aria-hidden
             className="pointer-events-none fixed inset-y-0 left-0 z-0 hidden w-[42rem] bg-[radial-gradient(60%_50%_at_0%_18%,var(--sidebar-bleed)_0%,transparent_72%)] md:block"
           />
-          {/* Dashboard atmosphere — full viewport width so the field runs
-              behind the sidebar too and shows through its translucency.
-              Dark gets the WebGL silk; light gets the warm paper wash. */}
-          {isDashboard && (
-            <>
-              <div
-                aria-hidden
-                className="pointer-events-none fixed inset-x-0 top-0 z-0 hidden h-[60vh] dark:block"
-              >
-                <SilkBackdrop />
-              </div>
-              <div
-                aria-hidden
-                className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[60vh] bg-[radial-gradient(90%_75%_at_25%_0%,rgba(234,179,8,0.10)_0%,rgba(234,179,8,0.035)_45%,transparent_75%)] dark:hidden"
-              />
-            </>
-          )}
+          {/* Atmosphere: the redesign frame's low gold bloom behind the top of
+              the page (components/redesign/shell.tsx). A wide radial set off
+              the top edge, so only its lower half shows — well under any text.
+              Gold from --primary; fixed and non-interactive. */}
+          <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+            <div className="absolute -top-40 left-[18%] h-[520px] w-[820px] rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--primary)_7.5%,transparent),transparent)]" />
+          </div>
           <div className="relative z-10 flex flex-1 overflow-hidden">
             <SidebarProvider>
               {/* Sidebar hidden on mobile — bottom nav replaces it.
