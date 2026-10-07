@@ -6,7 +6,8 @@
  *
  * Kept from the preview: every card and its layout. Swapped for real data:
  * market cap and its 24h move, 24h volume and BTC dominance from the global
- * feed; breadth from the listed assets; Fear & Greed from /insights.
+ * feed; breadth from the listed assets; Fear & Greed from /insights, or the
+ * public alternative.me index when /insights has no reading.
  * The BTC / ETH / other split reads both shares from the same global
  * response. The market-cap curve and the seven daily volume bars come from
  * getMarketHistory: BTC, ETH and USDT's own 7-day charts, summed (the
@@ -22,7 +23,7 @@ import { motion } from "motion/react"
 import { cn } from "@/lib/utils"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { Panel, Spark } from "@/components/dashboard/redesign/ui"
-import { getMarketHistory } from "@/lib/actions"
+import { getFearGreed, getMarketHistory } from "@/lib/actions"
 import { listAssets, type MarketHistory } from "@/lib/market-history"
 import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backend"
 import { UNKNOWN, breadthOf, formatFunding, formatLarge, formatPrice, futuresTotals } from "@/lib/markets-view"
@@ -139,24 +140,26 @@ function Unavailable({ children }: { children: React.ReactNode }) {
   return <span className="text-[12px] text-muted-foreground">{children}</span>
 }
 
-/** The Fear & Greed reading from /insights, or null (not deployed, or failed).
- *  The same single request the previous stats strip made. */
+/** The Fear & Greed reading: the backend's /insights first (the request the
+ *  previous strip made), else the public index through getFearGreed. Null
+ *  when neither has one. */
 function useSentiment() {
   const [value, setValue] = React.useState<{ value: number; classification: string } | null>(null)
-  const [settled, setSettled] = React.useState(!isCryptoBackendEnabled)
+  const [settled, setSettled] = React.useState(false)
   React.useEffect(() => {
-    if (!isCryptoBackendEnabled) return
     const controller = new AbortController()
-    cryptoBackendClient
-      .getInsights(1, controller.signal)
-      .then((data) => {
-        if (data.fearGreed) setValue(data.fearGreed)
-      })
-      .catch(() => {
-        /* Expected before the backend carrying /insights is deployed. */
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setSettled(true)
+    const fromBackend = isCryptoBackendEnabled
+      ? cryptoBackendClient
+          .getInsights(1, controller.signal)
+          .then((data) => data.fearGreed ?? null)
+          .catch(() => null) // Expected before the backend carrying /insights is deployed.
+      : Promise.resolve(null)
+    fromBackend
+      .then((reading) => reading ?? getFearGreed().catch(() => null))
+      .then((reading) => {
+        if (controller.signal.aborted) return
+        if (reading) setValue(reading)
+        setSettled(true)
       })
     return () => controller.abort()
   }, [])

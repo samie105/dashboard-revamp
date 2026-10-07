@@ -16,9 +16,10 @@
  *    New Listings tab is there as in the preview, showing its empty state (no
  *    listing dates exist anywhere in the app). When the feed has no 24h
  *    changes, the list says so instead of ranking zeroes.
- *  · Market sentiment — today's Fear & Greed reading from /insights. The
- *    Yesterday / Last week rows are hidden (only the current reading exists).
- *    When there is no reading, the panel says so.
+ *  · Market sentiment — today's Fear & Greed reading: /insights' own, else
+ *    the public alternative.me index (data.tsx useFearGreed), with the
+ *    preview's Yesterday / Last week rows from the index's past readings. The
+ *    panel waits with a skeleton, and says so when there is no reading.
  */
 
 import * as React from "react"
@@ -366,8 +367,8 @@ export function TopMovers() {
 /* ── Market mood ───────────────────────────────────────────────────────── */
 
 export function MarketMood() {
-  const { insights } = useDashboardData()
-  const reading = insights?.fearGreed ?? null
+  const { fearGreed } = useDashboardData()
+  const reading = fearGreed ?? null
   const score = reading?.value ?? 0
   const label = reading?.classification ?? ""
   // A 180° arc, drawn with stroke-dasharray so it can animate in.
@@ -383,8 +384,17 @@ export function MarketMood() {
         <span className="text-[12px] font-medium text-muted-foreground">Fear &amp; Greed</span>
       </div>
 
-      {!reading ? (
-        // Not in the preview: no reading (the source is down or /insights isn't deployed).
+      {fearGreed === undefined ? (
+        // Not in the preview: the reading is still on its way.
+        <div className="flex items-center gap-5" aria-hidden>
+          <span className="skel h-[96px] w-[180px] shrink-0 rounded-t-full" />
+          <span className="flex flex-col gap-2">
+            <span className="skel h-7 w-12 rounded" />
+            <span className="skel h-4 w-20 rounded" />
+          </span>
+        </div>
+      ) : !reading ? (
+        // Not in the preview: no reading from either source.
         <p className="py-8 text-center text-[13px] text-muted-foreground">Market sentiment isn&apos;t available right now.</p>
       ) : (
       <div className="flex items-center gap-5">
@@ -426,7 +436,26 @@ export function MarketMood() {
           </div>
         </div>
 
-        {/* The preview's Yesterday / Last week rows: hidden, only today's reading exists. */}
+        {/* The preview's Yesterday / Last week rows, from the index's own past
+            readings and labels. A row the index has no reading for is left out. */}
+        {(reading.yesterday || reading.lastWeek) && (
+          <dl className="flex flex-1 flex-col gap-3 text-[13px]">
+            {[
+              { k: "Yesterday", r: reading.yesterday },
+              { k: "Last week", r: reading.lastWeek },
+            ]
+              .filter((row): row is { k: string; r: { value: number; classification: string } } => Boolean(row.r))
+              .map(({ k, r }) => (
+                <div key={k} className="flex items-center justify-between gap-2 border-b border-foreground/[0.05] pb-3 last:border-b-0 last:pb-0">
+                  <dt className="text-muted-foreground">{k}</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {r.value}{" "}
+                    <span className={cn("text-[11.5px] font-medium", r.value >= 55 ? "text-credit" : r.value >= 45 ? "text-warning" : "text-debit")}>{r.classification}</span>
+                  </dd>
+                </div>
+              ))}
+          </dl>
+        )}
       </div>
       )}
     </Panel>

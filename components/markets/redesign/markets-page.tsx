@@ -123,11 +123,27 @@ export function MarketsPage({ coins, globalStats, error }: { coins: CoinData[]; 
 
   const isFutures = tab === "Futures"
   const futuresClosed = isFutures && FUTURES_CLOSED
-  const source = tab === "Spot" ? spotMarkets : coins
+  const rawSource = tab === "Spot" ? spotMarkets : coins
 
   // One batched sparkline request for everything this view can rank.
-  const sparkSymbols = React.useMemo(() => (isFutures ? futuresMarkets.map((m) => m.baseAsset) : source.map((c) => c.symbol)), [isFutures, futuresMarkets, source])
+  const sparkSymbols = React.useMemo(() => (isFutures ? futuresMarkets.map((m) => m.baseAsset) : rawSource.map((c) => c.symbol)), [isFutures, futuresMarkets, rawSource])
   const spark = useSparklines(sparkSymbols)
+
+  /* The price feed sends market cap and volume as 0. The sparkline response
+     (CoinGecko /coins/markets, already fetched) carries both, so they are
+     filled in from there: the table shows them, and sorting by them works.
+     A coin CoinGecko doesn't cover keeps "—". */
+  const enrich = React.useCallback(
+    (list: CoinData[]) =>
+      list.map((c) => {
+        const sp = spark(c.symbol)
+        if (!sp || ((c.marketCap || !sp.marketCap) && (c.volume24h || !sp.volume24h))) return c
+        return { ...c, marketCap: c.marketCap || sp.marketCap || 0, volume24h: c.volume24h || sp.volume24h || 0 }
+      }),
+    [spark],
+  )
+  const source = React.useMemo(() => enrich(rawSource), [enrich, rawSource])
+  const allCoins = React.useMemo(() => enrich(coins), [enrich, coins])
   const changeOf = React.useCallback((coin: CoinData) => spark(coin.symbol)?.change24h ?? coin.change24h, [spark])
 
   /** Whether the 7-day series have answered for anything on screen. Until
@@ -148,7 +164,7 @@ export function MarketsPage({ coins, globalStats, error }: { coins: CoinData[]; 
   }, [isFutures, futuresMarkets, source, weekOf, spark])
 
   const tableCoins = React.useMemo(() => {
-    const base = tableTab === "Favorites" ? coins.filter((c) => favorites.has(c.id)) : source
+    const base = tableTab === "Favorites" ? allCoins.filter((c) => favorites.has(c.id)) : source
     return filterCoins(base, {
       tab,
       search,
@@ -156,7 +172,7 @@ export function MarketsPage({ coins, globalStats, error }: { coins: CoinData[]; 
       sortAsc,
       onChain: chainFilter === ALL_CHAINS ? null : (symbol) => (registry.bySymbol.get(symbol.toUpperCase()) ?? []).some((r) => r.networkId === chainFilter),
     })
-  }, [tableTab, coins, favorites, source, tab, search, sortBy, sortAsc, chainFilter, registry])
+  }, [tableTab, allCoins, favorites, source, tab, search, sortBy, sortAsc, chainFilter, registry])
 
   const tableFutures = React.useMemo(() => filterFutures(futuresMarkets, { search, sortBy, sortAsc }), [futuresMarkets, search, sortBy, sortAsc])
   const pageInfo = pageOf(isFutures ? tableFutures.length : tableCoins.length, page)

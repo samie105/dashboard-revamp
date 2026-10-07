@@ -8,7 +8,8 @@
  *
  * Nothing new is fetched. This is the previous hero's arithmetic and its 30s
  * price poller (components/dashboard/hero.tsx), plus the one `/insights`
- * request the insights card made:
+ * request the insights card made (and, when it has no Fear & Greed reading,
+ * the public index through getFearGreed):
  *  · `usePortfolioTotal` owns the total, so the navbar pill, /portfolio and
  *    the dashboard agree by construction;
  *  · `useAccountHistory` owns the curves (now also cut per chart range);
@@ -23,6 +24,8 @@ import { useWalletBalances } from "@/hooks/useWalletBalances"
 import { usePortfolioTotal } from "@/hooks/usePortfolioTotal"
 import { useAccountHistory, type AccountSpec } from "@/hooks/useAccountHistory"
 import { fetchPrices } from "@/lib/crypto-api"
+import { getFearGreed } from "@/lib/actions"
+import type { FearGreed } from "@/lib/fear-greed"
 import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backend"
 import type { CoinData } from "@/lib/actions"
 
@@ -76,9 +79,11 @@ function useLivePrices(initial: Record<string, number>) {
 
 export type InsightsPayload = Awaited<ReturnType<typeof cryptoBackendClient.getInsights>>
 
-/** `/insights`, or null (not deployed or failed: same either way). Unchanged fetch. */
-function useInsights(): InsightsPayload | null {
+/** `/insights`, or null (not deployed or failed: same either way). Unchanged
+ *  fetch; `settled` says it has answered either way. */
+function useInsights(): { data: InsightsPayload | null; settled: boolean } {
   const [data, setData] = React.useState<InsightsPayload | null>(null)
+  const [settled, setSettled] = React.useState(!isCryptoBackendEnabled)
   React.useEffect(() => {
     if (!isCryptoBackendEnabled) return
     const controller = new AbortController()
@@ -88,9 +93,33 @@ function useInsights(): InsightsPayload | null {
       .catch(() => {
         /* Deliberately silent: a 404 is expected before the route is deployed. */
       })
+      .finally(() => {
+        if (!controller.signal.aborted) setSettled(true)
+      })
     return () => controller.abort()
   }, [])
-  return data
+  return { data, settled }
+}
+
+/** The Fear & Greed reading. Today's is /insights' own when it has one, else
+ *  the public index's; Yesterday and Last week always come from the index
+ *  (getFearGreed, cached on the server), which /insights doesn't carry.
+ *  undefined while still resolving, null when there's no reading. */
+function useFearGreed(insights: { data: InsightsPayload | null; settled: boolean }): FearGreed | null | undefined {
+  const own = insights.data?.fearGreed ?? null
+  const [index, setIndex] = React.useState<FearGreed | null | undefined>(undefined)
+  React.useEffect(() => {
+    let live = true
+    getFearGreed()
+      .then((value) => live && setIndex(value))
+      .catch(() => live && setIndex(null))
+    return () => {
+      live = false
+    }
+  }, [])
+  if (!insights.settled || index === undefined) return own ? { value: own.value, classification: own.classification } : undefined
+  if (own) return { value: own.value, classification: own.classification, ...(index?.yesterday ? { yesterday: index.yesterday } : {}), ...(index?.lastWeek ? { lastWeek: index.lastWeek } : {}) }
+  return index
 }
 
 /** One row per coin, in the preview's Holding shape: wallet + spot add up. */
@@ -185,6 +214,8 @@ type DashboardData = ReturnType<typeof useModel> & {
   /** The server's price-feed error, if any. */
   error?: string
   insights: InsightsPayload | null
+  /** Fear & Greed: undefined while resolving, null when there's no reading. */
+  fearGreed: FearGreed | null | undefined
 }
 
 const DashboardDataContext = React.createContext<DashboardData | null>(null)
@@ -201,8 +232,10 @@ export function DashboardDataProvider({
   children: React.ReactNode
 }) {
   const model = useModel(coins, prices)
-  const insights = useInsights()
-  const value = React.useMemo(() => ({ ...model, coins, error, insights }), [model, coins, error, insights])
+  const insightsState = useInsights()
+  const insights = insightsState.data
+  const fearGreed = useFearGreed(insightsState)
+  const value = React.useMemo(() => ({ ...model, coins, error, insights, fearGreed }), [model, coins, error, insights, fearGreed])
   return <DashboardDataContext.Provider value={value}>{children}</DashboardDataContext.Provider>
 }
 

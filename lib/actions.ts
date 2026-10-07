@@ -3,6 +3,7 @@
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import { DEV_MOCK_USER_BALANCES } from "@/lib/dev-mock-data"
 import { buildMarketHistory, type MarketHistory, type Points } from "@/lib/market-history"
+import { parseFearGreed, type FearGreed } from "@/lib/fear-greed"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -695,6 +696,28 @@ export async function getMarketHistory(): Promise<MarketHistory | null> {
   return marketHistoryInflight
 }
 
+/* ── Fear & Greed (markets page) ─────────────────────────────────────────────
+   The fallback for when the backend's /insights carries no reading: the
+   public index from alternative.me, free and keyless. It updates once a day,
+   so an hour's cache costs nothing; a failure is remembered for 10 minutes. */
+
+let fearGreedCache: { value: FearGreed | null; at: number; ttl: number } | null = null
+
+export async function getFearGreed(): Promise<FearGreed | null> {
+  if (fearGreedCache && Date.now() - fearGreedCache.at < fearGreedCache.ttl) return fearGreedCache.value
+  try {
+    const res = await fetch("https://api.alternative.me/fng/?limit=8", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8_000) })
+    if (!res.ok) throw new Error(`Fear & Greed ${res.status}`)
+    const value = parseFearGreed(await res.json())
+    fearGreedCache = { value, at: Date.now(), ttl: value ? 60 * 60_000 : 10 * 60_000 }
+    return value
+  } catch (err) {
+    console.error("[getFearGreed]", err)
+    fearGreedCache = { value: null, at: Date.now(), ttl: 10 * 60_000 }
+    return null
+  }
+}
+
 export async function getPrices(): Promise<PricesResponse> {
   const now = Date.now()
   console.log("[getPrices] called")
@@ -1284,6 +1307,10 @@ async function fetchChartData(
 export interface SparklinePoint {
   prices: number[]
   change24h: number
+  /** Market cap and 24h volume in USD, from the same /coins/markets row.
+   *  Optional: absent or 0 means CoinGecko gave no figure. */
+  marketCap?: number
+  volume24h?: number
 }
 
 /** `ok: false` means the request itself failed (rate limit, timeout, network).
@@ -1380,7 +1407,9 @@ export async function getSparklines(symbols: string[]): Promise<SparklineResult>
           if (then > 0) change24h = ((now - then) / then) * 100
         }
 
-        const entry: SparklinePoint = { prices: thinned, change24h }
+        const marketCap = typeof row.market_cap === "number" && row.market_cap > 0 ? row.market_cap : undefined
+        const volume24h = typeof row.total_volume === "number" && row.total_volume > 0 ? row.total_volume : undefined
+        const entry: SparklinePoint = { prices: thinned, change24h, marketCap, volume24h }
         out[symbol] = entry
         sparklineCache.set(symbol, { data: entry, ts: Date.now() })
       }
