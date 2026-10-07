@@ -2,11 +2,8 @@
 
 import * as React from "react"
 import { usePathname } from "next/navigation"
-import { SidebarProvider } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
-import { PreviewSidebar } from "@/components/preview/sidebar"
-import { isPreviewPath, isRedesignPath } from "@/components/preview/routes"
-import { Navbar } from "@/components/navbar"
+import { AppFrame } from "@/components/chrome/frame"
+import { isRedesignPath } from "@/components/preview/routes"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { IncomingCallProvider } from "@/components/community/incoming-call-provider"
 import { MoneyFlowProvider } from "@/components/flows/money-flow-modal"
@@ -53,7 +50,6 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     rootRef.current?.toggleAttribute("data-ws-scrolled", (e.target as HTMLElement).scrollTop > 8)
   }, [])
   if (isAuthRoute) return <>{children}</>
-  const isPreview = isPreviewPath(pathname)
   // The gold "silk" atmosphere that sat behind the dashboard and wallet hero
   // (components/ui/silk-backdrop.tsx) was removed at the lead's request, in
   // favour of the redesign frame's static gold bloom (below).
@@ -85,12 +81,6 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       <MoneyFlowProvider>
         <div ref={rootRef} className="relative flex flex-col h-screen overflow-hidden">
           <LiquidGlassPointer />
-          {/* Desktop atmosphere — the rail's warm bloom spilling into the page.
-              Fixed and non-interactive so it never intercepts a click. */}
-          <div
-            aria-hidden
-            className="pointer-events-none fixed inset-y-0 left-0 z-0 hidden w-[42rem] bg-[radial-gradient(60%_50%_at_0%_18%,var(--sidebar-bleed)_0%,transparent_72%)] md:block"
-          />
           {/* Atmosphere: the redesign frame's low gold bloom behind the top of
               the page (components/redesign/shell.tsx). A wide radial set off
               the top edge, so only its lower half shows — well under any text.
@@ -98,30 +88,10 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
           <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
             <div className="absolute -top-40 left-[18%] h-[520px] w-[820px] rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--primary)_7.5%,transparent),transparent)]" />
           </div>
-          <div className="relative z-10 flex flex-1 overflow-hidden">
-            <SidebarProvider>
-              {/* Sidebar hidden on mobile — bottom nav replaces it.
-                  The dashboard design preview renders its OWN rail so the
-                  live app's navigation cannot shift under people who are
-                  using it; see components/dashboard-unauth/preview-sidebar. */}
-              <div className="hidden md:flex">
-                {isPreview ? <PreviewSidebar /> : <AppSidebar />}
-              </div>
-              <div className="flex flex-1 flex-col w-full overflow-hidden">
-                <Navbar />
-                <div className="relative flex min-h-0 flex-1 flex-col">
-                  {/* iOS scroll-edge: content frosts progressively as it
-                      slides under the chrome instead of hitting a line. */}
-                  <div aria-hidden className="ws-scroll-edge pointer-events-none absolute inset-x-0 top-0 z-20 h-16" />
-                  {/* pb-28: the floating capsule tab bar needs clearance on
-                      mobile; desktop has no bar. */}
-                  <main onScroll={handleMainScroll} className="flex-1 overflow-y-auto w-full pb-28 md:pb-0">
-                    {children}
-                  </main>
-                </div>
-              </div>
-            </SidebarProvider>
-          </div>
+          {/* The redesign's frame: top bar across the page, rail on the left
+              (components/chrome/frame.tsx). It replaced AppSidebar + Navbar,
+              which are kept in the repo, unused. */}
+          <AppFrame onMainScroll={handleMainScroll}>{children}</AppFrame>
           <MobileBottomNav />
           {/* Spec §2 — the legacy-wallet migration message, shown once per
               user as an announcement. It lives on afterwards in the navbar's
