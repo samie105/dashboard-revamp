@@ -848,6 +848,9 @@ export function AppFrame({ children, onMainScroll }: { children: React.ReactNode
   const [dialog, setDialog] = React.useState<WalletDialog | null>(null)
   const pathname = usePathname()
   const mainRef = React.useRef<HTMLElement>(null)
+  /** The trading screen keeps the rail an icon strip at every width, as the
+   *  preview does, so the chart, book and ticket get the room. */
+  const iconRail = pathname === "/trade" || pathname.startsWith("/trade/")
 
   // The page scrolls inside <main>, not the window, so Next's scroll
   // restoration never touches it: start each route at the top.
@@ -868,13 +871,15 @@ export function AppFrame({ children, onMainScroll }: { children: React.ReactNode
       <TopBar onMenu={() => setDrawer(true)} onDeposit={() => setDialog("receive")} />
 
       <div className="relative flex min-h-0 flex-1">
-        <aside className={cn("ds-rail slim-scroll hidden shrink-0 overflow-y-auto pt-5 lg:block lg:w-[84px] xl:w-[264px]", CHROME_FONTS)} style={CHROME_FONT_STYLE}>
-          <div className="xl:hidden">
+        <aside className={cn("ds-rail slim-scroll hidden shrink-0 overflow-y-auto pt-5 lg:block lg:w-[84px]", !iconRail && "xl:w-[264px]", CHROME_FONTS)} style={CHROME_FONT_STYLE}>
+          <div className={iconRail ? undefined : "xl:hidden"}>
             <Rail compact onDialog={setDialog} />
           </div>
-          <div className="hidden xl:block">
-            <Rail compact={false} onDialog={setDialog} />
-          </div>
+          {!iconRail && (
+            <div className="hidden xl:block">
+              <Rail compact={false} onDialog={setDialog} />
+            </div>
+          )}
         </aside>
 
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">

@@ -38,8 +38,8 @@ import { cn } from "@/lib/utils"
 import { Segmented, type SegmentedOption } from "@/components/ui/system"
 import { fetchHlCandles, type HlCandleInterval } from "@/lib/hl-public"
 
-const INTERVALS: HlCandleInterval[] = ["1m", "5m", "15m", "1h", "4h", "1d"]
-const POLL_MS = 15_000
+export const INTERVALS: HlCandleInterval[] = ["1m", "5m", "15m", "1h", "4h", "1d"]
+export const POLL_MS = 15_000
 
 /**
  * The two moving averages the toolbar can lay over the bars.
@@ -131,7 +131,7 @@ function windowRange(
  * computed from the full history rather than from whatever window this chart
  * happens to be showing.
  */
-function deriveStats(candles: readonly Candle[], upstream: ChartStats | null): ChartStats {
+export function deriveStats(candles: readonly Candle[], upstream: ChartStats | null): ChartStats {
   const range = windowRange(candles, DAY)
   const last = candles.length > 0 ? candles[candles.length - 1].close : null
   return {
@@ -145,7 +145,7 @@ function deriveStats(candles: readonly Candle[], upstream: ChartStats | null): C
   }
 }
 
-type ChartPayload = {
+export type ChartPayload = {
   candles: Candle[]
   stats: ChartStats | null
   source: ChartOrigin
@@ -174,7 +174,7 @@ function sma(candles: readonly Candle[], period: number) {
   return out
 }
 
-type Candle = {
+export type Candle = {
   time: number
   open: number
   high: number
@@ -783,7 +783,7 @@ function Figure({
   )
 }
 
-async function loadCandles(
+export async function loadCandles(
   source: ChartSource,
   interval: HlCandleInterval,
   signal: AbortSignal,

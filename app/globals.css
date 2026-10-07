@@ -1466,6 +1466,36 @@ input[type="range"]::-moz-range-track {
     grid-template-rows: auto auto 1fr;
   }
 }
+/* The real trading screen (components/trade/trade-client.tsx) on the
+   preview's grid. Below lg the same elements keep their stacked phone
+   layout; from lg they take the five areas. Spot has no order book, so
+   data-book="false" lets the chart and activity take its column. */
+@media (min-width: 1024px) {
+  .trade-body {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas: "head head" "chart ticket" "book ticket" "orders orders";
+  }
+  .trade-body[data-book="false"] { grid-template-areas: "head head" "chart ticket" "orders ticket"; }
+  .trade-body > [data-area="head"] { grid-area: head; }
+  .trade-body > [data-area="chart"] { grid-area: chart; }
+  .trade-body > [data-area="book"] { grid-area: book; }
+  .trade-body > [data-area="ticket"] { grid-area: ticket; }
+  .trade-body > [data-area="orders"] { grid-area: orders; }
+}
+@media (min-width: 1280px) {
+  .trade-body {
+    grid-template-columns: minmax(0, 1fr) 300px 340px;
+    grid-template-areas: "head head head" "chart book ticket" "orders orders ticket";
+    grid-template-rows: auto auto 1fr;
+  }
+  .trade-body[data-book="false"] {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas: "head head" "chart ticket" "orders ticket";
+  }
+}
+
 /* A book level or a new fill catches the eye for a moment, then settles. */
 @keyframes book-flash-a { from { background-color: rgb(239 68 68 / 0.22); } to { background-color: transparent; } }
 @keyframes book-flash-b { from { background-color: rgb(16 185 129 / 0.22); } to { background-color: transparent; } }

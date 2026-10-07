@@ -26,16 +26,20 @@ export function num(value: unknown): number | null {
 
 type PoolRow = {
   id?: string
-  attributes?: { address?: string; reserve_in_usd?: string | number }
+  attributes?: { address?: string; reserve_in_usd?: string | number; volume_usd?: { h24?: string | number } }
 }
 
 /**
- * The pool to chart: the deepest one.
+ * The pool to chart: the one that actually trades.
  *
- * A token trades in many pools and the thin ones print noise — a $200 pool
- * shows a 60% "candle" against a few dollars of flow. Depth is the only sane
- * tiebreak, and it is also the pool an order actually routes through. The
- * upstream does NOT return these sorted by liquidity, so this must sort.
+ * A token trades in many pools and the thin ones print noise. Candles are made
+ * of trades, so the pool with the most 24-hour volume is the one with a real
+ * price history; depth (`reserve_in_usd`) is the fallback when the upstream
+ * reports no volume. Ranking by depth alone was fooled by pools whose stated
+ * reserve is inflated: for wrapped SOL it chose a "D O T F / SOL" pool claiming
+ * $181M of reserve on $1.3M of daily volume over the $132M-a-day SOL/USDC pool,
+ * and the chart drew three hourly candles. The upstream does NOT return pools
+ * sorted, so this must sort.
  */
 export function pickBestPool(rows: readonly PoolRow[] | undefined): string | null {
   const best = (rows ?? [])
@@ -47,10 +51,11 @@ export function pickBestPool(rows: readonly PoolRow[] | undefined): string | nul
           .split("_")
           .slice(1)
           .join("_"),
+      volume: num(row.attributes?.volume_usd?.h24) ?? 0,
       liquidity: num(row.attributes?.reserve_in_usd) ?? 0,
     }))
     .filter((row) => row.address)
-    .sort((a, b) => b.liquidity - a.liquidity)[0]
+    .sort((a, b) => b.volume - a.volume || b.liquidity - a.liquidity)[0]
   return best?.address ?? null
 }
 

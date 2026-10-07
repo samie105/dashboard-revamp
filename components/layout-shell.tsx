@@ -11,12 +11,11 @@ import { LiquidGlassPointer } from "@/components/liquid-glass"
 import { prefetchSpotMarkets } from "@/lib/spot-markets"
 import { MigrationNoticePopup } from "@/components/crypto/MigrationNotice"
 
-/** Routes that render full-bleed (no sidebar / top-nav / navbar).
- *  /trade is here because the market rail, the chart and the book need the
- *  width. The redesigned previews (isRedesignPath) are full-bleed too: they
- *  bring their OWN frame from app/(redesign)/layout.tsx — including the
- *  trading preview, whose rail stays an icon strip to give the chart room. */
-const FULL_BLEED_ROUTES = ["/trade", "/vivid"]
+/** Routes that render full-bleed (no sidebar / top-nav / navbar). The
+ *  redesigned previews (isRedesignPath) are full-bleed too: they bring their
+ *  OWN frame from app/(redesign)/layout.tsx. /trade now sits in the app frame
+ *  like its preview, with the rail held to an icon strip (AppFrame). */
+const FULL_BLEED_ROUTES = ["/vivid"]
 const AUTH_ROUTES = ["/login", "/register"]
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
