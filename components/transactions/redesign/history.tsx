@@ -24,7 +24,11 @@ import { cn } from "@/lib/utils"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { DashScope } from "@/components/dash"
 import { Figure, Icon, Panel, PanelTitle, PillTabs, UnderlineTabs } from "@/components/dashboard/redesign/ui"
-import { GLYPH_ICON, StatusChip, TxDetail, fmtTime, kindTone, worthText } from "@/components/transactions/redesign/detail"
+import { BankTag, GLYPH_ICON, StatusChip, TxDetail, fmtTime, kindTone, worthText, type OrderRefresh } from "@/components/transactions/redesign/detail"
+import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
+import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
+import { networkLabel, orderAmountText, orderToRow, type HistoryRow } from "@/lib/fiat-history"
+import { useFiatOrderPoll } from "@/hooks/crypto/useFiatOrderPoll"
 import {
   KIND_FILTERS,
   RANGE_FILTERS,
@@ -38,20 +42,19 @@ import {
   filterKind,
   glyphOf,
   isStopped,
+  labelOf,
   transactionsCsv,
-  typeLabel,
   type HistoryRange,
   type KindKey,
   type StatusKey,
 } from "@/lib/transactions-view"
 import type { useUnifiedTransactions } from "@/hooks/use-unified-transactions"
-import type { UnifiedTransaction } from "@/types/transactions"
 
 const WIDE = "(min-width: 1536px)"
 const ROW_GRID = "md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_112px_minmax(0,1fr)_16px]"
 
 /** The preview's CSV download, of the rows on screen. */
-function exportCsv(rows: UnifiedTransaction[]) {
+function exportCsv(rows: HistoryRow[]) {
   const blob = new Blob([transactionsCsv(rows)], { type: "text/csv;charset=utf-8" })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
@@ -70,12 +73,16 @@ function useNow() {
 
 /* ── Row ──────────────────────────────────────────────────────────────── */
 
-function TxRow({ tx, selected, onSelect }: { tx: UnifiedTransaction; selected: boolean; onSelect: () => void }) {
+function TxRow({ tx, selected, onSelect }: { tx: HistoryRow; selected: boolean; onSelect: () => void }) {
   const d = directionOf(tx)
-  const network = chainLabel(tx.chain)
-  const peer = counterparty(tx)
-  const worth = tx.type === "swap" && tx.toToken && tx.toAmount != null ? `→ ${tx.toAmount} ${tx.toToken}` : worthText(tx)
-  const showTo = tx.type === "swap" && tx.toToken && tx.toToken !== tx.token
+  const order = tx.order
+  const network = order ? networkLabel(order.network) : chainLabel(tx.chain)
+  // The order's reference stays in its detail panel (it is what support asks
+  // for); the row says how it is paid.
+  const peer = order ? `${order.currency} · ${order.channel}` : counterparty(tx)
+  const worth = order ? null : tx.type === "swap" && tx.toToken && tx.toAmount != null ? `→ ${tx.toAmount} ${tx.toToken}` : worthText(tx)
+  const showTo = !order && tx.type === "swap" && tx.toToken && tx.toToken !== tx.token
+  const amount = order ? (orderAmountText(order) ?? "—") : amountText(tx)
   return (
     <button
       type="button"
@@ -87,9 +94,6 @@ function TxRow({ tx, selected, onSelect }: { tx: UnifiedTransaction; selected: b
         selected ? "bg-primary/[0.06]" : "hover:bg-foreground/[0.03]",
       )}
     >
-      {selected && (
-        <motion.span layoutId="tx-selected" transition={{ type: "spring", stiffness: 500, damping: 40 }} className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-primary shadow-[0_0_10px_var(--primary)]" />
-      )}
 
       {/* Type + assets */}
       <span className="flex min-w-0 items-center gap-3">
@@ -101,11 +105,20 @@ function TxRow({ tx, selected, onSelect }: { tx: UnifiedTransaction; selected: b
         </span>
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-foreground">
-            {typeLabel(tx)}
-            <span className="font-medium text-muted-foreground">
-              {tx.token}
-              {showTo && <> → {tx.toToken}</>}
-            </span>
+            {order ? (
+              <>
+                <span className="truncate">{labelOf(tx)}</span>
+                <BankTag className="shrink-0" />
+              </>
+            ) : (
+              <>
+                {labelOf(tx)}
+                <span className="font-medium text-muted-foreground">
+                  {tx.token}
+                  {showTo && <> → {tx.toToken}</>}
+                </span>
+              </>
+            )}
           </span>
           <span className="truncate text-[12px] text-muted-foreground">
             {fmtTime(tx.createdAt)}
@@ -130,10 +143,10 @@ function TxRow({ tx, selected, onSelect }: { tx: UnifiedTransaction; selected: b
         <span
           className={cn(
             "whitespace-nowrap text-[13.5px] font-semibold",
-            isStopped(tx.status) ? "text-muted-foreground line-through decoration-debit/60" : d === "in" ? "text-credit" : "text-foreground",
+            isStopped(tx.status) ? "text-muted-foreground line-through decoration-debit/60" : d === "in" && (!order || tx.status === "completed") ? "text-credit" : "text-foreground",
           )}
         >
-          <Figure mask="••••">{amountText(tx)}</Figure>
+          <Figure mask="••••">{amount}</Figure>
         </span>
         {(worth || tx.status !== "completed") && (
           <span className="flex items-center gap-1.5 whitespace-nowrap text-[12px] text-muted-foreground">
@@ -180,7 +193,7 @@ function SkeletonRows({ rows = 7 }: { rows?: number }) {
 
 /* ── Sheet (below 1536px) ─────────────────────────────────────────────── */
 
-function DetailSheet({ tx, onClose }: { tx: UnifiedTransaction | null; onClose: () => void }) {
+function DetailSheet({ tx, onClose, refresh }: { tx: HistoryRow | null; onClose: () => void; refresh?: OrderRefresh }) {
   // Portalled to <body>: the page sits inside <Rise> wrappers whose entrance
   // uses `transform`, which would make a "fixed" sheet relative to the list.
   // DashScope re-applies the page's type inside the portal.
@@ -238,7 +251,7 @@ function DetailSheet({ tx, onClose }: { tx: UnifiedTransaction | null; onClose: 
               )}
             >
               <span aria-hidden className="mx-auto mb-4 block h-1 w-10 rounded-full bg-foreground/15 md:hidden" />
-              <TxDetail tx={tx} onClose={onClose} />
+              <TxDetail tx={tx} onClose={onClose} refresh={refresh} />
             </motion.div>
           </>
         )}
@@ -252,15 +265,31 @@ function DetailSheet({ tx, onClose }: { tx: UnifiedTransaction | null; onClose: 
 
 type Model = ReturnType<typeof useUnifiedTransactions>
 
-export function History({ model }: { model: Model }) {
-  const { transactions, isLoading, isLoadingMore, hasMore, sentinelRef } = model
+type OrdersState = { isLoading: boolean; error: unknown; refetch: () => void }
+
+export function History({ model, rows: listed, orders }: { model: Model; rows: HistoryRow[]; orders: OrdersState }) {
+  const { isLoadingMore, hasMore, sentinelRef } = model
+  // One list, so it settles once: wallet rows and orders together, rather
+  // than orders popping in between rows a moment later.
+  const isLoading = model.isLoading || orders.isLoading
   const now = useNow()
   const [kind, setKind] = React.useState<KindKey>("all")
   const [status, setStatus] = React.useState<StatusKey>("any")
   const [range, setRange] = React.useState<HistoryRange>("all")
   const [query, setQuery] = React.useState("")
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-  const [sheetTx, setSheetTx] = React.useState<UnifiedTransaction | null>(null)
+  const [sheetTx, setSheetTx] = React.useState<HistoryRow | null>(null)
+
+  // A picked fiat order is refreshed (GET /fiat/orders/:id with the §11
+  // backoff), as expanding it in the old order list did. The fresh copy
+  // replaces the listed one, so its row and its detail never disagree.
+  const pickedOrderId = (sheetTx ?? listed.find((t) => t.id === selectedId))?.order?.id
+  const picked = useFiatOrderPoll(pickedOrderId)
+  const transactions = React.useMemo(
+    () => (picked.data ? listed.map((row) => (row.id === picked.data!.id ? orderToRow(picked.data!) : row)) : listed),
+    [listed, picked.data],
+  )
+  const refresh = { isLoading: picked.isLoading, error: picked.error }
 
   // Everything except the type tab — so each tab's badge counts what it
   // would show under the other filters.
@@ -270,7 +299,7 @@ export function History({ model }: { model: Model }) {
   const filtersOn = status !== "any" || range !== "all" || Boolean(query)
 
   const groups = React.useMemo(() => {
-    const out: { label: string; items: UnifiedTransaction[] }[] = []
+    const out: { label: string; items: HistoryRow[] }[] = []
     if (!now) return out
     for (const tx of rows) {
       const label = dayLabel(tx.createdAt, now)
@@ -284,7 +313,7 @@ export function History({ model }: { model: Model }) {
   // The newest row is selected until the reader picks one.
   const selected = transactions.find((t) => t.id === selectedId) ?? rows[0] ?? transactions[0] ?? null
 
-  const select = (tx: UnifiedTransaction) => {
+  const select = (tx: HistoryRow) => {
     setSelectedId(tx.id)
     if (!window.matchMedia(WIDE).matches) setSheetTx(tx)
   }
@@ -367,6 +396,17 @@ export function History({ model }: { model: Model }) {
           </div>
         </div>
 
+        {/* The order list is its own request: if only it fails, say so here
+            and keep the wallet rows working. */}
+        {Boolean(orders.error) && (
+          <div className="mx-4 mt-3 flex flex-col gap-2 rounded-xl border border-debit/20 bg-debit/[0.05] p-3 md:mx-6">
+            <FiatErrorDetail error={describeFiatError(orders.error)} />
+            <button type="button" onClick={orders.refetch} className="self-start text-[12.5px] font-semibold text-primary hover:opacity-85">
+              Try again
+            </button>
+          </div>
+        )}
+
         {isLoading || !now ? (
           <SkeletonRows />
         ) : rows.length === 0 ? (
@@ -445,7 +485,7 @@ export function History({ model }: { model: Model }) {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
               >
-                <TxDetail tx={selected} />
+                <TxDetail tx={selected} refresh={selected.order?.id === pickedOrderId ? refresh : undefined} />
               </motion.div>
             </AnimatePresence>
           ) : isLoading ? (
@@ -472,7 +512,7 @@ export function History({ model }: { model: Model }) {
         </Panel>
       </div>
 
-      <DetailSheet tx={sheetTx} onClose={closeSheet} />
+      <DetailSheet tx={sheetTx ? (transactions.find((t) => t.id === sheetTx.id) ?? sheetTx) : null} onClose={closeSheet} refresh={refresh} />
     </div>
   )
 }

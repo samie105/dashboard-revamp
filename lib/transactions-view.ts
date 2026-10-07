@@ -10,6 +10,7 @@
  * they are tested here rather than in a browser.
  */
 
+import { orderAmountText, orderLabel, orderStateLabel, type HistoryRow } from "@/lib/fiat-history"
 import type { UnifiedTransaction, UnifiedTransactionStatus } from "@/types/transactions"
 
 export type Direction = "in" | "out" | "neutral"
@@ -73,6 +74,11 @@ export function typeLabel(tx: UnifiedTransaction) {
     default:
       return "Transaction"
   }
+}
+
+/** A row's name: the order's own words for a fiat order, else as above. */
+export function labelOf(row: HistoryRow) {
+  return row.order ? orderLabel(row.order) : typeLabel(row)
 }
 
 const CHAIN_LABELS: Record<string, string> = {
@@ -247,18 +253,18 @@ function csvCell(v: unknown) {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-export function transactionsCsv(rows: UnifiedTransaction[]): string {
+export function transactionsCsv(rows: HistoryRow[]): string {
   const body = rows.map((tx) =>
     [
-      tx.id,
+      tx.order?.publicReference ?? tx.id,
       tx.createdAt,
-      typeLabel(tx),
-      tx.status,
+      labelOf(tx),
+      tx.order ? orderStateLabel(tx.order.state) : tx.status,
       tx.token,
-      tx.amount,
+      tx.order ? orderAmountText(tx.order) : tx.amount,
       tx.toToken,
       tx.toAmount,
-      chainLabel(tx.chain),
+      tx.order ? tx.order.network : chainLabel(tx.chain),
       tx.fromAddress,
       tx.toAddress,
       tx.txHash,
@@ -328,23 +334,23 @@ export function statusGroup(status: UnifiedTransactionStatus): Exclude<StatusKey
 }
 
 /** Every filter but the type tab, so each tab's badge counts what it would show. */
-export function filterBase(
-  rows: UnifiedTransaction[],
+export function filterBase<T extends HistoryRow>(
+  rows: T[],
   f: { status: StatusKey; range: HistoryRange; query: string },
   now: Date,
-): UnifiedTransaction[] {
+): T[] {
   const q = f.query.trim().toLowerCase()
   return rows.filter(
     (tx) =>
       (f.status === "any" || statusGroup(tx.status) === f.status) &&
       daysAgo(tx.createdAt, now) < RANGE_DAYS[f.range] &&
       (!q ||
-        [tx.id, tx.token, tx.fromToken, tx.toToken, tx.txHash, tx.fromAddress, tx.toAddress, chainLabel(tx.chain), typeLabel(tx)]
+        [tx.id, tx.token, tx.fromToken, tx.toToken, tx.txHash, tx.fromAddress, tx.toAddress, chainLabel(tx.chain), labelOf(tx), tx.order?.publicReference, tx.fiatCurrency]
           .filter(Boolean)
           .some((v) => v!.toLowerCase().includes(q))),
   )
 }
 
-export function filterKind(rows: UnifiedTransaction[], kind: KindKey) {
+export function filterKind<T extends UnifiedTransaction>(rows: T[], kind: KindKey): T[] {
   return kind === "all" ? rows : rows.filter((tx) => kindOf(tx) === kind)
 }

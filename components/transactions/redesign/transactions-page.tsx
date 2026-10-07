@@ -5,23 +5,31 @@
  * real data. Same heading, summary row and history workspace; the list, the
  * stats, the polling and every filter are useUnifiedTransactions exactly as
  * the previous page used it (components/transactions/transactions-client.tsx,
- * kept unused). The fiat order history the preview doesn't have follows below.
+ * kept unused). Fiat orders (GET /fiat/orders, the same useFiatOrders query
+ * the old order list made) are rows of the same history, marked "Bank"; the
+ * old list (components/fiat/history/FiatOrderHistory.tsx) is kept, unused.
+ * The summary cards stay wallet-only, so no money is counted twice.
  */
 
 import * as React from "react"
 
 import { DashScope } from "@/components/dash"
 import { Rise } from "@/components/ui/system"
-import { FiatOrderHistory } from "@/components/fiat/history/FiatOrderHistory"
 import { useUnifiedTransactions } from "@/hooks/use-unified-transactions"
+import { useFiatOrders } from "@/hooks/crypto/useFiatOrders"
+import { mergeHistory } from "@/lib/fiat-history"
 import { Summary } from "@/components/transactions/redesign/summary"
 import { History } from "@/components/transactions/redesign/history"
 
 export function TransactionsPage() {
   const model = useUnifiedTransactions({ pollInterval: 30000 })
-  const { transactions, stats, error, isLoading } = model
-  const pending = transactions.filter((t) => t.status === "pending" || t.status === "processing").length
-  const failed = transactions.filter((t) => t.status === "failed").length
+  const orders = useFiatOrders(50)
+  const { transactions, stats, error } = model
+  const rows = React.useMemo(() => mergeHistory(transactions, orders.data), [transactions, orders.data])
+  const isLoading = model.isLoading || orders.isLoading
+  const pending = rows.filter((t) => t.status === "pending" || t.status === "processing").length
+  const failed = rows.filter((t) => t.status === "failed").length
+  const refetchOrders = React.useCallback(() => void orders.refetch(), [orders])
 
   return (
     <DashScope className="ws-icon-mono mx-auto flex w-full max-w-[1720px] flex-col gap-4 md:gap-5">
@@ -54,10 +62,7 @@ export function TransactionsPage() {
         </div>
       )}
       <Rise delay={120}>
-        <History model={model} />
-      </Rise>
-      <Rise delay={180}>
-        <FiatOrderHistory />
+        <History model={model} rows={rows} orders={{ isLoading: orders.isLoading, error: orders.error, refetch: refetchOrders }} />
       </Rise>
     </DashScope>
   )

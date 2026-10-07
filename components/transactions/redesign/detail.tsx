@@ -12,6 +12,7 @@
  */
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { motion } from "motion/react"
 import {
   ArrowDownLeft01Icon,
@@ -42,6 +43,24 @@ import {
   typeLabel,
   type KindGlyph,
 } from "@/lib/transactions-view"
+import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
+import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
+import type { FiatOrder } from "@/lib/crypto-backend/types"
+import { savePendingFlow } from "@/lib/pending-flow"
+import { useFiatQuote } from "@/hooks/crypto/useFiatQuote"
+import {
+  networkLabel,
+  orderAmounts,
+  orderAssetSymbol,
+  orderChip,
+  orderLabel,
+  orderRecovery,
+  orderStateLabel,
+  orderWalletNote,
+  quotedReceive,
+  type HistoryRow,
+  type OrderChipTone,
+} from "@/lib/fiat-history"
 import type { UnifiedTransaction } from "@/types/transactions"
 
 /* ── Vocabulary shared with the list ──────────────────────────────────── */
@@ -73,7 +92,41 @@ function fmtDate(iso: string) {
 /** The preview's chip for pending, failed and completed; processing pings
  *  like pending, and cancelled / expired take a quiet neutral chip (the
  *  preview has neither state). */
-export function StatusChip({ tx, className }: { tx: UnifiedTransaction; className?: string }) {
+const ORDER_CHIP: Record<OrderChipTone, string> = {
+  live: "bg-warning/[0.12] text-warning",
+  review: "bg-warning/[0.12] text-warning",
+  done: "bg-credit/[0.1] text-credit",
+  bad: "bg-debit/[0.12] text-debit",
+  quiet: "bg-foreground/[0.07] text-muted-foreground",
+}
+
+/** A fiat order's chip: the same shapes, its own words (lib/fiat-history.ts). */
+function OrderChip({ order, className }: { order: FiatOrder; className?: string }) {
+  const chip = orderChip(order.state)
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-bold", ORDER_CHIP[chip.tone], chip.tone !== "live" && "uppercase tracking-[0.04em]", className)}>
+      {chip.tone === "live" && (
+        <span className="relative flex size-1.5">
+          <span className="absolute inset-0 animate-ping rounded-full bg-warning opacity-70" />
+          <span className="relative size-1.5 rounded-full bg-warning" />
+        </span>
+      )}
+      {chip.label}
+    </span>
+  )
+}
+
+/** The "Bank" tag that marks a fiat order's row. */
+export function BankTag({ className }: { className?: string }) {
+  return (
+    <span className={cn("rounded-[5px] border border-primary/25 bg-primary/[0.08] px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.06em] text-primary", className)}>
+      Bank
+    </span>
+  )
+}
+
+export function StatusChip({ tx, className }: { tx: HistoryRow; className?: string }) {
+  if (tx.order) return <OrderChip order={tx.order} className={className} />
   if (tx.status === "pending" || tx.status === "processing") {
     return (
       <span className={cn("inline-flex items-center gap-1.5 rounded-md bg-warning/[0.12] px-2 py-0.5 text-[11px] font-bold tabular-nums text-warning", className)}>
@@ -182,7 +235,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 /* ── Panel ─────────────────────────────────────────────────────────────── */
 
-export function TxDetail({ tx, onClose }: { tx: UnifiedTransaction; onClose?: () => void }) {
+export type OrderRefresh = { isLoading: boolean; error: unknown }
+
+export function TxDetail({ tx, onClose, refresh }: { tx: HistoryRow; onClose?: () => void; refresh?: OrderRefresh }) {
+  if (tx.order) return <OrderDetail order={tx.order} onClose={onClose} refresh={refresh} />
+  return <WalletDetail tx={tx} onClose={onClose} />
+}
+
+function WalletDetail({ tx, onClose }: { tx: UnifiedTransaction; onClose?: () => void }) {
   const d = directionOf(tx)
   const stopped = isStopped(tx.status)
   const twoLeg = tx.type === "swap" && Boolean(tx.toToken) && tx.toToken !== tx.token
@@ -310,6 +370,176 @@ export function TxDetail({ tx, onClose }: { tx: UnifiedTransaction; onClose?: ()
             View on explorer
           </a>
         </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Fiat order ────────────────────────────────────────────────────────────
+   The same panel for a bank order. Its fields are the ones the previous
+   order list showed (components/fiat/history/FiatOrderHistory.tsx), with the
+   same "Continue" path. The list (history.tsx) refreshes the order once the
+   reader has picked it, so the row and this panel show the same state;
+   `refresh` is that request's progress. */
+
+/** The bank side of an order: its currency, drawn where a coin logo would go. */
+const FIAT_SIGNS: Record<string, string> = { NGN: "₦", USD: "$", GBP: "£", EUR: "€", KES: "KSh", GHS: "₵" }
+
+function FiatBadge({ currency, className }: { currency: string; className?: string }) {
+  const sign = FIAT_SIGNS[currency.toUpperCase()]
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full border border-foreground/[0.1] bg-foreground/[0.06] font-display font-semibold text-foreground/85",
+        sign && sign.length === 1 ? "text-[15px]" : "text-[10px] tracking-[0.02em]",
+        className,
+      )}
+    >
+      {sign ?? currency.slice(0, 3).toUpperCase()}
+    </span>
+  )
+}
+
+function OrderDetail({ order, onClose, refresh }: { order: FiatOrder; onClose?: () => void; refresh?: OrderRefresh }) {
+  const router = useRouter()
+  // The "you get" figure: what arrived if the order says, else what it was
+  // quoted to deliver. Bridge withdrawals carry no quote, so stay without one.
+  const quote = useFiatQuote(order.quoteId)
+  const onramp = order.direction === "onramp"
+  const asset = orderAssetSymbol(order)
+  const { expected, observed, sending, requested } = orderAmounts(order)
+  const quoted = quotedReceive(order, quote.data)
+  const recovery = orderRecovery(order)
+  const note = orderWalletNote(order)
+  const reason = order.failureReason ?? order.reviewReason ?? order.refundReason
+  const chip = orderChip(order.state)
+  const done = order.state === "completed"
+  const stopped = chip.tone === "bad" || chip.tone === "quiet"
+
+  function continueOrder() {
+    if (!recovery) return
+    savePendingFlow(recovery.kind, order.id)
+    router.push(recovery.href)
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={cn("flex size-11 items-center justify-center rounded-2xl border", onramp ? "border-credit/25 bg-credit/[0.1] text-credit" : "border-debit/25 bg-debit/[0.1] text-debit")}>
+            <Icon icon={onramp ? ArrowDownLeft01Icon : ArrowUpRight01Icon} className="size-5" strokeWidth={2} />
+          </span>
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className="flex items-center gap-2">
+              <span className="font-display text-[16px] font-semibold text-foreground">{orderLabel(order)}</span>
+              <BankTag />
+            </span>
+            <OrderChip order={order} className="w-fit" />
+          </span>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close details"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+          >
+            <Icon icon={Cancel01Icon} className="size-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Both sides, as the preview draws a swap: what the user pays on the
+          left, what they get on the right. A side with no reported amount
+          shows just its currency or coin. */}
+      <div className="rounded-2xl border border-foreground/[0.06] bg-[radial-gradient(120%_100%_at_0%_0%,color-mix(in_oklab,var(--primary)_5%,transparent),transparent_60%)] p-4">
+        <div className="flex items-center gap-3">
+          <span className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+            {onramp ? <FiatBadge currency={order.currency} className="size-8" /> : <CoinAvatar symbol={asset} size="lg" className="size-8 ring-1 ring-foreground/10" />}
+            <span className={cn("max-w-full truncate font-display text-[17px] font-semibold tabular-nums", stopped && "text-muted-foreground line-through decoration-debit/60")}>
+              <Figure mask="••••">{(onramp ? expected ?? requested : sending ?? observed) ?? (onramp ? order.currency : asset)}</Figure>
+            </span>
+            <span className="text-[12px] text-muted-foreground">
+              {onramp ? "You pay" : observed && !sending ? "Received on chain" : "You send"}
+            </span>
+          </span>
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-foreground/[0.08] bg-foreground/[0.03] text-primary">
+            <Icon icon={ArrowRight01Icon} className="size-4" strokeWidth={2} />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col items-end gap-1.5 text-right">
+            {onramp ? <CoinAvatar symbol={asset} size="lg" className="size-8 ring-1 ring-foreground/10" /> : <FiatBadge currency={order.currency} className="size-8" />}
+            <span className={cn("max-w-full truncate font-display text-[17px] font-semibold tabular-nums", done ? "text-credit" : "text-foreground", stopped && "text-muted-foreground")}>
+              <Figure mask="••••">{(onramp ? observed : expected) ?? quoted ?? (onramp ? asset : order.currency)}</Figure>
+            </span>
+            <span className="text-[12px] text-muted-foreground">
+              {(onramp ? observed : expected) ? (onramp ? "You get" : "Paid to your bank") : quoted ? "You get · quoted" : quote.isLoading ? "Loading quote…" : onramp ? "You get" : "Paid to your bank"}
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">Progress</span>
+        <ol className="flex flex-col">
+          <li className="relative flex gap-3 pb-4">
+            <span aria-hidden className="absolute bottom-0 left-[11px] top-6 w-px bg-credit/40" />
+            <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full border border-credit/40 bg-credit/[0.12] text-credit">
+              <Icon icon={Tick02Icon} className="size-3" strokeWidth={2.6} />
+            </span>
+            <span className="flex min-w-0 flex-col pt-0.5">
+              <span className="text-[13px] font-semibold text-foreground">Order created</span>
+              <span className="text-[12px] text-muted-foreground">{`${fmtDate(order.createdAt)}, ${fmtTime(order.createdAt)}`}</span>
+            </span>
+          </li>
+          <li className="relative flex gap-3">
+            <span
+              className={cn(
+                "relative flex size-6 shrink-0 items-center justify-center rounded-full border",
+                done ? "border-credit/40 bg-credit/[0.12] text-credit" : chip.tone === "bad" ? "border-debit/40 bg-debit/[0.12] text-debit" : chip.tone === "quiet" ? "border-foreground/[0.12] text-muted-foreground" : "border-warning/50 bg-warning/[0.12] text-warning",
+              )}
+            >
+              {done && <Icon icon={Tick02Icon} className="size-3" strokeWidth={2.6} />}
+              {chip.tone === "bad" && <Icon icon={Cancel01Icon} className="size-3" strokeWidth={2.6} />}
+              {(chip.tone === "live" || chip.tone === "review") && <span className={cn("size-2 rounded-full bg-warning", chip.tone === "live" && "animate-pulse")} />}
+            </span>
+            <span className="flex min-w-0 flex-col pt-0.5">
+              <span className="text-[13px] font-semibold text-foreground">{orderStateLabel(order.state)}</span>
+              <span className="text-[12px] text-muted-foreground">
+                {done && order.completedAt ? `${fmtDate(order.completedAt)}, ${fmtTime(order.completedAt)}` : `Updated ${fmtDate(order.updatedAt)}, ${fmtTime(order.updatedAt)}`}
+              </span>
+            </span>
+          </li>
+        </ol>
+        {refresh?.isLoading && <p className="text-[12px] text-muted-foreground">Refreshing this order…</p>}
+        {Boolean(refresh?.error) && <FiatErrorDetail error={describeFiatError(refresh?.error)} />}
+        {reason && <p className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] px-3 py-2.5 text-[12.5px] text-muted-foreground">{reason}</p>}
+        {note && <p className="text-[12.5px] text-muted-foreground">{note}</p>}
+      </div>
+
+      <dl className="flex flex-col rounded-2xl border border-foreground/[0.06] bg-foreground/[0.015] px-4">
+        <Row label="Reference">
+          <CopyValue value={order.publicReference} display={order.publicReference} />
+        </Row>
+        <Row label="Created">{`${fmtDate(order.createdAt)}, ${fmtTime(order.createdAt)}`}</Row>
+        <Row label="Network">{networkLabel(order.network)}</Row>
+        <Row label="Asset">{asset}</Row>
+        <Row label="Currency">{order.currency}</Row>
+        <Row label="Payment rail">{order.channel}</Row>
+        {expected && <Row label="Expected fiat deposit">{expected}</Row>}
+        {observed && <Row label="Observed crypto deposit">{observed}</Row>}
+        {order.observedDepositTxHash && (
+          <Row label="Deposit transaction">
+            <CopyValue value={order.observedDepositTxHash} />
+          </Row>
+        )}
+      </dl>
+
+      {recovery && (
+        <button type="button" onClick={continueOrder} className="ds-gold flex h-11 items-center justify-center gap-2 rounded-xl text-[13.5px] font-semibold">
+          {recovery.label}
+          <Icon icon={ArrowRight01Icon} className="size-4" strokeWidth={2} />
+        </button>
       )}
     </div>
   )
