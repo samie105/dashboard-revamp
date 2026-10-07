@@ -86,6 +86,30 @@ function sampleAt(series: number[], i: number, length: number): number {
   return series[idx]
 }
 
+/** The chart ranges the dashboard offers: each is "the last N hourly points" of the 30-day series. */
+export type HistoryRange = "today" | "week" | "month"
+
+const RANGE_POINTS_BACK: Record<HistoryRange, number | null> = {
+  today: POINTS_PER_DAY,
+  week: 7 * POINTS_PER_DAY,
+  month: null,
+}
+
+/**
+ * The tail of an hourly series covering one range, resampled to `outPoints`
+ * so every range draws at the same width. A series shorter than the range
+ * gives what it has (never invented points), and a series that can't draw a
+ * line gives back what it was handed.
+ */
+export function rangeSlice(raw: number[], range: HistoryRange, outPoints = SPARK_POINTS): number[] {
+  if (raw.length < 2) return raw
+  const back = RANGE_POINTS_BACK[range]
+  const tail = back === null ? raw : raw.slice(Math.max(0, raw.length - 1 - back))
+  if (tail.length < 2) return tail
+  const n = Math.min(outPoints, tail.length)
+  return Array.from({ length: n }, (_, i) => sampleAt(tail, i, n))
+}
+
 function pctChange(from: number, to: number): number | null {
   if (!isFinite(from) || Math.abs(from) < 1e-9) return null
   return ((to - from) / Math.abs(from)) * 100
@@ -212,6 +236,15 @@ export function useAccountHistory(accounts: AccountSpec[]) {
         ? Array.from({ length: SPARK_POINTS }, (_, i) => sampleAt(totalRaw, i, SPARK_POINTS))
         : totalRaw
 
-    return { sparkSeries, totalSeries, changes, loading }
+    /* The same total, cut to each chart range. Sliced from `totalRaw` (hourly),
+       not from `totalSeries` (40 points across 30 days), so a 1D curve has a
+       day of real points under it rather than one and a bit. */
+    const rangeSeries: Record<HistoryRange, number[]> = {
+      today: rangeSlice(totalRaw, "today"),
+      week: rangeSlice(totalRaw, "week"),
+      month: rangeSlice(totalRaw, "month"),
+    }
+
+    return { sparkSeries, totalSeries, rangeSeries, changes, loading }
   }, [accounts, priceSeries, symbols])
 }

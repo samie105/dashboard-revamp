@@ -1501,3 +1501,98 @@ input[type="range"]::-moz-range-track {
   border: 3px solid #0f0f0f;
 }
 .dash-range:focus-visible { outline: 2px solid rgb(250 204 21 / 0.5); outline-offset: 4px; }
+
+/* ── Redesign port: real pages (components/dash/) ─────────────────────────
+   The preview's look (.dash-* above) on the app's own tokens, so it works in
+   both themes. The previews hard-code near-black surfaces; these never do.
+   Dark keeps the preview's top-lit bevel and gold bloom; light trades the
+   bevel for a soft drop so the same panel reads on a white canvas. */
+.dash-scope {
+  font-family: var(--font-dash-sans), var(--font-sans), system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+.dash-scope .tabular-nums { font-variant-numeric: tabular-nums; }
+
+.ds-panel {
+  background: var(--card);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 5%, transparent), 0 8px 24px -16px color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+.dark .ds-panel {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.028), rgb(255 255 255 / 0.008) 40%, transparent),
+    var(--card);
+  border-color: color-mix(in oklab, var(--foreground) 7%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 1px 2px rgb(0 0 0 / 0.4);
+}
+/* A box inside a panel: amount fields, breakdowns, stat grids. */
+.ds-well {
+  background: color-mix(in oklab, var(--foreground) 2.5%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.ds-lift {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.35s ease;
+}
+.ds-lift:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-lift, .ds-lift:hover { transition: none; transform: none; }
+}
+
+/* Gold: a lit face, a darker lip, a bloom on hover — built from --primary. */
+.ds-gold {
+  color: var(--primary-foreground);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--primary) 78%, white), var(--primary) 60%, color-mix(in oklab, var(--primary) 92%, black));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), inset 0 -1px 0 rgb(0 0 0 / 0.12), 0 6px 18px -8px color-mix(in oklab, var(--primary) 70%, transparent);
+  transition: transform 0.2s ease, box-shadow 0.25s ease, filter 0.2s ease;
+}
+.ds-gold:hover:not(:disabled) {
+  filter: brightness(1.04);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 -1px 0 rgb(0 0 0 / 0.12), 0 10px 28px -8px color-mix(in oklab, var(--primary) 80%, transparent);
+}
+.ds-gold:active:not(:disabled) { transform: translateY(1px); }
+
+/* Table cells: a hairline above each row, a faint wash on hover. */
+.ds-cell {
+  height: 56px;
+  border-top: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+  transition: background-color 0.2s ease;
+  vertical-align: middle;
+}
+tr:hover > .ds-cell { background: color-mix(in oklab, var(--foreground) 2.5%, transparent); }
+
+/* The preview's inset (welcome prompt) and promo surfaces, on tokens. */
+.ds-inset {
+  /* Lifted off the panel it sits in, as the preview's inset is (#151515 on
+     #0f0f0f): a lighter fill, a visible rim and the gold wash on the left. */
+  background:
+    radial-gradient(120% 140% at 0% 50%, color-mix(in oklab, var(--primary) 9%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in oklab, var(--foreground) 6%, var(--card)), color-mix(in oklab, var(--foreground) 2.5%, var(--card)));
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+.ds-promo {
+  background:
+    radial-gradient(90% 120% at 100% 50%, color-mix(in oklab, var(--primary) 8%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in oklab, var(--foreground) 2.8%, transparent), transparent 50%),
+    var(--card);
+}
+
+/* Carousel progress fill: slides in on transform, so it never triggers
+   layout (smooth even while the page is busy). Reduced motion: no sweep. */
+@keyframes ds-progress-sweep {
+  from { transform: translate3d(-100%, 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+.ds-progress {
+  animation-name: ds-progress-sweep;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-progress { animation: none; transform: none; opacity: 0.6; }
+}
