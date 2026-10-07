@@ -338,7 +338,7 @@ function WithdrawForm(f: SendFormRenderProps) {
 
       {f.errorSlot}
 
-      <PrimaryButton disabled={f.ctaDisabled} busy={f.ctaBusy} onClick={f.onSubmit}>
+      <PrimaryButton disabled={f.ctaDisabled} busy={f.ctaBusy} onClick={f.onSubmit} label={label}>
         {label}
       </PrimaryButton>
     </div>
@@ -435,7 +435,7 @@ function TransferForm({ v, spotUsdc }: { v: FundingView; spotUsdc: number | null
       {v.withdrawalRelayed && <Note>Withdrawal relayed. Your wallet balance will update after settlement.</Note>}
       {v.futuresUnreadable && <Note tone="warning">We can’t verify the latest Futures balance right now. Nothing will be submitted until it is available.</Note>}
       {v.success && <Note tone="success">{plain(v.success)}</Note>}
-      <PrimaryButton disabled={Boolean(v.blocker)} busy={v.busy} onClick={v.submit}>
+      <PrimaryButton disabled={Boolean(v.blocker)} busy={v.busy} onClick={v.submit} label={label}>
         {label}
       </PrimaryButton>
     </div>

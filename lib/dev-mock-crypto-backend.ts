@@ -55,6 +55,7 @@ const NETWORKS = [
   { id: "ton-mainnet", family: "ton", name: "TON", environment: "mainnet", nativeAsset: "TON", capabilities: { balance: true, transfer: true } },
   { id: "tron-mainnet", family: "tron", name: "Tron", environment: "mainnet", nativeAsset: "TRX", capabilities: { balance: true, transfer: true } },
   { id: "bitcoin-mainnet", family: "bitcoin", name: "Bitcoin", environment: "mainnet", nativeAsset: "BTC", capabilities: { balance: true, transfer: true } },
+  { id: "intertrain-mainnet", family: "intertrain", name: "Intertrain", environment: "mainnet", nativeAsset: "WSK", capabilities: { balance: true, transfer: true } },
 ]
 
 const USDC_ETH = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
@@ -212,6 +213,8 @@ const DEMO_ACCOUNTS: Array<{ family: string; address: string; networks: string[]
   { family: "solana", address: "Fq8kU7JtyKvnJsZJafXa6GfgjciFDKiNCDSYc5D2FfWy", networks: ["solana-mainnet-beta"] },
   { family: "tron", address: "TLEvwMieGYSv8pBP5s1nGBJ8nYVPPokeXG", networks: ["tron-mainnet"] },
   { family: "bitcoin", address: "bc1q3ml9cragvkwxpvucph8mwf0xv0dre323f0mg8g", networks: ["bitcoin-mainnet"] },
+  // Well-formed bech32m (version 1 + a hash of a fixed string), no key behind it.
+  { family: "intertrain", address: "mna1qycvfn8jnh0usq25rw9jhv9dctg04kha2gu7gl9f", networks: ["intertrain-mainnet"] },
   { family: "ton", address: "UQBGvjFGRxPGyXyABYk7IyZBDUr6nkWu0z5f_68vkyG47GIW", networks: ["ton-mainnet"] },
   { family: "sui", address: "0x73f60bf23b7d5b3eee0b5a4d1dba2c5b461fe7272c6809f9d92a4c529523a7e5", networks: ["sui-mainnet"] },
 ]
@@ -221,7 +224,7 @@ const seedFlag = globalThis as typeof globalThis & { __wsMockNoDemoSeed?: boolea
 function seedDemoWallet() {
   // A wallet with no package is a half-finished setup (or the fiat mock's
   // placeholder) — replace it too, or the page stays stuck on "finish setup".
-  const isOldDemo = state.pkg?.id === "mock-pkg-demo" && !state.pkg.accounts.some((a) => a.family === "bitcoin")
+  const isOldDemo = state.pkg?.id === "mock-pkg-demo" && !state.pkg.accounts.some((a) => a.family === "intertrain")
   if ((state.pkg && !isOldDemo) || seedFlag.__wsMockNoDemoSeed) return
   const walletId = "66f000000000000000000041"
   state.wallet = {
@@ -945,6 +948,10 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
       intent.status = "submitted"
       return json({ intentId: intent.id, status: "submitted", results: [{ status: "ok" }] })
     }
+  }
+  // The USDC → WSK bridge's status, open, so the bridge page can be looked at.
+  if (method === "GET" && path === "bridge/intertrain/usdc/status") {
+    return json({ enabled: true, available: true, sourceNetworks: ["arbitrum-one"], destinationNetwork: "intertrain-mainnet", asset: "USDC" })
   }
   if (method === "POST" && path === "trading/hyperliquid/deposit/intents") {
     const body = await readBody()

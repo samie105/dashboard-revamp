@@ -54,13 +54,35 @@ export function Note({ tone = "info", children }: { tone?: "info" | "warning" | 
   )
 }
 
-export function PrimaryButton({ children, disabled, busy, onClick }: { children: React.ReactNode; disabled?: boolean; busy?: boolean; onClick?: () => void }) {
+/** The submit button. `label` carries the same Vivid control identity the
+ *  flow's own FlowCta gives it (components/ui/flow.tsx): by default a guarded
+ *  "flow-submit" that announces a real money move. */
+export function PrimaryButton({
+  children,
+  disabled,
+  busy,
+  onClick,
+  label,
+  control,
+}: {
+  children: React.ReactNode
+  disabled?: boolean
+  busy?: boolean
+  onClick?: () => void
+  label: string
+  control?: { target: string; describe: string; guarded?: boolean }
+}) {
+  const guarded = control?.guarded ?? true
   return (
     <button
       type="button"
       disabled={disabled || busy}
       aria-busy={busy || undefined}
       onClick={onClick}
+      data-vivid-target={control?.target ?? "flow-submit"}
+      data-vivid-guard={guarded ? "" : undefined}
+      aria-label={control ? `${control.describe} — ${label}` : `Confirm transfer — ${label}`}
+      data-vivid-label={control ? `${control.describe}: ${label}.` : `Submit this money flow: ${label}. Moves real money.`}
       className="ds-gold flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[14.5px] font-semibold disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none"
     >
       {busy && <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />}
@@ -236,6 +258,8 @@ export function AmountField({
           onChange={(e) => set(e.target.value)}
           placeholder="0.00"
           aria-label={`Amount in ${symbol}`}
+          data-vivid-target="flow-amount"
+          data-vivid-label={`The amount to move, in ${symbol}`}
           className="min-w-0 flex-1 bg-transparent font-display text-[18px] font-semibold tabular-nums text-foreground outline-none placeholder:text-muted-foreground/40 disabled:opacity-50"
         />
         <span className="text-[13px] font-semibold text-muted-foreground">{symbol}</span>
