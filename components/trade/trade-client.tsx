@@ -86,9 +86,7 @@ import {
   orderCopy,
 } from "@/components/trade/order-placed-modal"
 import { useAuth } from "@/components/auth-provider"
-import { useUiMode } from "@/components/ui-mode-provider"
 import { tradeView } from "@/lib/trade-view"
-import { ModeSwitch } from "@/components/ui/mode-switch"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import {
   useCryptoBalances,
@@ -366,9 +364,11 @@ export function TradeClient() {
    * on a trading screen is worse than an absent one, because the absent one
    * cannot be traded on.
    */
-  const { mode } = useUiMode()
-  const view = tradeView(mode)
-  const pro = mode === "pro"
+  // The Simple/Pro switch is gone from Trade: the screen is the preview's
+  // one full view (order book, trades, chart toolbar, every order type),
+  // whatever mode the rest of the app is in.
+  const view = tradeView("pro")
+  const pro = true
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const modernWallet = useCryptoWalletState()
@@ -2446,8 +2446,8 @@ export function TradeClient() {
          ordinary page flow on the preview's grid, and the page scrolls. */
       className="dash-scope relative flex min-h-0 flex-col pb-8 md:pb-24 lg:pb-0"
     >
-      {/* Top bar — the app's chrome only: a way out, the Simple/Pro switch,
-          and the way back to the wallet. The market itself lives in the header
+      {/* Top bar — the app's chrome only: the page title and the way back to
+          the wallet. The market itself lives in the header
           over the chart, where the price sits beside the thing it describes.
           The venue switch and the funding doors that used to sit here are
           both gone — see the two notes below, at the points they occupied. */}
@@ -2477,15 +2477,6 @@ export function TradeClient() {
             commonest widths. */}
         {/* Spot / Futures moved into the pair header, as in the preview. */}
 
-        {/* Simple / Pro. Same control and same place in the reading order as
-           on the wallet: beside the screen's own identity, not buried in a
-           settings menu.
-           The rest of what this branch put here — the pair picker, the price
-           and the 24h cluster — is gone from the top bar rather than dropped:
-           it moved into MarketHeader, over the chart, where the price sits
-           beside the thing it describes. The mode switch is the only part of
-           that block that is chrome. */}
-        <ModeSwitch className="shrink-0" />
         {/* Balances + the way back to the wallet */}
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           {balances && market === "futures" && FUTURES_LIVE && (
