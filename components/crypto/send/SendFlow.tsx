@@ -60,6 +60,26 @@ import { SEND_STAGES, sendStageIndex } from "@/lib/crypto-wallet/send-stages"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { NETWORK_ICON } from "@/lib/networks"
 import { SendFormScreen, type ChoiceOption } from "./SendFormScreen"
+
+/** Everything the form screen is handed, plus a flat list of every spendable
+ *  asset across the networks, for a form that picks network and asset in one
+ *  control (the wallet page's Withdraw panel). */
+export type SendFormRenderProps = React.ComponentProps<typeof SendFormScreen> & {
+  assetChoices: SendAssetChoice[]
+  /** Choose network and asset together — same resets as picking each. */
+  onPick: (networkId: string, assetKey: string) => void
+}
+
+export type SendAssetChoice = {
+  networkId: string
+  networkLabel: string
+  networkIcon?: string
+  assetKey: string
+  symbol: string
+  logo?: string
+  /** The spendable amount, formatted. */
+  amount: string
+}
 import { SendReviewScreen } from "./SendReviewScreen"
 import { SendStatusScreen } from "./SendStatusScreen"
 import { feeRowValue, useSponsorshipOffer } from "./use-sponsorship-offer"
@@ -121,7 +141,16 @@ export function SendFlow({
   onClose,
   onInFlightChange,
   onStepChange,
+  bare = false,
+  renderForm,
+  initialAsset,
 }: {
+  /** Drop the flow's own title (a host that already titles it). */
+  bare?: boolean
+  /** Draw the form step with a different layout. Same props, same rules. */
+  renderForm?: (props: SendFormRenderProps) => React.ReactNode
+  /** Pre-select the first network holding this symbol, once. */
+  initialAsset?: string
   onClose?: () => void
   /** Reports which screen is showing, so a containing modal can size itself
    *  to it. Review is landscape and needs the width; the form and the status
@@ -231,6 +260,34 @@ export function SendFlow({
     sub: formatCryptoAmount(row.amountBaseUnits, row.decimals),
     icon: row.logo,
   }))
+  const assetChoices: SendAssetChoice[] = React.useMemo(
+    () =>
+      networkOptions.flatMap((option) => {
+        const network = networkList.find((n) => n.id === option.key)
+        const owner = network ? accountByFamily.get(network.family) : undefined
+        if (!owner) return []
+        return spendableBalances(balances.balances, owner.id, option.key).map((row) => ({
+          networkId: option.key,
+          networkLabel: option.label,
+          networkIcon: option.icon,
+          assetKey: assetKeyOf(row.asset),
+          symbol: row.symbol,
+          logo: row.logo,
+          amount: formatCryptoAmount(row.amountBaseUnits, row.decimals),
+        }))
+      }),
+    [networkOptions, networkList, accountByFamily, balances.balances],
+  )
+  const appliedInitialAsset = React.useRef(false)
+  React.useEffect(() => {
+    if (appliedInitialAsset.current || !initialAsset || networkId) return
+    const match = assetChoices.find((c) => c.symbol.toUpperCase() === initialAsset.toUpperCase())
+    if (!match) return
+    appliedInitialAsset.current = true
+    setNetworkId(match.networkId)
+    setAssetKey(match.assetKey)
+  }, [initialAsset, assetChoices, networkId])
+
   const selectedBalance = assetRows.find((row) => assetKeyOf(row.asset) === assetKey)
   // A refreshed snapshot can retire the row the user picked (spent elsewhere,
   // provider dropped it). Falling back to "nothing selected" keeps every
@@ -629,7 +686,7 @@ export function SendFlow({
     <Shell>
       <div className={`flex items-start gap-2 ${inModal ? "mb-4" : "mb-5"}`}>
         {showBack ? <BackAction to={backTarget} /> : null}
-        <FlowHeader direction="out" title="Send crypto" subtitle="Approved on this device — only you can send" />
+        {bare ? null : <FlowHeader direction="out" title="Send crypto" subtitle="Approved on this device — only you can send" />}
       </div>
       {body}
       {/* Mounted on every branch: the DEK can lapse at any point, and the
@@ -774,65 +831,78 @@ export function SendFlow({
 
   const networkUnavailable = balances.unavailableNetworks.some((entry) => entry.networkId === networkId)
 
+  const formProps: React.ComponentProps<typeof SendFormScreen> = {
+    networkOptions,
+    networkId,
+    onNetworkChange: (next) => {
+      setNetworkId(next)
+      // Address format and amount precision are both properties of the
+      // chain — carrying either across a network change would carry a value
+      // that was never valid here.
+      setAssetKey("")
+      setAmount("")
+      setAddressTouched(false)
+    },
+    networkNotice: (
+      <>
+        {balances.error || refreshError ? (
+          <SectionMessage error={balances.error ?? refreshError} onAction={refreshBalances} />
+        ) : null}
+        {networkUnavailable ? (
+          <InlineNotice tone="warning">
+            {selectedNetwork?.name ?? "This network"} balances are temporarily unavailable — what you can send here
+            may be incomplete.
+          </InlineNotice>
+        ) : null}
+      </>
+    ),
+    assetOptions,
+    assetKey: activeAssetKey,
+    onAssetChange: (next) => {
+      setAssetKey(next)
+      // An amount is denominated in the asset it was typed under.
+      setAmount("")
+    },
+    to,
+    onToChange: setTo,
+    onToBlur: () => {
+      setTo((current) => current.trim())
+      setAddressTouched(true)
+    },
+    addressProblem,
+    selfSend,
+    amount,
+    onAmountChange: setAmount,
+    symbol,
+    decimals,
+    amountProblem,
+    amountApprox,
+    amountHint,
+    maxSpend,
+    ctaLabel: transfer.isLoading ? "Preparing review…" : blocker ?? "Review transfer",
+    ctaDisabled: Boolean(blocker),
+    ctaBusy: transfer.isLoading,
+    onSubmit: () => void startReview(),
+    errorSlot: renderError(createError, () => void startReview(), () => void startReview()),
+    // Belt and braces alongside the pre-flight snapshot capture above: while
+    // the intent create is in flight, nothing here should be editable —
+    // there must be no window where a picker change can outrun what was
+    // already captured for the review screen.
+    disabled: transfer.isLoading,
+  }
+
   return shell(
-    <SendFormScreen
-      networkOptions={networkOptions}
-      networkId={networkId}
-      onNetworkChange={(next) => {
-        setNetworkId(next)
-        // Address format and amount precision are both properties of the
-        // chain — carrying either across a network change would carry a value
-        // that was never valid here.
-        setAssetKey("")
-        setAmount("")
-        setAddressTouched(false)
-      }}
-      networkNotice={
-        <>
-          {balances.error || refreshError ? (
-            <SectionMessage error={balances.error ?? refreshError} onAction={refreshBalances} />
-          ) : null}
-          {networkUnavailable ? (
-            <InlineNotice tone="warning">
-              {selectedNetwork?.name ?? "This network"} balances are temporarily unavailable — what you can send here
-              may be incomplete.
-            </InlineNotice>
-          ) : null}
-        </>
-      }
-      assetOptions={assetOptions}
-      assetKey={activeAssetKey}
-      onAssetChange={(next) => {
-        setAssetKey(next)
-        // An amount is denominated in the asset it was typed under.
-        setAmount("")
-      }}
-      to={to}
-      onToChange={setTo}
-      onToBlur={() => {
-        setTo((current) => current.trim())
-        setAddressTouched(true)
-      }}
-      addressProblem={addressProblem}
-      selfSend={selfSend}
-      amount={amount}
-      onAmountChange={setAmount}
-      symbol={symbol}
-      decimals={decimals}
-      amountProblem={amountProblem}
-      amountApprox={amountApprox}
-      amountHint={amountHint}
-      maxSpend={maxSpend}
-      ctaLabel={transfer.isLoading ? "Preparing review…" : blocker ?? "Review transfer"}
-      ctaDisabled={Boolean(blocker)}
-      ctaBusy={transfer.isLoading}
-      onSubmit={() => void startReview()}
-      errorSlot={renderError(createError, () => void startReview(), () => void startReview())}
-      // Belt and braces alongside the pre-flight snapshot capture above: while
-      // the intent create is in flight, nothing here should be editable —
-      // there must be no window where a picker change can outrun what was
-      // already captured for the review screen.
-      disabled={transfer.isLoading}
-    />,
+    renderForm
+      ? renderForm({
+          ...formProps,
+          assetChoices,
+          onPick: (nextNetwork, nextAsset) => {
+            setNetworkId(nextNetwork)
+            setAssetKey(nextAsset)
+            setAmount("")
+            setAddressTouched(false)
+          },
+        })
+      : <SendFormScreen {...formProps} />,
   )
 }

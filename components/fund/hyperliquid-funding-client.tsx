@@ -16,11 +16,38 @@ import type { CryptoTransactionIntent } from "@/lib/crypto-backend"
 
 type Mode = "fund" | "withdraw"
 
+/** The flow's live state and actions, for a host that draws its own form
+ *  (the wallet page's Transfer panel). Same rules, same requests. */
+export type FundingView = {
+  isDeposit: boolean
+  amount: string
+  setAmount: (v: string) => void
+  /** Futures USDC that can be withdrawn (0 until read). */
+  withdrawable: number
+  /** The wallet's Arbitrum address the money moves from / to. */
+  destination?: string
+  busy: boolean
+  /** Why the button is off, or null when it can be pressed. */
+  blocker: string | null
+  ctaLabel: string
+  submit: () => void
+  /** A deposit prepared earlier and not finished; the amount is locked to it. */
+  pendingDeposit: boolean
+  progress: string | null
+  message: string | null
+  success: string | null
+  withdrawalFailed: boolean
+  withdrawalRelayed: boolean
+  futuresUnreadable: boolean
+}
+
 /** Mainnet Hyperliquid funding. Every money-moving action is an intent built
  * by the backend and signed by the modern wallet in this browser. */
-export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, onInFlightChange, onCompactChange }: {
+export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, onInFlightChange, onCompactChange, render }: {
   mode: Mode
   variant?: "page" | "modal"
+  /** Draw the form yourself from the flow's state (see FundingView). */
+  render?: (view: FundingView) => React.ReactNode
   onDismiss?: () => void
   onInFlightChange?: (inFlight: boolean) => void
   onCompactChange?: (compact: boolean) => void
@@ -186,7 +213,30 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
     }
   }
 
-  const content = (
+  const ctaLabel = busy ? "Signing and submitting…" : blocker ?? (pendingDeposit ? "Resume deposit" : isDeposit ? "Deposit to Hyperliquid" : "Withdraw from Hyperliquid")
+  const progress =
+    isDeposit && (busy || pendingDeposit) && !success
+      ? depositStage === 0 ? "Preparing the Arbitrum approval…" : depositStage === 1 ? "Approval submitted. Sending USDC to Hyperliquid…" : "Deposit submitted. Waiting for Hyperliquid to credit Futures."
+      : null
+
+  const content = render ? render({
+    isDeposit,
+    amount,
+    setAmount,
+    withdrawable: balance,
+    destination,
+    busy,
+    blocker,
+    ctaLabel,
+    submit: () => void submit(),
+    pendingDeposit: Boolean(pendingDeposit),
+    progress,
+    message,
+    success,
+    withdrawalFailed: !isDeposit && Boolean(withdrawalIntentId) && withdrawalQuery.data?.status === "failed",
+    withdrawalRelayed: !isDeposit && Boolean(withdrawalIntentId) && withdrawalQuery.data?.status === "submitted",
+    futuresUnreadable: !isDeposit && accountQuery.isError,
+  }) : (
     <div className="flex flex-col gap-4">
       <div className="rounded-2xl bg-surface-sunken/60 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
         {isDeposit
@@ -209,13 +259,13 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
       {!isDeposit && withdrawalIntentId && withdrawalQuery.data?.status === "submitted" && <div className="rounded-xl bg-surface-sunken/70 px-3.5 py-2.5 text-[13px] text-muted-foreground">Withdrawal relayed to Hyperliquid. The Arbitrum balance will update after settlement.</div>}
       {!isDeposit && accountQuery.isError && <InlineNotice tone="warning">We can’t verify the latest Futures balance right now. Nothing will be submitted until it is available.</InlineNotice>}
       {success && <InlineNotice className="bg-credit-chip text-credit">{success}</InlineNotice>}
-      <FlowCta label={busy ? "Signing and submitting…" : blocker ?? (pendingDeposit ? "Resume deposit" : isDeposit ? "Deposit to Hyperliquid" : "Withdraw from Hyperliquid")} onClick={() => void submit()} disabled={Boolean(blocker) || busy} busy={busy} />
+      <FlowCta label={ctaLabel} onClick={() => void submit()} disabled={Boolean(blocker) || busy} busy={busy} />
     </div>
   )
 
   return (
     <>
-      {variant === "modal" ? content : <FlowShell><PageHeader title={isDeposit ? "Deposit to Hyperliquid" : "Withdraw from Hyperliquid"} subtitle="Modern wallet only · Hyperliquid mainnet" back="/" className="mb-5" />{content}</FlowShell>}
+      {variant === "modal" || render ? content : <FlowShell><PageHeader title={isDeposit ? "Deposit to Hyperliquid" : "Withdraw from Hyperliquid"} subtitle="Modern wallet only · Hyperliquid mainnet" back="/" className="mb-5" />{content}</FlowShell>}
       <WalletUnlockDialog action="hyperliquid-deposit" open={unlockOpen} onOpenChange={setUnlockOpen} onUnlocked={() => { const action = resume.current; resume.current = null; action?.() }} />
       {onDismiss && success && <button type="button" onClick={onDismiss} className="sr-only">Done</button>}
     </>

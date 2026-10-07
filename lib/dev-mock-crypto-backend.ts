@@ -54,6 +54,7 @@ const NETWORKS = [
   { id: "sui-mainnet", family: "sui", name: "Sui", environment: "mainnet", nativeAsset: "SUI", capabilities: { balance: true, transfer: true } },
   { id: "ton-mainnet", family: "ton", name: "TON", environment: "mainnet", nativeAsset: "TON", capabilities: { balance: true, transfer: true } },
   { id: "tron-mainnet", family: "tron", name: "Tron", environment: "mainnet", nativeAsset: "TRX", capabilities: { balance: true, transfer: true } },
+  { id: "bitcoin-mainnet", family: "bitcoin", name: "Bitcoin", environment: "mainnet", nativeAsset: "BTC", capabilities: { balance: true, transfer: true } },
 ]
 
 const USDC_ETH = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
@@ -161,6 +162,7 @@ function clearPersistedMockCryptoState() {
 /** Back to "no wallet yet", in memory and on disk — the state the demo starts
  *  from, so the setup ceremony can be run again. */
 export function resetMockCryptoState() {
+  seedFlag.__wsMockNoDemoSeed = true
   state.wallet = null; state.pkg = null; state.prepared.clear(); state.intents.clear()
   state.byIdempotency.clear(); state.sponsorOps.clear(); state.hlIntents.clear()
   state.transactions = []; state.balanceDeltas.clear()
@@ -193,6 +195,51 @@ function hydrateMockCryptoState() {
 }
 
 hydrateMockCryptoState()
+
+/* ── Demo wallet ───────────────────────────────────────────────────────────
+   The setup ceremony can't finish on every dev machine, and without a
+   finished wallet the wallet page is nothing but the setup modal. So the
+   first "get my wallet" with no wallet seeds a READY one: an account per
+   family with well-formed addresses nobody holds the key to (the wallet
+   preview's own, components/wallet-unauth/wallet-data.ts), and a package so
+   the page treats setup as done. Balances come from SEED_BALANCES as usual.
+   Signing a send from it fails — there are no local keys — which is fine for
+   looking at the screens. GET /api/crypto/dev/reset turns seeding off for
+   the rest of the session, so the real ceremony can still be run. */
+
+const DEMO_ACCOUNTS: Array<{ family: string; address: string; networks: string[] }> = [
+  { family: "evm", address: "0x3f5401b76080CB31B74A7ed98e38daE13c01c516", networks: ["ethereum-mainnet", "arbitrum-one"] },
+  { family: "solana", address: "Fq8kU7JtyKvnJsZJafXa6GfgjciFDKiNCDSYc5D2FfWy", networks: ["solana-mainnet-beta"] },
+  { family: "tron", address: "TLEvwMieGYSv8pBP5s1nGBJ8nYVPPokeXG", networks: ["tron-mainnet"] },
+  { family: "bitcoin", address: "bc1q3ml9cragvkwxpvucph8mwf0xv0dre323f0mg8g", networks: ["bitcoin-mainnet"] },
+  { family: "ton", address: "UQBGvjFGRxPGyXyABYk7IyZBDUr6nkWu0z5f_68vkyG47GIW", networks: ["ton-mainnet"] },
+  { family: "sui", address: "0x73f60bf23b7d5b3eee0b5a4d1dba2c5b461fe7272c6809f9d92a4c529523a7e5", networks: ["sui-mainnet"] },
+]
+
+const seedFlag = globalThis as typeof globalThis & { __wsMockNoDemoSeed?: boolean }
+
+function seedDemoWallet() {
+  // A wallet with no package is a half-finished setup (or the fiat mock's
+  // placeholder) — replace it too, or the page stays stuck on "finish setup".
+  const isOldDemo = state.pkg?.id === "mock-pkg-demo" && !state.pkg.accounts.some((a) => a.family === "bitcoin")
+  if ((state.pkg && !isOldDemo) || seedFlag.__wsMockNoDemoSeed) return
+  const walletId = "66f000000000000000000041"
+  state.wallet = {
+    id: walletId, userId: DEV_BYPASS_USER.userId, status: "active", version: 1, securityVersion: 1,
+    provisioningMode: "self-custodial", createdAt: nowIso(), updatedAt: nowIso(),
+  }
+  state.pkg = {
+    id: "mock-pkg-demo", walletId, version: 1, baseVersion: 0, securityVersion: 1,
+    format: "worldstreet-wallet-package", status: "active", envelopes: [],
+    accounts: DEMO_ACCOUNTS.map((a) => ({
+      accountId: `mock-account-demo-${a.family}`,
+      family: a.family,
+      canonicalAddress: a.address,
+      addresses: a.networks.map((networkId) => ({ networkId, address: a.address, isCanonical: true })),
+    })),
+  }
+  persistMockCryptoState()
+}
 
 const nextId = (prefix: string) => `${prefix}-${++state.counter}-${Date.now().toString(36)}`
 
@@ -248,6 +295,9 @@ const SEED_BALANCES: Record<string, Array<{ kind: "native" | "token"; identifier
   ],
   "ton-mainnet": [
     { kind: "native", identifier: "TON", amountBaseUnits: "250000000000", decimals: 9, symbol: "TON", name: "Toncoin" },
+  ],
+  "bitcoin-mainnet": [
+    { kind: "native", identifier: "BTC", amountBaseUnits: "1342000", decimals: 8, symbol: "BTC", name: "Bitcoin" },
   ],
   "tron-mainnet": [
     { kind: "native", identifier: "TRX", amountBaseUnits: "4000000000", decimals: 6, symbol: "TRX", name: "Tron" },
@@ -604,6 +654,7 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
 
   // Wallet lifecycle
   if (method === "GET" && path === "wallets/me") {
+    seedDemoWallet()
     const details = walletDetails()
     if (!details && FIAT_MOCKS_ENABLED) {
       // Dev-only: fiat mock mode needs a ready wallet to reach Buy. Not stored,
