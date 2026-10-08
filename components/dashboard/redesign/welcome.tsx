@@ -19,7 +19,7 @@
 import * as React from "react"
 import Image from "next/image"
 import { ArrowRight02Icon, HelpCircleIcon } from "@hugeicons/core-free-icons"
-import { useAuth } from "@/components/auth-provider"
+import { useDisplayName } from "@/hooks/useDisplayName"
 import { openWelcomeGuide } from "@/components/welcome-guide"
 import { Icon, Panel } from "@/components/dashboard/redesign/ui"
 
@@ -37,8 +37,7 @@ function useGreeting() {
 
 export function Welcome() {
   const greeting = useGreeting()
-  const { user } = useAuth()
-  const name = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader" : "Trader"
+  const name = useDisplayName()
 
   return (
     <Panel className="grid grid-cols-1 items-stretch gap-4 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] md:p-5 md:pl-7">

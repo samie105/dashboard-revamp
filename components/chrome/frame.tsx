@@ -77,6 +77,7 @@ import {
 import { useVividOptional } from "@worldstreet/vivid-voice"
 
 import { useAuth } from "@/components/auth-provider"
+import { useDisplayName } from "@/hooks/useDisplayName"
 import { ModernReceiveModal } from "@/components/crypto/ModernReceiveModal"
 import { SendModal } from "@/components/crypto/SendModal"
 import { NavbarActions } from "@/components/navbar-actions"
@@ -162,9 +163,8 @@ const RAIL: RailGroup[] = [
   {
     label: "Account",
     items: [
-      { name: "Profile", href: "/profile", icon: UserIcon },
-      { name: "Security", href: "/security", icon: Shield01Icon },
       { name: "Verification", href: VERIFICATION_URL, icon: CheckmarkBadge01Icon },
+      { name: "Settings", href: "/settings", icon: Settings01Icon },
       { name: "API Management", icon: SourceCodeIcon, soon: true },
       { name: "Help Center", icon: HelpCircleIcon, soon: true },
     ],
@@ -460,9 +460,11 @@ function SearchField({ className }: { className?: string }) {
 
 /* ── Account menu ─────────────────────────────────────────────────────── */
 
-const ACCOUNT_LINKS: { name: string; href: string; icon: IconSvg }[] = [
+/* Security has no page yet. Settings is being built and opens in dev only
+   until it's finished — it still wears "Soon" there. */
+const ACCOUNT_LINKS: { name: string; href: string; icon: IconSvg; soon?: boolean }[] = [
   { name: "Profile", href: "/profile", icon: UserIcon },
-  { name: "Security", href: "/security", icon: Shield01Icon },
+  { name: "Security", href: "/security", icon: Shield01Icon, soon: true },
   { name: "Identity verification", href: VERIFICATION_URL, icon: CheckmarkBadge01Icon },
   { name: "Settings", href: "/settings", icon: Settings01Icon },
 ]
@@ -491,7 +493,7 @@ function useCryptoTotal() {
 
 function Avatar({ size }: { size: "sm" | "lg" }) {
   const { user } = useAuth()
-  const name = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader" : "Trader"
+  const name = useDisplayName()
   const box = size === "lg" ? "size-11 text-[16px]" : "size-9 text-[14px]"
   return (
     <span className={cn("flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-primary/70 font-display font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.25)]", box)}>
@@ -509,7 +511,7 @@ function AccountMenu() {
   const { user, signOut } = useAuth()
   const { hidden } = useBalancePrivacy()
   const { total, loading } = useCryptoTotal()
-  const name = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Trader" : "Trader"
+  const name = useDisplayName()
 
   return (
     <div {...wrapProps} className="relative">
@@ -564,8 +566,24 @@ function AccountMenu() {
                   <Icon icon={l.icon} className="size-[17px] text-muted-foreground transition-colors group-hover:text-primary" />
                   <span className="flex-1">{l.name}</span>
                   {ext && <Icon icon={LinkSquare02Icon} className="size-3.5 text-muted-foreground/50" />}
+                  {l.soon && <SoonChip />}
                 </>
               )
+              if (l.soon) {
+                return (
+                  <span
+                    key={l.name}
+                    role="menuitem"
+                    aria-disabled="true"
+                    title={`${l.name} — coming soon`}
+                    className="flex h-10 cursor-not-allowed select-none items-center gap-3 rounded-xl px-2.5 text-[13.5px] font-medium text-muted-foreground/40"
+                  >
+                    <Icon icon={l.icon} className="size-[17px]" />
+                    <span className="flex-1">{l.name}</span>
+                    <SoonChip />
+                  </span>
+                )
+              }
               return ext ? (
                 <a key={l.name} href={l.href} target="_blank" rel="noopener noreferrer" role="menuitem" onClick={() => setOpen(false)} className={cls}>
                   {inner}
@@ -761,6 +779,7 @@ function RailLink({
         <>
           <span className={cn("relative flex-1 truncate text-left", active && "font-semibold")}>{item.name}</span>
           {trailing}
+          {item.soon && <span className="relative"><SoonChip /></span>}
           {ext && <Icon icon={LinkSquare02Icon} className="relative size-3.5 text-muted-foreground/40" />}
           {item.chevron && <Icon icon={ArrowRight01Icon} className="relative size-3.5 text-muted-foreground/70" strokeWidth={2} />}
         </>

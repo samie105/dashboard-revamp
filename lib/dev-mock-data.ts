@@ -782,11 +782,14 @@ export async function devMockApiResponse(req: Request, path: string): Promise<Re
 
 // ── Dashboard profile (for lib/profile-actions.ts) ──────────────────────────
 
-const mockProfile = {
+const initialMockProfile = {
   _id: "dev-profile-000000000001",
   authUserId: DEV_BYPASS_USER.userId,
   email: DEV_BYPASS_USER.email,
   displayName: `${DEV_BYPASS_USER.firstName} ${DEV_BYPASS_USER.lastName}`,
+  username: "" as string,
+  country: "",
+  timezone: "",
   avatarUrl: "",
   bio: "Local development profile (dev bypass).",
   preferredCurrency: "USD",
@@ -810,6 +813,13 @@ const mockProfile = {
   createdAt: daysAgo(45),
   updatedAt: daysAgo(0),
 }
+
+// Hung off globalThis, like the crypto mock's state: in dev, route bundles can
+// each evaluate this module, and a profile held in a module constant would be
+// a different object per bundle — a name saved in Settings would vanish on the
+// next page. One process, one profile, until the dev server restarts.
+const profileStore = globalThis as typeof globalThis & { __wsDevMockProfile?: typeof initialMockProfile }
+const mockProfile = (profileStore.__wsDevMockProfile ??= initialMockProfile)
 
 export function getDevMockProfile() {
   return { ...mockProfile }

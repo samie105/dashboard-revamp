@@ -1024,6 +1024,9 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
     return json({ networkId: "arbitrum-one", amount, intents: [payload.data] })
   }
 
+  // Trading sessions — none in the demo, so Settings shows its empty state.
+  if (method === "GET" && path === "wallets/me/sessions") return json([])
+
   // Devices & recovery
   if (method === "GET" && path === "devices") {
     return json([{ id: "mock-device-1", label: "This device — Chrome on Windows", platform: "Windows", status: "active", lastSeenAt: nowIso(), createdAt: nowIso() }])

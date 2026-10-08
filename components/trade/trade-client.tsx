@@ -81,6 +81,14 @@ import {
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { ModernFundingPanel } from "@/components/trade/modern-funding-panel"
+import { useTradePrefs } from "@/lib/trade-prefs"
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalDescription,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from "@/components/ui/responsive-modal"
 import {
   OrderPlacedModal,
   orderCopy,
@@ -409,7 +417,10 @@ export function TradeClient() {
   /** Settled, and there is nothing to trade with. */
   const needsWallet = isCryptoBackendEnabled && !walletReady && !walletLoading
 
-  const market: Market = gatedMarket(params.get("market"))
+  // Settings → Preferences: which venue to open on when the link doesn't say.
+  // An explicit ?market= always wins.
+  const tradePrefs = useTradePrefs()
+  const market: Market = gatedMarket(params.get("market") ?? tradePrefs.defaultVenue)
   /* FUTURES GATE: whether the futures notice is up. Two things raise it — a
      press on the Futures tab (the path nearly everyone takes) and an arrival
      on a stale `?market=futures` link (the safety net) — and the dismiss
@@ -474,6 +485,9 @@ export function TradeClient() {
   const [slPrice, setSlPrice] = React.useState("")
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
+  // Settings → "Confirm before placing orders": a review step before a SPOT
+  // swap is sent. Futures always has its own review (spec §9) regardless.
+  const [spotReviewOpen, setSpotReviewOpen] = React.useState(false)
   const [outcome, setOutcome] = React.useState<HlOrderOutcome | null>(null)
   // Modern spot never claims a fill at submit time (spec §8: "a quote is not a
   // fill"). The submitted intent is polled until the backend says confirmed.
@@ -2357,7 +2371,7 @@ export function TradeClient() {
           ticket first becomes sendable, the travelling band while the order
           is in flight, the shadow that appears only while it is armed. */}
         <button
-          onClick={submit}
+          onClick={() => (market === "spot" && !modernFutures && tradePrefs.confirmSpot ? setSpotReviewOpen(true) : void submit())}
           disabled={!canSubmit}
           data-vivid-target="trade-submit"
           data-vivid-guard={modernFutures ? undefined : ""}
@@ -2399,6 +2413,47 @@ export function TradeClient() {
           )}
           {ctaLabel}
         </button>
+
+        {/* The optional spot review — the same receipt rows as the ticket's
+            summary, and the same submit() behind Confirm. */}
+        <ResponsiveModal open={spotReviewOpen} onOpenChange={setSpotReviewOpen}>
+          <ResponsiveModalContent className="gap-5 p-5 sm:max-w-md sm:p-6">
+            <ResponsiveModalHeader>
+              <ResponsiveModalTitle>Review your {side === "buy" ? "buy" : "sell"}</ResponsiveModalTitle>
+              <ResponsiveModalDescription>
+                {side === "buy" ? "Buy" : "Sell"} {symbol}
+                {amt > 0 ? ` for ${inTokenUnit ? `${amt} ${spentSymbol}` : `$${amt}`}` : ""}. Nothing is sent until you confirm.
+              </ResponsiveModalDescription>
+            </ResponsiveModalHeader>
+            <dl className="flex flex-col gap-2 rounded-2xl border border-foreground/[0.06] bg-foreground/[0.02] px-4 py-3.5 text-[13px]">
+              {receiptRows.map((r) => (
+                <div key={r.label} className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">{r.label}</dt>
+                  <dd className={cn("text-right tabular-nums text-foreground", r.strong ? "font-display text-[14px] font-semibold" : "font-semibold")}>{r.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button type="button" onClick={() => setSpotReviewOpen(false)} className="h-12 rounded-xl border border-foreground/[0.09] text-[14px] font-semibold text-foreground/85 transition-colors hover:text-foreground">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => {
+                  setSpotReviewOpen(false)
+                  void submit()
+                }}
+                data-vivid-target="trade-submit-confirm"
+                data-vivid-guard=""
+                data-vivid-label={`Confirm the ${side} of ${symbol}. Moves real money.`}
+                className={cn("h-12 rounded-xl text-[14px] font-semibold text-white transition-[filter] hover:brightness-110 disabled:opacity-40", side === "buy" ? "bg-credit" : "bg-debit")}
+              >
+                Confirm {side === "buy" ? "buy" : "sell"}
+              </button>
+            </div>
+          </ResponsiveModalContent>
+        </ResponsiveModal>
 
         {/* Where the price came from (`TradeView.priceSources`). Pro only, and
             in the ticket rather than under the header on purpose: it is a
