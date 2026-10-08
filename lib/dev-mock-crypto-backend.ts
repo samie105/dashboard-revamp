@@ -33,6 +33,7 @@ import { Keypair, PublicKey, SystemProgram, TransactionMessage, VersionedTransac
 import { DEV_BYPASS_USER } from "./dev-auth-bypass"
 import { respondFromFiatFixtures } from "./crypto-backend/dev-mock-fiat-responder"
 import { FIAT_MOCKS_ENABLED } from "./fiat-mocks"
+import { BALANCE_NETWORK_ID, SWAP_ASSETS } from "@/components/swap/swap-model"
 
 // ── Envelope helpers ────────────────────────────────────────────────────────
 
@@ -948,6 +949,58 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
       intent.status = "submitted"
       return json({ intentId: intent.id, status: "submitted", results: [{ status: "ok" }] })
     }
+  }
+  // A LI.FI-shaped swap quote, so the swap ticket's quoted states (rate,
+  // minimum, impact, fees, route, an armed button) can be looked at in dev.
+  // Priced from fixed dollar figures; signing a swap from it still fails,
+  // because the demo wallet has no keys.
+  if (method === "GET" && path === "trading/spot/lifi/quote") {
+    const q = new URL(req.url).searchParams
+    const fromChain = q.get("fromChain") ?? ""
+    const toChain = q.get("toChain") ?? ""
+    const pick = (chain: string, id: string | null) => {
+      const networkId = BALANCE_NETWORK_ID[chain]
+      const lower = (id ?? "").toLowerCase()
+      return SWAP_ASSETS.find((a) => a.networkId === networkId && (a.address.toLowerCase() === lower || a.symbol.toLowerCase() === lower))
+    }
+    const from = pick(fromChain, q.get("fromToken"))
+    const to = pick(toChain, q.get("toToken"))
+    if (!from || !to) return jsonRaw({ success: false, error: "No route for this pair in the dev mock" })
+    const USD: Record<string, number> = { ETH: 3284.12, BTC: 96420.5, SOL: 182.55, SUI: 3.14, TRX: 0.242, USDC: 1, USDT: 1 }
+    const amount = Number(q.get("amount") ?? 0)
+    const slippage = Number(q.get("slippage") ?? 0.005)
+    const crossChain = fromChain !== toChain
+    const usdIn = amount * (USD[from.symbol] ?? 0)
+    const impact = Math.min(4.5, (usdIn / 45_000) * 1.1 + (crossChain ? 0.18 : 0.04))
+    const feeUsd = usdIn * (crossChain ? 0.0025 : 0.001)
+    const usdOut = usdIn * (1 - impact / 100) - feeUsd
+    const out = usdOut / (USD[to.symbol] || 1)
+    const base = (n: number, d: number) => BigInt(Math.max(0, Math.floor(n * 10 ** Math.min(d, 9)))).toString() + "0".repeat(Math.max(0, d - 9))
+    const steps = crossChain
+      ? [
+          ...(from.symbol !== "USDC" ? [{ tool: "uniswap", type: "swap", fromSymbol: from.symbol, toSymbol: "USDC" }] : []),
+          { tool: "across", type: "cross", fromSymbol: "USDC", toSymbol: "USDC" },
+          ...(to.symbol !== "USDC" ? [{ tool: fromChain === "solana" || toChain === "solana" ? "jupiter" : "uniswap", type: "swap", fromSymbol: "USDC", toSymbol: to.symbol }] : []),
+        ]
+      : [{ tool: fromChain === "solana" ? "jupiter" : "1inch", type: "swap", fromSymbol: from.symbol, toSymbol: to.symbol }]
+    return jsonRaw({
+      success: true,
+      quote: {
+        toAmount: base(out, to.decimals),
+        toAmountMin: base(out * (1 - slippage), to.decimals),
+        toAmountUSD: usdOut.toFixed(2),
+        fromAmountUSD: usdIn.toFixed(2),
+        priceImpact: Number(impact.toFixed(3)),
+        gasCostUSD: crossChain ? "1.84" : fromChain === "solana" ? "0.02" : "0.61",
+        tool: steps[0].tool,
+        executionData: { mock: true },
+        fromToken: { chainId: 0, address: from.address, symbol: from.symbol, decimals: from.decimals },
+        toToken: { chainId: 0, address: to.address, symbol: to.symbol, decimals: to.decimals },
+        executionDuration: crossChain ? 180 : fromChain === "solana" ? 8 : 25,
+        feeCosts: [{ name: "Integrator fee", amountUSD: feeUsd.toFixed(2), included: false }],
+        steps,
+      },
+    })
   }
   // The USDC → WSK bridge's status, open, so the bridge page can be looked at.
   if (method === "GET" && path === "bridge/intertrain/usdc/status") {
