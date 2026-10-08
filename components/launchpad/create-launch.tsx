@@ -129,9 +129,12 @@ export function CreateLaunch() {
   return launchId ? <LaunchStatus launchId={launchId} /> : <LaunchForm />
 }
 
-/* ── The form ──────────────────────────────────────────────────────────── */
+/* ── State and behaviour, shared with the redesigned screens ──────────────
+   Moved verbatim out of LaunchForm and LaunchStatus below, so the redesign
+   (components/launchpad/redesign/create.tsx) runs the same draft → deploy →
+   sign → submit and the same status polling and retry. */
 
-function LaunchForm() {
+export function useLaunchForm() {
   const router = useRouter()
   const signer = useSolanaSigner()
   const network = useLaunchNetwork()
@@ -241,6 +244,118 @@ function LaunchForm() {
     })
   }
 
+
+  /** A changed network is a different launch: drop the reused draft key. */
+  const resetIntentKey = React.useCallback(() => {
+    idempotencyKey.current = null
+  }, [])
+
+  return {
+    resetIntentKey,
+    allocationLamports,
+    availability,
+    bps,
+    busy,
+    canLaunch,
+    complete,
+    error,
+    form,
+    idempotencyKey,
+    inFlight,
+    launch,
+    mine,
+    network,
+    networkId,
+    paused,
+    problems,
+    rentLamports,
+    router,
+    set,
+    setBusy,
+    setError,
+    setForm,
+    settled,
+    signer,
+    solana,
+    t,
+    terms,
+    total,
+  }
+}
+
+export function useLaunchStatus(launchId: string) {
+  const signer = useSolanaSigner()
+  const [error, setError] = React.useState<string | null>(null)
+  const [busy, setBusy] = React.useState(false)
+
+  const launch = useQuery({
+    queryKey: ["launchpad", "mine", launchId],
+    queryFn: ({ signal }) => cryptoBackendClient.getMyLaunch(launchId, signal),
+    enabled: isCryptoBackendEnabled,
+    // Poll while it is in flight; the reconciler moves it within ~30s.
+    refetchInterval: (q) => {
+      const s = (q.state.data as LaunchpadToken | undefined)?.status
+      return s === "deploying" || s === "draft" ? 4_000 : false
+    },
+  })
+
+  /** Deploy is idempotent: while a deploy is in flight this returns the same
+   *  intent; after a failure it builds a new one (with a new token address). */
+  function continueOrRetry() {
+    signer.run(async () => {
+      setBusy(true)
+      setError(null)
+      try {
+        const { intent } = await cryptoBackendClient.deployLaunch(launchId)
+        if (intent.status === "awaiting_signature")
+          await signer.signAndSubmit(intent)
+        await launch.refetch()
+      } catch (e) {
+        setError(formatWalletActionError(e, "solana", "SOL"))
+      } finally {
+        setBusy(false)
+      }
+    })
+  }
+
+
+  return {
+    busy,
+    continueOrRetry,
+    error,
+    launch,
+    setBusy,
+    setError,
+    signer,
+  }
+}
+
+/* ── The form ──────────────────────────────────────────────────────────── */
+
+function LaunchForm() {
+  const {
+    resetIntentKey,
+    allocationLamports,
+    busy,
+    canLaunch,
+    complete,
+    error,
+    form,
+    inFlight,
+    launch,
+    network,
+    networkId,
+    paused,
+    problems,
+    rentLamports,
+    set,
+    signer,
+    solana,
+    t,
+    terms,
+    total,
+  } = useLaunchForm()
+
   return (
     <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6 lg:p-8">
       <PageHeader
@@ -253,7 +368,7 @@ function LaunchForm() {
             networkId={networkId}
             onChange={(next) => {
               network.setNetworkId(next)
-              idempotencyKey.current = null // another network, another launch
+              resetIntentKey() // another network, another launch
             }}
           />
         }
@@ -536,39 +651,13 @@ const STAGES = [
 ]
 
 function LaunchStatus({ launchId }: { launchId: string }) {
-  const signer = useSolanaSigner()
-  const [error, setError] = React.useState<string | null>(null)
-  const [busy, setBusy] = React.useState(false)
-
-  const launch = useQuery({
-    queryKey: ["launchpad", "mine", launchId],
-    queryFn: ({ signal }) => cryptoBackendClient.getMyLaunch(launchId, signal),
-    enabled: isCryptoBackendEnabled,
-    // Poll while it is in flight; the reconciler moves it within ~30s.
-    refetchInterval: (q) => {
-      const s = (q.state.data as LaunchpadToken | undefined)?.status
-      return s === "deploying" || s === "draft" ? 4_000 : false
-    },
-  })
-
-  /** Deploy is idempotent: while a deploy is in flight this returns the same
-   *  intent; after a failure it builds a new one (with a new token address). */
-  function continueOrRetry() {
-    signer.run(async () => {
-      setBusy(true)
-      setError(null)
-      try {
-        const { intent } = await cryptoBackendClient.deployLaunch(launchId)
-        if (intent.status === "awaiting_signature")
-          await signer.signAndSubmit(intent)
-        await launch.refetch()
-      } catch (e) {
-        setError(formatWalletActionError(e, "solana", "SOL"))
-      } finally {
-        setBusy(false)
-      }
-    })
-  }
+  const {
+    busy,
+    continueOrRetry,
+    error,
+    launch,
+    signer,
+  } = useLaunchStatus(launchId)
 
   const l = launch.data
   if (!l) {
