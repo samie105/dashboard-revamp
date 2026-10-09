@@ -147,8 +147,6 @@ const RAIL: RailGroup[] = [
     label: "Wallet",
     items: [
       { name: "Wallet", href: "/wallet/modern", icon: Wallet02Icon },
-      { name: "Deposit", dialog: "receive", icon: Download04Icon },
-      { name: "Withdraw", dialog: "send", icon: Upload04Icon },
       { name: "Portfolio", href: "/portfolio", icon: ChartCandlestickIcon },
       { name: "Transactions", href: "/transactions", icon: Invoice03Icon },
     ],
