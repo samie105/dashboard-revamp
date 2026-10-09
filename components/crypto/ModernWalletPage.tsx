@@ -361,7 +361,8 @@ export function ModernWalletPage() {
   useEffect(() => {
     if (!wallet.data || !packageQuery.data || setupCeremony || hasIntertrainAccount) return
     if (typeof window !== "undefined" && window.sessionStorage.getItem("worldstreet:intertrain-prompt-dismissed") === "1") return
-    setIntertrainPromptOpen(true)
+    const promptTimer = window.setTimeout(() => setIntertrainPromptOpen(true), 0)
+    return () => window.clearTimeout(promptTimer)
   }, [wallet.data, packageQuery.data, setupCeremony, hasIntertrainAccount])
 
   const heroStats = useMemo(() => {
@@ -369,7 +370,7 @@ export function ModernWalletPage() {
     return [
       { label: "Assets", value: balances.balances.length },
       { label: "Networks", value: pricedNetworks.size },
-      { label: "Accounts", value: wallet.data?.accounts.length ?? 0 },
+      { label: "Accounts", value: wallet.data?.accounts.filter((account) => account.chainFamily !== "bitcoin").length ?? 0 },
     ]
   }, [balances.balances, wallet.data])
 
@@ -381,7 +382,7 @@ export function ModernWalletPage() {
    * three times and guess which copy was right.
    */
   const chainGroups = useMemo<ChainGroup[]>(() => {
-    const groups = (wallet.data?.accounts ?? []).map((account) => {
+    const groups = (wallet.data?.accounts ?? []).filter((account) => account.chainFamily !== "bitcoin").map((account) => {
       const familyNetworks = networksForFamily(account.chainFamily, networks.data)
       const meta = familyNetworks.length ? networkMetaFor(familyNetworks[0].id, networks.data) : null
       const networkIds = new Set(familyNetworks.map((network) => network.id))

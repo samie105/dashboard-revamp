@@ -1,0 +1,159 @@
+/* Faithful reference dashboard; artwork is cropped from the supplied reference. */
+.preview-exchange:has(.preview-dashboard-page){font-family:Arial,Helvetica,sans-serif;font-weight:400;--background:#08090a;--foreground:#f4f5f6}
+.preview-exchange:has(.preview-dashboard-page) svg[viewBox="0 0 24 24"] > path:not(:first-child){stroke:currentColor}
+.preview-exchange:has(.preview-dashboard-page) .preview-topbar{height:68px;background:#08090a;padding:0 30px;gap:48px;border-color:#ffffff12}
+.preview-exchange:has(.preview-dashboard-page) .preview-topbar-brand{font-family:inherit;font-size:24px}
+.preview-exchange:has(.preview-dashboard-page) .preview-top-nav-item{font-size:14px;font-weight:400}
+.preview-exchange:has(.preview-dashboard-page) .preview-top-nav-item[data-active]{border:1px solid #ffffff18;background:#ffffff04;font-weight:600}
+.preview-exchange:has(.preview-dashboard-page) .preview-deposit-button{background:#ffd000;box-shadow:0 0 14px #f5c51824}
+.preview-exchange:has(.preview-dashboard-page) .preview-profile-avatar{width:38px;height:38px;font-size:18px}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-rail{width:258px;background:#08090a;padding:22px 12px 24px 7px;scrollbar-width:none}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-brand{display:none}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-groups{gap:22px}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-list{gap:3px}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-item{min-height:42px;padding:0 26px;gap:20px;font-size:14px;color:#d3d5da;font-weight:400;border-radius:6px}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-item[data-active]{color:#ffda00;background:#352900;font-weight:600}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-item[data-active]::before{top:3px;bottom:3px;width:5px}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-icon{width:21px;height:21px;color:inherit}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-soon{display:none}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-section-label{text-transform:uppercase;font-size:11px;letter-spacing:1.2px;color:#9098a1;margin:0 26px 5px}
+.preview-exchange:has(.preview-dashboard-page) .preview-exchange-main{background:#08090a;scrollbar-width:none}
+.preview-exchange .preview-dashboard-page{padding:22px 24px 24px 21px;background:#08090a}
+.preview-exchange .preview-dashboard-layout{max-width:none;grid-template-columns:minmax(0,1fr) 416px;gap:18px}
+.preview-exchange .preview-dashboard-column,.preview-exchange .preview-dashboard-rail{display:flex;flex-direction:column;gap:16px}
+.preview-exchange .dashboard-welcome-card,.preview-exchange .dashboard-portfolio-card,.preview-exchange .dashboard-balance-tile,.preview-exchange .dashboard-assets-card,.preview-exchange .dashboard-quick-actions-card,.preview-exchange .dashboard-trade-promo-card,.preview-exchange .dashboard-movers-card{border:1px solid #ffffff10;border-radius:9px;background:#0b0d0e;box-shadow:none}
+.preview-exchange .dashboard-welcome-card{height:138px;min-height:138px;padding:18px 16px 12px 22px;grid-template-columns:minmax(0,1fr) 392px}
+.preview-exchange .dashboard-welcome-copy{align-self:start;margin:0}
+.preview-exchange .dashboard-kicker{font-size:21px;line-height:1.2;color:#f4f5f6}
+.preview-exchange .dashboard-welcome-copy h1{font-family:inherit;font-size:32px;font-weight:700;line-height:1.1;margin:5px 0 8px;letter-spacing:-.5px}
+.preview-exchange .dashboard-welcome-copy h1 span{font-size:29px}
+.preview-exchange .dashboard-welcome-subtitle{font-size:14px;color:#b9c0ca}
+.dashboard-reference-mountains{position:absolute;width:256px;height:134px;right:392px;bottom:0;background:url('/newlook.png') -680px -92px / 1802px 872px no-repeat;pointer-events:none;mask-image:linear-gradient(90deg,transparent,#000 15%,#000 90%,transparent)}
+.preview-exchange .dashboard-verification-card{height:106px;background:#090b0c;border:1px solid #ffffff16;border-radius:13px;gap:8px;padding:0 12px 0 0}
+.dashboard-reference-gift{width:122px;height:103px;flex:0 0 122px;background:url('/newlook.png') -937px -112px / 1802px 872px no-repeat;border-radius:12px 0 0 12px}
+.preview-exchange .dashboard-verification-copy strong{font-size:13px;font-weight:600}
+.preview-exchange .dashboard-verification-copy span{font-size:12px;color:#a5adb8}
+.preview-exchange .dashboard-verification-copy a{background:#ffd000;color:#08090a;padding:8px 15px;font-size:12px;border-radius:7px;margin-top:7px}
+.preview-exchange .dashboard-verification-copy a span{color:inherit}
+.preview-exchange .dashboard-portfolio-card{height:248px;min-height:248px;grid-template-columns:280px minmax(0,1fr)}
+.preview-exchange .dashboard-portfolio-summary{padding:22px;justify-content:flex-start}
+.preview-exchange .dashboard-portfolio-label-row{font-size:15px}
+.preview-exchange .dashboard-portfolio-value{font-family:inherit;font-size:68px;font-weight:700;letter-spacing:-2px;line-height:1;margin-top:13px}
+.preview-exchange .dashboard-portfolio-btc{font-size:19px;color:#cbd3df;margin-top:8px}
+.preview-exchange .dashboard-portfolio-change{gap:12px;margin-top:13px;font-size:16px}
+.preview-exchange .dashboard-portfolio-change > span{color:#00e6a0;background:#003c2b;border-radius:12px;padding:8px 11px}
+.preview-exchange .dashboard-portfolio-change > strong{color:#00e6a0;font-size:16px}
+.preview-exchange .dashboard-portfolio-change small{font-size:14px;margin-left:-8px;white-space:nowrap}
+.preview-exchange .dashboard-portfolio-chart-panel{padding:16px 20px 14px 0;border:0}
+.preview-exchange .dashboard-range-tabs{border:1px solid #ffffff12;border-radius:7px;padding:0;background:transparent;gap:0}
+.preview-exchange .dashboard-range-tabs button{min-width:46px;padding:7px;font-weight:400;line-height:16px}
+.preview-exchange .dashboard-range-tabs button[data-active]{border:1px solid #ffdb00;background:#4a3b08;color:#fff}
+.preview-exchange .dashboard-chart-wrap{height:180px;margin-top:4px;padding-right:50px}
+.preview-exchange .dashboard-chart{inset:0 50px 25px 0;width:calc(100% - 50px);height:calc(100% - 25px)}
+.preview-exchange .dashboard-chart-grid{stroke:#ffffff08}
+.preview-exchange .dashboard-chart-grid-vertical{stroke:#ffffff06}
+.preview-exchange .dashboard-chart-line{stroke:#ffd400;stroke-width:2}
+.preview-exchange .dashboard-chart-labels{font-size:12px;right:50px}
+.preview-exchange .dashboard-chart-axis{font-size:12px;bottom:24px}
+.dashboard-crosshair{stroke:#9099a4;stroke-width:1;stroke-dasharray:3 4}
+.dashboard-chart-tooltip{position:absolute;top:12px;z-index:5;display:grid;gap:5px;padding:12px;border:1px solid #ffffff20;background:#111519f5;border-radius:8px;pointer-events:none;min-width:170px}
+.dashboard-chart-tooltip small,.dashboard-chart-tooltip span{font-size:11px;color:#a5abb3}
+.dashboard-chart-tooltip strong{font-size:16px}.dashboard-chart-tooltip em{font-size:12px;color:#16c79a;font-style:normal}
+.preview-exchange .dashboard-balance-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;padding:0;background:transparent}
+.preview-exchange .dashboard-balance-tile{height:100px;min-height:100px;padding:10px 19px;gap:19px;box-sizing:border-box}
+.preview-exchange .dashboard-balance-tile .dashboard-icon-circle{width:64px;height:64px;flex-basis:64px;background:#181a1c;color:#f4f5f6;border:1px solid #ffffff09}
+.preview-exchange .dashboard-icon-circle svg{width:25px;height:25px;color:inherit}
+.preview-exchange .dashboard-balance-copy{gap:5px}
+.preview-exchange .dashboard-balance-copy > span{font-size:14px}
+.preview-exchange .dashboard-balance-copy > strong{font-size:20px}
+.preview-exchange .dashboard-balance-copy > em{font-size:14px;color:#00e6a0}
+.preview-exchange .dashboard-balance-progress-row i{height:8px;min-width:48px}
+.preview-exchange .dashboard-balance-progress-row small{font-size:12px}
+.preview-exchange .dashboard-quick-actions-card{min-height:130px;padding:14px 10px}
+.preview-exchange .dashboard-quick-action{gap:10px;font-size:13px}
+.preview-exchange .dashboard-quick-action .dashboard-icon-circle{width:58px;height:58px;flex-basis:58px;background:#161819}
+.preview-exchange .dashboard-quick-action-primary .dashboard-icon-circle{background:#ffd000;color:#08090a}
+.preview-exchange .dashboard-trade-promo-card{height:181px;min-height:181px;padding:22px 20px}
+.preview-exchange .dashboard-trade-promo-copy{max-width:240px}
+.preview-exchange .dashboard-trade-promo-copy h2{font-size:19px;font-weight:700}
+.preview-exchange .dashboard-trade-promo-copy p{font-size:14px;line-height:1.6;max-width:220px;margin:6px 0 12px}
+.preview-exchange .dashboard-trade-promo-copy a{border:1px solid #ffdb00;border-radius:8px;background:transparent;color:#ffdb00;padding:9px 14px;font-size:14px}
+.dashboard-reference-phone{position:absolute;width:177px;height:178px;right:0;top:1px;background:url('/newlook.png') -1600px -238px / 1802px 872px no-repeat;mask-image:linear-gradient(90deg,transparent,#000 18%)}
+.preview-exchange .dashboard-promo-dots{bottom:10px}
+.preview-exchange .dashboard-movers-card{min-height:415px;padding:16px 20px 12px}
+.preview-exchange .dashboard-movers-heading h2{font-size:18px;font-weight:700}
+.preview-exchange .dashboard-movers-heading a{color:#ffdb00;font-size:13px}
+.preview-exchange .dashboard-mover-tabs{background:none;margin:14px 0 10px;padding:0;gap:10px}
+.preview-exchange .dashboard-mover-tabs button{background:#121619;border:1px solid transparent;padding:9px 20px;font-size:12px;border-radius:7px}
+.preview-exchange .dashboard-mover-tabs button[data-active]{border:1px solid #ffdb00;background:#302600;color:#ffdb00}
+.preview-exchange .dashboard-movers-header{font-size:12px;padding:12px 5px 8px}
+.preview-exchange .dashboard-mover-row{min-height:51px;font-size:13px;padding:0 5px}
+.preview-exchange .dashboard-mover-coin{grid-template-columns:34px auto;column-gap:12px}
+.preview-exchange .dashboard-mover-coin > :first-child{width:32px;height:32px}
+.preview-exchange .dashboard-mover-coin strong{font-size:12px}
+.preview-exchange .dashboard-mover-coin small{font-size:12px}
+.preview-exchange .dashboard-positive{color:#00df99;background:#003021;border-radius:8px}
+.preview-exchange .dashboard-negative{border-radius:8px}
+.preview-exchange .dashboard-assets-toolbar{min-height:45px;padding:0 17px;gap:16px}
+.preview-exchange .dashboard-assets-tabs{gap:34px;min-height:45px}
+.preview-exchange .dashboard-assets-tabs button{font-size:13px;font-weight:400}
+.preview-exchange .dashboard-assets-tabs button[data-active]{color:#ffda00;font-weight:600}
+.preview-exchange .dashboard-assets-table{min-width:880px;font-size:12px}
+.preview-exchange .dashboard-assets-table th{font-size:12px;font-weight:400}
+.preview-exchange .dashboard-assets-table th,.preview-exchange .dashboard-assets-table td{padding:4px 13px;line-height:16px}
+.preview-exchange .dashboard-assets-table tbody tr{height:33px}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-group:not(:first-child) .preview-nav-item{min-height:37px}
+.preview-exchange .dashboard-asset-name > span:last-child{flex-direction:row;align-items:center;gap:12px}
+.preview-exchange .dashboard-asset-name small{font-size:11px}
+.preview-exchange .dashboard-asset-name strong{font-size:12px;font-weight:400}
+.preview-exchange .dashboard-assets-table th:nth-child(n+3),.preview-exchange .dashboard-assets-table td:nth-child(n+3){text-align:left}
+.preview-exchange .dashboard-asset-actions{gap:35px}
+.preview-exchange .dashboard-asset-actions a{color:#ffda00;font-size:12px;font-weight:400}
+.preview-exchange .dashboard-assets-table-wrap{scrollbar-width:none}
+.preview-exchange .dashboard-assets-table-wrap::-webkit-scrollbar{display:none}
+.preview-exchange:has(.preview-dashboard-page) :is(a,button,input):focus-visible{outline:2px solid #ffda00;outline-offset:3px}
+@media(max-width:1650px){
+.preview-exchange:has(.preview-dashboard-page) .preview-topbar{gap:20px}
+.preview-exchange .preview-dashboard-layout{grid-template-columns:minmax(0,1fr) 360px}
+.preview-exchange .dashboard-welcome-card{grid-template-columns:minmax(0,1fr) 340px}
+.preview-exchange .dashboard-reference-gift{width:96px;flex-basis:96px}
+.preview-exchange .dashboard-balance-tile{padding:14px 10px;gap:10px}
+.preview-exchange .dashboard-balance-tile .dashboard-icon-circle{width:44px;height:44px;flex-basis:44px}
+.preview-exchange .dashboard-balance-copy > span{font-size:12px}
+.preview-exchange .dashboard-mover-tabs button{padding:9px 12px}
+.preview-exchange .dashboard-assets-toolbar{flex-wrap:wrap}
+.preview-exchange .dashboard-assets-tools{padding-bottom:8px}
+}
+@media(max-width:1279px){
+.preview-exchange .preview-dashboard-layout{grid-template-columns:1fr}
+.preview-exchange .preview-dashboard-rail{display:grid;grid-template-columns:1fr 1fr}
+.preview-exchange .dashboard-movers-card{grid-column:2;grid-row:1 / span 2}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-rail{width:220px}
+.preview-exchange:has(.preview-dashboard-page) .preview-topbar{gap:12px;padding:0 16px}
+}
+@media(max-width:1023px){
+.preview-exchange:has(.preview-dashboard-page) .preview-mobile-menu{display:inline-flex}
+.preview-exchange:has(.preview-dashboard-page) .preview-top-nav{display:none}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-rail{position:fixed;top:68px;bottom:0;left:0;width:258px;transform:translateX(-102%)}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-rail-open{transform:translateX(0)}
+}
+@media(max-width:767px){
+.preview-exchange .preview-dashboard-page{padding:16px 12px}
+.preview-exchange .dashboard-welcome-card{height:auto;min-height:235px;grid-template-columns:1fr;gap:16px;padding:16px}
+.preview-exchange .dashboard-reference-mountains{display:none}
+.preview-exchange .dashboard-verification-card{width:100%;max-width:392px}
+.preview-exchange .dashboard-portfolio-card{height:auto;grid-template-columns:1fr}
+.preview-exchange .dashboard-portfolio-chart-panel{padding:0 16px 16px}
+.preview-exchange .dashboard-portfolio-value{font-size:58px}
+.preview-exchange .dashboard-chart-labels{font-size:9px}
+.preview-exchange .dashboard-balance-grid{grid-template-columns:1fr 1fr}
+.preview-exchange .preview-dashboard-rail{display:flex}
+.preview-exchange .dashboard-assets-toolbar{padding:0 12px}
+.preview-exchange .dashboard-assets-tabs{padding:0;width:100%;overflow:auto;gap:22px}
+.preview-exchange .dashboard-assets-tools{padding:8px 0}
+.preview-exchange:has(.preview-dashboard-page) .preview-topbar-brand span{display:none}
+.preview-exchange:has(.preview-dashboard-page) .preview-topbar-search-wrap{min-width:0}
+.preview-exchange:has(.preview-dashboard-page) .preview-topbar{padding:0 10px;gap:8px}
+.preview-exchange:has(.preview-dashboard-page) .preview-nav-rail{top:68px}
+}
+@media(prefers-reduced-motion:reduce){.preview-exchange:has(.preview-dashboard-page) *{transition:none!important;animation:none!important}}

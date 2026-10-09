@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useProfile } from "@/components/profile-provider"
 import { allFunctions } from "@/lib/vivid-functions"
 import { getPageInfo } from "@/lib/vivid-page-context"
+import { isPreviewPath } from "@/components/preview/routes"
 import VividVoiceControl from "@/components/vivid/vivid-voice-control"
 import VividSpotlight from "@/components/vivid/vivid-spotlight"
 import VividWidget from "@/components/vivid/VividWidget"
@@ -55,7 +56,10 @@ export function VividVoiceProvider({ children }: { children: React.ReactNode }) 
   const router = useRouter()
   const { profile } = useProfile()
 
-  const hideMic = HIDE_MIC_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
+  // The public exchange preview is deliberately self-contained. The hosted
+  // widget is domain-locked and returns a noisy 403 on localhost, so keeping
+  // it out of these routes also keeps the preview console and viewport clean.
+  const hideMic = HIDE_MIC_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/")) || isPreviewPath(pathname)
 
   // Hosted mode: the platform widget is the assistant. Skip the in-repo
   // provider entirely — it would mount a second orb and a second realtime
