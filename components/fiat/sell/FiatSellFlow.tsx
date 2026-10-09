@@ -68,13 +68,18 @@ import {
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import type { FiatBeneficiaryRequirement, FiatOrder, FiatQuote } from "@/lib/crypto-backend/types"
 import { clearPendingFlow, readPendingFlow, savePendingFlow } from "@/lib/pending-flow"
+import { TradeCta, TradeFrame, TradeNotice, TradeSkeleton, TradeUnavailable } from "@/components/buy-sell/redesign/kit"
+import { BeneficiaryFormView, OfframpTicket, type BeneficiaryField } from "@/components/buy-sell/redesign/offramp-ticket"
+import { QuoteHead } from "@/components/buy-sell/redesign/onramp-ticket"
+import { RedesignOfframpOrder } from "@/components/buy-sell/redesign/sell-order"
 
 const WALLET_SETUP_HREF = "/wallet/modern"
 const TITLE = "Sell crypto"
 const SUBTITLE = "Send crypto from your Worldstreet wallet, receive local fiat"
 
 type Props = {
-  variant?: "page" | "modal"
+  /** "redesign" = the /sell page in the preview's look (components/buy-sell/redesign). Same logic; only what's rendered differs. */
+  variant?: "page" | "modal" | "redesign"
   onInFlightChange?: (inFlight: boolean) => void
   onCompactChange?: (compact: boolean) => void
   railSwitcher?: React.ReactNode
@@ -105,7 +110,9 @@ function OfframpOrderStatus({
   onDiscard,
   discarding,
   discardError,
+  variant = "classic",
 }: {
+  variant?: "classic" | "redesign"
   order: FiatOrder
   view: ReturnType<typeof offrampOrderView>
   stageIndex: number | null
@@ -136,6 +143,29 @@ function OfframpOrderStatus({
     || (order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash)
   const stuckBeforeSigning = order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash
   const problemCaption = discardError ? <><FiatErrorDetail error={describeFiatError(discardError)} />{reasonCaption}</> : reasonCaption
+
+  if (variant === "redesign") {
+    return (
+      <RedesignOfframpOrder
+        order={order}
+        view={view}
+        figure={figure}
+        canDiscard={canDiscard}
+        stuckBeforeSigning={stuckBeforeSigning}
+        stageIndex={stageIndex}
+        stageProgress={stageProgress}
+        canSign={canSign}
+        signing={signing}
+        signError={signError}
+        onSign={onSign}
+        onRefresh={onRefresh}
+        onStartOver={onStartOver}
+        onDiscard={onDiscard}
+        discarding={discarding}
+        discardError={discardError}
+      />
+    )
+  }
 
   if (view.screen === "sign") {
     return (
@@ -263,6 +293,7 @@ function OfframpOrderStatus({
 
 export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChange, railSwitcher }: Props) {
   const isModal = variant === "modal"
+  const isRedesign = variant === "redesign"
   const router = useRouter()
   const queryClient = useQueryClient()
   const { user, isLoaded, isSignedIn } = useAuth()
@@ -480,10 +511,18 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   React.useEffect(() => onInFlightChange?.(inFlight), [inFlight, onInFlightChange])
   React.useEffect(() => onCompactChange?.(!showingOrder), [showingOrder, onCompactChange])
 
-  const shell = (content: React.ReactNode) => (
+  // The redesign's stand-ins take the same props as the classic pieces.
+  const Banner = isRedesign ? TradeNotice : AnnouncementBanner
+  const Unavailable = isRedesign ? TradeUnavailable : UnavailablePanel
+  const Skeleton = isRedesign ? TradeSkeleton : FlowSkeleton
+  const Cta = isRedesign ? TradeCta : FlowCta
+
+  const shell = (content: React.ReactNode, head?: React.ReactNode) => (
     <>
       {isModal ? (
         <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{railSwitcher}{content}</div>
+      ) : isRedesign ? (
+        <TradeFrame mode="sell" tabs={!showingOrder} head={head}>{railSwitcher}{content}</TradeFrame>
       ) : (
         <FlowShell className="max-w-5xl px-3 py-5 sm:px-5 sm:py-8">
           <PageHeader title={TITLE} subtitle={SUBTITLE} back="/" className="mb-4" />
@@ -506,12 +545,13 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
 
   if (showingOrder) {
     if (!order.data) {
-      return shell(order.error ? <><FiatErrorDetail error={describeFiatError(order.error)} /><FlowCta label="Try again" onClick={order.refresh} /></> : <FlowSkeleton />)
+      return shell(order.error ? <><FiatErrorDetail error={describeFiatError(order.error)} /><Cta label="Try again" onClick={order.refresh} /></> : <Skeleton />)
     }
     return shell(
       <>
-        {config.data?.environment === "sandbox" && <AnnouncementBanner title="Sandbox" detail="This payout is using the provider test environment." />}
+        {config.data?.environment === "sandbox" && <Banner title="Sandbox" detail="This payout is using the provider test environment." />}
         <OfframpOrderStatus
+          variant={isRedesign ? "redesign" : "classic"}
           order={order.data}
           view={view!}
           stageIndex={stageIndex}
@@ -532,17 +572,17 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
     )
   }
 
-  if (!isCryptoBackendEnabled) return shell(<UnavailablePanel title="The Worldstreet wallet isn't enabled" tone="muted" reason="The new wallet is still rolling out for your account." />)
-  if (wallet.needsSetup) return shell(<UnavailablePanel title="You don't have a Worldstreet wallet yet" tone="muted" reason="Create your Worldstreet wallet first." action={{ label: "Set up your wallet", onClick: () => router.push(WALLET_SETUP_HREF) }} />)
+  if (!isCryptoBackendEnabled) return shell(<Unavailable title="The Worldstreet wallet isn't enabled" tone="muted" reason="The new wallet is still rolling out for your account." />)
+  if (wallet.needsSetup) return shell(<Unavailable title="You don't have a Worldstreet wallet yet" tone="muted" reason="Create your Worldstreet wallet first." action={{ label: "Set up your wallet", onClick: () => router.push(WALLET_SETUP_HREF) }} />)
   if (wallet.error) return shell(<SectionMessage error={wallet.error} onAction={() => void wallet.refetch()} />)
-  if (config.error && !config.data) return shell(<><FiatErrorDetail error={describeFiatError(config.error)} /><FlowCta label="Try again" onClick={() => void config.refetch()} /></>)
-  if (wallet.isLoading || !config.data) return shell(<FlowSkeleton />)
+  if (config.error && !config.data) return shell(<><FiatErrorDetail error={describeFiatError(config.error)} /><Cta label="Try again" onClick={() => void config.refetch()} /></>)
+  if (wallet.isLoading || !config.data) return shell(<Skeleton />)
 
   const availability = offrampAvailability(config.data)
-  if (availability === "disabled") return shell(<UnavailablePanel title="Selling isn't available" tone="muted" reason="This option is switched off right now." />)
-  if (availability === "blocked") return shell(<UnavailablePanel title="Selling is temporarily unavailable" reason="The backend has paused fiat movement. Try again later." />)
-  if (availability === "discovery_only") return shell(<UnavailablePanel title="Selling isn't open yet" tone="muted" reason="The supported corridors are visible to operations, but money movement is not enabled." />)
-  if (availability === "unavailable" || !selected) return shell(<UnavailablePanel title="No local payout corridor is available" tone="muted" reason="OnSwitch has not returned an available African offramp for this wallet and deployment." />)
+  if (availability === "disabled") return shell(<Unavailable title="Selling isn't available" tone="muted" reason="This option is switched off right now." />)
+  if (availability === "blocked") return shell(<Unavailable title="Selling is temporarily unavailable" reason="The backend has paused fiat movement. Try again later." />)
+  if (availability === "discovery_only") return shell(<Unavailable title="Selling isn't open yet" tone="muted" reason="The supported corridors are visible to operations, but money movement is not enabled." />)
+  if (availability === "unavailable" || !selected) return shell(<Unavailable title="No local payout corridor is available" tone="muted" reason={isRedesign ? "No local-currency payout route is available for this wallet yet." : "OnSwitch has not returned an available African offramp for this wallet and deployment."} />)
 
   const amountProblem = amount.trim() && !isValidAmount(amount) ? "Enter an amount greater than zero." : null
   const secondsLeft = currentQuote ? quoteSecondsLeft(currentQuote) : 0
@@ -660,6 +700,99 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
                 ? "Get a new quote"
                 : `Sell for ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}`
   const submitting = quoteMutation.isPending || orderMutation.isPending
+
+  if (isRedesign) {
+    // Same fields, rules and handlers as the classic form below.
+    const formFields: BeneficiaryField[] = [
+      { kind: "text", key: "holderName", label: "Account holder name", value: holderName, onChange: setHolderName, autoComplete: "name", invalid: formAttempted && holderName.trim().length < 3, invalidText: "", disabled: createBeneficiary.isPending },
+      ...visibleRequirements.map((requirement): BeneficiaryField => {
+        const value = fieldValues[requirement.path] ?? ""
+        const invalid = formAttempted && !beneficiaryRequirementMatches(requirement, value)
+        const setValue = (next: string) => setFieldValues((current) => ({ ...current, [requirement.path]: next }))
+        if (requirementIsInstitutionField(requirement)) {
+          const institutionOptions = institutions.data ?? []
+          return {
+            kind: "bank",
+            key: requirement.path,
+            value,
+            options: [
+              { value: "", label: institutions.isLoading ? "Loading banks…" : "Choose a bank" },
+              ...institutionOptions.map((bank) => ({ value: bank.code ?? bank.id, label: bank.name ?? "Bank" })),
+            ],
+            onChange: setValue,
+            disabled: createBeneficiary.isPending || institutions.isLoading || institutionOptions.length === 0,
+            listFailed: !institutions.isLoading && institutionOptions.length === 0,
+            onRetry: () => void institutions.refetch(),
+            invalid,
+          }
+        }
+        return {
+          kind: "text",
+          key: requirement.path,
+          label: `${beneficiaryRequirementLabel(requirement.path)}${requirement.required ? " *" : ""}`,
+          value,
+          onChange: setValue,
+          placeholder: requirement.example ?? undefined,
+          inputMode: requirementIsAccountField(requirement) ? "tel" : undefined,
+          invalid,
+          invalidText: "Enter a valid value for this field.",
+          disabled: createBeneficiary.isPending,
+        }
+      }),
+    ]
+    return shell(
+      <OfframpTicket
+        railSwitch={null}
+        banners={config.data.environment === "sandbox" ? <Banner title="Sandbox" detail="This payout is using the provider test environment. No production fiat is moved." /> : null}
+        countries={countryGroups}
+        routes={routesForCountry}
+        selected={selected}
+        onCountry={onCountryChange}
+        onRoute={setOptionKey}
+        amount={amount}
+        onAmountInput={onAmountInput}
+        submitting={submitting}
+        amountProblem={amountProblem}
+        quote={currentQuote}
+        quoteUsable={quoteUsable}
+        secondsLeft={secondsLeft}
+        payout={{
+          loading: beneficiaries.isLoading,
+          error: Boolean(beneficiaries.error) && !beneficiaries.data ? describeFiatError(beneficiaries.error) : null,
+          accounts: eligibleBeneficiaries,
+          value: beneficiaryId,
+          onChange: setBeneficiaryId,
+          formOpen: showBeneficiaryForm,
+          onToggleForm: () => setShowBeneficiaryForm((value) => !value),
+          form: showBeneficiaryForm || eligibleBeneficiaries.length === 0 ? (
+            <BeneficiaryFormView
+              fields={formFields}
+              notices={
+                <>
+                  {requirements.isLoading && <TradeNotice tone="info" title="Loading the fields required for this payout corridor…" />}
+                  {Boolean(requirements.error) && <FiatErrorDetail error={describeFiatError(requirements.error)} />}
+                  {requirements.isSuccess && requiredRequirements.length === 0 && <TradeNotice tone="info" title="No additional fields were returned. The payout provider will perform the final validation." />}
+                </>
+              }
+              error={createBeneficiary.error ? describeFiatError(createBeneficiary.error) : null}
+              save={{
+                label: createBeneficiary.isPending ? "Adding account…" : "Save payout account",
+                onClick: submitBeneficiary,
+                disabled: createBeneficiary.isPending || !requirements.isSuccess || (formAttempted && !formReady),
+                busy: createBeneficiary.isPending,
+              }}
+            />
+          ) : null,
+        }}
+        requoteNotice={needsOfframpRequote(orderMutation.error)}
+        error={error}
+        ctaLabel={ctaLabel}
+        onCta={onQuoteOrOrder}
+        ctaDisabled={!currentRequest || submitting || !wallet.data?.id}
+      />,
+      <QuoteHead quote={currentQuote} usable={quoteUsable} secondsLeft={secondsLeft} showRate={false} />,
+    )
+  }
 
   return shell(
     <>
