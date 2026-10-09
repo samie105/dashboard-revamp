@@ -8,8 +8,6 @@ const nextConfig = {
   // sensible instead of a 404 until those pages are built.
   async redirects() {
     return [
-      { source: "/profile", destination: "/dashboard", permanent: false },
-      { source: "/settings", destination: "/dashboard", permanent: false },
       { source: "/security", destination: "/dashboard", permanent: false },
       // KYC lives on the hub, which owns the Didit flow — send deep links and
       // bookmarks there rather than bouncing them to the dashboard.

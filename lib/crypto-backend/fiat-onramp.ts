@@ -343,6 +343,21 @@ function instructionRecord(providerDisplay: FiatOrder["providerDisplay"]): Recor
 }
 
 /**
+ * Only the amount the user was asked to pay, for order history: the
+ * instructions' `amount` and `currency` (guide lines 811-812), read from the
+ * same places as paymentInstructionsFrom. No bank field is ever returned.
+ * The instructions expire (guide line 825), so this is the requested amount,
+ * not a settled one.
+ */
+export function instructedAmount(providerDisplay: FiatOrder["providerDisplay"]): { amount: string; currency?: string } | null {
+  const raw = instructionRecord(providerDisplay)
+  const amount = raw?.amount
+  if (typeof amount !== "string" && typeof amount !== "number") return null
+  const currency = raw?.currency
+  return { amount: String(amount), ...(typeof currency === "string" ? { currency } : {}) }
+}
+
+/**
  * "providerDisplay is a sanitized display object. Render only the fields
  * returned by the backend and treat the instructions as expiring. Do not
  * infer bank details from the quote." (guide lines 755-757)

@@ -76,13 +76,17 @@ import {
 } from "@/lib/crypto-backend/fiat-onramp"
 import type { FiatOrder, FiatQuote } from "@/lib/crypto-backend/types"
 import { clearPendingFlow, readPendingFlow, savePendingFlow } from "@/lib/pending-flow"
+import { TradeCta, TradeFrame, TradeNotice, TradeSkeleton, TradeUnavailable } from "@/components/buy-sell/redesign/kit"
+import { RedesignOnrampOrder } from "@/components/buy-sell/redesign/onramp-order"
+import { BuyRailSwitch, OnrampTicket, QuoteHead } from "@/components/buy-sell/redesign/onramp-ticket"
 
 const WALLET_SETUP_HREF = "/wallet/modern"
 const TITLE = "Buy crypto"
 const SUBTITLE = "Pay locally and receive crypto directly in your Worldstreet wallet"
 
 type Props = {
-  variant?: "page" | "modal"
+  /** "redesign" = the /buy page in the preview's look (components/buy-sell/redesign). Same logic; only what's rendered differs. */
+  variant?: "page" | "modal" | "redesign"
   onInFlightChange?: (inFlight: boolean) => void
   onCompactChange?: (compact: boolean) => void
 }
@@ -103,6 +107,7 @@ const sameRequest = (a: OnrampQuoteRequest | null, b: OnrampQuoteRequest | null)
 
 export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChange }: Props) {
   const isModal = variant === "modal"
+  const isRedesign = variant === "redesign"
   const router = useRouter()
   const queryClient = useQueryClient()
   const { user } = useAuth()
@@ -252,9 +257,18 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
 
   /* ── Layout ───────────────────────────────────────────────────────── */
 
-  const shell = (content: React.ReactNode) =>
+  // The redesign's stand-ins take the same props as the classic pieces.
+  const Banner = isRedesign ? TradeNotice : AnnouncementBanner
+  const Unavailable = isRedesign ? TradeUnavailable : UnavailablePanel
+  const Skeleton = isRedesign ? TradeSkeleton : FlowSkeleton
+  const Cta = isRedesign ? TradeCta : FlowCta
+  const OrderScreen = isRedesign ? RedesignOnrampOrder : OnrampOrderScreen
+
+  const shell = (content: React.ReactNode, head?: React.ReactNode) =>
     isModal ? (
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{content}</div>
+    ) : isRedesign ? (
+      <TradeFrame mode="buy" tabs={!showingOrder} head={head}>{content}</TradeFrame>
     ) : (
       <FlowShell className="max-w-5xl px-3 py-5 sm:px-5 sm:py-8">
         <PageHeader title={TITLE} subtitle={SUBTITLE} back="/" className="mb-4" />
@@ -264,7 +278,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
 
   const sandbox =
     config.data?.environment === "sandbox" ? (
-      <AnnouncementBanner
+      <Banner
         title="Sandbox"
         detail="This is the payment provider's test environment. Payments here are for testing."
       />
@@ -278,16 +292,16 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
         return shell(
           <>
             <FiatErrorDetail error={describeFiatError(order.error)} />
-            <FlowCta label="Try again" onClick={order.refresh} />
+            <Cta label="Try again" onClick={order.refresh} />
           </>,
         )
       }
-      return shell(<FlowSkeleton />)
+      return shell(<Skeleton />)
     }
     return shell(
       <>
         {sandbox}
-        <OnrampOrderScreen
+        <OrderScreen
           order={order.data}
           view={view!}
           instructions={instructions}
@@ -313,7 +327,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
 
   if (!isCryptoBackendEnabled) {
     return shell(
-      <UnavailablePanel
+      <Unavailable
         title="The Worldstreet wallet isn't enabled"
         tone="muted"
         reason="The new wallet is still rolling out and isn't switched on for your account yet."
@@ -325,7 +339,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   // existing WorldStreet wallet (guide lines 16-21, 812-814).
   if (wallet.needsSetup) {
     return shell(
-      <UnavailablePanel
+      <Unavailable
         title="You don't have a Worldstreet wallet yet"
         tone="muted"
         reason="Create your Worldstreet wallet first — it only takes a minute."
@@ -338,23 +352,23 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     return shell(
       <>
         <FiatErrorDetail error={describeFiatError(config.error)} />
-        <FlowCta label="Try again" onClick={() => void config.refetch()} />
+        <Cta label="Try again" onClick={() => void config.refetch()} />
       </>,
     )
   }
-  if (wallet.isLoading || !config.data) return shell(<FlowSkeleton />)
+  if (wallet.isLoading || !config.data) return shell(<Skeleton />)
   if (!config.data.enabled || config.data.availability === "disabled") {
-    return shell(<UnavailablePanel title="Buying isn't available" tone="muted" reason="This option is switched off right now." />)
+    return shell(<Unavailable title="Buying isn't available" tone="muted" reason="This option is switched off right now." />)
   }
   if (config.data.availability === "blocked") {
-    return shell(<UnavailablePanel title="Buying is temporarily unavailable" reason="Please try again a little later." />)
+    return shell(<Unavailable title="Buying is temporarily unavailable" reason="Please try again a little later." />)
   }
   if (config.data.availability === "discovery_only") {
-    return shell(<UnavailablePanel title="Buying isn't open yet" tone="muted" reason="You'll be able to buy here soon." />)
+    return shell(<Unavailable title="Buying isn't open yet" tone="muted" reason="You'll be able to buy here soon." />)
   }
   if (rails.length === 0 || !rail) {
     return shell(
-      <UnavailablePanel
+      <Unavailable
         title="Nothing is available to buy with right now"
         tone="muted"
         reason="None of the supported currencies can take a payment at the moment."
@@ -383,6 +397,26 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
         (account.addresses ?? []).map((address) => [address.networkId, address.address] as const),
       ),
     )
+    if (isRedesign) {
+      return shell(
+        <>
+          <BuyRailSwitch rails={rails} rail={rail} onRail={setRailChoice} />
+          {sandbox}
+          {rails.length === 1 && (
+            <p className="px-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+              Local-currency buying will appear here once it&apos;s available for your account.
+            </p>
+          )}
+          <BridgeUsdBuy
+            config={config.data}
+            walletId={wallet.data?.id}
+            walletNetworkIds={usableWalletNetworkIds}
+            walletNetworkAddresses={walletNetworkAddresses}
+            variant="redesign"
+          />
+        </>,
+      )
+    }
     const content = (
       <>
         {railTabs}
@@ -427,7 +461,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
 
   /* ── Local currency rail (OnSwitch) ───────────────────────────────── */
 
-  if (!activeCorridor || !selected) return shell(<FlowSkeleton />)
+  if (!activeCorridor || !selected) return shell(<Skeleton />)
 
   const secondsLeft = currentQuote ? quoteSecondsLeft(currentQuote, now) : 0
   const quoteUsable = currentQuote ? isQuoteUsable(currentQuote, now) : false
@@ -537,10 +571,42 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
     <>
       {sandbox}
       {requoted && currentQuote && (
-        <AnnouncementBanner title="New quote" detail="The earlier quote expired. Check the new figures before you buy." />
+        <Banner title="New quote" detail="The earlier quote expired. Check the new figures before you buy." />
       )}
     </>
   )
+
+  if (isRedesign) {
+    return shell(
+      <OnrampTicket
+        railSwitch={<BuyRailSwitch rails={rails} rail={rail} onRail={setRailChoice} />}
+        banners={banners}
+        corridors={corridors}
+        corridor={activeCorridor}
+        onCorridor={setCorridorKey}
+        channels={channels}
+        channel={selectedChannel}
+        onChannel={setChannel}
+        routes={routes}
+        selected={selected}
+        onRoute={setRouteKey}
+        amount={amount}
+        onAmountInput={onAmountInput}
+        submitting={submitting}
+        amountProblem={amountProblem}
+        hint={hint}
+        quote={currentQuote}
+        quoteUsable={quoteUsable}
+        secondsLeft={secondsLeft}
+        showHolderNotice={Boolean(currentQuote && quoteUsable && !holderNameReady)}
+        error={error}
+        ctaLabel={ctaLabel}
+        onCta={onCta}
+        ctaDisabled={ctaDisabled}
+      />,
+      <QuoteHead quote={currentQuote} usable={quoteUsable} secondsLeft={secondsLeft} />,
+    )
+  }
 
   const selectors = (
     <div className="flex flex-col gap-4">

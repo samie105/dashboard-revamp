@@ -2,6 +2,8 @@
 
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import { DEV_MOCK_USER_BALANCES } from "@/lib/dev-mock-data"
+import { buildMarketHistory, type MarketHistory, type Points } from "@/lib/market-history"
+import { parseFearGreed, type FearGreed } from "@/lib/fear-greed"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,8 @@ export interface PricesResponse {
     totalMarketCap: number
     totalVolume: number
     btcDominance: number
+    /** ETH's share, from the same /global response. Optional: 0 or absent means no figure. */
+    ethDominance?: number
     marketCapChange24h: number
   }
   fetchedAt: number
@@ -612,6 +616,7 @@ async function fetchGlobalStats(): Promise<PricesResponse["globalStats"]> {
       totalMarketCap: body.data?.total_market_cap?.usd ?? 0,
       totalVolume: body.data?.total_volume?.usd ?? 0,
       btcDominance: body.data?.market_cap_percentage?.btc ?? 0,
+      ethDominance: body.data?.market_cap_percentage?.eth ?? 0,
       marketCapChange24h: body.data?.market_cap_change_percentage_24h_usd ?? 0,
     }
     globalStatsCache = { value, at: Date.now() }
@@ -620,6 +625,96 @@ async function fetchGlobalStats(): Promise<PricesResponse["globalStats"]> {
     // Optional data. Zeros mean "no figure", and every reader hides the cell.
     globalStatsCache = { value: EMPTY_GLOBAL_STATS, at: Date.now() }
     return EMPTY_GLOBAL_STATS
+  }
+}
+
+/* ── 7-day market history (markets page stat cards) ────────────────────────
+   The free API has no whole-market history, so this sums three assets' own
+   7-day charts: BTC, ETH and USDT, about three quarters of the market's value
+   and most of its volume (lib/market-history.ts). The cards name them.
+   Three requests, made on the server one at a time and spaced out, because
+   CoinGecko's anonymous tier refuses bursts well under its stated limit and
+   the page's sparklines share that budget. A rate-limit reply is retried up
+   to twice. Cached for an hour, so the server makes this round at most
+   hourly; a failure returns null (the cards draw no chart) and is remembered
+   for 10 minutes so a limit isn't hammered. */
+
+const MARKET_HISTORY_ASSETS: { id: string; symbol: string }[] = [
+  { id: "bitcoin", symbol: "BTC" },
+  { id: "ethereum", symbol: "ETH" },
+  { id: "tether", symbol: "USDT" },
+]
+const MARKET_HISTORY_TTL = 60 * 60_000
+const MARKET_HISTORY_RETRY = 10 * 60_000
+const MARKET_HISTORY_GAP_MS = 3_000
+const RATE_LIMIT_WAIT_MS = 15_000
+let marketHistoryCache: { value: MarketHistory | null; at: number; ttl: number } | null = null
+let marketHistoryInflight: Promise<MarketHistory | null> | null = null
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** One CoinGecko read; a rate-limit reply (429) is retried up to twice. */
+async function geckoJson(url: string): Promise<unknown> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12_000) })
+    if (res.status === 429 && attempt < 2) {
+      await pause(RATE_LIMIT_WAIT_MS)
+      continue
+    }
+    if (!res.ok) throw new Error(`CoinGecko ${res.status}`)
+    return res.json()
+  }
+}
+
+export async function getMarketHistory(): Promise<MarketHistory | null> {
+  if (marketHistoryCache && Date.now() - marketHistoryCache.at < marketHistoryCache.ttl) return marketHistoryCache.value
+  if (marketHistoryInflight) return marketHistoryInflight
+
+  marketHistoryInflight = (async () => {
+    try {
+      const charts: { market_caps?: Points; total_volumes?: Points }[] = []
+      for (const [i, asset] of MARKET_HISTORY_ASSETS.entries()) {
+        if (i > 0) await pause(MARKET_HISTORY_GAP_MS)
+        charts.push(
+          (await geckoJson(`https://api.coingecko.com/api/v3/coins/${asset.id}/market_chart?vs_currency=usd&days=7`)) as {
+            market_caps?: Points
+            total_volumes?: Points
+          },
+        )
+      }
+      const value = buildMarketHistory(charts, MARKET_HISTORY_ASSETS.map((a) => a.symbol))
+      marketHistoryCache = { value, at: Date.now(), ttl: value ? MARKET_HISTORY_TTL : MARKET_HISTORY_RETRY }
+      return value
+    } catch (err) {
+      console.error("[getMarketHistory]", err)
+      marketHistoryCache = { value: null, at: Date.now(), ttl: MARKET_HISTORY_RETRY }
+      return null
+    } finally {
+      marketHistoryInflight = null
+    }
+  })()
+  return marketHistoryInflight
+}
+
+/* ── Fear & Greed (markets page) ─────────────────────────────────────────────
+   The fallback for when the backend's /insights carries no reading: the
+   public index from alternative.me, free and keyless. It updates once a day,
+   so an hour's cache costs nothing; a failure is remembered for 10 minutes. */
+
+let fearGreedCache: { value: FearGreed | null; at: number; ttl: number } | null = null
+
+export async function getFearGreed(): Promise<FearGreed | null> {
+  if (fearGreedCache && Date.now() - fearGreedCache.at < fearGreedCache.ttl) return fearGreedCache.value
+  try {
+    const res = await fetch("https://api.alternative.me/fng/?limit=8", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8_000) })
+    if (!res.ok) throw new Error(`Fear & Greed ${res.status}`)
+    const value = parseFearGreed(await res.json())
+    fearGreedCache = { value, at: Date.now(), ttl: value ? 60 * 60_000 : 10 * 60_000 }
+    return value
+  } catch (err) {
+    console.error("[getFearGreed]", err)
+    fearGreedCache = { value: null, at: Date.now(), ttl: 10 * 60_000 }
+    return null
   }
 }
 
@@ -1212,6 +1307,10 @@ async function fetchChartData(
 export interface SparklinePoint {
   prices: number[]
   change24h: number
+  /** Market cap and 24h volume in USD, from the same /coins/markets row.
+   *  Optional: absent or 0 means CoinGecko gave no figure. */
+  marketCap?: number
+  volume24h?: number
 }
 
 /** `ok: false` means the request itself failed (rate limit, timeout, network).
@@ -1308,7 +1407,9 @@ export async function getSparklines(symbols: string[]): Promise<SparklineResult>
           if (then > 0) change24h = ((now - then) / then) * 100
         }
 
-        const entry: SparklinePoint = { prices: thinned, change24h }
+        const marketCap = typeof row.market_cap === "number" && row.market_cap > 0 ? row.market_cap : undefined
+        const volume24h = typeof row.total_volume === "number" && row.total_volume > 0 ? row.total_volume : undefined
+        const entry: SparklinePoint = { prices: thinned, change24h, marketCap, volume24h }
         out[symbol] = entry
         sparklineCache.set(symbol, { data: entry, ts: Date.now() })
       }

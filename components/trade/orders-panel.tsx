@@ -50,7 +50,7 @@ const TH =
 const TD = "px-4 py-2.5 text-[12px] tabular-nums"
 
 /** Ledger status → what to call it and how to colour it. */
-function statusOf(status: string): { label: string; className: string } {
+export function statusOf(status: string): { label: string; className: string } {
   if (status === "confirmed") return { label: "Filled", className: "bg-credit-chip text-credit" }
   if (status === "failed") return { label: "Failed", className: "bg-debit-chip text-debit" }
   /* In flight. Neutral, at the RAISED step of the stone ladder — gold means
@@ -77,9 +77,9 @@ function statusOf(status: string): { label: string; className: string } {
  * is done, and what is done from what went wrong. Every bucket below is read
  * off the ledger's own reconciled status; none of them is derived or guessed.
  */
-type OrderFilter = "all" | "pending" | "filled" | "failed"
+export type OrderFilter = "all" | "pending" | "filled" | "failed"
 
-function bucketOf(status: string): Exclude<OrderFilter, "all"> {
+export function bucketOf(status: string): Exclude<OrderFilter, "all"> {
   if (status === "confirmed") return "filled"
   if (status === "failed") return "failed"
   // 'submitted' and the reconciler's 'unknown' are both "we do not have an
@@ -88,7 +88,7 @@ function bucketOf(status: string): Exclude<OrderFilter, "all"> {
   return "pending"
 }
 
-function timeOf(iso: string | null, long = false): string {
+export function timeOf(iso: string | null, long = false): string {
   if (!iso) return "—"
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return "—"
@@ -100,7 +100,7 @@ function timeOf(iso: string | null, long = false): string {
   )
 }
 
-function usd(value: number): string {
+export function usd(value: number): string {
   return `$${value.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: value < 1 ? 4 : 2,
@@ -198,7 +198,7 @@ export function resolveOrder(order: SpotOrder, registry: SpotRegistry): Resolved
   return { order, symbol, icon, side, size, unit, valueUsd }
 }
 
-function sizeText(row: ResolvedOrder): string {
+export function sizeText(row: ResolvedOrder): string {
   if (row.size === null) return "—"
   return `${row.size.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${row.unit}`
 }
@@ -218,7 +218,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   )
 }
 
-function OrderDetailModal({ row, onClose }: { row: ResolvedOrder | null; onClose: () => void }) {
+export function OrderDetailModal({ row, onClose }: { row: ResolvedOrder | null; onClose: () => void }) {
   const order = row?.order
   const status = statusOf(order?.status ?? "")
   const explorer = order?.txHash ? explorerTxUrl(order.networkId, order.txHash) : null

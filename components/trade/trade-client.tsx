@@ -34,7 +34,6 @@
 import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
-import Image from "next/image"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Dialog } from "@base-ui/react/dialog"
 import { cn } from "@/lib/utils"
@@ -82,14 +81,20 @@ import {
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { ModernFundingPanel } from "@/components/trade/modern-funding-panel"
+import { useTradePrefs } from "@/lib/trade-prefs"
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalDescription,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from "@/components/ui/responsive-modal"
 import {
   OrderPlacedModal,
   orderCopy,
 } from "@/components/trade/order-placed-modal"
 import { useAuth } from "@/components/auth-provider"
-import { useUiMode } from "@/components/ui-mode-provider"
 import { tradeView } from "@/lib/trade-view"
-import { ModeSwitch } from "@/components/ui/mode-switch"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import {
   useCryptoBalances,
@@ -102,22 +107,36 @@ import {
   type Hl24hStats,
 } from "@/lib/hl-public"
 import {
-  CandleChart,
   type ChartOrigin,
   type ChartSource,
   type ChartStats,
 } from "@/components/trade/candle-chart"
-import { OrderBook } from "@/components/trade/order-book"
+import { ChartPanel } from "@/components/trade/redesign/chart-panel"
+import { BookPanel } from "@/components/trade/redesign/book"
+import { useSpotBook, useTape, type TapeSource } from "@/components/trade/redesign/book-data"
+import { ActivityPanel } from "@/components/trade/redesign/activity"
+import { Figure } from "@/components/dashboard/redesign/ui"
+import { cleanDecimal } from "@/lib/decimal-input"
+import {
+  CheckRow,
+  Collapsible,
+  FIELD_INPUT,
+  FieldBox,
+  LeverageSlider,
+  MarginModeRow,
+  Notice,
+  OrderPanelHead,
+  PercentSlider,
+  SideTabs,
+  Summary,
+  TypeTabs,
+} from "@/components/trade/redesign/form-parts"
 import { PriceSources } from "@/components/trade/price-sources"
 import { PositionsPanel } from "@/components/trade/positions-panel"
 import { OrdersPanel } from "@/components/trade/orders-panel"
-import { MarketsRail } from "@/components/trade/markets-rail"
 import { MarketPicker } from "@/components/trade/market-picker"
-import { MarketHeader, fmtPx } from "@/components/trade/market-header"
-import {
-  WalletStrip,
-  type WalletStripRow,
-} from "@/components/trade/wallet-strip"
+import { fmtPx } from "@/components/trade/market-header"
+import { PairHeader } from "@/components/trade/redesign/pair-header"
 import { SlippageControl } from "@/components/trade/slippage-control"
 import { TokenIdentity } from "@/components/trade/token-identity"
 import { noteRecentMarket } from "@/hooks/useMarketPrefs"
@@ -132,9 +151,7 @@ import { chainLabel } from "@/lib/spot-market-search"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { MODAL_BACKDROP, MODAL_SURFACE } from "@/components/ui/modal-surface"
 import { EmptyState, Skel } from "@/components/ui/system"
-import { CARD_HUE } from "@/components/ui/surface"
 import {
-  BackAction,
   Segmented,
   type SegmentedOption,
 } from "@/components/ui/system"
@@ -184,15 +201,6 @@ type OrderType = "market" | "limit"
  */
 const FUTURES_LIVE: boolean = true
 
-const MARKET_TABS: readonly SegmentedOption<Market>[] = [
-  { key: "spot", label: "Spot" },
-  // When this toggle is restored the Futures tab comes back visible AND
-  // selectable, not `disabled`. A disabled tab answers only a hovering mouse —
-  // its `title` never fires on a touchscreen, which is most of this audience —
-  // so the press is let through and `setMarketTab` answers it with the notice
-  // instead of a dead control.
-  { key: "futures", label: "Futures" },
-]
 const ORDER_TYPES: readonly SegmentedOption<OrderType>[] = [
   { key: "market", label: "Market" },
   { key: "limit", label: "Limit" },
@@ -364,9 +372,11 @@ export function TradeClient() {
    * on a trading screen is worse than an absent one, because the absent one
    * cannot be traded on.
    */
-  const { mode } = useUiMode()
-  const view = tradeView(mode)
-  const pro = mode === "pro"
+  // The Simple/Pro switch is gone from Trade: the screen is the preview's
+  // one full view (order book, trades, chart toolbar, every order type),
+  // whatever mode the rest of the app is in.
+  const view = tradeView("pro")
+  const pro = true
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const modernWallet = useCryptoWalletState()
@@ -407,7 +417,10 @@ export function TradeClient() {
   /** Settled, and there is nothing to trade with. */
   const needsWallet = isCryptoBackendEnabled && !walletReady && !walletLoading
 
-  const market: Market = gatedMarket(params.get("market"))
+  // Settings → Preferences: which venue to open on when the link doesn't say.
+  // An explicit ?market= always wins.
+  const tradePrefs = useTradePrefs()
+  const market: Market = gatedMarket(params.get("market") ?? tradePrefs.defaultVenue)
   /* FUTURES GATE: whether the futures notice is up. Two things raise it — a
      press on the Futures tab (the path nearly everyone takes) and an arrival
      on a stale `?market=futures` link (the safety net) — and the dismiss
@@ -433,7 +446,7 @@ export function TradeClient() {
   const [account, setAccount] = React.useState<HlAccount | null>(null)
   const [book, setBook] = React.useState<HlOrderBook | null>(null)
   const [stats, setStats] = React.useState<Hl24hStats | null>(null)
-  const [lastTick, setLastTick] = React.useState<"up" | "down" | null>(null)
+  const [, setLastTick] = React.useState<"up" | "down" | null>(null)
   const prevMidRef = React.useRef(0)
   const [side, setSide] = React.useState<Side>("buy")
   const [orderType, setOrderType] = React.useState<OrderType>("market")
@@ -472,6 +485,9 @@ export function TradeClient() {
   const [slPrice, setSlPrice] = React.useState("")
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
+  // Settings → "Confirm before placing orders": a review step before a SPOT
+  // swap is sent. Futures always has its own review (spec §9) regardless.
+  const [spotReviewOpen, setSpotReviewOpen] = React.useState(false)
   const [outcome, setOutcome] = React.useState<HlOrderOutcome | null>(null)
   // Modern spot never claims a fill at submit time (spec §8: "a quote is not a
   // fill"). The submitted intent is polled until the backend says confirmed.
@@ -496,6 +512,11 @@ export function TradeClient() {
   const [mobilePane, setMobilePane] = React.useState<
     "book" | "positions" | "orders"
   >("book")
+  // Phone: the preview's Chart | Book tabs over one content area.
+  const [phoneView, setPhoneView] = React.useState<"chart" | "book">("chart")
+  // The order form's linked fields (Amount ↔ Total, or Margin): the one being
+  // typed into shows exactly what was typed; the other is derived from it.
+  const [draft, setDraft] = React.useState<{ field: "base" | "quote" | "margin"; text: string } | null>(null)
   // Spot has no book/positions toggle — the squeezed strip is Orders or
   // nothing — so its full-screen view is its own boolean rather than a
   // mode of mobilePane.
@@ -783,6 +804,19 @@ export function TradeClient() {
       : null
   }, [current, market, usingModern])
 
+  /* The preview's book panel, on both venues. Futures keeps its own book
+     (`book`, below); spot reads the coin's book from the futures venue when it
+     lists it, and its trades from the token's own pool. */
+  const spotBook = useSpotBook(market === "spot" && current ? symbol : null)
+  const tapeSource = React.useMemo<TapeSource>(() => {
+    if (!current) return null
+    if (market === "futures") return { kind: "venue", coin: current.symbol }
+    if (chartSource?.kind === "dex" && chartSource.token) return { kind: "pool", networkId: chartSource.networkId, token: chartSource.token }
+    if (chartSource?.kind === "hyperliquid") return { kind: "venue", coin: chartSource.coin }
+    return null
+  }, [current, market, chartSource])
+  const tape = useTape(tapeSource)
+
   /* The market strip's 24h figures. Hyperliquid rows fill these from its own
      stats endpoint; spot rows had nothing behind them and read "—" forever,
      so they now take the pool's own 24h numbers, reported by the same request
@@ -817,7 +851,7 @@ export function TradeClient() {
   /* Liveness. Bumped once per price poll that LANDS — the chart's own poll on
      spot, the book poll on futures — and nothing else, so the header's
      heartbeat can only beat when data actually arrived. */
-  const [beat, setBeat] = React.useState(0)
+  const [, setBeat] = React.useState(0)
   const handleChartStats = React.useCallback((s: ChartStats | null) => {
     setDexStats((prev) => {
       if (!s) return prev
@@ -863,7 +897,14 @@ export function TradeClient() {
   )
 
   React.useEffect(() => {
-    if (!bookCoin) return
+    if (!bookCoin) {
+      // Leaving futures: drop its book, or spot would price SOL off the last
+      // BTC book (the header and ticket read `book?.midPrice` first).
+      setBook(null)
+      prevMidRef.current = 0
+      setLastTick(null)
+      return
+    }
     let cancelled = false
     setBook(null) // don't show the previous coin's book/price while loading
     prevMidRef.current = 0
@@ -890,7 +931,10 @@ export function TradeClient() {
 
   // 24h stats for the header — derived from public candles, refreshed slowly.
   React.useEffect(() => {
-    if (!bookCoin) return
+    if (!bookCoin) {
+      setStats(null)
+      return
+    }
     let cancelled = false
     setStats(null)
     const load = () =>
@@ -1132,42 +1176,6 @@ export function TradeClient() {
       ? chainLabel(current.networkId)
       : null
 
-  /* What the wallet holds of BOTH sides of the pair on this chain. `null`
-     while the snapshot is loading — a skeleton, never a zero. Modern spot
-     only: the perps account keeps its own figures in the top bar. */
-  const walletRows = React.useMemo<WalletStripRow[]>(() => {
-    if (!(usingModern && market === "spot") || !current) return []
-    const networkId = "networkId" in current ? current.networkId : undefined
-    if (!networkId) return []
-    const quote = quoteOf(current)
-    const holding = (sym: string, address: string | null): number | null => {
-      if (spotBalanceRequest && !exactSpotBalances.data && exactSpotBalances.isFetching) return null
-      const rows = spotBalanceRows(spotBalances, networkId, sym, address)
-      if (rows.length === 0 && (balancesLoading || exactSpotBalances.isLoading)) return null
-      return rows.reduce(
-        (sum, b) =>
-          sum + Number(formatCryptoAmount(b.amountBaseUnits, b.decimals, 12)),
-        0
-      )
-    }
-    const spotCurrent = current as HlSpotMarket
-    const base = holding(current.symbol, assetAddressOf(spotCurrent, "sell", current.symbol))
-    const quoteHeld = holding(quote, assetAddressOf(spotCurrent, "buy", quote))
-    return [
-      {
-        symbol: current.symbol,
-        icon: "icon" in current ? current.icon : null,
-        amount: base,
-        valueUsd: base !== null && price > 0 ? base * price : null,
-      },
-      {
-        symbol: quote,
-        icon: null,
-        amount: quoteHeld,
-        valueUsd: quoteHeld !== null && sizesLikeUsd(quote) ? quoteHeld : null,
-      },
-    ]
-  }, [usingModern, market, current, spotBalances, balancesLoading, exactSpotBalances.isLoading, exactSpotBalances.isFetching, exactSpotBalances.data, spotBalanceRequest, price])
 
   // Switching market carries no symbol: a spot pair name is meaningless on the
   // perps list (and vice versa), so the selection effect picks that market's
@@ -1626,8 +1634,6 @@ export function TradeClient() {
   const volume24h = stats?.quoteVolume ?? dexStats?.volume24h ?? null
   const high24h = stats?.high ?? dexStats?.high24h ?? null
   const low24h = stats?.low ?? dexStats?.low24h ?? null
-  const changePct1h = dexStats?.changePct1h ?? null
-  const changePct7d = dexStats?.changePct7d ?? null
 
   /* What the base token IS, on this chain: the contract the ticket names and
      links to. Read through the order builder so the address shown is the one
@@ -1658,7 +1664,7 @@ export function TradeClient() {
       {/* Anchored under the pair trigger in the market header on wide
           screens; below sm it spans the viewport instead, since the header
           sits under the top bar and a 360px panel would clip. */}
-      <div className="fixed inset-x-3 top-16 z-50 rounded-2xl bg-card pb-1 shadow-2xl ring-1 ring-border/40 sm:absolute sm:inset-x-auto sm:top-full sm:left-0 sm:mt-2 sm:w-[360px]">
+      <div className="fixed inset-x-3 top-16 z-50 rounded-2xl border border-foreground/[0.08] bg-popover/95 p-2 pb-1 text-popover-foreground shadow-[0_24px_60px_-12px_rgb(0_0_0/0.6)] backdrop-blur-xl sm:absolute sm:inset-x-auto sm:top-full sm:left-0 sm:mt-2 sm:w-[min(420px,calc(100vw-40px))]">
         <MarketPicker
           list={list}
           selected={selection}
@@ -1856,59 +1862,73 @@ export function TradeClient() {
           ? `${spotFloor(amt / price).toFixed(qtyPlaces)} ${symbol}`
           : `$${spotFloor(amt).toFixed(2)}`
       : null
+  /* The preview's summary rows, always on screen ("—" until there is an
+     amount). Spot: price, fee, what you spend or receive, and the floor the
+     price protection guarantees. Perps: size, notional, liquidation, fee and
+     funding. No fee, funding or liquidation figure is quoted to this ticket,
+     and a computed liquidation price is wrong exactly when it matters, so
+     those read "—" rather than a guess. */
+  const priced = amt > 0 && price > 0 && Boolean(current)
   const receiptRows: { label: string; value: string; strong?: boolean }[] =
-    amt > 0 && price > 0 && current
+    market === "futures"
       ? [
-          { label: "Price", value: `$${fmtPx(price)}` },
-          ...(market === "futures"
-            ? [
-                {
-                  label: "Size",
-                  value: `≈ ${(amt / price).toFixed(qtyPlaces)} ${symbol}`,
-                },
-                ...(!(modernFutures && reduceOnly) && leverage > 1
-                  ? [
-                      {
-                        label: `Margin at ${leverage}×`,
-                        value: `≈ $${(amt / leverage).toFixed(2)}`,
-                      },
-                    ]
-                  : []),
-              ]
-            : inTokenUnit
-              ? [
-                  {
-                    label: "You'll get",
-                    value: `≈ $${(amt * price).toFixed(2)}`,
-                  },
-                ]
-              : side === "buy"
-                ? [
-                    {
-                      label: "You'll get",
-                      value: `≈ ${(amt / price).toFixed(qtyPlaces)} ${symbol}`,
-                    },
-                  ]
-                : [
-                    {
-                      label: "You'll sell",
-                      value: `≈ ${(amt / price).toFixed(qtyPlaces)} ${symbol}`,
-                    },
-                    { label: "You'll get", value: `≈ $${amt.toFixed(2)}` },
-                  ]),
-          ...(networkLabel && market === "spot"
-            ? [{ label: "Network", value: networkLabel }]
-            : []),
-          // Last, under the hairline: the figure the tolerance guarantees, and
-          // the one the press is actually agreeing to.
-          ...(minimumReceived
-            ? [{ label: "At least", value: minimumReceived, strong: true }]
-            : []),
+          { label: "Position size", value: priced ? `≈ ${(amt / price).toFixed(qtyPlaces)} ${symbol}` : "—" },
+          { label: "Notional", value: priced ? `$${amt.toFixed(2)}` : "—" },
+          { label: "Liquidation price", value: "—" },
+          { label: "Fee", value: "—" },
+          { label: "Funding / 8h", value: "—" },
         ]
-      : []
+      : [
+          { label: "Est. price", value: price > 0 ? `$${fmtPx(price)}` : "—" },
+          { label: "Fee", value: "—" },
+          side === "buy"
+            ? { label: "You spend", value: priced ? (inTokenUnit ? `${amt} ${spentSymbol}` : `$${amt.toFixed(2)}`) : "—" }
+            : { label: "You receive", value: priced ? `≈ $${(inTokenUnit ? amt * price : amt).toFixed(2)}` : "—" },
+          // Under the hairline: the figure the tolerance guarantees, and the
+          // one the press is actually agreeing to.
+          { label: "At least", value: minimumReceived ?? "—", strong: true },
+        ]
 
-  const fieldClass =
-    "w-full rounded-xl bg-surface-sunken px-3.5 py-2.5 text-[14px] tabular-nums outline-none ring-1 ring-transparent transition-shadow placeholder:text-subtle focus:ring-foreground/[0.14]"
+
+  /* ── The preview form's linked fields ───────────────────────────────────
+     Display and typing helpers only: every path below ends in the same
+     setAmountUsd / setAmountUnit the ticket always used, so the order it
+     builds and submits is unchanged. */
+  const quoteSym = market === "futures" ? "USD" : quoteOf(current)
+  const baseQty = price > 0 ? (inTokenUnit ? (side === "sell" ? amt : amt / price) : amt / price) : 0
+  const quoteTotal = inTokenUnit ? (side === "sell" ? amt * price : amt) : amt
+  /** Perps size by margin (notional = margin × leverage); reduce-only by the
+   *  position size itself, with no leverage. */
+  const isPerpMargin = market === "futures" && !(modernFutures && reduceOnly)
+  const marginValue = isPerpMargin ? amt / Math.max(1, leverage) : amt
+  const typeBase = (text: string) => {
+    setDraft({ field: "base", text })
+    const q = parseFloat(text) || 0
+    if (side === "sell" && unitSwitchable) {
+      setAmountUnit("token")
+      setAmountUsd(text)
+    } else {
+      setAmountUnit("usd")
+      setAmountUsd(q > 0 && price > 0 ? String(Number((q * price).toFixed(2))) : "")
+    }
+  }
+  const typeQuote = (text: string) => {
+    setDraft({ field: "quote", text })
+    setAmountUnit("usd")
+    setAmountUsd(text)
+  }
+  const typeMargin = (text: string) => {
+    setDraft({ field: "margin", text })
+    const m = parseFloat(text) || 0
+    setAmountUnit("usd")
+    setAmountUsd(isPerpMargin ? (m > 0 ? String(Number((m * Math.max(1, leverage)).toFixed(2))) : "") : text)
+  }
+  /** The preview keeps the margin when leverage moves; the notional follows. */
+  const changeLeverage = (next: number) => {
+    if (isPerpMargin && amt > 0) setAmountUsd(String(Number(((amt / Math.max(1, leverage)) * next).toFixed(2))))
+    setDraft(null)
+    setLeverage(next)
+  }
 
   const ticket =
     /* No wallet, no ticket. The form used to render in full here and take the
@@ -1976,7 +1996,14 @@ export function TradeClient() {
     ) : reviewScreen ? (
       reviewScreen
     ) : (
-      <div className="flex flex-col gap-4 p-4 lg:p-5">
+      <div className="flex flex-col gap-4 p-4">
+        {/* The preview's order form (components/trade-unauth/order-form.tsx)
+            on this ticket's own state and handlers: nothing below changes what
+            an order does, only how it is asked for. */}
+        <OrderPanelHead
+          title={market === "futures" ? "Perpetual order" : "Spot order"}
+          note={market === "spot" && networkLabel ? `Swap on ${networkLabel}` : undefined}
+        />
         {spotMarketsUnavailable && (
           <AnnouncementBanner
             tone="warning"
@@ -2009,115 +2036,67 @@ export function TradeClient() {
             sunken track like the Segmented, but this is the one control in
             the app whose active fill is NOT neutral: the colour is the
             meaning. */}
-        <div
-          role="group"
-          aria-label="Side"
-          className="grid grid-cols-2 gap-1 rounded-2xl bg-surface-sunken p-1"
-        >
-          {(["buy", "sell"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSide(s)}
-              aria-pressed={side === s}
-              aria-label={
-                market === "futures"
-                  ? s === "buy"
-                    ? "Long side"
-                    : "Short side"
-                  : s === "buy"
-                    ? "Buy side"
-                    : "Sell side"
-              }
-              data-vivid-target={
-                s === "buy" ? "trade-side-buy" : "trade-side-sell"
-              }
-              data-vivid-label={
-                market === "futures"
-                  ? s === "buy"
-                    ? "Long side"
-                    : "Short side"
-                  : s === "buy"
-                    ? "Buy side"
-                    : "Sell side"
-              }
-              className={cn(
-                "rounded-xl py-2.5 text-[13.5px] font-bold transition-all focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none active:scale-[0.97] motion-reduce:active:scale-100",
-                side === s
-                  ? s === "buy"
-                    ? "bg-credit text-white shadow-sm"
-                    : "bg-debit text-white shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {market === "futures"
-                ? s === "buy"
-                  ? "Long"
-                  : "Short"
-                : s === "buy"
-                  ? "Buy"
-                  : "Sell"}
-            </button>
-          ))}
-        </div>
-
-        {/* Type — futures only.
-            A spot order is a swap against a liquidity pool: it executes at the
-            pool's price the moment it lands, and there is nowhere for an order
-            to rest. The Limit tab here promised one anyway — `buildSpotOrderPlan`
-            never read `limitPrice`, so it placed a market swap while the ticket
-            demanded a price before it would submit. A control that changes
-            nothing except what it asks of you is worse than no control. */}
+        {/* The preview perp form's top row. The ticket sends no margin mode,
+            so this states the venue's: the open position's own, isolated for
+            an isolated-only contract, otherwise its default, cross. */}
         {market === "futures" && (
-          <Segmented
-            size="sm"
-            value={orderType}
-            onChange={setOrderType}
-            options={ORDER_TYPES}
-            className="self-start"
-            vividPrefix="order-type"
+          <MarginModeRow mode={openPosition?.leverage.type ?? (onlyIsolated ? "isolated" : "cross")} maxLeverage={maxLev} />
+        )}
+
+        <SideTabs
+          value={side}
+          onChange={setSide}
+          options={(["buy", "sell"] as const).map((s) => {
+            const label = market === "futures" ? (s === "buy" ? "Long" : "Short") : s === "buy" ? "Buy" : "Sell"
+            return {
+              key: s,
+              label,
+              tone: s === "buy" ? ("credit" as const) : ("debit" as const),
+              attrs: {
+                "aria-label": `${label} side`,
+                "data-vivid-target": s === "buy" ? "trade-side-buy" : "trade-side-sell",
+                "data-vivid-label": `${label} side`,
+              },
+            }
+          })}
+        />
+
+        {market === "futures" ? (
+          <TypeTabs value={orderType} onChange={setOrderType} options={ORDER_TYPES.map((o) => ({ key: o.key, label: String(o.label) }))} />
+        ) : (
+          /* Spot is a swap against a pool: it fills at the pool's price the
+             moment it lands and cannot rest, so Market is the only type it
+             can honestly offer (the old Limit tab placed a market swap). */
+          <TypeTabs
+            value={"market" as const}
+            onChange={() => {}}
+            options={[
+              { key: "limit" as const, label: "Limit", disabled: true, title: "Swaps fill at the market price" },
+              { key: "market" as const, label: "Market" },
+              { key: "stop" as const, label: "Stop", disabled: true, title: "Swaps fill at the market price" },
+            ]}
           />
         )}
 
-        {orderType === "limit" && (
-          <label className="flex flex-col gap-1.5">
-            <span className="px-1 text-[12px] font-semibold text-muted-foreground">
-              Limit price
-            </span>
-            <div className="flex items-center rounded-xl bg-surface-sunken ring-1 ring-transparent transition-shadow focus-within:ring-foreground/[0.14]">
-              <input
-                value={limitPrice}
-                onChange={(e) =>
-                  setLimitPrice(e.target.value.replace(/[^0-9.]/g, ""))
-                }
-                inputMode="decimal"
-                data-vivid-target="trade-limit-price"
-                data-vivid-label="Limit price in USD"
-                aria-label="Limit price in USD"
-                placeholder={price ? fmtPx(price) : "…"}
-                className="min-w-0 flex-1 bg-transparent px-3.5 py-2.5 text-[14px] tabular-nums outline-none placeholder:text-subtle"
-              />
-              <span className="pr-3.5 text-[11px] font-semibold text-subtle">
-                USD
-              </span>
-            </div>
-          </label>
+        {/* Perps: leverage first, as in the preview. */}
+        {isPerpMargin && (
+          <div className="flex flex-col gap-1.5">
+            <LeverageSlider value={leverage} max={maxLev} onChange={changeLeverage} />
+          </div>
         )}
 
-        {/* Amount — the hero figure of the ticket, in the AmountField
-            register: large, light, tabular, with the unit beside it. */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3 px-1 text-[12px]">
-            <span className="font-semibold text-muted-foreground">Amount</span>
+        <div className="flex flex-col gap-2.5">
+          <div className="flex justify-between gap-3 text-[12px] text-muted-foreground">
+            <span>{market === "futures" ? (modernFutures && reduceOnly ? "Position" : "Available margin") : "Available"}</span>
             {/* The wallet's real holding of the token this side spends, on
-                this row's chain. Tapping it means "all of it", in whichever
-                unit the field is currently in. */}
+                this row's chain. Tapping it means "all of it". */}
             {usingModern && market === "spot" ? (
               spendable !== null ? (
                 <button
                   type="button"
                   onClick={() => {
                     if (spendable <= 0) return
+                    setDraft(null)
                     setAmountUsd(
                       String(
                         inTokenUnit
@@ -2135,294 +2114,202 @@ export function TradeClient() {
                   }}
                   data-vivid-target="trade-amount-balance"
                   data-vivid-label="Use the whole available balance"
-                  className="min-w-0 truncate text-muted-foreground tabular-nums transition-colors hover:text-foreground"
+                  className="min-w-0 truncate font-semibold tabular-nums text-foreground transition-colors hover:text-primary"
                 >
-                  Available{" "}
-                  <span className="font-semibold text-foreground">
-                    {spendable.toLocaleString(undefined, {
-                      maximumFractionDigits: 6,
-                    })}{" "}
-                    {spentSymbol}
-                  </span>
+                  <Figure mask="••••">{`${spendable.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${spentSymbol}`}</Figure>
                 </button>
               ) : balancesLoading ? (
                 <Skel className="h-3 w-24" />
-              ) : null
-            ) : market === "spot" && side === "buy" && balances ? (
-              <span className="text-muted-foreground tabular-nums">
-                Available{" "}
-                <span className="font-semibold text-foreground">
-                  ${balances.spotUsdc.toFixed(2)}
-                </span>
-              </span>
-            ) : null}
-            {/* Reduce-only spends nothing, so the free balance is the wrong
-                ceiling to quote — the open position is. */}
-            {modernFutures && reduceOnly ? (
-              openPosition && (
-                <span className="text-muted-foreground tabular-nums">
-                  Position{" "}
-                  <span className="font-semibold text-foreground">
-                    ${openPosition.notionalUsd.toFixed(2)}
-                  </span>
-                </span>
+              ) : (
+                <span className="font-semibold text-foreground">—</span>
               )
-            ) : market === "futures" && balances ? (
-              <span className="text-muted-foreground tabular-nums">
-                Available{" "}
-                <span className="font-semibold text-foreground">
-                  ${balances.perpsWithdrawableUsdc.toFixed(2)}
-                </span>
+            ) : market === "spot" ? (
+              <span className="font-semibold tabular-nums text-foreground">
+                {side === "buy" && balances ? <Figure mask="••••">{`${balances.spotUsdc.toFixed(2)} USDC`}</Figure> : "—"}
               </span>
-            ) : null}
-          </div>
-
-          <div className="flex items-center gap-2 rounded-2xl bg-surface-sunken px-4 py-3 ring-1 ring-transparent transition-shadow focus-within:ring-foreground/[0.14]">
-            {/* The ticket's own hero figure follows the price above it to
-               Medium 500. Leaving the amount at Light 300 beside a Medium
-               price would put two different weights on the same register on
-               one screen, which reads as a mistake rather than as a
-               hierarchy. */}
-            {!inTokenUnit && (
-              <span
-                aria-hidden
-                className="font-display text-[22px] leading-none font-medium text-muted-foreground/70"
-              >
-                $
-              </span>
-            )}
-            <input
-              value={amountUsd}
-              onChange={(e) =>
-                setAmountUsd(e.target.value.replace(/[^0-9.]/g, ""))
-              }
-              inputMode="decimal"
-              data-vivid-target="trade-amount"
-              data-vivid-label={
-                inTokenUnit
-                  ? `Order amount in ${spentSymbol}`
-                  : "Order amount in USD (the notional)"
-              }
-              aria-label={
-                inTokenUnit
-                  ? `Order amount in ${spentSymbol}`
-                  : "Order amount in USD"
-              }
-              placeholder="0"
-              className="min-w-0 flex-1 bg-transparent font-display text-[28px] leading-none font-medium tracking-[-0.02em] tabular-nums outline-none placeholder:font-light placeholder:text-muted-foreground/30"
-            />
-            {/* The unit switch. Where a spot row names the token being spent,
-                the ticket can size the order in it — which is what the second
-                "swap" form under the workspace used to exist for. Switching
-                clears the field: the same digits mean a different order. */}
-            {unitSwitchable ? (
-              <div className="flex shrink-0 items-center gap-0.5 rounded-full bg-background/60 p-0.5">
-                {(
-                  [
-                    ["usd", "USD"],
-                    ["token", spentSymbol],
-                  ] as const
-                ).map(([unit, unitLabel]) => (
-                  <button
-                    key={unit}
-                    type="button"
-                    onClick={() => {
-                      if (amountUnit === unit) return
-                      setAmountUnit(unit)
-                      setAmountUsd("")
-                    }}
-                    aria-pressed={amountUnit === unit}
-                    data-vivid-target={`trade-amount-unit-${unit}`}
-                    data-vivid-label={`Size this order in ${unitLabel}`}
-                    className={cn(
-                      /* min-h-11 below lg: this was a 22px target sitting
-                         inside the one control on the screen that changes what
-                         a typed number MEANS. It fits: the amount row is ~52px
-                         tall around a 28px figure, so a 44px chip inside a
-                         2px track clears it without moving anything. */
-                      "inline-flex min-h-11 items-center justify-center rounded-full px-3 text-[10.5px] font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none lg:min-h-0 lg:px-2 lg:py-1",
-                      amountUnit === unit
-                        ? "bg-accent text-foreground shadow-sm"
-                        : "text-subtle hover:text-foreground"
-                    )}
-                  >
-                    {unitLabel}
-                  </button>
-                ))}
-              </div>
+            ) : modernFutures && reduceOnly ? (
+              <span className="font-semibold tabular-nums text-foreground">{openPosition ? <Figure mask="••••">{`$${openPosition.notionalUsd.toFixed(2)}`}</Figure> : "—"}</span>
             ) : (
-              // One unit, so name it rather than offering a choice between
-              // two spellings of it.
-              <span className="shrink-0 rounded-full bg-background/60 px-2.5 py-1 text-[10.5px] font-bold tracking-[0.04em] text-muted-foreground">
-                {spentSymbol ?? "USD"}
+              <span className="font-semibold tabular-nums text-foreground">
+                {balances ? <Figure mask="••••">{`${balances.perpsWithdrawableUsdc.toFixed(2)} USDC`}</Figure> : "—"}
               </span>
             )}
           </div>
 
-          {maxNotional > 0 ? (
-            <div className="grid grid-cols-4 gap-1.5">
-              {[0.25, 0.5, 0.75, 1].map((pct) => (
-                <button
-                  key={pct}
-                  type="button"
-                  data-vivid-target={
-                    pct === 1
-                      ? "trade-amount-max"
-                      : `trade-amount-${pct * 100}pct`
-                  }
-                  data-vivid-label={
-                    pct === 1
-                      ? "Use the full available balance"
-                      : `Use ${pct * 100}% of the available balance`
-                  }
-                  aria-label={
-                    pct === 1
-                      ? "Use the full available balance as the amount"
-                      : `Use ${pct * 100} percent of the available balance as the amount`
-                  }
-                  onClick={() => {
-                    // Two decimals is a dollar's precision. A token amount
-                    // rounded to cents is a different order — and for anything
-                    // priced under a cent, rounds to nothing at all.
-                    const places = inTokenUnit ? 6 : 2
-                    const scale = 10 ** places
-                    setAmountUsd(
-                      pct === 1
-                        ? String(Math.floor(maxNotional * scale) / scale)
-                        : String(Math.floor(maxNotional * pct * scale) / scale)
-                    )
-                  }}
-                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-surface-sunken text-[12px] font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none active:scale-90 motion-reduce:active:scale-100 lg:min-h-0 lg:py-1.5"
-                >
-                  {pct === 1 ? "Max" : `${pct * 100}%`}
-                </button>
-              ))}
-            </div>
+          {/* Price: editable for a futures limit order; otherwise the order
+              fills at the market, and the field says so. */}
+          {orderType === "limit" && market === "futures" ? (
+            <FieldBox label="Price" suffix="USD">
+              <input
+                value={limitPrice}
+                onChange={(e) =>
+                  setLimitPrice(cleanDecimal(e.target.value))
+                }
+                inputMode="decimal"
+                data-vivid-target="trade-limit-price"
+                data-vivid-label="Limit price in USD"
+                aria-label="Limit price in USD"
+                placeholder={price ? fmtPx(price) : "…"}
+                className={FIELD_INPUT}
+              />
+            </FieldBox>
           ) : (
-            !inTokenUnit &&
-            amt > 0 &&
-            amt < minOrder && (
-              <p className="px-1 text-[11.5px] text-subtle">
-                {modernFutures
-                  ? `Rounded up to Hyperliquid's ${fmtMin(minOrder)} minimum`
-                  : `Minimum order ${fmtMin(minOrder)}`}
-              </p>
-            )
+            <FieldBox label="Price" suffix={quoteSym} disabled>
+              <input
+                disabled
+                value=""
+                placeholder={market === "futures" ? (price ? `Mark ${fmtPx(price)}` : "Market price") : "Best market price"}
+                aria-label="Fills at the market price"
+                className={FIELD_INPUT}
+              />
+            </FieldBox>
+          )}
+
+          {market === "spot" ? (
+            /* Amount (the coin) and Total (the quote) are two views of one
+               order. Total sizes it in dollars, exactly as before; Amount
+               sizes it in the coin: on a sell, in the token itself (what the
+               old USD/token switch did); on a buy, converted at the live price.
+               The ticket submits the same amount it always has. */
+            <FieldBox label="Amount" suffix={symbol || "—"} invalid={amt > 0 && !amountSufficient}>
+              <input
+                value={draft?.field === "base" ? draft.text : baseQty > 0 ? String(Number(baseQty.toFixed(qtyPlaces))) : ""}
+                onChange={(e) => typeBase(cleanDecimal(e.target.value))}
+                onBlur={() => setDraft(null)}
+                inputMode="decimal"
+                placeholder="0"
+                data-vivid-target="trade-amount-base"
+                data-vivid-label={`Order amount in ${symbol}`}
+                aria-label={`Order amount in ${symbol}`}
+                className={FIELD_INPUT}
+              />
+            </FieldBox>
+          ) : (
+            <FieldBox label={isPerpMargin ? "Margin" : "Size"} suffix="USD" invalid={amt > 0 && !amountSufficient}>
+              <input
+                value={draft?.field === "margin" ? draft.text : marginValue > 0 ? String(Number(marginValue.toFixed(2))) : ""}
+                onChange={(e) => typeMargin(cleanDecimal(e.target.value))}
+                onBlur={() => setDraft(null)}
+                inputMode="decimal"
+                placeholder="0"
+                data-vivid-target="trade-amount"
+                data-vivid-label={isPerpMargin ? "Margin in USD (notional = margin × leverage)" : "Position size to reduce, in USD"}
+                aria-label={isPerpMargin ? "Margin in USD" : "Size to reduce in USD"}
+                className={FIELD_INPUT}
+              />
+            </FieldBox>
+          )}
+
+          {/* The preview's percent slider, on the same "use X% of what you
+              can spend" sizing the 25 / 50 / 75 / Max buttons did, with the
+              same rounding: a dollar's two decimals, or six for a token. */}
+          {/* Always on screen, as in the preview; with nothing available to
+              take a share of, moving it changes nothing. */}
+          {(
+            <PercentSlider
+              value={maxNotional > 0 ? Math.max(0, Math.min(100, Math.round((amt / maxNotional) * 100))) || 0 : 0}
+              tone={side === "buy" ? "credit" : "debit"}
+              onChange={(p) => {
+                if (maxNotional <= 0) return
+                setDraft(null)
+                if (p === 0) {
+                  setAmountUsd("")
+                  return
+                }
+                const places = inTokenUnit ? 6 : 2
+                const scale = 10 ** places
+                setAmountUsd(String(Math.floor(maxNotional * (p / 100) * scale) / scale))
+              }}
+            />
+          )}
+
+          {market === "spot" && (
+            <FieldBox label="Total" suffix={quoteSym} invalid={amt > 0 && !amountSufficient}>
+              <input
+                value={draft?.field === "quote" ? draft.text : inTokenUnit ? (quoteTotal > 0 ? String(Number(quoteTotal.toFixed(2))) : "") : amountUsd}
+                onChange={(e) => typeQuote(cleanDecimal(e.target.value))}
+                onBlur={() => setDraft(null)}
+                inputMode="decimal"
+                placeholder="0.00"
+                data-vivid-target="trade-amount"
+                data-vivid-label="Order total in USD (the notional)"
+                aria-label="Order total in USD"
+                className={FIELD_INPUT}
+              />
+            </FieldBox>
+          )}
+
+          {!inTokenUnit && amt > 0 && amt < minOrder && maxNotional <= 0 && (
+            <p className="px-1 text-[11.5px] text-muted-foreground">
+              {modernFutures
+                ? `Rounded up to the venue's ${fmtMin(minOrder)} minimum`
+                : `Minimum order ${fmtMin(minOrder)}`}
+            </p>
           )}
         </div>
 
         {/* Reduce-only (spec §9) — modern perps only. It changes what the rest
-          of the ticket even means, so it sits above the controls it removes. */}
+          of the ticket even means. */}
         {modernFutures && (
-          <label className="flex items-center justify-between gap-3 rounded-xl bg-surface-sunken px-3.5 py-2.5">
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="text-[12.5px] font-semibold">Reduce only</span>
-              <span className="text-[11px] leading-snug text-subtle">
-                Shrinks an open position — never opens a new one.
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={reduceOnly}
-              onChange={(e) => setReduceOnly(e.target.checked)}
-              data-vivid-target="trade-reduce-only"
-              data-vivid-label="Reduce-only toggle — the order can only close existing exposure"
-              aria-label="Reduce only — the order can only close existing exposure"
-              className="h-4 w-4 shrink-0 accent-[var(--primary)]"
-            />
-          </label>
+          <CheckRow
+            checked={reduceOnly}
+            onChange={(v) => {
+              setDraft(null)
+              setReduceOnly(v)
+            }}
+            label="Reduce only"
+            hint="Shrinks an open position — never opens a new one."
+            attrs={{
+              "data-vivid-target": "trade-reduce-only",
+              "data-vivid-label": "Reduce-only toggle — the order can only close existing exposure",
+              "aria-label": "Reduce only — the order can only close existing exposure",
+            }}
+          />
         )}
 
         {market === "futures" && !(modernFutures && reduceOnly) && (
-          <div>
-            <div className="flex justify-between px-1 text-[12px]">
-              <span className="font-semibold text-muted-foreground">
-                Leverage
-              </span>
-              <span className="font-bold text-foreground tabular-nums">
-                {leverage}×
-              </span>
-            </div>
-            <input
-              type="range"
-              min={1}
-              max={maxLev}
-              value={leverage}
-              onChange={(e) => setLeverage(parseInt(e.target.value))}
-              data-vivid-target="trade-leverage"
-              data-vivid-label={`Leverage slider, 1 to ${maxLev}. Fill with a whole number.`}
-              aria-label={`Leverage multiplier, 1 to ${maxLev}`}
-              className="mt-1 h-11 w-full cursor-pointer accent-[var(--primary)] [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6"
-            />
-            <div className="flex justify-between px-1 text-[10px] text-subtle">
-              <span>1×</span>
-              <span>{maxLev}×</span>
-            </div>
-            {/* The venue's own constraint, stated rather than assumed (spec §9).
-              There is no cross-margin control to hide — this contract simply
-              has one margin mode, and the ticket says which. */}
-            {onlyIsolated && (
-              <p className="mt-1.5 px-1 text-[11px] leading-snug text-subtle">
-                Isolated margin only — the margin you commit here backs this
-                position alone.
-              </p>
-            )}
-          </div>
-        )}
-
-        {market === "futures" && !(modernFutures && reduceOnly) && (
-          <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col gap-1.5">
-              <span className="px-1 text-[12px] font-semibold text-muted-foreground">
-                Take profit
-              </span>
+          <Collapsible label="Take profit / Stop loss" defaultOpen={Boolean(tpPrice || slPrice)}>
+            <FieldBox label="TP" suffix="USD">
               <input
                 value={tpPrice}
                 onChange={(e) =>
-                  setTpPrice(e.target.value.replace(/[^0-9.]/g, ""))
+                  setTpPrice(cleanDecimal(e.target.value))
                 }
                 inputMode="decimal"
+                placeholder={side === "buy" ? "Above entry" : "Below entry"}
                 data-vivid-target="trade-take-profit"
                 data-vivid-label="Take profit trigger price (optional)"
                 aria-label="Take profit trigger price"
-                className={cn(fieldClass, "focus:ring-credit/40")}
+                className={FIELD_INPUT}
               />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="px-1 text-[12px] font-semibold text-muted-foreground">
-                Stop loss
-              </span>
+            </FieldBox>
+            <FieldBox label="SL" suffix="USD">
               <input
                 value={slPrice}
                 onChange={(e) =>
-                  setSlPrice(e.target.value.replace(/[^0-9.]/g, ""))
+                  setSlPrice(cleanDecimal(e.target.value))
                 }
                 inputMode="decimal"
+                placeholder={side === "buy" ? "Below entry" : "Above entry"}
                 data-vivid-target="trade-stop-loss"
                 data-vivid-label="Stop loss trigger price (optional)"
                 aria-label="Stop loss trigger price"
-                className={cn(fieldClass, "focus:ring-debit/40")}
+                className={FIELD_INPUT}
               />
-            </label>
-          </div>
+            </FieldBox>
+          </Collapsible>
         )}
 
         {tpslError && (
-          <p
-            role="alert"
-            className="rounded-xl bg-warning-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning"
-          >
+          <Notice tone="warn" role="alert">
             {tpslError}
-          </p>
+          </Notice>
         )}
 
         {reduceOnlyError && (
-          <p
-            role="alert"
-            className="rounded-xl bg-warning-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning"
-          >
+          <Notice tone="warn" role="alert">
             {reduceOnlyError}
-          </p>
+          </Notice>
         )}
 
         {/* How far the fill may drift from the price above. A spot swap is
@@ -2435,38 +2322,25 @@ export function TradeClient() {
         {/* The receipt — what this amount turns into. Mounted once when an
             amount first exists, so it rises in rather than flickering per
             keystroke. */}
-        {receiptRows.length > 0 && (
-          <div className="ws-microswap">
-            <DetailPanel rows={receiptRows} />
-          </div>
-        )}
+        <Summary rows={receiptRows} />
 
         {error && (
-          <p
-            role="alert"
-            className="rounded-xl bg-debit-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed text-debit"
-          >
+          <Notice tone="bad" role="alert">
             {error}
-          </p>
+          </Notice>
         )}
         {outcome?.success && (
-          <p
-            role="status"
-            className="rounded-xl bg-credit-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed text-credit"
-          >
+          <Notice tone="good">
             {outcome.resting
               ? "Limit order resting on the book."
               : `Filled ${outcome.filledSize ?? ""} ${outcome.symbol} @ $${outcome.avgFillPrice?.toFixed(2) ?? "—"}`}
-          </p>
+          </Notice>
         )}
         {outcome?.success && outcome.tpslWarning && (
-          <p
-            role="alert"
-            className="rounded-xl bg-warning-chip px-3.5 py-2.5 text-[12.5px] leading-relaxed font-semibold text-warning"
-          >
+          <Notice tone="warn" role="alert">
             ⚠ {outcome.tpslWarning} — your position is open without that
             protection.
-          </p>
+          </Notice>
         )}
         {/* Spec §8: a submitted order is not a fill. This line follows the same
           intent poll as the confirmation modal and says the same thing in the
@@ -2478,21 +2352,17 @@ export function TradeClient() {
           market === "spot" &&
           spotIntentId &&
           !orderModalOpen && (
-            <p
-              role="status"
-              aria-live="polite"
-              className={cn(
-                "rounded-xl px-3.5 py-2.5 text-[12.5px] leading-relaxed",
+            <Notice
+              tone={
                 spotIntentStatus === "confirmed"
-                  ? "bg-credit-chip text-credit"
-                  : spotIntentStatus === "failed" ||
-                      spotIntentStatus === "expired"
-                    ? "bg-debit-chip text-debit"
-                    : "bg-surface-sunken text-muted-foreground"
-              )}
+                  ? "good"
+                  : spotIntentStatus === "failed" || spotIntentStatus === "expired"
+                    ? "bad"
+                    : "quiet"
+              }
             >
               {orderCopy(spotIntentStatus, symbol).body}
-            </p>
+            </Notice>
           )}
 
         {/* Modern perps: this press only BUILDS the order — the review screen's
@@ -2501,7 +2371,7 @@ export function TradeClient() {
           ticket first becomes sendable, the travelling band while the order
           is in flight, the shadow that appears only while it is armed. */}
         <button
-          onClick={submit}
+          onClick={() => (market === "spot" && !modernFutures && tradePrefs.confirmSpot ? setSpotReviewOpen(true) : void submit())}
           disabled={!canSubmit}
           data-vivid-target="trade-submit"
           data-vivid-guard={modernFutures ? undefined : ""}
@@ -2515,12 +2385,17 @@ export function TradeClient() {
               ? `Build the order and open the review screen — ${side === "buy" ? "long" : "short"} ${symbol}. Nothing is sent until you confirm there.`
               : `Place the order — ${market === "futures" ? (side === "buy" ? "long" : "short") : side} ${symbol} for the amount shown. Moves real money.`
           }
+          /* The preview's button: the side's colour when it can go, a quiet
+             outline that names the blocker when it can't. */
           className={cn(
-            "relative flex h-12 w-full items-center justify-center rounded-full text-[15px] font-bold text-white transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-none active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:active:scale-100 motion-reduce:active:scale-100",
+            "relative flex h-12 w-full items-center justify-center rounded-xl text-[14.5px] font-semibold transition-[filter,background-color] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-none disabled:cursor-not-allowed",
             submitting && "ws-inflight",
-            side === "buy"
-              ? "bg-credit shadow-[0_10px_28px_-10px_color-mix(in_oklab,var(--credit)_60%,transparent)] hover:bg-credit/90 focus-visible:ring-credit/50"
-              : "bg-debit shadow-[0_10px_28px_-10px_color-mix(in_oklab,var(--debit)_60%,transparent)] hover:bg-debit/90 focus-visible:ring-debit/50"
+            !canSubmit && !submitting
+              ? "border border-foreground/[0.07] bg-foreground/[0.04] text-muted-foreground"
+              : cn(
+                  "text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)] hover:brightness-110 active:brightness-95",
+                  side === "buy" ? "bg-credit focus-visible:ring-credit/50" : "bg-debit focus-visible:ring-debit/50",
+                )
           )}
         >
           {canSubmit && armGen > 0 && (
@@ -2539,17 +2414,46 @@ export function TradeClient() {
           {ctaLabel}
         </button>
 
-        {/* What the wallet holds of both sides of the pair — the answer to
-            "how much can I buy" and "how much can I sell", where the button
-            is. Both modes: this is the user's own money, which is the one
-            thing Simple must never hide. */}
-        {walletRows.length > 0 && (
-          <WalletStrip
-            network={networkLabel}
-            rows={walletRows}
-            className="mt-1"
-          />
-        )}
+        {/* The optional spot review — the same receipt rows as the ticket's
+            summary, and the same submit() behind Confirm. */}
+        <ResponsiveModal open={spotReviewOpen} onOpenChange={setSpotReviewOpen}>
+          <ResponsiveModalContent className="gap-5 p-5 sm:max-w-md sm:p-6">
+            <ResponsiveModalHeader>
+              <ResponsiveModalTitle>Review your {side === "buy" ? "buy" : "sell"}</ResponsiveModalTitle>
+              <ResponsiveModalDescription>
+                {side === "buy" ? "Buy" : "Sell"} {symbol}
+                {amt > 0 ? ` for ${inTokenUnit ? `${amt} ${spentSymbol}` : `$${amt}`}` : ""}. Nothing is sent until you confirm.
+              </ResponsiveModalDescription>
+            </ResponsiveModalHeader>
+            <dl className="flex flex-col gap-2 rounded-2xl border border-foreground/[0.06] bg-foreground/[0.02] px-4 py-3.5 text-[13px]">
+              {receiptRows.map((r) => (
+                <div key={r.label} className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">{r.label}</dt>
+                  <dd className={cn("text-right tabular-nums text-foreground", r.strong ? "font-display text-[14px] font-semibold" : "font-semibold")}>{r.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button type="button" onClick={() => setSpotReviewOpen(false)} className="h-12 rounded-xl border border-foreground/[0.09] text-[14px] font-semibold text-foreground/85 transition-colors hover:text-foreground">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => {
+                  setSpotReviewOpen(false)
+                  void submit()
+                }}
+                data-vivid-target="trade-submit-confirm"
+                data-vivid-guard=""
+                data-vivid-label={`Confirm the ${side} of ${symbol}. Moves real money.`}
+                className={cn("h-12 rounded-xl text-[14px] font-semibold text-white transition-[filter] hover:brightness-110 disabled:opacity-40", side === "buy" ? "bg-credit" : "bg-debit")}
+              >
+                Confirm {side === "buy" ? "buy" : "sell"}
+              </button>
+            </div>
+          </ResponsiveModalContent>
+        </ResponsiveModal>
 
         {/* Where the price came from (`TradeView.priceSources`). Pro only, and
             in the ticket rather than under the header on purpose: it is a
@@ -2588,34 +2492,17 @@ export function TradeClient() {
   /* ── Workspace ────────────────────────────────────────────────────────── */
   return (
     <div
-      /* Clearance for the app's floating tab bar, which this route now carries
-         on phones (it is full-bleed, so it has no sidebar and no navbar — the
-         bar was the only navigation left and it was missing). The capsule is
-         56px tall sitting 12px off the bottom, so 68px plus the device inset
-         puts the buy/sell bar exactly on top of it: no overlap, nothing
-         wasted. From `md` up the capsule is hidden and the padding goes. */
-      className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background pb-[calc(68px+env(safe-area-inset-bottom))] md:pb-0"
-      /* The house atmosphere: one warm radial at the crown, the same ambient
-         brand glow the shell's rail carries, at the same strength. It is the
-         only large-area use of gold the system permits, it is decorative only,
-         and it is why this screen reads as Worldstreet rather than as a
-         generic dark exchange.
-         It is painted as this element's own background-image rather than as a
-         layer behind it. A `-z-10` child of a positioned parent that has no
-         stacking context of its own paints behind that parent's BACKGROUND
-         too, so an opaque `bg-background` swallows it completely — the glow
-         was there and invisible. A background-image composites over the
-         background-colour by definition, and in-flow content still paints
-         above both, which is exactly the stack this wants. */
-      style={{
-        backgroundImage:
-          "radial-gradient(120% 86% at 22% 0%, var(--sidebar-glow) 0%, transparent 64%)",
-        backgroundSize: "100% 460px",
-        backgroundRepeat: "no-repeat",
-      }}
+      /* Inside the app frame now (components/chrome/frame.tsx), like the
+         preview (app/(redesign)/trade-unauth). Below lg the screen still fills
+         the viewport under the frame's top bar: `-mb-28` cancels the frame's
+         <main> bottom padding, and this element keeps its own clearance for
+         the floating tab bar (56px + 12px + the device inset), so the
+         buy/sell bar sits on top of it exactly as before. From lg up it is
+         ordinary page flow on the preview's grid, and the page scrolls. */
+      className="dash-scope relative flex min-h-0 flex-col pb-8 md:pb-24 lg:pb-0"
     >
-      {/* Top bar — the app's chrome only: a way out, the Simple/Pro switch,
-          and the way back to the wallet. The market itself lives in the header
+      {/* Top bar — the app's chrome only: the page title and the way back to
+          the wallet. The market itself lives in the header
           over the chart, where the price sits beside the thing it describes.
           The venue switch and the funding doors that used to sit here are
           both gone — see the two notes below, at the points they occupied. */}
@@ -2635,47 +2522,16 @@ export function TradeClient() {
           screen used to run px-3/px-2/px-4 across three adjacent bands, which
           is the kind of near-miss the eye reads as sloppiness without being
           able to name. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-2.5 py-2.5 sm:gap-x-4 lg:flex-nowrap lg:px-4 lg:py-3">
-        {/* This route has no sidebar or navbar, so it carries its own way
-            out — a back control, not just a clickable logo. */}
-        <div className="flex shrink-0 items-center gap-1.5">
-          <BackAction to="/" className="mt-0" />
-          <Link
-            href="/"
-            className="hidden items-center sm:flex"
-            title="Dashboard"
-          >
-            <Image
-              src="/worldstreet-logo/WorldStreet1x.png"
-              alt="Worldstreet"
-              width={72}
-              height={18}
-              className="h-[18px] w-auto object-contain"
-            />
-          </Link>
-        </div>
-        <span className="hidden h-6 w-px bg-border/40 sm:block" />
+      <div className="mx-auto flex w-full max-w-[1920px] flex-wrap items-center gap-x-3 gap-y-2 px-2.5 py-2.5 sm:gap-x-4 lg:flex-nowrap lg:px-4 lg:pb-3 lg:pt-4">
+        {/* The preview's page title. The frame now carries the way out, so
+            the back control and logo this bar used to hold are gone. */}
+        <h1 className="hidden font-display text-[20px] font-semibold tracking-[-0.02em] text-foreground lg:block">Trade</h1>
 
         {/* Market toggle. The phone padding trim below bought ~25px, which
             was the difference between this row wrapping and not on the
             commonest widths. */}
-        <Segmented
-          size="sm"
-          value={market}
-          onChange={setMarketTab}
-          options={MARKET_TABS}
-          className="shrink-0 [&_button]:px-2.5 sm:[&_button]:px-3.5"
-        />
+        {/* Spot / Futures moved into the pair header, as in the preview. */}
 
-        {/* Simple / Pro. Same control and same place in the reading order as
-           on the wallet: beside the screen's own identity, not buried in a
-           settings menu.
-           The rest of what this branch put here — the pair picker, the price
-           and the 24h cluster — is gone from the top bar rather than dropped:
-           it moved into MarketHeader, over the chart, where the price sits
-           beside the thing it describes. The mode switch is the only part of
-           that block that is chrome. */}
-        <ModeSwitch className="shrink-0" />
         {/* Balances + the way back to the wallet */}
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           {balances && market === "futures" && FUTURES_LIVE && (
@@ -2721,67 +2577,79 @@ export function TradeClient() {
           orders, ticket — on the `ws-pane` entrance; the header above the
           chart does not, so its picker's fixed layout on phones has no
           transformed ancestor to trip over. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 px-2.5 pb-2.5 lg:flex-row lg:gap-3 lg:px-4 lg:pb-4">
-        {/* Markets rail — the full list lives on the left so switching pairs
-            is one click, not a menu dive.
-            PRO ONLY, and structural rather than flagged: `TradeView` names
-            features inside the screen, and this is a whole pane of the
-            workspace. A wall of 9,000 tickers is the definition of what Simple
-            is for keeping off the screen; the pair picker in the header is
-            still one press away for anyone who wants to change market. There
-            is no `marketsRail` flag to read — see the report. */}
-        {pro && (
-          <MarketsRail
-            list={list}
-            selected={selection}
-            onSelect={setSelection}
-            className={`ws-pane hidden w-[280px] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} xl:flex`}
-            style={
-              {
-                "--ws-pane-x": "-10px",
-                "--ws-pane-delay": "40ms",
-              } as React.CSSProperties
-            }
-          />
-        )}
+      <div
+        className="trade-body mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col gap-2.5 px-2.5 pb-2.5 lg:px-4 lg:pb-4"
+        data-book="true"
+      >
+        {/* The markets rail (MarketsRail) isn't on the preview's screen: its
+            list is the pair picker in the header, one press away. */}
 
-        {/* Market header + chart + bottom panel */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 lg:gap-3">
-          <MarketHeader
-            className="shrink-0 px-1.5 pt-1 lg:px-2 lg:pt-1.5"
+        {/* Market header, chart and activity: grid areas from lg. */}
+        <div data-area="head" className="min-w-0 shrink-0">
+          {/* The preview's pair header on the same figures the previous
+              header showed; the Spot / Futures switch lives here now. */}
+          <PairHeader
+            venue={market}
+            onVenue={setMarketTab}
             symbol={symbol}
             quote={market === "futures" ? "USDC" : quoteOf(current)}
             icon={current && "icon" in current ? current.icon : null}
-            network={market === "futures" ? null : networkLabel}
-            venueLabel={market === "futures" ? "Perpetual" : "Spot"}
+            subtitle={
+              market === "futures"
+                ? `Perpetual${current && "maxLeverage" in current && current.maxLeverage ? ` · ${current.maxLeverage}×` : ""}`
+                : networkLabel
+                  ? `Spot on ${networkLabel}`
+                  : "Spot"
+            }
             price={price}
-            lastTick={lastTick}
             changePct={changePct24h}
-            changePct1h={changePct1h}
-            changePct7d={changePct7d}
-            volume24h={volume24h}
             high24h={high24h}
             low24h={low24h}
-            beat={beat}
-            showMarketStats={view.marketStats}
+            volume24h={volume24h}
+            network={market === "futures" ? null : networkLabel}
+            maxLeverage={current && "maxLeverage" in current ? current.maxLeverage : null}
+            showStats={view.marketStats}
             pickerOpen={pickerOpen}
             onTogglePicker={() => setPickerOpen((v) => !v)}
             picker={picker}
           />
+        </div>
+
+          {/* Phone: the preview's Chart | Book tabs (components/trade-unauth/mobile.tsx). */}
+          <div className="flex items-center gap-2 max-lg:order-1 lg:hidden">
+            <div role="tablist" className="grid grid-cols-2 gap-1 rounded-xl border border-foreground/[0.06] bg-foreground/[0.025] p-1">
+              {(["chart", "book"] as const).map((v) => (
+                <button
+                  key={v}
+                  role="tab"
+                  type="button"
+                  aria-selected={phoneView === v}
+                  onClick={() => setPhoneView(v)}
+                  className={cn("relative h-8 rounded-lg px-4 text-[12.5px] font-semibold capitalize", phoneView === v ? "bg-foreground/[0.08] text-foreground" : "text-muted-foreground")}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div
+            data-area="chart"
             /* Taller on phones: the chart is the reason this screen exists, and
                260px of it under a market strip read as a strip of noise. Sized
                against the viewport so it scales with the device instead of
                being tuned to one handset, and capped so the panes below it
                stay reachable without a scroll. */
-            className={`ws-pane h-[min(44dvh,420px)] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} sm:h-[min(50dvh,460px)] lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1`}
+            className={cn(
+              "ws-pane ds-panel flex h-[min(56dvh,480px)] min-w-0 shrink-0 flex-col overflow-hidden rounded-[20px] max-lg:order-2 sm:h-[min(56dvh,520px)] lg:h-auto lg:min-h-[520px] xl:min-h-[570px]",
+              phoneView === "book" && "max-lg:hidden",
+            )}
             style={{ "--ws-pane-delay": "0ms" } as React.CSSProperties}
             data-vivid-target="price-chart"
             data-vivid-label="The candlestick price chart"
           >
             {marketsError ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-chip">
                   <HugeiconsIcon
                     icon={Alert02Icon}
@@ -2805,104 +2673,38 @@ export function TradeClient() {
                 </button>
               </div>
             ) : !chartSource ? (
-              <div className="flex h-full items-center justify-center">
+              <div className="flex min-h-0 flex-1 items-center justify-center">
                 <p className="max-w-sm px-6 text-center text-xs leading-relaxed text-muted-foreground">
                   Select a market to load its chart.
                 </p>
               </div>
             ) : (
-              <CandleChart
+              /* The preview's chart and toolbar on the real feed (same requests,
+                 polling and stats as the previous chart). Simple keeps the
+                 chart and drops the toolbar, as before. */
+              <ChartPanel
                 source={chartSource}
                 onStats={handleChartStats}
                 onSource={setChartOrigin}
-                /* Simple keeps the chart and drops the workbench above it. */
                 toolbar={view.chartToolbar}
+                className="min-h-0 flex-1"
               />
             )}
           </div>
-          {/* Spot has neither positions nor resting orders — a swap settles or
-              it doesn't — so the two perps tabs could only ever read "none"
-              there. One Orders table takes their place; futures keeps the
-              drawer, where both concepts are real. */}
-          {market === "spot" ? (
-            <OrdersPanel
-              showTabs={view.orderTabs}
-              className={`ws-pane hidden h-[224px] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:flex`}
-              style={{ "--ws-pane-delay": "90ms" } as React.CSSProperties}
-            />
-          ) : (
-            <PositionsPanel
+          {/* The preview's activity panel: open orders, positions and the
+              spot order history in one panel, on the same account data and
+              the same Cancel / Close handlers as before. Spot opens on its
+              order history, futures on positions. */}
+          <div data-area="orders" className="min-w-0 max-lg:order-3">
+            <ActivityPanel
               account={account}
+              accountLoading={false}
               busyKey={busyKey}
               onClosePosition={handleClose}
               onCancelOrder={handleCancel}
-              className={`ws-pane hidden h-[224px] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:flex`}
-              style={{ "--ws-pane-delay": "90ms" } as React.CSSProperties}
+              defaultView={market === "spot" ? "history" : "positions"}
             />
-          )}
-
-          {/* Below lg the panes share one strip instead of stacking into an
-              endless scroll — the chart above never leaves the screen.
-              On spot there is only one pane, so there is no tab bar: a
-              Segmented offering a single choice is a control that does
-              nothing. Positions/Orders open full-screen rather than
-              squeezed into this strip's leftover height — the same room
-              they get in the always-on desktop rail. */}
-          <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:hidden`}>
-            {market === "spot" ? (
-              /* Same problem as futures had: a full order history table has
-                 no readable room left under the chart. Opens full-screen
-                 instead, same as Positions/Orders there. */
-              <button
-                type="button"
-                onClick={() => setSpotOrdersOpen(true)}
-                className="flex min-h-0 flex-1 items-center justify-between px-4 text-left transition-colors hover:bg-accent/30"
-              >
-                <span className="text-[13px] font-semibold">Orders</span>
-                <HugeiconsIcon
-                  icon={ArrowLeft01Icon}
-                  className="h-4 w-4 rotate-180 text-subtle"
-                />
-              </button>
-            ) : (
-              <>
-                {/* Separated by FILL, not a hairline: the strip sits on the
-                    card's own ground and the pane below it is what moves.
-                    (Light mode brings the hairline back through the token
-                    layer, which is where that rule lives.) */}
-                <div className="scrollbar-none flex shrink-0 items-center overflow-x-auto px-3 pt-3 pb-2">
-                  <Segmented
-                    size="sm"
-                    value={mobilePane}
-                    onChange={setMobilePane}
-                    options={[
-                      { key: "book" as const, label: "Book" },
-                      {
-                        key: "positions" as const,
-                        label: positionCount
-                          ? `Positions · ${positionCount}`
-                          : "Positions",
-                      },
-                      {
-                        key: "orders" as const,
-                        label: orderCount ? `Orders · ${orderCount}` : "Orders",
-                      },
-                    ]}
-                  />
-                </div>
-                <OrderBook
-                  book={book}
-                  lastTick={lastTick}
-                  onPickPrice={(p) => {
-                    pickPrice(p)
-                    setTicketOpen(true)
-                  }}
-                  className="min-h-0 flex-1"
-                />
-              </>
-            )}
           </div>
-        </div>
 
         {/* Full-screen Positions/Orders on mobile (spec: match the room the
             desktop rail gives them, not the sliver left under the chart).
@@ -2970,23 +2772,26 @@ export function TradeClient() {
         )}
 
         {/* Order book rail */}
-        {market === "futures" && (
-          <OrderBook
-            book={book}
-            lastTick={lastTick}
-            onPickPrice={pickPrice}
-            /* Its own card, separated by the workspace gap rather than by a
-               hairline drawn down its edge — the same treatment the chart,
-               the orders pane and the ticket already get. */
-            className={`hidden w-[248px] shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:flex xl:w-[276px]`}
+        <div data-area="book" className={cn("min-w-0 max-lg:order-2 lg:block", phoneView === "book" ? "block" : "hidden")}>
+          <BookPanel
+            base={symbol}
+            quote={market === "futures" ? "USDC" : quoteOf(current)}
+            price={price}
+            changePct={changePct24h}
+            book={market === "futures" ? book : spotBook.book}
+            bookState={market === "futures" ? (book ? "ready" : "loading") : !current ? "loading" : spotBook.state}
+            trades={tape}
+            onPick={pickPrice}
+            className="h-full"
           />
-        )}
+        </div>
 
         {/* Ticket rail — desktop keeps it always-on; below lg it becomes the
             modal the action bar opens, so the chart owns the screen. */}
         <aside
           aria-label="Order ticket"
-          className={`slim-scroll ws-pane hidden shrink-0 overflow-hidden rounded-2xl bg-card ${CARD_HUE} lg:block lg:w-[320px] lg:overflow-y-auto xl:w-[344px]`}
+          data-area="ticket"
+          className="slim-scroll ws-pane ds-panel hidden min-w-0 self-start overflow-hidden rounded-[20px] lg:block xl:sticky xl:top-4"
           style={
             {
               "--ws-pane-x": "10px",

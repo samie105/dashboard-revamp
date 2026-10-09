@@ -13,6 +13,7 @@ import * as React from "react"
 
 import { BridgeUsdSell } from "@/components/fiat/sell/BridgeUsdSell"
 import { FiatSellFlow } from "@/components/fiat/sell/FiatSellFlow"
+import { Segments } from "@/components/buy-sell/redesign/kit"
 import { ChoiceRow } from "@/components/ui/flow"
 import { Eyebrow } from "@/components/ui/system"
 import { useFiatConfig } from "@/hooks/crypto/useFiatConfig"
@@ -37,7 +38,19 @@ export function FiatSellRouter(props: Props) {
   ))
   const activeRail = availableRails.includes(rail) ? rail : availableRails[0] ?? rail
 
-  const railSwitcher = availableRails.length > 1 ? (
+  // The redesign's switch: same rails and state, no provider names.
+  const railSwitcher = availableRails.length > 1 && props.variant === "redesign" ? (
+    <Segments<Rail>
+      id="sell-rail"
+      label="Get paid in"
+      options={[
+        { key: "local", label: "Local currency" },
+        { key: "usd", label: "USD" },
+      ]}
+      value={activeRail}
+      onChange={setRail}
+    />
+  ) : availableRails.length > 1 ? (
     <div className="flex flex-col gap-2">
       <Eyebrow>Sell through</Eyebrow>
       <ChoiceRow<Rail>

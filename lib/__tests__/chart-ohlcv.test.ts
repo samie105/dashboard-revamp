@@ -34,6 +34,15 @@ describe("pickBestPool", () => {
     expect(pickBestPool(rows)).toBe("b")
   })
 
+  it("prefers the pool that trades over one with an inflated reserve", () => {
+    // The live wrapped-SOL response: the deepest stated reserve is a thin pool.
+    const rows = [
+      { id: "solana_dotf", attributes: { address: "dotf", reserve_in_usd: "181668393.86", volume_usd: { h24: "1272304.86" } } },
+      { id: "solana_solusdc", attributes: { address: "solusdc", reserve_in_usd: "30633054.76", volume_usd: { h24: "132112397.29" } } },
+    ]
+    expect(pickBestPool(rows)).toBe("solusdc")
+  })
+
   it("returns null for no pools", () => {
     expect(pickBestPool([])).toBeNull()
     expect(pickBestPool(undefined)).toBeNull()
