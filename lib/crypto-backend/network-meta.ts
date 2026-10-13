@@ -10,6 +10,7 @@ const BACKEND_NETWORK_KEY: Record<string, string> = {
   "sui-mainnet": "sui",
   "ton-mainnet": "ton",
   "tron-mainnet": "tron",
+  "bitcoin-mainnet": "bitcoin",
   "intertrain-mainnet": "intertrain",
 }
 
@@ -31,6 +32,7 @@ export function networkMetaFor(
     else if (live?.family === "sui") key = "sui"
     else if (live?.family === "ton") key = "ton"
     else if (live?.family === "tron") key = "tron"
+    else if (live?.family === "bitcoin") key = "bitcoin"
     else if (live?.family === "intertrain") key = "intertrain"
   }
   return key ? (NETWORKS.find((n) => n.key === key) ?? null) : null

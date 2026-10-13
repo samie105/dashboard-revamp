@@ -1,2 +1,5 @@
-import { IntertrainUsdcBridgeClient } from "@/components/bridge/intertrain-usdc-bridge-client"
-export default function BridgePage() { return <IntertrainUsdcBridgeClient /> }
+import { BridgePage } from "@/components/bridge/redesign/bridge-page"
+
+export default function BridgeRoute() {
+  return <BridgePage />
+}

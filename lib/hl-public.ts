@@ -167,3 +167,23 @@ export async function fetchHl24hStats(coin: string): Promise<Hl24hStats | null> 
     lastClose: last.close,
   }
 }
+
+// ── Recent trades ──────────────────────────────────────────────────────────
+
+/** One print on the tape. `side` is the taker's: a buy lifted the ask. */
+export type TapeFill = { id: string; side: "buy" | "sell"; price: number; size: number; time: number }
+
+/** The venue's latest public trades for a coin, newest first. */
+export async function fetchHlRecentTrades(coin: string): Promise<TapeFill[]> {
+  const rows = await infoRequest<{ side?: string; px?: string; sz?: string; time?: number; tid?: number; hash?: string }[]>({ type: "recentTrades", coin })
+  return (Array.isArray(rows) ? rows : [])
+    .map((r, i) => ({
+      id: String(r.tid ?? `${r.hash ?? "t"}-${i}`),
+      side: r.side === "B" ? ("buy" as const) : ("sell" as const),
+      price: Number(r.px),
+      size: Number(r.sz),
+      time: Number(r.time),
+    }))
+    .filter((f) => Number.isFinite(f.price) && f.price > 0 && Number.isFinite(f.size))
+    .sort((a, b) => b.time - a.time)
+}

@@ -13,6 +13,10 @@ export interface IDashboardProfile extends Document {
   authUserId: string
   email: string
   displayName: string
+  /** Optional handle, unique when set (lowercase, 3–20 of a-z 0-9 _). */
+  username?: string
+  country: string
+  timezone: string
   avatarUrl: string
   bio: string
   savedBankDetails: IBankDetail[]
@@ -41,6 +45,12 @@ const DashboardProfileSchema = new Schema<IDashboardProfile>(
     authUserId: { type: String, required: true, unique: true, index: true },
     email: { type: String, required: true, unique: true, index: true, lowercase: true },
     displayName: { type: String, default: "" },
+    // No default: profiles without a username leave the field ABSENT, and a
+    // sparse unique index ignores absent fields — so any number of profiles
+    // can have no username while two can never share one.
+    username: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
+    country: { type: String, default: "" },
+    timezone: { type: String, default: "" },
     avatarUrl: { type: String, default: "" },
     bio: { type: String, default: "", maxlength: 500 },
     savedBankDetails: {

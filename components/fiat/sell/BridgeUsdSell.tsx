@@ -70,11 +70,15 @@ import { isBridgeWithdrawalAvailable } from "@/lib/crypto-backend/fiat-capabilit
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import type { BridgeWithdrawalChannel, FiatOrder } from "@/lib/crypto-backend/types"
 import { clearPendingFlow, readPendingFlow, savePendingFlow } from "@/lib/pending-flow"
+import { TradeCta, TradeFrame, TradeNotice, TradeSkeleton, TradeUnavailable } from "@/components/buy-sell/redesign/kit"
+import { RedesignUsdWithdrawalOrder } from "@/components/buy-sell/redesign/sell-order"
+import { UsdSellTicket, UsdSellVerify } from "@/components/buy-sell/redesign/usd-sell"
 
 const WALLET_SETUP_HREF = "/wallet/modern"
 
 type Props = {
-  variant?: "page" | "modal"
+  /** "redesign" = the /sell page in the preview's look (components/buy-sell/redesign). Same logic; only what's rendered differs. */
+  variant?: "page" | "modal" | "redesign"
   onInFlightChange?: (inFlight: boolean) => void
   onCompactChange?: (compact: boolean) => void
   railSwitcher?: React.ReactNode
@@ -88,7 +92,9 @@ function BridgeWithdrawalOrderStatus({
   canSign,
   signing,
   signError,
+  variant = "classic",
 }: {
+  variant?: "classic" | "redesign"
   order: FiatOrder
   onSign: () => void
   onRefresh: () => void
@@ -111,6 +117,26 @@ function BridgeWithdrawalOrderStatus({
       <span className="block">Order reference {order.publicReference} if you contact support.</span>
     </>
   )
+
+  if (variant === "redesign") {
+    return (
+      <RedesignUsdWithdrawalOrder
+        order={order}
+        view={view}
+        figure={figure}
+        stages={BRIDGE_WITHDRAWAL_STAGES.map((stage) => stage.label)}
+        stageIndex={stageIndex}
+        stageProgress={stageProgress}
+        railLabel={bridgeWithdrawalChannelLabel(normalizeChannel(order.channel))}
+        canSign={canSign}
+        signing={signing}
+        signError={signError}
+        onSign={onSign}
+        onRefresh={onRefresh}
+        onStartOver={onStartOver}
+      />
+    )
+  }
 
   if (view.screen === "sign") {
     return (
@@ -253,6 +279,7 @@ export function BridgeUsdSell({
   railSwitcher,
 }: Props) {
   const isModal = variant === "modal"
+  const isRedesign = variant === "redesign"
   const router = useRouter()
   const queryClient = useQueryClient()
   const { user } = useAuth()
@@ -402,10 +429,18 @@ export function BridgeUsdSell({
   React.useEffect(() => onInFlightChange?.(inFlight), [inFlight, onInFlightChange])
   React.useEffect(() => onCompactChange?.(!showingOrder), [showingOrder, onCompactChange])
 
+  // The redesign's stand-ins take the same props as the classic pieces.
+  const Banner = isRedesign ? TradeNotice : AnnouncementBanner
+  const Unavailable = isRedesign ? TradeUnavailable : UnavailablePanel
+  const Skeleton = isRedesign ? TradeSkeleton : FlowSkeleton
+  const Cta = isRedesign ? TradeCta : FlowCta
+
   const shell = (content: React.ReactNode) => (
     <>
       {isModal ? (
         <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{railSwitcher}{content}</div>
+      ) : isRedesign ? (
+        <TradeFrame mode="sell" tabs={!showingOrder}>{railSwitcher}{content}</TradeFrame>
       ) : (
         <FlowShell className="max-w-5xl px-3 py-5 sm:px-5 sm:py-8">
           <PageHeader title="Sell" subtitle="Send USDC from your Worldstreet wallet, receive USD" back="/" className="mb-4" />
@@ -429,13 +464,14 @@ export function BridgeUsdSell({
   if (showingOrder) {
     if (!order.data) {
       return shell(order.error
-        ? <><FiatErrorDetail error={describeFiatError(order.error)} /><FlowCta label="Try again" onClick={order.refresh} /></>
-        : <FlowSkeleton />)
+        ? <><FiatErrorDetail error={describeFiatError(order.error)} /><Cta label="Try again" onClick={order.refresh} /></>
+        : <Skeleton />)
     }
     return shell(
       <>
-        {config.data?.environment === "sandbox" && <AnnouncementBanner title="Sandbox" detail="This withdrawal uses the provider test environment. No production fiat is moved." />}
+        {config.data?.environment === "sandbox" && <Banner title="Sandbox" detail="This withdrawal uses the provider test environment. No production fiat is moved." />}
         <BridgeWithdrawalOrderStatus
+          variant={isRedesign ? "redesign" : "classic"}
           order={order.data}
           onSign={pressSign}
           onRefresh={order.refresh}
@@ -448,20 +484,32 @@ export function BridgeUsdSell({
     )
   }
 
-  if (!isCryptoBackendEnabled) return shell(<UnavailablePanel title="The Worldstreet wallet isn't enabled" tone="muted" reason="The new wallet is still rolling out for your account." />)
-  if (wallet.needsSetup) return shell(<UnavailablePanel title="You don't have a Worldstreet wallet yet" tone="muted" reason="Create your Worldstreet wallet first." action={{ label: "Set up your wallet", onClick: () => router.push(WALLET_SETUP_HREF) }} />)
+  if (!isCryptoBackendEnabled) return shell(<Unavailable title="The Worldstreet wallet isn't enabled" tone="muted" reason="The new wallet is still rolling out for your account." />)
+  if (wallet.needsSetup) return shell(<Unavailable title="You don't have a Worldstreet wallet yet" tone="muted" reason="Create your Worldstreet wallet first." action={{ label: "Set up your wallet", onClick: () => router.push(WALLET_SETUP_HREF) }} />)
   if (wallet.error) return shell(<SectionMessage error={wallet.error} onAction={() => void wallet.refetch()} />)
-  if (config.error && !config.data) return shell(<><FiatErrorDetail error={describeFiatError(config.error)} /><FlowCta label="Try again" onClick={() => void config.refetch()} /></>)
-  if (wallet.isLoading || !config.data) return shell(<FlowSkeleton />)
+  if (config.error && !config.data) return shell(<><FiatErrorDetail error={describeFiatError(config.error)} /><Cta label="Try again" onClick={() => void config.refetch()} /></>)
+  if (wallet.isLoading || !config.data) return shell(<Skeleton />)
 
   if (!isBridgeWithdrawalAvailableForUi(config.data)) {
-    return shell(<UnavailablePanel title="USD withdrawals aren't available" tone="muted" reason="Bridge has not enabled a verified USD payout route for this deployment." />)
+    return shell(<Unavailable title="USD withdrawals aren't available" tone="muted" reason={isRedesign ? "A verified USD payout route isn't enabled yet." : "Bridge has not enabled a verified USD payout route for this deployment."} />)
   }
   if (networks.length === 0) {
-    return shell(<UnavailablePanel title="Your wallet has no supported USDC network" tone="muted" reason="Bridge can only withdraw from a network that this Worldstreet wallet owns and the backend has approved." />)
+    return shell(<Unavailable title="Your wallet has no supported USDC network" tone="muted" reason={isRedesign ? "USD withdrawals can only be sent from a network your Worldstreet wallet owns and that's been approved." : "Bridge can only withdraw from a network that this Worldstreet wallet owns and the backend has approved."} />)
   }
   if (!selectedNetwork) {
-    return shell(<UnavailablePanel title="A supported USDC network is not selected" tone="muted" reason="Refresh the wallet and capability data before creating a withdrawal." />)
+    return shell(<Unavailable title="A supported USDC network is not selected" tone="muted" reason="Refresh the wallet and capability data before creating a withdrawal." />)
+  }
+  if (!bridgeApproved && isRedesign) {
+    return shell(
+      <UsdSellVerify
+        railSwitch={null}
+        complianceError={compliance.error && !compliance.data ? describeFiatError(compliance.error) : null}
+        record={bridgeCustomer}
+        showRecord={Boolean(compliance.data)}
+        kyc={kycRequired ? <BridgeKycPanel kycRequired variant="redesign" /> : null}
+        onRefresh={() => void compliance.refetch()}
+      />,
+    )
   }
   if (!bridgeApproved) {
     return shell(
@@ -519,6 +567,35 @@ export function BridgeUsdSell({
     if (fraction !== undefined && fraction.length > 6) return
     const normalizedWhole = whole.replace(/^0+(?=\d)/, "")
     setAmount(fraction !== undefined ? `${normalizedWhole}.${fraction}` : normalizedWhole)
+  }
+
+  if (isRedesign) {
+    return shell(
+      <UsdSellTicket
+        railSwitch={null}
+        banners={config.data.environment === "sandbox" ? <Banner title="Sandbox" detail="This withdrawal uses the provider test environment. No production fiat is moved." /> : null}
+        amount={amount}
+        onAmountInput={onAmountInput}
+        pending={orderMutation.isPending}
+        amountProblem={amountProblem}
+        networks={networks}
+        networkId={selectedNetwork.networkId}
+        networkName={selectedNetwork.networkName}
+        onNetwork={setNetworkId}
+        channels={channels.map((item) => ({ key: item.channel, label: bridgeWithdrawalChannelLabel(item.channel) }))}
+        channel={activeChannel ?? ""}
+        channelLabel={selectedChannelLabel}
+        onChannel={(value) => setChannel(value as BridgeWithdrawalChannel)}
+        accounts={eligibleBeneficiaries}
+        accountsLoading={beneficiaries.isLoading}
+        beneficiaryId={beneficiaryId}
+        onBeneficiary={setBeneficiaryId}
+        error={error}
+        ctaLabel={orderMutation.isPending ? "Creating withdrawal…" : !amount.trim() ? "Enter a USDC amount" : amountProblem ? "Enter a valid amount" : !selectedBeneficiary ? "Select a verified USD account" : "Create USD withdrawal"}
+        onCta={createOrder}
+        ctaDisabled={!canCreateOrder}
+      />,
+    )
   }
 
   return shell(

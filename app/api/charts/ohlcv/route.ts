@@ -23,7 +23,6 @@
 import { NextResponse } from "next/server"
 import {
   normalizeOhlcv,
-  pickBestPool,
   stats24hFrom,
   normalizeBirdeye,
   bucketPrices,
@@ -31,8 +30,8 @@ import {
   num,
   type Candle,
 } from "@/lib/chart-ohlcv"
+import { CHAIN_SLUG, GECKO, findPool } from "@/lib/gecko-pool"
 
-const GECKO = "https://api.geckoterminal.com/api/v2"
 const COINGECKO = "https://api.coingecko.com/api/v3"
 const BIRDEYE = "https://public-api.birdeye.so"
 
@@ -98,12 +97,6 @@ const COINGECKO_DAYS: Record<string, number> = {
 const ALL_INTERVALS = ["1m", "5m", "15m", "1h", "4h", "1d"]
 const COINGECKO_INTERVALS = Object.keys(COINGECKO_DAYS)
 
-/** Our network ids → GeckoTerminal's own chain slugs. */
-const CHAIN_SLUG: Record<string, string> = {
-  "solana-mainnet-beta": "solana",
-  "ethereum-mainnet": "eth",
-  "arbitrum-one": "arbitrum",
-}
 
 /**
  * Chart interval → GeckoTerminal's timeframe + aggregate. Their API only
@@ -121,7 +114,6 @@ const TIMEFRAME: Record<string, { timeframe: string; aggregate: number }> = {
 }
 
 type CacheEntry<T> = { value: T; expires: number }
-const poolCache = new Map<string, CacheEntry<string | null>>()
 const candleCache = new Map<string, CacheEntry<Payload>>()
 
 type Stats = { price: number | null; changePct24h: number | null; volume24h: number | null }
@@ -159,36 +151,6 @@ function put<T>(store: Map<string, CacheEntry<T>>, key: string, value: T, ttlMs:
   }
 }
 
-/**
- * The pool to chart: the one holding the most liquidity for this token.
- *
- * A token trades in many pools and the thin ones print noise — a $200 pool
- * will show a 60% "candle" that no one could have traded. Depth is the only
- * sane tiebreak, and it is also the pool an order actually routes through.
- */
-async function findPool(slug: string, token: string, signal: AbortSignal): Promise<string | null> {
-  const key = `${slug}:${token.toLowerCase()}`
-  const hit = cached(poolCache, key)
-  if (hit !== undefined) return hit
-
-  const response = await fetch(
-    `${GECKO}/networks/${slug}/tokens/${encodeURIComponent(token)}/pools?page=1`,
-    { headers: { accept: "application/json" }, signal },
-  )
-  if (!response.ok) {
-    // A rate limit or upstream outage is not proof that the token has no
-    // pool. Cache only a genuine 404; caching 429/5xx here made charts stay
-    // empty for ten minutes after a transient provider failure.
-    if (response.status === 404) put(poolCache, key, null, 10 * 60_000)
-    return null
-  }
-  const body = (await response.json()) as {
-    data?: { id?: string; attributes?: { address?: string; reserve_in_usd?: string } }[]
-  }
-  const pool = pickBestPool(body.data)
-  put(poolCache, key, pool, pool ? 60 * 60_000 : 10 * 60_000)
-  return pool
-}
 
 /**
  * The primary source: Birdeye, address-keyed OHLCV on every chain we route.

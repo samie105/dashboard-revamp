@@ -34,6 +34,7 @@ import {
 } from "@/lib/crypto-backend/fiat-compliance"
 import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
 import { ComplianceStatusList } from "./ComplianceStatusList"
+import { KycFormView } from "@/components/buy-sell/redesign/usd-buy"
 
 const FIELD_LABEL: Record<keyof BridgeKycInput, string> = {
   legalName: "Legal name",
@@ -41,7 +42,8 @@ const FIELD_LABEL: Record<keyof BridgeKycInput, string> = {
   country: "Country (two-letter code, e.g. US)",
 }
 
-export function BridgeKycPanel({ kycRequired }: { kycRequired: boolean }) {
+/** `variant` "redesign" = the /buy page's look (components/buy-sell/redesign), without provider names. Render only. */
+export function BridgeKycPanel({ kycRequired, variant = "classic" }: { kycRequired: boolean; variant?: "classic" | "redesign" }) {
   const compliance = useFiatCompliance()
   const start = useStartBridgeKyc()
   const finish = useFinishBridgeKyc()
@@ -69,6 +71,36 @@ export function BridgeKycPanel({ kycRequired }: { kycRequired: boolean }) {
     }
     setLink(safe)
     openKycLink(safe)
+  }
+
+  if (variant === "redesign") {
+    return (
+      <KycFormView
+        record={bridgeRecord}
+        fields={(Object.keys(FIELD_LABEL) as Array<keyof BridgeKycInput>).map((field) => ({
+          key: field,
+          label: FIELD_LABEL[field],
+          value: form[field],
+          type: field === "email" ? "email" : "text",
+          autoComplete: field === "email" ? "email" : field === "legalName" ? "name" : "country",
+          maxLength: field === "country" ? 2 : undefined,
+          invalid: invalid.has(field),
+        }))}
+        onField={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
+        pending={start.isPending}
+        startError={startError}
+        unsafeLink={unsafeLink}
+        cta={{
+          label: start.isPending ? "Opening verification…" : incomplete ? "Fill in all three fields" : "Start verification",
+          disabled: incomplete || start.isPending,
+          onClick: () => void begin(),
+        }}
+        link={link}
+        finishing={finish.isPending}
+        onFinish={() => finish.mutate()}
+        finishError={finishError}
+      />
+    )
   }
 
   return (

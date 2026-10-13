@@ -42,23 +42,65 @@ import { complianceRecordFor, describeBridgeVirtualAccountRefusal, isBridgeKycRe
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
 import type { FiatCapabilitySnapshot, FiatVirtualAccount } from "@/lib/crypto-backend/types"
+import { CryptoBackendError } from "@/lib/crypto-backend"
+import {
+  CreateUsdAccountView,
+  KycCard,
+  UsdAccountView,
+  UsdBuyLayout,
+  UsdDeposits,
+  UsdDepositsLoading,
+  UsdLoadError,
+  UsdLoading,
+  UsdNoDeposits,
+} from "@/components/buy-sell/redesign/usd-buy"
+
+/** "redesign" = the /buy page's look (components/buy-sell/redesign). Render only; the logic is shared. */
+type Variant = "classic" | "redesign"
 
 export function BridgeUsdBuy({
   config,
   walletId,
   walletNetworkIds,
   walletNetworkAddresses,
+  variant = "classic",
 }: {
   config: FiatCapabilitySnapshot
   walletId: string | undefined
   walletNetworkIds?: readonly string[]
   walletNetworkAddresses?: Readonly<Record<string, string | undefined>>
+  variant?: Variant
 }) {
   const accounts = useFiatVirtualAccounts()
   const compliance = useFiatCompliance()
   const kycRequired = isBridgeKycRequired(config, "virtual-account")
   const hasBridgeRecord = Boolean(complianceRecordFor(compliance.data, "bridge"))
   const [kycOpen, setKycOpen] = React.useState(false)
+
+  if (variant === "redesign") {
+    return (
+      <UsdBuyLayout
+        account={
+          accounts.isLoading ? (
+            <UsdLoading />
+          ) : accounts.error && !accounts.data ? (
+            <UsdLoadError error={describeFiatError(accounts.error)} onRetry={() => void accounts.refetch()} />
+          ) : accounts.data && accounts.data.length > 0 ? (
+            accounts.data.map((account) => <UsdAccount key={account.id} account={account} variant="redesign" />)
+          ) : (
+            <CreateUsdAccount config={config} walletId={walletId} walletNetworkIds={walletNetworkIds} walletNetworkAddresses={walletNetworkAddresses} variant="redesign" />
+          )
+        }
+        kyc={
+          kycRequired ? (
+            <KycCard open={kycOpen} onToggle={() => setKycOpen((open) => !open)} hasRecord={hasBridgeRecord}>
+              <BridgeKycPanel kycRequired variant="redesign" />
+            </KycCard>
+          ) : undefined
+        }
+      />
+    )
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -113,7 +155,7 @@ export function BridgeUsdBuy({
 
 /* ── One virtual account: deposit details + activity ──────────────────── */
 
-function UsdAccount({ account: listed }: { account: FiatVirtualAccount }) {
+function UsdAccount({ account: listed, variant = "classic" }: { account: FiatVirtualAccount; variant?: Variant }) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const userId = user?.userId ?? "anonymous"
@@ -133,6 +175,32 @@ function UsdAccount({ account: listed }: { account: FiatVirtualAccount }) {
     if (hasNewCompletedDelivery(lastCompleted.current, completed)) refreshWalletBalances(queryClient, userId)
     if (completed) lastCompleted.current = completed
   }, [activity.data, queryClient, userId])
+
+  if (variant === "redesign") {
+    return (
+      <UsdAccountView
+        rows={rows.map((row) => ({ label: row.label, value: <SensitiveValue value={row.value} sensitive={row.sensitive} /> }))}
+        note={`USD you send here arrives as ${account.asset} on ${account.networkId} in your Worldstreet wallet. This is a deposit address for your bank transfer, not a balance.`}
+        status={humanizeValue(account.status)}
+        deposits={
+          activity.isLoading ? (
+            <UsdDepositsLoading />
+          ) : activity.error && !activity.data ? (
+            <FiatErrorDetail error={describeFiatError(activity.error)} />
+          ) : activity.data && activity.data.length > 0 ? (
+            <UsdDeposits
+              items={activity.data}
+              rail={(item) => item.sourcePaymentRail?.toUpperCase() ?? ""}
+              when={(item) => (item.occurredAt ? new Date(item.occurredAt).toLocaleString() : "")}
+              status={(item) => humanizeValue(item.providerStatus)}
+            />
+          ) : (
+            <UsdNoDeposits />
+          )
+        }
+      />
+    )
+  }
 
   return (
     <>
@@ -203,11 +271,13 @@ function CreateUsdAccount({
   walletId,
   walletNetworkIds,
   walletNetworkAddresses,
+  variant = "classic",
 }: {
   config: FiatCapabilitySnapshot
   walletId: string | undefined
   walletNetworkIds?: readonly string[]
   walletNetworkAddresses?: Readonly<Record<string, string | undefined>>
+  variant?: Variant
 }) {
   const create = useCreateBridgeUsdAccount()
   const readiness = bridgeVirtualAccountReadiness(config, walletId, walletNetworkAddresses)
@@ -225,6 +295,36 @@ function CreateUsdAccount({
         : readiness.reason === "wallet_address_unavailable"
           ? "Your wallet does not have an address on Bridge's selected USDC network yet."
           : null
+
+  if (variant === "redesign") {
+    // Same states as below; the copy without provider names.
+    const copy = readiness.reason === "capability_unavailable"
+      ? "USD deposits are not enabled for this deployment yet."
+      : readiness.reason === "wallet_unavailable"
+        ? "Set up your Worldstreet wallet before creating USD deposit details."
+        : readiness.reason === "network_unavailable"
+          ? "There's no supported USDC network for this wallet yet."
+          : readiness.reason === "wallet_address_unavailable"
+            ? "Your wallet doesn't have an address on the USDC network used for USD deposits yet."
+            : null
+    const shownRefusal = refusal && create.error instanceof CryptoBackendError && create.error.status === 403
+      ? { ...refusal, message: "Your USD deposit account isn't approved yet. Finish the identity check, then try again." }
+      : refusal
+    return (
+      <CreateUsdAccountView
+        readinessCopy={copy}
+        refusal={shownRefusal}
+        cta={{
+          label: create.isPending ? "Creating your USD account…" : !ready ? "USD account creation isn't available yet" : "Create USD account",
+          disabled: !ready || create.isPending,
+          busy: create.isPending,
+          onClick: () => {
+            if (networkId && walletId) create.mutate({ walletId, networkId })
+          },
+        }}
+      />
+    )
+  }
 
   return (
     <div className="flex flex-col gap-2">

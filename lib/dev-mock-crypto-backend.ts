@@ -33,6 +33,7 @@ import { Keypair, PublicKey, SystemProgram, TransactionMessage, VersionedTransac
 import { DEV_BYPASS_USER } from "./dev-auth-bypass"
 import { respondFromFiatFixtures } from "./crypto-backend/dev-mock-fiat-responder"
 import { FIAT_MOCKS_ENABLED } from "./fiat-mocks"
+import { BALANCE_NETWORK_ID, SWAP_ASSETS } from "@/components/swap/swap-model"
 
 // ── Envelope helpers ────────────────────────────────────────────────────────
 
@@ -54,6 +55,8 @@ const NETWORKS = [
   { id: "sui-mainnet", family: "sui", name: "Sui", environment: "mainnet", nativeAsset: "SUI", capabilities: { balance: true, transfer: true } },
   { id: "ton-mainnet", family: "ton", name: "TON", environment: "mainnet", nativeAsset: "TON", capabilities: { balance: true, transfer: true } },
   { id: "tron-mainnet", family: "tron", name: "Tron", environment: "mainnet", nativeAsset: "TRX", capabilities: { balance: true, transfer: true } },
+  { id: "bitcoin-mainnet", family: "bitcoin", name: "Bitcoin", environment: "mainnet", nativeAsset: "BTC", capabilities: { balance: true, transfer: true } },
+  { id: "intertrain-mainnet", family: "intertrain", name: "Intertrain", environment: "mainnet", nativeAsset: "WSK", capabilities: { balance: true, transfer: true } },
 ]
 
 const USDC_ETH = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
@@ -161,6 +164,7 @@ function clearPersistedMockCryptoState() {
 /** Back to "no wallet yet", in memory and on disk — the state the demo starts
  *  from, so the setup ceremony can be run again. */
 export function resetMockCryptoState() {
+  seedFlag.__wsMockNoDemoSeed = true
   state.wallet = null; state.pkg = null; state.prepared.clear(); state.intents.clear()
   state.byIdempotency.clear(); state.sponsorOps.clear(); state.hlIntents.clear()
   state.transactions = []; state.balanceDeltas.clear()
@@ -193,6 +197,53 @@ function hydrateMockCryptoState() {
 }
 
 hydrateMockCryptoState()
+
+/* ── Demo wallet ───────────────────────────────────────────────────────────
+   The setup ceremony can't finish on every dev machine, and without a
+   finished wallet the wallet page is nothing but the setup modal. So the
+   first "get my wallet" with no wallet seeds a READY one: an account per
+   family with well-formed addresses nobody holds the key to (the wallet
+   preview's own, components/wallet-unauth/wallet-data.ts), and a package so
+   the page treats setup as done. Balances come from SEED_BALANCES as usual.
+   Signing a send from it fails — there are no local keys — which is fine for
+   looking at the screens. GET /api/crypto/dev/reset turns seeding off for
+   the rest of the session, so the real ceremony can still be run. */
+
+const DEMO_ACCOUNTS: Array<{ family: string; address: string; networks: string[] }> = [
+  { family: "evm", address: "0x3f5401b76080CB31B74A7ed98e38daE13c01c516", networks: ["ethereum-mainnet", "arbitrum-one"] },
+  { family: "solana", address: "Fq8kU7JtyKvnJsZJafXa6GfgjciFDKiNCDSYc5D2FfWy", networks: ["solana-mainnet-beta"] },
+  { family: "tron", address: "TLEvwMieGYSv8pBP5s1nGBJ8nYVPPokeXG", networks: ["tron-mainnet"] },
+  { family: "bitcoin", address: "bc1q3ml9cragvkwxpvucph8mwf0xv0dre323f0mg8g", networks: ["bitcoin-mainnet"] },
+  // Well-formed bech32m (version 1 + a hash of a fixed string), no key behind it.
+  { family: "intertrain", address: "mna1qycvfn8jnh0usq25rw9jhv9dctg04kha2gu7gl9f", networks: ["intertrain-mainnet"] },
+  { family: "ton", address: "UQBGvjFGRxPGyXyABYk7IyZBDUr6nkWu0z5f_68vkyG47GIW", networks: ["ton-mainnet"] },
+  { family: "sui", address: "0x73f60bf23b7d5b3eee0b5a4d1dba2c5b461fe7272c6809f9d92a4c529523a7e5", networks: ["sui-mainnet"] },
+]
+
+const seedFlag = globalThis as typeof globalThis & { __wsMockNoDemoSeed?: boolean }
+
+function seedDemoWallet() {
+  // A wallet with no package is a half-finished setup (or the fiat mock's
+  // placeholder) — replace it too, or the page stays stuck on "finish setup".
+  const isOldDemo = state.pkg?.id === "mock-pkg-demo" && !state.pkg.accounts.some((a) => a.family === "intertrain")
+  if ((state.pkg && !isOldDemo) || seedFlag.__wsMockNoDemoSeed) return
+  const walletId = "66f000000000000000000041"
+  state.wallet = {
+    id: walletId, userId: DEV_BYPASS_USER.userId, status: "active", version: 1, securityVersion: 1,
+    provisioningMode: "self-custodial", createdAt: nowIso(), updatedAt: nowIso(),
+  }
+  state.pkg = {
+    id: "mock-pkg-demo", walletId, version: 1, baseVersion: 0, securityVersion: 1,
+    format: "worldstreet-wallet-package", status: "active", envelopes: [],
+    accounts: DEMO_ACCOUNTS.map((a) => ({
+      accountId: `mock-account-demo-${a.family}`,
+      family: a.family,
+      canonicalAddress: a.address,
+      addresses: a.networks.map((networkId) => ({ networkId, address: a.address, isCanonical: true })),
+    })),
+  }
+  persistMockCryptoState()
+}
 
 const nextId = (prefix: string) => `${prefix}-${++state.counter}-${Date.now().toString(36)}`
 
@@ -248,6 +299,9 @@ const SEED_BALANCES: Record<string, Array<{ kind: "native" | "token"; identifier
   ],
   "ton-mainnet": [
     { kind: "native", identifier: "TON", amountBaseUnits: "250000000000", decimals: 9, symbol: "TON", name: "Toncoin" },
+  ],
+  "bitcoin-mainnet": [
+    { kind: "native", identifier: "BTC", amountBaseUnits: "1342000", decimals: 8, symbol: "BTC", name: "Bitcoin" },
   ],
   "tron-mainnet": [
     { kind: "native", identifier: "TRX", amountBaseUnits: "4000000000", decimals: 6, symbol: "TRX", name: "Tron" },
@@ -604,6 +658,7 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
 
   // Wallet lifecycle
   if (method === "GET" && path === "wallets/me") {
+    seedDemoWallet()
     const details = walletDetails()
     if (!details && FIAT_MOCKS_ENABLED) {
       // Dev-only: fiat mock mode needs a ready wallet to reach Buy. Not stored,
@@ -895,6 +950,62 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
       return json({ intentId: intent.id, status: "submitted", results: [{ status: "ok" }] })
     }
   }
+  // A LI.FI-shaped swap quote, so the swap ticket's quoted states (rate,
+  // minimum, impact, fees, route, an armed button) can be looked at in dev.
+  // Priced from fixed dollar figures; signing a swap from it still fails,
+  // because the demo wallet has no keys.
+  if (method === "GET" && path === "trading/spot/lifi/quote") {
+    const q = new URL(req.url).searchParams
+    const fromChain = q.get("fromChain") ?? ""
+    const toChain = q.get("toChain") ?? ""
+    const pick = (chain: string, id: string | null) => {
+      const networkId = BALANCE_NETWORK_ID[chain]
+      const lower = (id ?? "").toLowerCase()
+      return SWAP_ASSETS.find((a) => a.networkId === networkId && (a.address.toLowerCase() === lower || a.symbol.toLowerCase() === lower))
+    }
+    const from = pick(fromChain, q.get("fromToken"))
+    const to = pick(toChain, q.get("toToken"))
+    if (!from || !to) return jsonRaw({ success: false, error: "No route for this pair in the dev mock" })
+    const USD: Record<string, number> = { ETH: 3284.12, BTC: 96420.5, SOL: 182.55, SUI: 3.14, TRX: 0.242, USDC: 1, USDT: 1 }
+    const amount = Number(q.get("amount") ?? 0)
+    const slippage = Number(q.get("slippage") ?? 0.005)
+    const crossChain = fromChain !== toChain
+    const usdIn = amount * (USD[from.symbol] ?? 0)
+    const impact = Math.min(4.5, (usdIn / 45_000) * 1.1 + (crossChain ? 0.18 : 0.04))
+    const feeUsd = usdIn * (crossChain ? 0.0025 : 0.001)
+    const usdOut = usdIn * (1 - impact / 100) - feeUsd
+    const out = usdOut / (USD[to.symbol] || 1)
+    const base = (n: number, d: number) => BigInt(Math.max(0, Math.floor(n * 10 ** Math.min(d, 9)))).toString() + "0".repeat(Math.max(0, d - 9))
+    const steps = crossChain
+      ? [
+          ...(from.symbol !== "USDC" ? [{ tool: "uniswap", type: "swap", fromSymbol: from.symbol, toSymbol: "USDC" }] : []),
+          { tool: "across", type: "cross", fromSymbol: "USDC", toSymbol: "USDC" },
+          ...(to.symbol !== "USDC" ? [{ tool: fromChain === "solana" || toChain === "solana" ? "jupiter" : "uniswap", type: "swap", fromSymbol: "USDC", toSymbol: to.symbol }] : []),
+        ]
+      : [{ tool: fromChain === "solana" ? "jupiter" : "1inch", type: "swap", fromSymbol: from.symbol, toSymbol: to.symbol }]
+    return jsonRaw({
+      success: true,
+      quote: {
+        toAmount: base(out, to.decimals),
+        toAmountMin: base(out * (1 - slippage), to.decimals),
+        toAmountUSD: usdOut.toFixed(2),
+        fromAmountUSD: usdIn.toFixed(2),
+        priceImpact: Number(impact.toFixed(3)),
+        gasCostUSD: crossChain ? "1.84" : fromChain === "solana" ? "0.02" : "0.61",
+        tool: steps[0].tool,
+        executionData: { mock: true },
+        fromToken: { chainId: 0, address: from.address, symbol: from.symbol, decimals: from.decimals },
+        toToken: { chainId: 0, address: to.address, symbol: to.symbol, decimals: to.decimals },
+        executionDuration: crossChain ? 180 : fromChain === "solana" ? 8 : 25,
+        feeCosts: [{ name: "Integrator fee", amountUSD: feeUsd.toFixed(2), included: false }],
+        steps,
+      },
+    })
+  }
+  // The USDC → WSK bridge's status, open, so the bridge page can be looked at.
+  if (method === "GET" && path === "bridge/intertrain/usdc/status") {
+    return json({ enabled: true, available: true, sourceNetworks: ["arbitrum-one"], destinationNetwork: "intertrain-mainnet", asset: "USDC" })
+  }
   if (method === "POST" && path === "trading/hyperliquid/deposit/intents") {
     const body = await readBody()
     const resolved = accountFor("arbitrum-one")
@@ -912,6 +1023,9 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
     const payload = (await response.json()) as { data: MockIntent }
     return json({ networkId: "arbitrum-one", amount, intents: [payload.data] })
   }
+
+  // Trading sessions — none in the demo, so Settings shows its empty state.
+  if (method === "GET" && path === "wallets/me/sessions") return json([])
 
   // Devices & recovery
   if (method === "GET" && path === "devices") {

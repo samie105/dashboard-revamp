@@ -32,12 +32,12 @@ import type { CoinData } from "@/lib/actions"
  * samples at five minutes at the finest, so a one-minute bar is not offered
  * rather than offered and returned empty.
  */
-const RANGES = [
+export const RANGES = [
   { key: "1D" as const, label: "1D", interval: "15m", seconds: 24 * 60 * 60 },
   { key: "1W" as const, label: "1W", interval: "1h", seconds: 7 * 24 * 60 * 60 },
   { key: "1M" as const, label: "1M", interval: "4h", seconds: 30 * 24 * 60 * 60 },
 ]
-type RangeKey = (typeof RANGES)[number]["key"]
+export type RangeKey = (typeof RANGES)[number]["key"]
 
 type Candle = { time: number; close: number }
 
@@ -101,16 +101,12 @@ function RateLine({ points }: { points: number[] }) {
   )
 }
 
-/* ── The card ──────────────────────────────────────────────────────────── */
-
-export function SwapRateChart({
-  fromCoin,
-  toCoin,
-}: {
-  fromCoin: CoinData | null
-  toCoin: CoinData | null
-}) {
-  const [rangeKey, setRangeKey] = React.useState<RangeKey>("1W")
+/**
+ * The pair's rate series: each side's dollar candles on the same interval,
+ * divided bar for bar. Shared by this card and the redesigned swap page's
+ * rate card, so both draw the same two real prices.
+ */
+export function useSwapRateSeries(fromCoin: CoinData | null, toCoin: CoinData | null, rangeKey: RangeKey) {
   const range = RANGES.find((option) => option.key === rangeKey) ?? RANGES[1]
 
   const fromId = fromCoin?.id
@@ -153,6 +149,20 @@ export function SwapRateChart({
   const latest = points.length > 0 ? points[points.length - 1] : null
   const changePct =
     points.length > 1 && points[0] > 0 ? ((points[points.length - 1] - points[0]) / points[0]) * 100 : null
+  return { range, loading, latest, changePct, points }
+}
+
+/* ── The card ──────────────────────────────────────────────────────────── */
+
+export function SwapRateChart({
+  fromCoin,
+  toCoin,
+}: {
+  fromCoin: CoinData | null
+  toCoin: CoinData | null
+}) {
+  const [rangeKey, setRangeKey] = React.useState<RangeKey>("1W")
+  const { loading, latest, changePct, points } = useSwapRateSeries(fromCoin, toCoin, rangeKey)
 
   return (
     <CardShell>

@@ -4,6 +4,7 @@ import { auth, currentUser } from "@clerk/nextjs/server"
 import { connectDB } from "@/lib/mongodb"
 import DashboardProfile from "@/models/DashboardProfile"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+import { isCountry, isTimezone, normalizeUsername, usernameProblem } from "@/lib/profile-fields"
 import {
   getDevMockProfile,
   updateDevMockProfile,
@@ -17,6 +18,9 @@ export type ProfileData = {
   authUserId: string
   email: string
   displayName: string
+  username?: string
+  country: string
+  timezone: string
   avatarUrl: string
   bio: string
   preferredCurrency: string
@@ -125,8 +129,18 @@ export async function fetchProfile(): Promise<ProfileResult> {
 }
 
 export async function updateProfile(
-  updates: Partial<Pick<ProfileData, "displayName" | "avatarUrl" | "bio" | "preferredCurrency" | "watchlist" | "defaultChartInterval" | "notifications" | "theme" | "dashboardLayout" | "onboardingCompleted">>,
+  updates: Partial<Pick<ProfileData, "displayName" | "username" | "country" | "timezone" | "avatarUrl" | "bio" | "preferredCurrency" | "watchlist" | "defaultChartInterval" | "notifications" | "theme" | "dashboardLayout" | "onboardingCompleted">>,
 ): Promise<ProfileResult> {
+  // Username, country and time zone are checked here, not just on the page:
+  // the page's rules are a convenience, this is the guard.
+  if (updates.username !== undefined) {
+    const problem = usernameProblem(updates.username)
+    if (problem) return { success: false, error: `Username: ${problem}` }
+    updates = { ...updates, username: normalizeUsername(updates.username) }
+  }
+  if (updates.country !== undefined && !isCountry(updates.country)) return { success: false, error: "Pick a country from the list." }
+  if (updates.timezone !== undefined && !isTimezone(updates.timezone)) return { success: false, error: "Pick a time zone from the list." }
+
   // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
   if (DEV_AUTH_BYPASS) {
     return { success: true, profile: updateDevMockProfile(updates) as ProfileData }
@@ -137,29 +151,44 @@ export async function updateProfile(
     if (!userId) return { success: false, error: "Unauthorized" }
 
     const allowedFields = [
-      "displayName", "avatarUrl", "bio", "preferredCurrency",
+      "displayName", "username", "country", "timezone", "avatarUrl", "bio", "preferredCurrency",
       "watchlist", "defaultChartInterval", "notifications",
       "theme", "dashboardLayout", "onboardingCompleted",
     ] as const
 
     const safe: Record<string, unknown> = {}
+    const unset: Record<string, ""> = {}
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
         safe[field] = updates[field]
       }
     }
+    // Clearing a username REMOVES the field rather than storing "" — an empty
+    // string would count as a value under the unique index, and the second
+    // person to clear theirs would collide with the first.
+    if (safe.username === "") {
+      delete safe.username
+      unset.username = ""
+    }
 
-    if (Object.keys(safe).length === 0) {
+    if (Object.keys(safe).length === 0 && Object.keys(unset).length === 0) {
       return { success: false, error: "No valid fields to update" }
     }
 
     await connectDB()
 
-    const profile = await DashboardProfile.findOneAndUpdate(
-      { authUserId: userId },
-      { $set: safe },
-      { new: true, runValidators: true },
-    )
+    let profile
+    try {
+      profile = await DashboardProfile.findOneAndUpdate(
+        { authUserId: userId },
+        { ...(Object.keys(safe).length ? { $set: safe } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) },
+        { new: true, runValidators: true },
+      )
+    } catch (err) {
+      // Mongo's duplicate-key error: the unique username index said no.
+      if ((err as { code?: number }).code === 11000) return { success: false, error: "That username is taken." }
+      throw err
+    }
 
     if (!profile) return { success: false, error: "Profile not found" }
 

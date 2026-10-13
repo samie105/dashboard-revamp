@@ -91,16 +91,12 @@ function useSecondsLeft(iso: string | undefined) {
 }
 
 type Result = { ok: true; txHash?: string } | { ok: false; message: string }
-
-export function LiveCurveTicket({
-  token,
-  platformFeeBps,
-  tokenDecimals,
-}: {
-  token: LaunchpadToken
-  platformFeeBps: number
-  tokenDecimals: number
-}) {
+/**
+ * The curve ticket's state and behaviour, moved verbatim out of
+ * LiveCurveTicket so the redesigned token page draws the same quote, intent,
+ * unlock, signing and submit. Only `token` and `tokenDecimals` come in.
+ */
+export function useCurveTicket({ token, tokenDecimals }: { token: LaunchpadToken; tokenDecimals: number }) {
   const { user } = useAuth()
   const wallet = useCryptoWalletState()
   const walletPackage = useQuery({
@@ -213,6 +209,80 @@ export function LiveCurveTicket({
     }
   }
 
+
+  /** Any edit to the trade is a new trade: drop the reused intent key. */
+  const resetIntentKey = React.useCallback(() => {
+    idempotencyKey.current = null
+  }, [])
+
+  return {
+    resetIntentKey,
+    amount,
+    baseUnits,
+    busy,
+    debounced,
+    decimals,
+    execute,
+    expired,
+    idempotencyKey,
+    inUnit,
+    outDecimals,
+    outUnit,
+    q,
+    quote,
+    result,
+    seconds,
+    setAmount,
+    setBusy,
+    setResult,
+    setSide,
+    setSlippage,
+    setUnlockOpen,
+    side,
+    slippage,
+    tradable,
+    unlockOpen,
+    user,
+    wallet,
+    walletPackage,
+  }
+}
+
+
+export function LiveCurveTicket({
+  token,
+  platformFeeBps,
+  tokenDecimals,
+}: {
+  token: LaunchpadToken
+  platformFeeBps: number
+  tokenDecimals: number
+}) {
+  const {
+    resetIntentKey,
+    amount,
+    baseUnits,
+    busy,
+    execute,
+    expired,
+    inUnit,
+    outDecimals,
+    outUnit,
+    q,
+    quote,
+    result,
+    seconds,
+    setAmount,
+    setResult,
+    setSide,
+    setSlippage,
+    setUnlockOpen,
+    side,
+    slippage,
+    tradable,
+    unlockOpen,
+  } = useCurveTicket({ token, tokenDecimals })
+
   if (!tradable) {
     return (
       <CardShell className={cn(CARD_HUE, "flex h-auto flex-col gap-2 p-5")}>
@@ -255,7 +325,7 @@ export function LiveCurveTicket({
           setSide(next as LaunchpadTradeSide)
           setAmount("")
           setResult(null)
-          idempotencyKey.current = null
+          resetIntentKey()
         }}
       />
 
@@ -272,7 +342,7 @@ export function LiveCurveTicket({
             onChange={(e) => {
               setAmount(e.target.value.replace(",", "."))
               setResult(null)
-              idempotencyKey.current = null
+              resetIntentKey()
             }}
             className="h-full min-w-0 flex-1 bg-transparent text-[18px] font-semibold tabular-nums outline-none placeholder:text-muted-foreground/50"
           />
