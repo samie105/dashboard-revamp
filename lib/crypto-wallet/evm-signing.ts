@@ -64,12 +64,12 @@ export async function signEvmIntent(
 }
 
 /**
- * Signs an Alchemy Wallet APIs prepared call.
+ * Signs a prepared EVM call returned by the WorldStreet sponsorship relay.
  *
- * The first sponsored operation for an EOA can contain both an EIP-7702
- * delegation authorization and a user-operation request. Later operations
- * contain only the user-operation request. Both are signed locally from the
- * decrypted modern-wallet key; no private key leaves the browser.
+ * The relay may return an EIP-7702 delegation authorization together with a
+ * user-operation request. Later operations may contain only the user-operation
+ * request. Both are signed locally from the decrypted modern-wallet key; no
+ * private key leaves the browser.
  */
 export async function signSponsoredEvmOperation(
   userId: string,
@@ -82,7 +82,7 @@ export async function signSponsoredEvmOperation(
   const signerAddress = typeof signingPayload.signerAddress === "string" ? signingPayload.signerAddress : ""
   const preparedCalls = signingPayload.preparedCalls
   if (kind !== "evm-prepared-calls" || !signerAddress || !preparedCalls || typeof preparedCalls !== "object") {
-    throw new Error("Alchemy returned an incomplete EVM prepared-calls payload")
+    throw new Error("The sponsorship relay returned an incomplete EVM prepared-calls payload")
   }
 
   const secret = await decryptLocalAccountKey(userId, walletId, packageValue, accountId)
@@ -91,25 +91,25 @@ export async function signSponsoredEvmOperation(
     if (account.address.toLowerCase() !== signerAddress.toLowerCase()) throw new Error("Local key does not match the sponsored operation signer")
     const prepared = preparedCalls as Record<string, unknown>
     const rawItems = prepared.type === "array" ? prepared.data : [prepared]
-    if (!Array.isArray(rawItems) || rawItems.length === 0) throw new Error("Alchemy returned no EVM signature requests")
+    if (!Array.isArray(rawItems) || rawItems.length === 0) throw new Error("The sponsorship relay returned no EVM signature requests")
 
     const signedItems: Record<string, unknown>[] = []
     for (const rawItem of rawItems) {
-      if (!rawItem || typeof rawItem !== "object") throw new Error("Alchemy returned an invalid EVM signature request")
+      if (!rawItem || typeof rawItem !== "object") throw new Error("The sponsorship relay returned an invalid EVM signature request")
       const item = { ...(rawItem as Record<string, unknown>) }
       const signatureRequest = item.signatureRequest
-      if (!signatureRequest || typeof signatureRequest !== "object") throw new Error("Alchemy returned an EVM request without a signature prompt")
+      if (!signatureRequest || typeof signatureRequest !== "object") throw new Error("The sponsorship relay returned an EVM request without a signature prompt")
       const request = signatureRequest as Record<string, unknown>
       let signature: string
 
       if (request.type === "eth_signAuthorization" || request.type === "eip7702Auth") {
         const authData = item.data
-        if (!authData || typeof authData !== "object") throw new Error("Alchemy returned an invalid EIP-7702 authorization")
+        if (!authData || typeof authData !== "object") throw new Error("The sponsorship relay returned an invalid EIP-7702 authorization")
         const auth = authData as Record<string, unknown>
         // chainId is a sibling of `data` on the item, not inside it.
         const authChainId = auth.chainId ?? item.chainId
         if (typeof auth.address !== "string" || authChainId === undefined || auth.nonce === undefined) {
-          throw new Error("Alchemy returned an incomplete EIP-7702 authorization")
+          throw new Error("The sponsorship relay returned an incomplete EIP-7702 authorization")
         }
         const signedAuthorization = await account.signAuthorization({
           address: auth.address as `0x${string}`,
@@ -123,10 +123,10 @@ export async function signSponsoredEvmOperation(
         const raw = typeof rawValue === "string" && rawValue.startsWith("0x")
           ? rawValue
           : typeof request.rawPayload === "string" ? request.rawPayload : undefined
-        if (!raw || !raw.startsWith("0x")) throw new Error("Alchemy returned an incomplete personal-sign request")
+        if (!raw || !raw.startsWith("0x")) throw new Error("The sponsorship relay returned an incomplete personal-sign request")
         signature = await account.signMessage({ message: { raw: raw as Hex } })
       } else {
-        throw new Error(`Alchemy returned unsupported EVM signature request: ${String(request.type)}`)
+        throw new Error(`The sponsorship relay returned an unsupported EVM signature request: ${String(request.type)}`)
       }
 
       delete item.signatureRequest

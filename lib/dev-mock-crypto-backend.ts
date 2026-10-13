@@ -785,7 +785,7 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
   // Sponsorship
   if (method === "GET" && path === "sponsorship/config") {
     return json({
-      enabled: true, provider: "alchemy (dev mock)",
+      enabled: true, provider: "manual relay (dev mock)",
       allowedNetworks: ["ethereum-mainnet", "arbitrum-one", "solana-mainnet-beta"],
       allowedOperations: ["native-transfer", "token-transfer"],
       maxGasUsd: 5, dailyUserLimitUsd: 25, supportedFamilies: ["evm", "solana"],
