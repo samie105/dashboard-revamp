@@ -58,6 +58,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 import { PREVIEW_ROUTES, walletHref } from "@/components/preview/routes"
+import { searchPlatform, type PlatformSearchItem } from "@/lib/platform-search"
 import {
   DEMO_USER,
   PORTFOLIO_TOTAL,
@@ -468,9 +469,27 @@ function NavMenu({
 
 /* ── Search ───────────────────────────────────────────────────────────── */
 
+function SearchResultIcon({ item }: { item: PlatformSearchItem }) {
+  const icon =
+    item.location === "Futures"
+      ? ChartLineData02Icon
+      : item.location === "Spot"
+        ? Exchange01Icon
+        : item.location === "Wallet" || item.location === "Fiat"
+          ? Wallet02Icon
+          : item.location === "Markets"
+            ? ChartBarLineIcon
+            : Search01Icon
+  return <Icon icon={icon} className="size-4" />
+}
+
 function SearchField({ className }: { className?: string }) {
   const ref = React.useRef<HTMLInputElement>(null)
+  const wrap = React.useRef<HTMLDivElement>(null)
   const [mac, setMac] = React.useState(false)
+  const [query, setQuery] = React.useState("")
+  const [open, setOpen] = React.useState(false)
+  const results = React.useMemo(() => searchPlatform(query), [query])
 
   React.useEffect(() => {
     setMac(/Mac|iPhone|iPad/.test(navigator.platform))
@@ -478,34 +497,122 @@ function SearchField({ className }: { className?: string }) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault()
         ref.current?.focus()
+        setOpen(true)
       }
+      if (e.key === "Escape") setOpen(false)
+    }
+    const onDown = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false)
     }
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    window.addEventListener("pointerdown", onDown)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      window.removeEventListener("pointerdown", onDown)
+    }
   }, [])
 
   return (
-    <label
-      className={cn(
-        "group flex h-11 items-center gap-2.5 rounded-full border border-white/[0.07] bg-white/[0.03] pr-1.5 pl-4 transition-all duration-200",
-        "focus-within:border-primary/45 focus-within:bg-white/[0.045] focus-within:shadow-[0_0_0_4px_color-mix(in_oklab,var(--primary)_10%,transparent)] hover:border-white/[0.12]",
-        className
-      )}
-    >
-      <Icon
-        icon={Search01Icon}
-        className="size-[17px] text-muted-foreground transition-colors group-focus-within:text-primary"
-      />
-      <input
-        ref={ref}
-        type="search"
-        placeholder="Search coins, pairs, or features…"
-        className="min-w-0 flex-1 bg-transparent text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground/70"
-      />
-      <kbd className="hidden h-7 shrink-0 items-center rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 font-sans text-[11px] font-semibold text-muted-foreground sm:inline-flex">
-        {mac ? "⌘ K" : "Ctrl K"}
-      </kbd>
-    </label>
+    <div ref={wrap} className={cn("relative", className)}>
+      <label
+        className={cn(
+          "group flex h-11 items-center gap-2.5 rounded-full border border-white/[0.07] bg-white/[0.03] pr-1.5 pl-4 transition-all duration-200",
+          "focus-within:border-primary/45 focus-within:bg-white/[0.045] focus-within:shadow-[0_0_0_4px_color-mix(in_oklab,var(--primary)_10%,transparent)] hover:border-white/[0.12]"
+        )}
+      >
+        <Icon
+          icon={Search01Icon}
+          className="size-[17px] text-muted-foreground transition-colors group-focus-within:text-primary"
+        />
+        <input
+          ref={ref}
+          type="search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          aria-label="Search coins, pairs, or features"
+          aria-expanded={open}
+          aria-controls="platform-search-results"
+          role="combobox"
+          placeholder="Search coins, pairs, or features…"
+          className="min-w-0 flex-1 bg-transparent text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground/70"
+        />
+        {query ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => {
+              setQuery("")
+              ref.current?.focus()
+            }}
+            className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+          >
+            <Icon icon={Cancel01Icon} className="size-3.5" />
+          </button>
+        ) : (
+          <kbd className="hidden h-7 shrink-0 items-center rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 font-sans text-[11px] font-semibold text-muted-foreground sm:inline-flex">
+            {mac ? "⌘ K" : "Ctrl K"}
+          </kbd>
+        )}
+      </label>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            id="platform-search-results"
+            role="listbox"
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.98 }}
+            transition={{ duration: 0.16 }}
+            className="absolute top-[calc(100%+8px)] right-0 left-0 z-50 max-h-[min(520px,calc(100dvh-100px))] overflow-y-auto rounded-2xl border border-white/[0.08] bg-[#121212]/[0.98] p-1.5 shadow-[0_24px_60px_-12px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+          >
+            <div className="px-3 pt-2 pb-1.5 text-[10.5px] font-semibold tracking-[0.12em] text-muted-foreground/70 uppercase">
+              {query.trim() ? "Search results" : "Quick access"}
+            </div>
+            {results.length > 0 ? (
+              results.map((item) => (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  role="option"
+                  onClick={() => {
+                    setOpen(false)
+                    setQuery("")
+                  }}
+                  className="group flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-white/[0.055]"
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.07] bg-white/[0.035] text-muted-foreground transition-colors group-hover:text-primary">
+                    <SearchResultIcon item={item} />
+                  </span>
+                  <span className="grid min-w-0 flex-1 leading-tight">
+                    <span className="truncate text-[13px] font-semibold text-foreground">
+                      {item.label}
+                    </span>
+                    <span className="truncate text-[11.5px] text-muted-foreground">
+                      {item.detail}
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded-md border border-primary/20 bg-primary/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                    {item.location}
+                  </span>
+                </Link>
+              ))
+            ) : (
+              <div className="px-3 py-7 text-center text-[12.5px] text-muted-foreground">
+                No coins, pairs, or features match “{query}”.
+              </div>
+            )}
+            <div className="px-3 pt-1.5 pb-1 text-[11px] text-muted-foreground/60">
+              Search a coin, pair, or venue — results show where they live.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
@@ -521,8 +628,16 @@ const ACCOUNT_LINKS: {
   badge?: string
 }[] = [
   // Deep links into the Settings page's sections.
-  { name: "Profile", href: `${PREVIEW_ROUTES.settings}?section=profile`, icon: UserIcon },
-  { name: "Security", href: `${PREVIEW_ROUTES.settings}?section=security`, icon: Shield01Icon },
+  {
+    name: "Profile",
+    href: `${PREVIEW_ROUTES.settings}?section=profile`,
+    icon: UserIcon,
+  },
+  {
+    name: "Security",
+    href: `${PREVIEW_ROUTES.settings}?section=security`,
+    icon: Shield01Icon,
+  },
   {
     name: "Identity verification",
     href: `${PREVIEW_ROUTES.settings}?section=verification`,
@@ -907,7 +1022,11 @@ function isActive(
   if (href === "#") return false
   const url = new URL(href, "http://x")
   // A bare row also owns its sub-pages (Launchpad → /launchpad-unauth/create).
-  if (url.pathname !== pathname && !(url.search === "" && pathname.startsWith(`${url.pathname}/`))) return false
+  if (
+    url.pathname !== pathname &&
+    !(url.search === "" && pathname.startsWith(`${url.pathname}/`))
+  )
+    return false
   // Every param the row names must match the URL (Trade = ?market=spot,
   // Futures = ?market=futures; Deposit = ?action=deposit) …
   for (const [k, v] of url.searchParams) if (search?.get(k) !== v) return false
@@ -1000,7 +1119,10 @@ export function DashboardFrame({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (isolated) return
     try {
-      window.sessionStorage.setItem("ws:redesign:last-page", window.location.pathname + window.location.search)
+      window.sessionStorage.setItem(
+        "ws:redesign:last-page",
+        window.location.pathname + window.location.search
+      )
     } catch {
       /* blocked storage just means Close falls back to the dashboard */
     }

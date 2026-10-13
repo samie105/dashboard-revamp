@@ -1,7 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { useAuth } from "@/components/auth-provider"
 import {
   cryptoBackendClient,
@@ -54,29 +59,77 @@ function mapCryptoStatus(status: string): UnifiedTransaction["status"] {
   return "pending"
 }
 
+function fallbackUsdPrice(token: string): number | undefined {
+  return ["USDC", "USDT", "DAI", "USDC.E", "USDT0"].includes(
+    token.toUpperCase()
+  )
+    ? 1
+    : undefined
+}
+
 function mapCryptoTransaction(
   transaction: CryptoTransactionRecord,
   registry: ReturnType<typeof useSpotRegistry>,
-  usdPrices: Record<string, number> | null,
+  usdPrices: Record<string, number> | null
 ): UnifiedTransaction {
   const described = describeLedgerRecord(transaction, registry)
   const summary = transaction.summary ?? {}
-  const action = typeof summary.action === "string" ? summary.action : "transfer"
+  const action =
+    typeof summary.action === "string" ? summary.action : "transfer"
   const isSwap = action === "spot-swap" || action === "jupiter-swap"
   const asset = transaction.assetSummary
   // Never render an intent's base-unit amount while token precision is still
   // loading. That was the source of the huge value/P&L flash on first paint.
-  const amount = described?.amountText ? Number(described.amountText.split(" ")[0].replaceAll(",", "")) : 0
-  const token = described?.symbol || (isSwap ? String(summary.buyToken ?? asset?.identifier ?? "Unknown") : asset?.identifier ?? "Unknown")
-  const indexedPrice = usdPrices?.[token] ?? usdPrices?.[token.toUpperCase()] ?? usdPrices?.[token.toLowerCase()]
-  const valueUsd = described?.valueUsd ??
-    (Number.isFinite(amount) && amount > 0 && typeof indexedPrice === "number" && indexedPrice > 0
+  const amount = described?.amountText
+    ? Number(described.amountText.split(" ")[0].replaceAll(",", ""))
+    : 0
+  const token =
+    described?.symbol ||
+    (isSwap
+      ? String(summary.buyToken ?? asset?.identifier ?? "Unknown")
+      : (asset?.identifier ?? "Unknown"))
+  const indexedPrice =
+    usdPrices?.[token] ??
+    usdPrices?.[token.toUpperCase()] ??
+    usdPrices?.[token.toLowerCase()] ??
+    fallbackUsdPrice(token)
+  const explicitUsd = [summary.usdValue, summary.valueUsd]
+    .map((value) => (typeof value === "number" ? value : Number(value)))
+    .find((value) => Number.isFinite(value) && value >= 0)
+  const valueUsd =
+    described?.valueUsd ??
+    explicitUsd ??
+    (Number.isFinite(amount) &&
+    amount > 0 &&
+    typeof indexedPrice === "number" &&
+    indexedPrice > 0
       ? amount * indexedPrice
       : undefined)
+  const summaryText = Object.values(summary)
+    .filter((value) => typeof value === "string")
+    .join(" ")
+  const location: UnifiedTransaction["location"] =
+    /futures|perp|hyperliquid/i.test(`${action} ${summaryText}`)
+      ? "futures"
+      : /fiat|onramp|offramp|payout/i.test(`${action} ${summaryText}`)
+        ? "fiat"
+        : isSwap || /spot/i.test(`${action} ${summaryText}`)
+          ? "spot"
+          : "wallet"
   return {
     id: transaction.id,
-    type: isSwap ? "swap" : transaction.direction === "incoming" ? "deposit" : "transfer",
-    subType: isSwap ? "spot" : transaction.direction === "incoming" ? "receive" : transaction.direction === "internal" ? "internal" : "send",
+    type: isSwap
+      ? "swap"
+      : transaction.direction === "incoming"
+        ? "deposit"
+        : "transfer",
+    subType: isSwap
+      ? "spot"
+      : transaction.direction === "incoming"
+        ? "receive"
+        : transaction.direction === "internal"
+          ? "internal"
+          : "send",
     amount,
     token,
     chain: transaction.networkId ?? transaction.chainFamily,
@@ -85,27 +138,63 @@ function mapCryptoTransaction(
     toAddress: transaction.toAddress,
     txHash: transaction.txHash,
     direction: transaction.direction ?? "outgoing",
+    location,
     valueUsd: valueUsd ?? undefined,
-    ...(isSwap ? {
-      fromToken: typeof summary.sellToken === "string" ? summary.sellToken : undefined,
-      toToken: typeof summary.buyToken === "string" ? summary.buyToken : undefined,
-      // The backend stores this as the received token's base units. Keep the
-      // row honest until both sides have independently known precision.
-      toAmount: undefined,
-      fromChain: transaction.networkId ?? transaction.chainFamily,
-      toChain: typeof summary.destinationNetworkId === "string" ? summary.destinationNetworkId : transaction.networkId ?? transaction.chainFamily,
-    } : {}),
-    createdAt: transaction.createdAt ?? transaction.submittedAt ?? new Date(0).toISOString(),
+    ...(isSwap
+      ? {
+          fromToken:
+            typeof summary.sellToken === "string"
+              ? summary.sellToken
+              : undefined,
+          toToken:
+            typeof summary.buyToken === "string" ? summary.buyToken : undefined,
+          // The backend stores this as the received token's base units. Keep the
+          // row honest until both sides have independently known precision.
+          toAmount: undefined,
+          fromChain: transaction.networkId ?? transaction.chainFamily,
+          toChain:
+            typeof summary.destinationNetworkId === "string"
+              ? summary.destinationNetworkId
+              : (transaction.networkId ?? transaction.chainFamily),
+        }
+      : {}),
+    createdAt:
+      transaction.createdAt ??
+      transaction.submittedAt ??
+      new Date(0).toISOString(),
     completedAt: transaction.confirmedAt,
   }
 }
 
-function matchesCryptoFilters(transaction: UnifiedTransaction, filters: TransactionFilters) {
+function matchesCryptoFilters(
+  transaction: UnifiedTransaction,
+  filters: TransactionFilters
+) {
   if (filters.type && transaction.type !== filters.type) return false
   if (filters.status && transaction.status !== filters.status) return false
   if (filters.search) {
     const search = filters.search.toLowerCase()
-    const haystack = `${transaction.id} ${transaction.token} ${transaction.chain ?? ""} ${transaction.txHash ?? ""}`.toLowerCase()
+    const haystack = [
+      transaction.id,
+      transaction.type,
+      transaction.subType,
+      transaction.token,
+      transaction.fromToken,
+      transaction.toToken,
+      transaction.pair,
+      transaction.chain,
+      transaction.location,
+      transaction.txHash,
+      transaction.fromAddress,
+      transaction.toAddress,
+      transaction.status,
+      transaction.direction,
+      String(transaction.amount),
+      transaction.valueUsd == null ? undefined : String(transaction.valueUsd),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
     if (!haystack.includes(search)) return false
   }
   if (filters.dateFrom && transaction.createdAt < filters.dateFrom) return false
@@ -114,33 +203,59 @@ function matchesCryptoFilters(transaction: UnifiedTransaction, filters: Transact
 }
 
 function getCryptoStats(transactions: UnifiedTransaction[]): TransactionStats {
-  const deposits = transactions.filter((transaction) => transaction.type === "deposit")
-  const outgoing = transactions.filter((transaction) => transaction.direction === "outgoing" && transaction.type !== "swap")
-  const knownDepositVolume = deposits.reduce((total, transaction) => total + (transaction.valueUsd ?? 0), 0)
-  const knownWithdrawalVolume = outgoing.reduce((total, transaction) => total + (transaction.valueUsd ?? 0), 0)
-  const depositValuationComplete = deposits.every((transaction) => transaction.valueUsd !== undefined)
-  const withdrawalValuationComplete = outgoing.every((transaction) => transaction.valueUsd !== undefined)
-  const valuationComplete = depositValuationComplete && withdrawalValuationComplete
+  const deposits = transactions.filter(
+    (transaction) => transaction.type === "deposit"
+  )
+  const outgoing = transactions.filter(
+    (transaction) =>
+      transaction.direction === "outgoing" && transaction.type !== "swap"
+  )
+  const knownDepositVolume = deposits.reduce(
+    (total, transaction) => total + (transaction.valueUsd ?? 0),
+    0
+  )
+  const knownWithdrawalVolume = outgoing.reduce(
+    (total, transaction) => total + (transaction.valueUsd ?? 0),
+    0
+  )
+  const depositValuationMissing = deposits.filter(
+    (transaction) => transaction.valueUsd === undefined
+  ).length
+  const withdrawalValuationMissing = outgoing.filter(
+    (transaction) => transaction.valueUsd === undefined
+  ).length
+  const depositValuationComplete = depositValuationMissing === 0
+  const withdrawalValuationComplete = withdrawalValuationMissing === 0
+  const valuationComplete =
+    depositValuationComplete && withdrawalValuationComplete
   return {
     ...DEFAULT_STATS,
     totalDeposits: deposits.length,
     totalWithdrawals: outgoing.length,
     // `spot_trade` was never counted, so "Moved" reported swaps and transfers
     // only and silently dropped every executed spot trade from the figure.
-    totalTrades: transactions.filter((transaction) => transaction.type === "spot_trade").length,
-    totalSwaps: transactions.filter((transaction) => transaction.type === "swap").length,
-    totalTransfers: transactions.filter((transaction) => transaction.type === "transfer").length,
+    totalTrades: transactions.filter(
+      (transaction) => transaction.type === "spot_trade"
+    ).length,
+    totalSwaps: transactions.filter(
+      (transaction) => transaction.type === "swap"
+    ).length,
+    totalTransfers: transactions.filter(
+      (transaction) => transaction.type === "transfer"
+    ).length,
     depositVolume: knownDepositVolume,
     withdrawalVolume: knownWithdrawalVolume,
     netVolume: knownDepositVolume - knownWithdrawalVolume,
     valuationComplete,
     depositValuationComplete,
     withdrawalValuationComplete,
+    depositValuationMissing,
+    withdrawalValuationMissing,
   }
 }
 
 export function useUnifiedTransactions(
-  options: UseUnifiedTransactionsOptions = {},
+  options: UseUnifiedTransactionsOptions = {}
 ): UseUnifiedTransactionsReturn {
   const { pollInterval = 30000 } = options
   const { user, isLoaded, isSignedIn } = useAuth()
@@ -167,7 +282,8 @@ export function useUnifiedTransactions(
 
   const cryptoQuery = useQuery({
     queryKey: cryptoQueryKeys.transactions(userId, filters),
-    queryFn: ({ signal }) => cryptoBackendClient.listTransactions(filters.limit || 30, signal),
+    queryFn: ({ signal }) =>
+      cryptoBackendClient.listTransactions(filters.limit || 30, signal),
     enabled: backendEnabled,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -178,7 +294,9 @@ export function useUnifiedTransactions(
     mutationFn: () => cryptoBackendClient.syncTransactions(),
     onSuccess: () => {
       window.setTimeout(() => {
-        void queryClient.invalidateQueries({ queryKey: [...cryptoQueryKeys.all, "transactions", userId] })
+        void queryClient.invalidateQueries({
+          queryKey: [...cryptoQueryKeys.all, "transactions", userId],
+        })
       }, 5_000)
     },
   })
@@ -202,7 +320,7 @@ export function useUnifiedTransactions(
       params.set("limit", String(filters.limit || 30))
       return `/api/transactions/unified?${params.toString()}`
     },
-    [filters],
+    [filters]
   )
 
   const fetchTransactions = useCallback(
@@ -235,13 +353,15 @@ export function useUnifiedTransactions(
         setNextCursor(data.pagination?.nextCursor)
       } catch (err) {
         console.error("Fetch transactions error:", err)
-        setError(err instanceof Error ? err.message : "Failed to load transactions")
+        setError(
+          err instanceof Error ? err.message : "Failed to load transactions"
+        )
       } finally {
         setIsLoading(false)
         setIsLoadingMore(false)
       }
     },
-    [backendEnabled, buildUrl, nextCursor],
+    [backendEnabled, buildUrl, nextCursor]
   )
 
   useEffect(() => {
@@ -249,7 +369,14 @@ export function useUnifiedTransactions(
     setNextCursor(undefined)
     fetchTransactions(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backendEnabled, filters.type, filters.status, filters.search, filters.dateFrom, filters.dateTo])
+  }, [
+    backendEnabled,
+    filters.type,
+    filters.status,
+    filters.search,
+    filters.dateFrom,
+    filters.dateTo,
+  ])
 
   useEffect(() => {
     if (backendEnabled || pollInterval <= 0) return
@@ -281,11 +408,11 @@ export function useUnifiedTransactions(
             loadMore()
           }
         },
-        { rootMargin: "200px" },
+        { rootMargin: "200px" }
       )
       observerRef.current.observe(node)
     },
-    [hasMore, isLoadingMore, loadMore],
+    [hasMore, isLoadingMore, loadMore]
   )
 
   const setFilters = useCallback((partial: Partial<TransactionFilters>) => {
@@ -302,14 +429,22 @@ export function useUnifiedTransactions(
   }, [backendEnabled, cryptoQuery, fetchTransactions])
 
   const backendTransactions = (cryptoQuery.data ?? [])
-    .map((transaction) => mapCryptoTransaction(transaction, registry, usdPrices))
+    .map((transaction) =>
+      mapCryptoTransaction(transaction, registry, usdPrices)
+    )
     .filter((transaction) => matchesCryptoFilters(transaction, filters))
-  const visibleTransactions = backendEnabled ? backendTransactions : transactions
+  const visibleTransactions = backendEnabled
+    ? backendTransactions
+    : transactions
 
   return {
     transactions: visibleTransactions,
     // Do not print a false $0 while the valuation index is still loading.
-    stats: backendEnabled ? (usdPrices === null ? null : getCryptoStats(visibleTransactions)) : stats,
+    stats: backendEnabled
+      ? usdPrices === null
+        ? null
+        : getCryptoStats(visibleTransactions)
+      : stats,
     isLoading: backendEnabled ? cryptoQuery.isLoading : isLoading,
     isLoadingMore: backendEnabled ? false : isLoadingMore,
     error: backendEnabled

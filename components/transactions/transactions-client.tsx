@@ -52,14 +52,15 @@ const TYPE_TABS: { key: UnifiedTransactionType | "all"; label: string }[] = [
   { key: "transfer", label: "Transfers" },
 ]
 
-const STATUS_PILLS: { key: UnifiedTransactionStatus | "all"; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "pending", label: "Pending" },
-  { key: "processing", label: "Processing" },
-  { key: "completed", label: "Completed" },
-  { key: "failed", label: "Failed" },
-  { key: "cancelled", label: "Cancelled" },
-]
+const STATUS_PILLS: { key: UnifiedTransactionStatus | "all"; label: string }[] =
+  [
+    { key: "all", label: "All" },
+    { key: "pending", label: "Pending" },
+    { key: "processing", label: "Processing" },
+    { key: "completed", label: "Completed" },
+    { key: "failed", label: "Failed" },
+    { key: "cancelled", label: "Cancelled" },
+  ]
 
 /* Status has three jobs on this page: colour the pill, name the state, and say
    where the transaction sits on its timeline. Keeping all three in one record
@@ -80,18 +81,56 @@ const STATUS_CONFIG: Record<
     terminal?: "failed" | "stopped"
   }
 > = {
-  pending:    { label: "Pending",    icon: Clock01Icon,             chip: "bg-warning-chip text-warning",                  step: 0 },
-  processing: { label: "Processing", icon: Loading03Icon,           chip: "bg-warning-chip text-warning",                  step: 1 },
+  pending: {
+    label: "Pending",
+    icon: Clock01Icon,
+    chip: "bg-warning-chip text-warning",
+    step: 0,
+  },
+  processing: {
+    label: "Processing",
+    icon: Loading03Icon,
+    chip: "bg-warning-chip text-warning",
+    step: 1,
+  },
   /* Neutral, not green. "Nothing went wrong" is the DEFAULT case, and a
      credit-coloured pill on 28 of 30 rows makes the two that did go wrong
      harder to find — while spending the money-in colour on a non-event. */
-  completed:  { label: "Completed",  icon: CheckmarkCircle01Icon,   chip: "bg-foreground/[0.07] text-muted-foreground",    step: 2 },
-  failed:     { label: "Failed",     icon: AlertCircleIcon,         chip: "bg-debit-chip text-debit",                      step: 1, terminal: "failed" },
-  cancelled:  { label: "Cancelled",  icon: Cancel01Icon,            chip: "bg-foreground/[0.06] text-muted-foreground",    step: 1, terminal: "stopped" },
-  expired:    { label: "Expired",    icon: Clock01Icon,             chip: "bg-foreground/[0.06] text-muted-foreground",    step: 1, terminal: "stopped" },
+  completed: {
+    label: "Completed",
+    icon: CheckmarkCircle01Icon,
+    chip: "bg-foreground/[0.07] text-muted-foreground",
+    step: 2,
+  },
+  failed: {
+    label: "Failed",
+    icon: AlertCircleIcon,
+    chip: "bg-debit-chip text-debit",
+    step: 1,
+    terminal: "failed",
+  },
+  cancelled: {
+    label: "Cancelled",
+    icon: Cancel01Icon,
+    chip: "bg-foreground/[0.06] text-muted-foreground",
+    step: 1,
+    terminal: "stopped",
+  },
+  expired: {
+    label: "Expired",
+    icon: Clock01Icon,
+    chip: "bg-foreground/[0.06] text-muted-foreground",
+    step: 1,
+    terminal: "stopped",
+  },
 }
 
-const CURRENCY_SYMBOLS: Record<string, string> = { NGN: "₦", USD: "$", GBP: "£", EUR: "€" }
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  NGN: "₦",
+  USD: "$",
+  GBP: "£",
+  EUR: "€",
+}
 
 const CHAIN_LABELS: Record<string, string> = {
   ethereum: "Ethereum",
@@ -105,19 +144,47 @@ const CHAIN_LABELS: Record<string, string> = {
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
 }
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 function fmtAmount(n: number, digits = 2) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: Math.max(digits, 6) })
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: Math.max(digits, 6),
+  })
 }
 
 function fmtFiat(amount: number, currency = "USD") {
   return `${CURRENCY_SYMBOLS[currency] || ""}${fmtAmount(amount)}${currency === "USD" ? "" : ` ${currency}`}`
+}
+
+function summaryMoney(value: number, complete: boolean, count: number) {
+  if (count === 0) return "$0.00"
+  if (complete) return `$${fmtAmount(value)}`
+  return value > 0 ? `≈$${fmtAmount(value)}` : "USD unavailable"
+}
+
+function valuationNote(
+  count: number,
+  missing: number | undefined,
+  noun: "deposit" | "withdrawal",
+  complete: boolean
+) {
+  const base = `${count} ${noun}${count === 1 ? "" : "s"}`
+  if (complete || count === 0) return base
+  const missingCount = missing ?? count
+  return `${base} · ${missingCount} missing USD price${missingCount === 1 ? "" : "s"}`
 }
 
 function truncateHash(hash: string) {
@@ -129,17 +196,29 @@ function chainLabel(chain?: string) {
   return CHAIN_LABELS[chain] ?? chain.charAt(0).toUpperCase() + chain.slice(1)
 }
 
+function locationLabel(tx: UnifiedTransaction) {
+  if (tx.location === "spot") return "Spot"
+  if (tx.location === "futures") return "Futures"
+  if (tx.location === "fiat") return "Fiat"
+  return "Wallet"
+}
+
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text)
 }
 
 function explorerUrl(chain: string | undefined, txHash: string) {
   switch (chain) {
-    case "ethereum": return `https://etherscan.io/tx/${txHash}`
-    case "arbitrum": return `https://arbiscan.io/tx/${txHash}`
-    case "sui": return `https://suiscan.xyz/mainnet/tx/${txHash}`
-    case "tron": return `https://tronscan.org/#/transaction/${txHash}`
-    default: return `https://solscan.io/tx/${txHash}`
+    case "ethereum":
+      return `https://etherscan.io/tx/${txHash}`
+    case "arbitrum":
+      return `https://arbiscan.io/tx/${txHash}`
+    case "sui":
+      return `https://suiscan.xyz/mainnet/tx/${txHash}`
+    case "tron":
+      return `https://tronscan.org/#/transaction/${txHash}`
+    default:
+      return `https://solscan.io/tx/${txHash}`
   }
 }
 
@@ -169,19 +248,29 @@ function directionOf(tx: UnifiedTransaction): Direction {
   }
 }
 
-const DIRECTION_STYLE: Record<Direction, { chip: string; text: string; sign: string }> = {
-  in:      { chip: "bg-credit-chip text-credit", text: "text-credit", sign: "+" },
-  out:     { chip: "bg-debit-chip text-debit",   text: "text-debit",  sign: "−" },
-  neutral: { chip: "bg-foreground/[0.06] text-muted-foreground", text: "text-foreground", sign: "" },
+const DIRECTION_STYLE: Record<
+  Direction,
+  { chip: string; text: string; sign: string }
+> = {
+  in: { chip: "bg-credit-chip text-credit", text: "text-credit", sign: "+" },
+  out: { chip: "bg-debit-chip text-debit", text: "text-debit", sign: "−" },
+  neutral: {
+    chip: "bg-foreground/[0.06] text-muted-foreground",
+    text: "text-foreground",
+    sign: "",
+  },
 }
 
 function typeIcon(tx: UnifiedTransaction) {
   switch (tx.type) {
-    case "swap": return RepeatIcon
+    case "swap":
+      return RepeatIcon
     case "spot_trade":
-    case "spot_order": return Activity01Icon
+    case "spot_order":
+      return Activity01Icon
     case "transfer":
-      if (tx.subType === "internal" || tx.direction?.includes("-to-")) return Link01Icon
+      if (tx.subType === "internal" || tx.direction?.includes("-to-"))
+        return Link01Icon
       return directionOf(tx) === "in" ? ArrowDown01Icon : ArrowUp01Icon
     default:
       return directionOf(tx) === "in" ? ArrowDown01Icon : ArrowUp01Icon
@@ -192,16 +281,23 @@ function typeLabel(tx: UnifiedTransaction) {
   switch (tx.type) {
     case "deposit":
       return tx.subType === "onchain" ? "Received" : "Deposit"
-    case "spot_deposit": return "Spot deposit"
-    case "withdrawal": return "Withdrawal"
-    case "p2p": return tx.subType === "buy" ? "P2P deposit" : "P2P withdrawal"
+    case "spot_deposit":
+      return "Spot deposit"
+    case "withdrawal":
+      return "Withdrawal"
+    case "p2p":
+      return tx.subType === "buy" ? "P2P deposit" : "P2P withdrawal"
     case "spot_trade":
-    case "spot_order": return tx.pair ? `Trade ${tx.pair}` : "Spot trade"
-    case "swap": return "Swap"
+    case "spot_order":
+      return tx.pair ? `Trade ${tx.pair}` : "Spot trade"
+    case "swap":
+      return "Swap"
     case "transfer":
-      if (tx.subType === "internal" || tx.direction?.includes("-to-")) return "Internal transfer"
+      if (tx.subType === "internal" || tx.direction?.includes("-to-"))
+        return "Internal transfer"
       return directionOf(tx) === "in" ? "Received" : "Sent"
-    default: return "Transaction"
+    default:
+      return "Transaction"
   }
 }
 
@@ -225,7 +321,10 @@ function summarise(tx: UnifiedTransaction) {
         ? `Bought ${amt} from a P2P seller`
         : `Sold ${amt} to a P2P buyer`
     case "swap": {
-      const to = tx.toAmount != null ? `${fmtAmount(Number(tx.toAmount), 2)} ${tx.toToken}` : tx.toToken
+      const to =
+        tx.toAmount != null
+          ? `${fmtAmount(Number(tx.toAmount), 2)} ${tx.toToken}`
+          : tx.toToken
       return to ? `Swapped ${amt} for ${to}` : `Swapped ${amt}`
     }
     case "spot_trade":
@@ -238,7 +337,9 @@ function summarise(tx: UnifiedTransaction) {
       if (tx.subType === "internal" || tx.direction?.includes("-to-")) {
         return `Moved ${amt} between your accounts`
       }
-      return directionOf(tx) === "in" ? `Received ${amt}${on}` : `Sent ${amt}${on}`
+      return directionOf(tx) === "in"
+        ? `Received ${amt}${on}`
+        : `Sent ${amt}${on}`
     default:
       return `${amt}${on}`
   }
@@ -250,15 +351,20 @@ function summarise(tx: UnifiedTransaction) {
  *  transaction to find out who it was with. */
 function counterparty(tx: UnifiedTransaction): string | null {
   if (tx.type === "swap" && tx.toToken) {
-    const to = tx.toAmount != null ? `${fmtAmount(Number(tx.toAmount))} ${tx.toToken}` : tx.toToken
+    const to =
+      tx.toAmount != null
+        ? `${fmtAmount(Number(tx.toAmount))} ${tx.toToken}`
+        : tx.toToken
     return `→ ${to}`
   }
   if (tx.bankDetails) return `to ${tx.bankDetails.bankName}`
   if (tx.pair) return tx.pair
   const dir = directionOf(tx)
-  if (dir === "in" && tx.fromAddress) return `from ${truncateHash(tx.fromAddress)}`
+  if (dir === "in" && tx.fromAddress)
+    return `from ${truncateHash(tx.fromAddress)}`
   if (dir === "out" && tx.toAddress) return `to ${truncateHash(tx.toAddress)}`
-  if (tx.direction?.includes("-to-")) return tx.direction.replace(/-/g, " ").replace(" to ", " → ")
+  if (tx.direction?.includes("-to-"))
+    return tx.direction.replace(/-/g, " ").replace(" to ", " → ")
   return null
 }
 
@@ -266,7 +372,8 @@ function counterparty(tx: UnifiedTransaction): string | null {
 function dayLabel(iso: string) {
   const d = new Date(iso)
   const today = new Date()
-  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const startOf = (x: Date) =>
+    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const days = Math.round((startOf(today) - startOf(d)) / 86_400_000)
   if (days === 0) return "Today"
   if (days === 1) return "Yesterday"
@@ -280,7 +387,13 @@ function dayLabel(iso: string) {
 
 // ── Status pill ──────────────────────────────────────────────────────────
 
-function StatusPill({ status, className }: { status: string; className?: string }) {
+function StatusPill({
+  status,
+  className,
+}: {
+  status: string
+  className?: string
+}) {
   const s = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending
   return (
     <span
@@ -327,7 +440,9 @@ export function TransactionsClient() {
   }, [])
 
   const activeType = (filters.type || "all") as UnifiedTransactionType | "all"
-  const activeStatus = (filters.status || "all") as UnifiedTransactionStatus | "all"
+  const activeStatus = (filters.status || "all") as
+    | UnifiedTransactionStatus
+    | "all"
   const hasDateFilter = Boolean(filters.dateFrom || filters.dateTo)
 
   /* One day per group. A flat list of forty rows makes the reader parse a date
@@ -350,32 +465,67 @@ export function TransactionsClient() {
     ? [
         {
           label: "Money in",
-          value: stats.depositValuationComplete === false && stats.totalDeposits > 0 ? "—" : `$${fmtAmount(stats.depositVolume)}`,
-          sub: `${stats.totalDeposits} deposit${stats.totalDeposits === 1 ? "" : "s"}`,
+          value: summaryMoney(
+            stats.depositVolume,
+            stats.depositValuationComplete !== false,
+            stats.totalDeposits
+          ),
+          sub: valuationNote(
+            stats.totalDeposits,
+            stats.depositValuationMissing,
+            "deposit",
+            stats.depositValuationComplete !== false
+          ),
           tone: "text-credit",
         },
         {
           label: "Money out",
-          value: stats.withdrawalValuationComplete === false && stats.totalWithdrawals > 0 ? "—" : `$${fmtAmount(stats.withdrawalVolume)}`,
-          sub: `${stats.totalWithdrawals} withdrawal${stats.totalWithdrawals === 1 ? "" : "s"}`,
+          value: summaryMoney(
+            stats.withdrawalVolume,
+            stats.withdrawalValuationComplete !== false,
+            stats.totalWithdrawals
+          ),
+          sub: valuationNote(
+            stats.totalWithdrawals,
+            stats.withdrawalValuationMissing,
+            "withdrawal",
+            stats.withdrawalValuationComplete !== false
+          ),
           tone: "text-debit",
         },
         {
           label: "Moved",
-          value: String(stats.totalTrades + stats.totalSwaps + stats.totalTransfers),
+          value: String(
+            stats.totalTrades + stats.totalSwaps + stats.totalTransfers
+          ),
           sub: `${stats.totalTrades + stats.totalSwaps} trades · ${stats.totalTransfers} transfers`,
           tone: "text-foreground",
         },
         {
           label: "Net",
-          value: stats.valuationComplete === false ? "—" : `${stats.netVolume >= 0 ? "+" : "−"}$${fmtAmount(Math.abs(stats.netVolume))}`,
-          sub: stats.valuationComplete === false ? "Waiting for asset prices" : "In minus out",
-          tone: stats.valuationComplete === false ? "text-foreground" : stats.netVolume >= 0 ? "text-credit" : "text-debit",
+          value:
+            stats.valuationComplete === false
+              ? stats.netVolume !== 0
+                ? `≈${stats.netVolume >= 0 ? "+" : "−"}$${fmtAmount(Math.abs(stats.netVolume))}`
+                : "USD unavailable"
+              : `${stats.netVolume >= 0 ? "+" : "−"}$${fmtAmount(Math.abs(stats.netVolume))}`,
+          sub:
+            stats.valuationComplete === false
+              ? "Partial USD valuation"
+              : "In minus out",
+          tone:
+            stats.valuationComplete === false
+              ? "text-foreground"
+              : stats.netVolume >= 0
+                ? "text-credit"
+                : "text-debit",
         },
       ]
     : null
 
-  const filtered = Boolean(filters.type || filters.status || filters.search || hasDateFilter)
+  const filtered = Boolean(
+    filters.type || filters.status || filters.search || hasDateFilter
+  )
 
   return (
     // overflow-x-hidden for the same reason the other pages carry it: the
@@ -391,7 +541,9 @@ export function TransactionsClient() {
                 <HugeiconsIcon icon={Download01Icon} className={className} />
               )}
               label="Export PDF"
-              onClick={() => transactions.length > 0 && exportTransactionsPdf(transactions)}
+              onClick={() =>
+                transactions.length > 0 && exportTransactionsPdf(transactions)
+              }
             />
             <IconAction
               icon={({ className }: { className?: string }) => (
@@ -414,230 +566,277 @@ export function TransactionsClient() {
              SAME rows the list below renders (see getCryptoStats), so the
              header and the ledger cannot disagree about what happened. */}
       <div className="flex flex-col gap-3">
-        <SectionRule label="Summary" note="Across the transactions shown below" />
+        <SectionRule
+          label="Summary"
+          note="Across the transactions shown below"
+        />
         <CardShell className={CARD_HUE}>
           <div className="grid grid-cols-2 gap-px bg-border/40 sm:grid-cols-4">
-            {(statCards ?? Array.from({ length: 4 }, () => null)).map((card, i) => (
-              <div key={card?.label ?? i} className="flex flex-col gap-1 bg-card/40 px-4 py-3.5">
-                {card ? (
-                  <>
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                      {card.label}
-                    </span>
-                    <span
-                      className={`font-display text-[22px] font-medium leading-tight tabular-nums ${card.tone}`}
-                    >
-                      {card.value}
-                    </span>
-                    <span className="truncate text-[11.5px] text-muted-foreground">{card.sub}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="skel h-2.5 w-16 rounded" />
-                    <span className="skel h-6 w-24 rounded" />
-                    <span className="skel h-3 w-20 rounded" />
-                  </>
-                )}
-              </div>
-            ))}
+            {(statCards ?? Array.from({ length: 4 }, () => null)).map(
+              (card, i) => (
+                <div
+                  key={card?.label ?? i}
+                  className="flex flex-col gap-1 bg-card/40 px-4 py-3.5"
+                >
+                  {card ? (
+                    <>
+                      <span className="text-[11px] font-semibold tracking-[0.07em] text-muted-foreground uppercase">
+                        {card.label}
+                      </span>
+                      <span
+                        className={`font-display text-[22px] leading-tight font-medium tabular-nums ${card.tone}`}
+                      >
+                        {card.value}
+                      </span>
+                      <span className="truncate text-[11.5px] text-muted-foreground">
+                        {card.sub}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="skel h-2.5 w-16 rounded" />
+                      <span className="skel h-6 w-24 rounded" />
+                      <span className="skel h-3 w-20 rounded" />
+                    </>
+                  )}
+                </div>
+              )
+            )}
           </div>
         </CardShell>
       </div>
 
       {error && (
-        <div className="rounded-2xl bg-debit-chip px-4 py-3 text-[13px] text-debit">{error}</div>
+        <div className="rounded-2xl bg-debit-chip px-4 py-3 text-[13px] text-debit">
+          {error}
+        </div>
       )}
 
       <div className="flex flex-col gap-3">
         <SectionRule label="History" note="Newest first" />
         <CardShell className={CARD_HUE}>
-        <CardHeader
-          title="History"
-          subtitle={
-            isLoading
-              ? "Loading…"
-              : `${transactions.length} ${transactions.length === 1 ? "transaction" : "transactions"}${filtered ? " matching your filters" : ""}`
-          }
-          /* The tabs sit in the header's right slot from `lg` up and drop to
+          <CardHeader
+            title="History"
+            subtitle={
+              isLoading
+                ? "Loading…"
+                : `${transactions.length} ${transactions.length === 1 ? "transaction" : "transactions"}${filtered ? " matching your filters" : ""}`
+            }
+            /* The tabs sit in the header's right slot from `lg` up and drop to
              their own row below it under that. In the slot on a phone they
              squeezed "14 transactions" into a two-line column beside them and
              left the search box about 60px wide. */
-          right={
-            <div className="hidden max-w-full overflow-x-auto scrollbar-none lg:block">
-              <Segmented
-                options={TYPE_TABS}
-                value={activeType}
-                onChange={(key) => setFilters({ type: key === "all" ? undefined : key })}
-                size="sm"
-              />
-            </div>
-          }
-        />
-
-        <div className="-mx-1 max-w-full overflow-x-auto px-5 pb-3 scrollbar-none lg:hidden">
-          <Segmented
-            options={TYPE_TABS}
-            value={activeType}
-            onChange={(key) => setFilters({ type: key === "all" ? undefined : key })}
-            size="sm"
+            right={
+              <div className="scrollbar-none hidden max-w-full overflow-x-auto lg:block">
+                <Segmented
+                  options={TYPE_TABS}
+                  value={activeType}
+                  onChange={(key) =>
+                    setFilters({ type: key === "all" ? undefined : key })
+                  }
+                  size="sm"
+                />
+              </div>
+            }
           />
-        </div>
 
-        {/* Filters — search, status, date. One quiet row, not two loud ones. */}
-        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-          <div className="relative w-full min-w-0 sm:max-w-72 sm:flex-1">
-            <HugeiconsIcon
-              icon={Search01Icon}
-              aria-hidden
-              className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60"
+          <div className="scrollbar-none -mx-1 max-w-full overflow-x-auto px-5 pb-3 lg:hidden">
+            <Segmented
+              options={TYPE_TABS}
+              value={activeType}
+              onChange={(key) =>
+                setFilters({ type: key === "all" ? undefined : key })
+              }
+              size="sm"
             />
-            <input
-              type="search"
-              placeholder="Search hash, token, address…"
-              value={filters.search || ""}
-              onChange={(e) => setFilters({ search: e.target.value || undefined })}
-              className="h-9 w-full rounded-full bg-foreground/[0.05] pl-9 pr-9 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/50 focus:ring-1 focus:ring-primary/40"
-            />
-            {/* A search you cannot clear in one tap is a search you have to
-                backspace out of, which on a phone is eight taps. */}
-            {filters.search && (
-              <button
-                type="button"
-                onClick={() => setFilters({ search: undefined })}
-                aria-label="Clear search"
-                className="ws-icon-mono absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
-              </button>
-            )}
           </div>
 
-          <label className="sr-only" htmlFor="tx-status">Status</label>
-          <select
-            id="tx-status"
-            value={activeStatus}
-            onChange={(e) =>
-              setFilters({
-                status:
-                  e.target.value === "all"
-                    ? undefined
-                    : (e.target.value as UnifiedTransactionStatus),
-              })
-            }
-            className={`h-9 shrink-0 rounded-full px-3 text-[13px] font-medium outline-none transition-colors ${
-              activeStatus === "all"
-                ? "bg-foreground/[0.05] text-muted-foreground"
-                : "bg-primary/[0.12] text-primary"
-            }`}
-          >
-            {STATUS_PILLS.map((p) => (
-              <option key={p.key} value={p.key}>
-                {p.key === "all" ? "Any status" : p.label}
-              </option>
-            ))}
-          </select>
+          {/* Filters — search, status, date. One quiet row, not two loud ones. */}
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+            <div className="relative w-full min-w-0 sm:max-w-72 sm:flex-1">
+              <HugeiconsIcon
+                icon={Search01Icon}
+                aria-hidden
+                className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60"
+              />
+              <input
+                type="search"
+                placeholder="Search token, pair, network, hash or address…"
+                value={filters.search || ""}
+                onChange={(e) =>
+                  setFilters({ search: e.target.value || undefined })
+                }
+                className="h-9 w-full rounded-full bg-foreground/[0.05] pr-9 pl-9 text-[13px] transition-colors outline-none placeholder:text-muted-foreground/50 focus:ring-1 focus:ring-primary/40"
+              />
+              {/* A search you cannot clear in one tap is a search you have to
+                backspace out of, which on a phone is eight taps. */}
+              {filters.search && (
+                <button
+                  type="button"
+                  onClick={() => setFilters({ search: undefined })}
+                  aria-label="Clear search"
+                  className="ws-icon-mono absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
 
-          <div className="relative shrink-0" ref={dateRef}>
-            <button
-              onClick={() => setShowDatePicker((v) => !v)}
-              className={`flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors ${
-                hasDateFilter
-                  ? "bg-primary/[0.12] text-primary"
-                  : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground"
+            <label className="sr-only" htmlFor="tx-status">
+              Status
+            </label>
+            <select
+              id="tx-status"
+              value={activeStatus}
+              onChange={(e) =>
+                setFilters({
+                  status:
+                    e.target.value === "all"
+                      ? undefined
+                      : (e.target.value as UnifiedTransactionStatus),
+                })
+              }
+              className={`h-9 shrink-0 rounded-full px-3 text-[13px] font-medium transition-colors outline-none ${
+                activeStatus === "all"
+                  ? "bg-foreground/[0.05] text-muted-foreground"
+                  : "bg-primary/[0.12] text-primary"
               }`}
             >
-              <HugeiconsIcon icon={Calendar01Icon} aria-hidden className="h-3.5 w-3.5" />
-              {hasDateFilter ? "Dated" : "Any date"}
-            </button>
+              {STATUS_PILLS.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.key === "all" ? "Any status" : p.label}
+                </option>
+              ))}
+            </select>
 
-            {showDatePicker && (
-              <div className="absolute right-0 top-full z-20 mt-2 min-w-60 rounded-2xl bg-popover p-3 shadow-2xl ring-1 ring-border/40">
-                <div className="flex flex-col gap-2.5">
-                  <div>
-                    <label className="mb-1 block text-[12px] text-muted-foreground">From</label>
-                    <input
-                      type="date"
-                      value={filters.dateFrom || ""}
-                      onChange={(e) => setFilters({ dateFrom: e.target.value || undefined })}
-                      className="h-9 w-full rounded-lg bg-foreground/[0.05] px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
-                    />
+            <div className="relative shrink-0" ref={dateRef}>
+              <button
+                onClick={() => setShowDatePicker((v) => !v)}
+                className={`flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors ${
+                  hasDateFilter
+                    ? "bg-primary/[0.12] text-primary"
+                    : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <HugeiconsIcon
+                  icon={Calendar01Icon}
+                  aria-hidden
+                  className="h-3.5 w-3.5"
+                />
+                {hasDateFilter ? "Dated" : "Any date"}
+              </button>
+
+              {showDatePicker && (
+                <div className="absolute top-full right-0 z-20 mt-2 min-w-60 rounded-2xl bg-popover p-3 shadow-2xl ring-1 ring-border/40">
+                  <div className="flex flex-col gap-2.5">
+                    <div>
+                      <label className="mb-1 block text-[12px] text-muted-foreground">
+                        From
+                      </label>
+                      <input
+                        type="date"
+                        value={filters.dateFrom || ""}
+                        onChange={(e) =>
+                          setFilters({ dateFrom: e.target.value || undefined })
+                        }
+                        className="h-9 w-full rounded-lg bg-foreground/[0.05] px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[12px] text-muted-foreground">
+                        To
+                      </label>
+                      <input
+                        type="date"
+                        value={filters.dateTo || ""}
+                        onChange={(e) =>
+                          setFilters({ dateTo: e.target.value || undefined })
+                        }
+                        className="h-9 w-full rounded-lg bg-foreground/[0.05] px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
+                      />
+                    </div>
+                    {hasDateFilter && (
+                      <button
+                        onClick={() => {
+                          setFilters({ dateFrom: undefined, dateTo: undefined })
+                          setShowDatePicker(false)
+                        }}
+                        className="rounded-lg py-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        Clear dates
+                      </button>
+                    )}
                   </div>
-                  <div>
-                    <label className="mb-1 block text-[12px] text-muted-foreground">To</label>
-                    <input
-                      type="date"
-                      value={filters.dateTo || ""}
-                      onChange={(e) => setFilters({ dateTo: e.target.value || undefined })}
-                      className="h-9 w-full rounded-lg bg-foreground/[0.05] px-2.5 text-[13px] outline-none focus:ring-1 focus:ring-primary/40"
-                    />
-                  </div>
-                  {hasDateFilter && (
-                    <button
-                      onClick={() => {
-                        setFilters({ dateFrom: undefined, dateTo: undefined })
-                        setShowDatePicker(false)
-                      }}
-                      className="rounded-lg py-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      Clear dates
-                    </button>
-                  )}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* ── The list ── */}
-        {isLoading ? (
-          <SkeletonRows rows={7} label="Loading transactions" />
-        ) : transactions.length === 0 ? (
-          <EmptyState
-            icon={({ className }) => <HugeiconsIcon icon={Exchange01Icon} className={className} />}
-            title={filtered ? "Nothing matches those filters" : "No transactions yet"}
-            description={
-              filtered
-                ? "Try a wider date range, or clear the status filter."
-                : "Deposits, withdrawals, swaps and transfers all land here."
-            }
-            ctas={filtered ? [] : [{ label: "Make a deposit", href: "/buy" }]}
-          />
-        ) : (
-          <div className="flex flex-col">
-            {groups.map((group) => (
-              <section key={group.label}>
-                {/* The day header replaces a date column that every row had to
+          {/* ── The list ── */}
+          {isLoading ? (
+            <SkeletonRows rows={7} label="Loading transactions" />
+          ) : transactions.length === 0 ? (
+            <EmptyState
+              icon={({ className }) => (
+                <HugeiconsIcon icon={Exchange01Icon} className={className} />
+              )}
+              title={
+                filtered
+                  ? "Nothing matches those filters"
+                  : "No transactions yet"
+              }
+              description={
+                filtered
+                  ? "Try a wider date range, or clear the status filter."
+                  : "Deposits, withdrawals, swaps and transfers all land here."
+              }
+              ctas={filtered ? [] : [{ label: "Make a deposit", href: "/buy" }]}
+            />
+          ) : (
+            <div className="flex flex-col">
+              {groups.map((group) => (
+                <section key={group.label}>
+                  {/* The day header replaces a date column that every row had to
                     repeat. Sticky, so you always know where you are in a long
                     scroll. */}
-                <h3 className="sticky top-0 z-10 flex items-center gap-3 bg-card/85 px-4 py-1.5 backdrop-blur-sm">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                    {group.label}
-                  </span>
-                  <span aria-hidden className="h-px flex-1 bg-border/40" />
-                  <span className="text-[11px] font-normal normal-case tracking-normal tabular-nums text-muted-foreground/70">
-                    {group.items.length} {group.items.length === 1 ? "entry" : "entries"}
-                  </span>
-                </h3>
-                {group.items.map((tx) => (
-                  <TransactionRow
-                    key={tx.id}
-                    tx={tx}
-                    expanded={expandedId === tx.id}
-                    onToggle={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
-                  />
-                ))}
-              </section>
-            ))}
-          </div>
-        )}
+                  <h3 className="sticky top-0 z-10 flex items-center gap-3 bg-card/85 px-4 py-1.5 backdrop-blur-sm">
+                    <span className="text-[11px] font-semibold tracking-[0.1em] text-muted-foreground uppercase">
+                      {group.label}
+                    </span>
+                    <span aria-hidden className="h-px flex-1 bg-border/40" />
+                    <span className="text-[11px] font-normal tracking-normal text-muted-foreground/70 normal-case tabular-nums">
+                      {group.items.length}{" "}
+                      {group.items.length === 1 ? "entry" : "entries"}
+                    </span>
+                  </h3>
+                  {group.items.map((tx) => (
+                    <TransactionRow
+                      key={tx.id}
+                      tx={tx}
+                      expanded={expandedId === tx.id}
+                      onToggle={() =>
+                        setExpandedId(expandedId === tx.id ? null : tx.id)
+                      }
+                    />
+                  ))}
+                </section>
+              ))}
+            </div>
+          )}
 
-        {hasMore && (
-          <div ref={sentinelRef} className="flex items-center justify-center py-4">
-            {isLoadingMore && (
-              <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin text-muted-foreground" />
-            )}
-          </div>
-        )}
+          {hasMore && (
+            <div
+              ref={sentinelRef}
+              className="flex items-center justify-center py-4"
+            >
+              {isLoadingMore && (
+                <HugeiconsIcon
+                  icon={Loading03Icon}
+                  className="h-4 w-4 animate-spin text-muted-foreground"
+                />
+              )}
+            </div>
+          )}
         </CardShell>
       </div>
 
@@ -664,7 +863,10 @@ function TransactionRow({
   const style = DIRECTION_STYLE[dir]
   const Icon = typeIcon(tx)
   const peer = counterparty(tx)
-  const failed = tx.status === "failed" || tx.status === "cancelled" || tx.status === "expired"
+  const failed =
+    tx.status === "failed" ||
+    tx.status === "cancelled" ||
+    tx.status === "expired"
 
   return (
     <div className="border-t border-border/10 first:border-t-0">
@@ -673,20 +875,26 @@ function TransactionRow({
         aria-expanded={expanded}
         className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/25"
       >
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${style.chip}`}>
+        <span
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${style.chip}`}
+        >
           <HugeiconsIcon icon={Icon} aria-hidden className="h-4 w-4" />
         </span>
 
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-[14px] font-semibold">{typeLabel(tx)}</span>
+          <span className="truncate text-[14px] font-semibold">
+            {typeLabel(tx)}
+          </span>
           <span className="truncate text-[12.5px] text-muted-foreground">
-            {[chainLabel(tx.chain), fmtTime(tx.createdAt)].filter(Boolean).join(" · ")}
+            {[locationLabel(tx), chainLabel(tx.chain), fmtTime(tx.createdAt)]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </span>
 
         {/* Who it was with. Hidden on phones, where the row has no slack. */}
         {peer && (
-          <span className="hidden min-w-0 max-w-[34%] flex-1 truncate text-right font-mono text-[12.5px] text-muted-foreground/80 md:block">
+          <span className="hidden max-w-[34%] min-w-0 flex-1 truncate text-right font-mono text-[12.5px] text-muted-foreground/80 md:block">
             {peer}
           </span>
         )}
@@ -702,7 +910,7 @@ function TransactionRow({
             {fmtAmount(tx.amount)} {tx.token}
           </span>
           {tx.fiatAmount != null && (
-            <span className="text-[12.5px] tabular-nums text-muted-foreground">
+            <span className="text-[12.5px] text-muted-foreground tabular-nums">
               {fmtFiat(tx.fiatAmount, tx.fiatCurrency)}
             </span>
           )}
@@ -722,7 +930,7 @@ function TransactionRow({
       </button>
 
       {expanded && (
-        <div className="bg-foreground/[0.05]/50 px-4 pb-4 pt-1">
+        <div className="bg-foreground/[0.05]/50 px-4 pt-1 pb-4">
           <TransactionDetail tx={tx} />
         </div>
       )}
@@ -741,21 +949,26 @@ function TransactionRow({
 function TransactionDetail({ tx }: { tx: UnifiedTransaction }) {
   const dir = directionOf(tx)
   const style = DIRECTION_STYLE[dir]
-  const failed = tx.status === "failed" || tx.status === "cancelled" || tx.status === "expired"
+  const failed =
+    tx.status === "failed" ||
+    tx.status === "cancelled" ||
+    tx.status === "expired"
 
   return (
     <div className="flex flex-col gap-4 rounded-2xl bg-card/70 p-4">
       {/* 1 ── What happened */}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <p className="text-[15px] font-semibold leading-snug">{summarise(tx)}</p>
+          <p className="text-[15px] leading-snug font-semibold">
+            {summarise(tx)}
+          </p>
           <p className="text-[13px] text-muted-foreground">
             {fmtDate(tx.createdAt)} at {fmtTime(tx.createdAt)}
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span
-            className={`font-display text-[22px] font-light leading-none tabular-nums ${failed ? "text-muted-foreground line-through" : style.text}`}
+            className={`font-display text-[22px] leading-none font-light tabular-nums ${failed ? "text-muted-foreground line-through" : style.text}`}
           >
             {style.sign}
             {fmtAmount(tx.amount)} {tx.token}
@@ -770,9 +983,17 @@ function TransactionDetail({ tx }: { tx: UnifiedTransaction }) {
       {/* 3 ── The specifics */}
       <div className="grid gap-3 sm:grid-cols-2">
         <DetailSection title="Amount">
-          <DetailRow label={dir === "out" ? "Sent" : dir === "in" ? "Received" : "Amount"} value={`${fmtAmount(tx.amount)} ${tx.token}`} />
+          <DetailRow
+            label={
+              dir === "out" ? "Sent" : dir === "in" ? "Received" : "Amount"
+            }
+            value={`${fmtAmount(tx.amount)} ${tx.token}`}
+          />
           {tx.fiatAmount != null && (
-            <DetailRow label="Value" value={fmtFiat(tx.fiatAmount, tx.fiatCurrency)} />
+            <DetailRow
+              label="Value"
+              value={fmtFiat(tx.fiatAmount, tx.fiatCurrency)}
+            />
           )}
           {tx.exchangeRate != null && (
             <DetailRow
@@ -780,9 +1001,13 @@ function TransactionDetail({ tx }: { tx: UnifiedTransaction }) {
               value={`1 ${tx.token} = ${fmtFiat(tx.exchangeRate, tx.fiatCurrency)}`}
             />
           )}
-          {tx.price != null && <DetailRow label="Price" value={fmtFiat(tx.price)} />}
+          {tx.price != null && (
+            <DetailRow label="Price" value={fmtFiat(tx.price)} />
+          )}
           {tx.pair && <DetailRow label="Pair" value={tx.pair} />}
-          {tx.side && <DetailRow label="Side" value={String(tx.side).toUpperCase()} />}
+          {tx.side && (
+            <DetailRow label="Side" value={String(tx.side).toUpperCase()} />
+          )}
           {tx.type === "swap" && tx.toAmount != null && (
             <DetailRow
               label="Received"
@@ -792,7 +1017,10 @@ function TransactionDetail({ tx }: { tx: UnifiedTransaction }) {
         </DetailSection>
 
         <DetailSection title="Route">
-          {tx.chain && <DetailRow label="Network" value={chainLabel(tx.chain)!} />}
+          <DetailRow label="Location" value={locationLabel(tx)} />
+          {tx.chain && (
+            <DetailRow label="Network" value={chainLabel(tx.chain)!} />
+          )}
           {tx.type === "swap" && tx.fromChain && tx.toChain && (
             <DetailRow
               label="Bridge"
@@ -800,13 +1028,26 @@ function TransactionDetail({ tx }: { tx: UnifiedTransaction }) {
             />
           )}
           {tx.fromAddress && (
-            <DetailRow label="From" value={truncateHash(tx.fromAddress)} mono copyValue={tx.fromAddress} />
+            <DetailRow
+              label="From"
+              value={truncateHash(tx.fromAddress)}
+              mono
+              copyValue={tx.fromAddress}
+            />
           )}
           {tx.toAddress && (
-            <DetailRow label="To" value={truncateHash(tx.toAddress)} mono copyValue={tx.toAddress} />
+            <DetailRow
+              label="To"
+              value={truncateHash(tx.toAddress)}
+              mono
+              copyValue={tx.toAddress}
+            />
           )}
           {tx.direction && !tx.fromAddress && !tx.toAddress && (
-            <DetailRow label="Direction" value={tx.direction.replace(/-/g, " → ")} />
+            <DetailRow
+              label="Direction"
+              value={tx.direction.replace(/-/g, " → ")}
+            />
           )}
           {tx.bankDetails && (
             <>
@@ -817,11 +1058,15 @@ function TransactionDetail({ tx }: { tx: UnifiedTransaction }) {
               />
             </>
           )}
-          {!tx.chain && !tx.fromAddress && !tx.toAddress && !tx.bankDetails && !tx.direction && (
-            <p className="px-3 py-2 text-[13px] text-muted-foreground/60">
-              No route recorded — this stayed inside WorldStreet.
-            </p>
-          )}
+          {!tx.chain &&
+            !tx.fromAddress &&
+            !tx.toAddress &&
+            !tx.bankDetails &&
+            !tx.direction && (
+              <p className="px-3 py-2 text-[13px] text-muted-foreground/60">
+                No route recorded — this stayed inside WorldStreet.
+              </p>
+            )}
         </DetailSection>
       </div>
 
@@ -882,11 +1127,14 @@ function StatusTracker({ tx }: { tx: UnifiedTransaction }) {
         : "bg-credit"
 
   return (
-    <ol className="flex max-w-2xl items-start gap-0 rounded-xl bg-foreground/[0.05]/70 px-4 py-3">
+    <ol className="bg-foreground/[0.05]/70 flex max-w-2xl items-start gap-0 rounded-xl px-4 py-3">
       {steps.map((step, i) => {
         const done = i <= reached
         return (
-          <li key={step.label} className={`flex min-w-0 items-start ${i === steps.length - 1 ? "" : "flex-1"}`}>
+          <li
+            key={step.label}
+            className={`flex min-w-0 items-start ${i === steps.length - 1 ? "" : "flex-1"}`}
+          >
             <div className="flex min-w-0 flex-col items-center gap-1.5">
               <span
                 className={`h-2.5 w-2.5 shrink-0 rounded-full ${done ? tone : "bg-foreground/15"} ${
@@ -896,10 +1144,12 @@ function StatusTracker({ tx }: { tx: UnifiedTransaction }) {
                     : ""
                 }`}
               />
-              <span className={`whitespace-nowrap text-[12px] font-medium ${done ? "text-foreground" : "text-muted-foreground/50"}`}>
+              <span
+                className={`text-[12px] font-medium whitespace-nowrap ${done ? "text-foreground" : "text-muted-foreground/50"}`}
+              >
                 {step.label}
               </span>
-              <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground/60">
+              <span className="text-[11.5px] whitespace-nowrap text-muted-foreground/60 tabular-nums">
                 {step.at ? fmtTime(step.at) : done ? "—" : ""}
               </span>
             </div>
@@ -917,9 +1167,15 @@ function StatusTracker({ tx }: { tx: UnifiedTransaction }) {
 
 // ── Detail primitives ────────────────────────────────────────────────────
 
-function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+function DetailSection({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl bg-foreground/[0.05]/70 p-3">
+    <div className="bg-foreground/[0.05]/70 flex flex-col gap-1 rounded-xl p-3">
       <Eyebrow className="px-1 pb-1">{title}</Eyebrow>
       {children}
     </div>
@@ -948,7 +1204,9 @@ function DetailRow({
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg px-1 py-1.5">
-      <span className="shrink-0 text-[13px] text-muted-foreground">{label}</span>
+      <span className="shrink-0 text-[13px] text-muted-foreground">
+        {label}
+      </span>
       <span className="flex min-w-0 items-center gap-1.5">
         {href ? (
           <a
@@ -960,10 +1218,18 @@ function DetailRow({
             {value}
           </a>
         ) : (
-          <span className={`truncate text-[13px] font-medium ${mono ? "font-mono" : ""}`}>{value}</span>
+          <span
+            className={`truncate text-[13px] font-medium ${mono ? "font-mono" : ""}`}
+          >
+            {value}
+          </span>
         )}
         {href && (
-          <HugeiconsIcon icon={LinkSquare01Icon} aria-hidden className="h-3 w-3 shrink-0 text-primary/70" />
+          <HugeiconsIcon
+            icon={LinkSquare01Icon}
+            aria-hidden
+            className="h-3 w-3 shrink-0 text-primary/70"
+          />
         )}
         {copyValue && (
           <button

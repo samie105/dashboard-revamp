@@ -28,7 +28,15 @@ import {
 import { cn } from "@/lib/utils"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { walletHref } from "@/components/preview/routes"
-import { directionOf, formatAmount, formatUSD, usdOf, type Tx, type TxKind } from "@/components/transactions-unauth/tx-data"
+import {
+  directionOf,
+  formatAmount,
+  formatUSD,
+  locationOf,
+  usdOf,
+  type Tx,
+  type TxKind,
+} from "@/components/transactions-unauth/tx-data"
 import { Figure, Icon, type IconSvg } from "@/components/redesign/ui"
 
 /* ── Vocabulary shared with the list ──────────────────────────────────── */
@@ -53,21 +61,30 @@ export function kindTone(kind: TxKind) {
 export function StatusChip({ tx, className }: { tx: Tx; className?: string }) {
   if (tx.status === "pending") {
     return (
-      <span className={cn("inline-flex items-center gap-1.5 rounded-md bg-warning/[0.12] px-2 py-0.5 text-[11px] font-bold tabular-nums text-warning", className)}>
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-md bg-warning/[0.12] px-2 py-0.5 text-[11px] font-bold text-warning tabular-nums",
+          className
+        )}
+      >
         <span className="relative flex size-1.5">
           <span className="absolute inset-0 animate-ping rounded-full bg-warning opacity-70" />
           <span className="relative size-1.5 rounded-full bg-warning" />
         </span>
-        {tx.confirmations ? `${tx.confirmations[0]}/${tx.confirmations[1]}` : "Pending"}
+        {tx.confirmations
+          ? `${tx.confirmations[0]}/${tx.confirmations[1]}`
+          : "Pending"}
       </span>
     )
   }
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.04em]",
-        tx.status === "failed" ? "bg-debit/[0.12] text-debit" : "bg-credit/[0.1] text-credit",
-        className,
+        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold tracking-[0.04em] uppercase",
+        tx.status === "failed"
+          ? "bg-debit/[0.12] text-debit"
+          : "bg-credit/[0.1] text-credit",
+        className
       )}
     >
       {tx.status === "failed" ? "Failed" : "Completed"}
@@ -92,19 +109,30 @@ export function useDayLabel() {
       if (offset === 1) return "Yesterday"
       if (now === null) return `${offset} days ago`
       const d = new Date(now - offset * 86_400_000)
-      return new Intl.DateTimeFormat("en-US", style === "heading" ? { weekday: "long", month: "short", day: "numeric" } : { month: "short", day: "numeric" }).format(d)
+      return new Intl.DateTimeFormat(
+        "en-US",
+        style === "heading"
+          ? { weekday: "long", month: "short", day: "numeric" }
+          : { month: "short", day: "numeric" }
+      ).format(d)
     },
-    [now],
+    [now]
   )
 }
 
 export function truncateMiddle(s: string, head = 8, tail = 6) {
-  return s.length <= head + tail + 1 ? s : `${s.slice(0, head)}…${s.slice(-tail)}`
+  return s.length <= head + tail + 1
+    ? s
+    : `${s.slice(0, head)}…${s.slice(-tail)}`
 }
 
 /* ── Timeline ─────────────────────────────────────────────────────────── */
 
-type Step = { label: string; hint?: string; state: "done" | "current" | "failed" | "todo" }
+type Step = {
+  label: string
+  hint?: string
+  state: "done" | "current" | "failed" | "todo"
+}
 
 function stepsFor(tx: Tx): Step[] {
   const failed = tx.status === "failed"
@@ -115,30 +143,58 @@ function stepsFor(tx: Tx): Step[] {
         { label: "Detected on chain", hint: tx.network, state: "done" },
         {
           label: "Confirming",
-          hint: tx.confirmations ? `${tx.confirmations[0]} of ${tx.confirmations[1]} confirmations` : "Network confirmations",
+          hint: tx.confirmations
+            ? `${tx.confirmations[0]} of ${tx.confirmations[1]} confirmations`
+            : "Network confirmations",
           state: pending ? "current" : "done",
         },
-        { label: "Credited to Funding", hint: pending ? "As soon as confirmations complete" : undefined, state: pending ? "todo" : "done" },
+        {
+          label: "Credited to Funding",
+          hint: pending ? "As soon as confirmations complete" : undefined,
+          state: pending ? "todo" : "done",
+        },
       ]
     case "withdrawal":
       return failed
         ? [
             { label: "Requested", state: "done" },
-            { label: "Rejected by the network", hint: "Funds were returned to your wallet", state: "failed" },
+            {
+              label: "Rejected by the network",
+              hint: "Funds were returned to your wallet",
+              state: "failed",
+            },
           ]
         : [
             { label: "Requested", state: "done" },
             { label: "Broadcast", hint: tx.network, state: "done" },
-            { label: "Confirmed", hint: "Arrived at the destination", state: "done" },
+            {
+              label: "Confirmed",
+              hint: "Arrived at the destination",
+              state: "done",
+            },
           ]
     case "swap":
     case "trade":
       return [
-        { label: tx.kind === "swap" ? "Swap submitted" : "Order placed", hint: tx.network, state: "done" },
-        { label: "Filled", hint: `${formatAmount(tx.toAmount ?? 0)} ${tx.toAsset} received`, state: "done" },
+        {
+          label: tx.kind === "swap" ? "Swap submitted" : "Order placed",
+          hint: tx.network,
+          state: "done",
+        },
+        {
+          label: "Filled",
+          hint: `${formatAmount(tx.toAmount ?? 0)} ${tx.toAsset} received`,
+          state: "done",
+        },
       ]
     case "transfer":
-      return [{ label: "Moved instantly", hint: `${tx.network} · no fee`, state: "done" }]
+      return [
+        {
+          label: "Moved instantly",
+          hint: `${tx.network} · no fee`,
+          state: "done",
+        },
+      ]
   }
 }
 
@@ -151,28 +207,58 @@ function Timeline({ tx }: { tx: Tx }) {
           key={s.label}
           initial={{ opacity: 0, x: -6 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3, delay: 0.08 + i * 0.07, ease: [0.22, 1, 0.36, 1] }}
+          transition={{
+            duration: 0.3,
+            delay: 0.08 + i * 0.07,
+            ease: [0.22, 1, 0.36, 1],
+          }}
           className="relative flex gap-3 pb-4 last:pb-0"
         >
           {i < steps.length - 1 && (
-            <span aria-hidden className={cn("absolute left-[11px] top-6 bottom-0 w-px", s.state === "done" ? "bg-credit/40" : "bg-white/[0.1]")} />
+            <span
+              aria-hidden
+              className={cn(
+                "absolute top-6 bottom-0 left-[11px] w-px",
+                s.state === "done" ? "bg-credit/40" : "bg-white/[0.1]"
+              )}
+            />
           )}
           <span
             className={cn(
               "relative flex size-6 shrink-0 items-center justify-center rounded-full border",
-              s.state === "done" && "border-credit/40 bg-credit/[0.12] text-credit",
-              s.state === "current" && "border-warning/50 bg-warning/[0.12] text-warning",
-              s.state === "failed" && "border-debit/40 bg-debit/[0.12] text-debit",
-              s.state === "todo" && "border-white/[0.12] text-muted-foreground",
+              s.state === "done" &&
+                "border-credit/40 bg-credit/[0.12] text-credit",
+              s.state === "current" &&
+                "border-warning/50 bg-warning/[0.12] text-warning",
+              s.state === "failed" &&
+                "border-debit/40 bg-debit/[0.12] text-debit",
+              s.state === "todo" && "border-white/[0.12] text-muted-foreground"
             )}
           >
-            {s.state === "done" && <Icon icon={Tick02Icon} className="size-3" strokeWidth={2.6} />}
-            {s.state === "failed" && <Icon icon={Cancel01Icon} className="size-3" strokeWidth={2.6} />}
-            {s.state === "current" && <span className="size-2 animate-pulse rounded-full bg-warning" />}
+            {s.state === "done" && (
+              <Icon icon={Tick02Icon} className="size-3" strokeWidth={2.6} />
+            )}
+            {s.state === "failed" && (
+              <Icon icon={Cancel01Icon} className="size-3" strokeWidth={2.6} />
+            )}
+            {s.state === "current" && (
+              <span className="size-2 animate-pulse rounded-full bg-warning" />
+            )}
           </span>
           <span className="flex min-w-0 flex-col pt-0.5">
-            <span className={cn("text-[13px] font-semibold", s.state === "todo" ? "text-muted-foreground" : "text-foreground")}>{s.label}</span>
-            {s.hint && <span className="text-[12px] text-muted-foreground">{s.hint}</span>}
+            <span
+              className={cn(
+                "text-[13px] font-semibold",
+                s.state === "todo" ? "text-muted-foreground" : "text-foreground"
+              )}
+            >
+              {s.label}
+            </span>
+            {s.hint && (
+              <span className="text-[12px] text-muted-foreground">
+                {s.hint}
+              </span>
+            )}
           </span>
         </motion.li>
       ))}
@@ -195,17 +281,40 @@ function CopyValue({ value, mono = true }: { value: string; mono?: boolean }) {
       title={value}
       className="group inline-flex min-w-0 items-center gap-1.5 text-right"
     >
-      <span className={cn("truncate text-[12.5px] text-foreground", mono && "font-mono")}>{truncateMiddle(value, 10, 8)}</span>
-      <Icon icon={copied ? Tick02Icon : Copy01Icon} className={cn("size-3.5 shrink-0 transition-colors", copied ? "text-credit" : "text-muted-foreground group-hover:text-primary")} />
+      <span
+        className={cn(
+          "truncate text-[12.5px] text-foreground",
+          mono && "font-mono"
+        )}
+      >
+        {truncateMiddle(value, 10, 8)}
+      </span>
+      <Icon
+        icon={copied ? Tick02Icon : Copy01Icon}
+        className={cn(
+          "size-3.5 shrink-0 transition-colors",
+          copied
+            ? "text-credit"
+            : "text-muted-foreground group-hover:text-primary"
+        )}
+      />
     </button>
   )
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
   return (
     <div className="flex items-center justify-between gap-4 border-t border-white/[0.05] py-3 first:border-t-0">
       <dt className="shrink-0 text-[12.5px] text-muted-foreground">{label}</dt>
-      <dd className="flex min-w-0 justify-end text-[13px] font-medium text-foreground">{children}</dd>
+      <dd className="flex min-w-0 justify-end text-[13px] font-medium text-foreground">
+        {children}
+      </dd>
     </div>
   )
 }
@@ -217,17 +326,25 @@ export function TxDetail({ tx, onClose }: { tx: Tx; onClose?: () => void }) {
   const meta = KIND_META[tx.kind]
   const d = directionOf(tx.kind)
   const twoLeg = !!tx.toAsset
-  const onChain = tx.kind === "deposit" || tx.kind === "withdrawal" || tx.kind === "swap"
+  const onChain =
+    tx.kind === "deposit" || tx.kind === "withdrawal" || tx.kind === "swap"
 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className={cn("flex size-11 items-center justify-center rounded-2xl border", kindTone(tx.kind))}>
+          <span
+            className={cn(
+              "flex size-11 items-center justify-center rounded-2xl border",
+              kindTone(tx.kind)
+            )}
+          >
             <Icon icon={meta.icon} className="size-5" strokeWidth={2} />
           </span>
           <span className="flex flex-col gap-1">
-            <span className="font-display text-[16px] font-semibold text-foreground">{meta.label}</span>
+            <span className="font-display text-[16px] font-semibold text-foreground">
+              {meta.label}
+            </span>
             <StatusChip tx={tx} className="w-fit" />
           </span>
         </div>
@@ -248,45 +365,86 @@ export function TxDetail({ tx, onClose }: { tx: Tx; onClose?: () => void }) {
         {twoLeg ? (
           <div className="flex items-center gap-3">
             <span className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
-              <CoinAvatar symbol={tx.asset} size="lg" className="size-8 ring-1 ring-white/10" />
-              <span className="font-display text-[17px] font-semibold tabular-nums"><Figure mask="••••">{`${formatAmount(tx.amount)} ${tx.asset}`}</Figure></span>
-              <span className="text-[12px] text-muted-foreground"><Figure mask="••••">{formatUSD(usdOf(tx.asset, tx.amount))}</Figure></span>
+              <CoinAvatar
+                symbol={tx.asset}
+                size="lg"
+                className="size-8 ring-1 ring-white/10"
+              />
+              <span className="font-display text-[17px] font-semibold tabular-nums">
+                <Figure mask="••••">{`${formatAmount(tx.amount)} ${tx.asset}`}</Figure>
+              </span>
+              <span className="text-[12px] text-muted-foreground">
+                <Figure mask="••••">
+                  {formatUSD(usdOf(tx.asset, tx.amount))}
+                </Figure>
+              </span>
             </span>
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-primary">
-              <Icon icon={ArrowRight01Icon} className="size-4" strokeWidth={2} />
+              <Icon
+                icon={ArrowRight01Icon}
+                className="size-4"
+                strokeWidth={2}
+              />
             </span>
             <span className="flex min-w-0 flex-1 flex-col items-end gap-1.5 text-right">
-              <CoinAvatar symbol={tx.toAsset!} size="lg" className="size-8 ring-1 ring-white/10" />
-              <span className="font-display text-[17px] font-semibold tabular-nums text-credit"><Figure mask="••••">{`${formatAmount(tx.toAmount ?? 0)} ${tx.toAsset}`}</Figure></span>
-              <span className="text-[12px] text-muted-foreground"><Figure mask="••••">{formatUSD(usdOf(tx.toAsset!, tx.toAmount ?? 0))}</Figure></span>
+              <CoinAvatar
+                symbol={tx.toAsset!}
+                size="lg"
+                className="size-8 ring-1 ring-white/10"
+              />
+              <span className="font-display text-[17px] font-semibold text-credit tabular-nums">
+                <Figure mask="••••">{`${formatAmount(tx.toAmount ?? 0)} ${tx.toAsset}`}</Figure>
+              </span>
+              <span className="text-[12px] text-muted-foreground">
+                <Figure mask="••••">
+                  {formatUSD(usdOf(tx.toAsset!, tx.toAmount ?? 0))}
+                </Figure>
+              </span>
             </span>
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <CoinAvatar symbol={tx.asset} size="lg" className="size-10 ring-1 ring-white/10" />
+            <CoinAvatar
+              symbol={tx.asset}
+              size="lg"
+              className="size-10 ring-1 ring-white/10"
+            />
             <span className="flex flex-col">
               <span
                 className={cn(
-                  "font-display text-[24px] font-semibold leading-tight tracking-[-0.03em] tabular-nums",
-                  tx.status === "failed" ? "text-muted-foreground line-through decoration-debit/60" : d === "credit" ? "text-credit" : "text-foreground",
+                  "font-display text-[24px] leading-tight font-semibold tracking-[-0.03em] tabular-nums",
+                  tx.status === "failed"
+                    ? "text-muted-foreground line-through decoration-debit/60"
+                    : d === "credit"
+                      ? "text-credit"
+                      : "text-foreground"
                 )}
               >
                 <Figure mask="••••">{amountText(tx)}</Figure>
               </span>
-              <span className="text-[12.5px] text-muted-foreground"><Figure mask="••••">{formatUSD(usdOf(tx.asset, tx.amount))}</Figure></span>
+              <span className="text-[12.5px] text-muted-foreground">
+                <Figure mask="••••">
+                  {formatUSD(usdOf(tx.asset, tx.amount))}
+                </Figure>
+              </span>
             </span>
           </div>
         )}
       </div>
 
       <div className="flex flex-col gap-3">
-        <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">Progress</span>
+        <span className="text-[12px] font-semibold tracking-[0.12em] text-muted-foreground/70 uppercase">
+          Progress
+        </span>
         <Timeline tx={tx} />
       </div>
 
       <dl className="flex flex-col rounded-2xl border border-white/[0.06] bg-white/[0.015] px-4">
         <Row label="Date">{`${dayLabel(tx.dayOffset, "short")}, ${tx.time}`}</Row>
-        <Row label={tx.kind === "transfer" ? "Route" : "Network"}>{tx.network}</Row>
+        <Row label="Location">{locationOf(tx)}</Row>
+        <Row label={tx.kind === "transfer" ? "Route" : "Network"}>
+          {tx.network}
+        </Row>
         {tx.counterparty && (
           <Row label={tx.kind === "deposit" ? "From" : "To"}>
             <CopyValue value={tx.counterparty} />
@@ -301,14 +459,18 @@ export function TxDetail({ tx, onClose }: { tx: Tx; onClose?: () => void }) {
           {tx.fee > 0 ? (
             <span className="tabular-nums">
               {formatAmount(tx.fee)} {tx.feeAsset}
-              <span className="ml-1.5 text-muted-foreground">({formatUSD(usdOf(tx.feeAsset, tx.fee))})</span>
+              <span className="ml-1.5 text-muted-foreground">
+                ({formatUSD(usdOf(tx.feeAsset, tx.fee))})
+              </span>
             </span>
           ) : (
             <span className="text-credit">Free</span>
           )}
         </Row>
         <Row label="Reference">
-          <span className="font-mono text-[12.5px] uppercase text-muted-foreground">{tx.id}</span>
+          <span className="font-mono text-[12.5px] text-muted-foreground uppercase">
+            {tx.id}
+          </span>
         </Row>
       </dl>
 
@@ -323,13 +485,19 @@ export function TxDetail({ tx, onClose }: { tx: Tx; onClose?: () => void }) {
           </a>
         )}
         {tx.status === "failed" && tx.kind === "withdrawal" && (
-          <Link href={walletHref("withdraw", tx.asset)} className="dash-gold-btn flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[13.5px] font-semibold">
+          <Link
+            href={walletHref("withdraw", tx.asset)}
+            className="dash-gold-btn flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[13.5px] font-semibold"
+          >
             <Icon icon={Refresh01Icon} className="size-4" strokeWidth={2} />
             Retry withdrawal
           </Link>
         )}
         {tx.kind === "deposit" && tx.status === "completed" && (
-          <Link href={walletHref("deposit", tx.asset)} className="dash-gold-btn flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[13.5px] font-semibold">
+          <Link
+            href={walletHref("deposit", tx.asset)}
+            className="dash-gold-btn flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[13.5px] font-semibold"
+          >
             Deposit again
           </Link>
         )}

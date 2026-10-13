@@ -2,14 +2,14 @@
 // Shared interface for normalizing all transaction types into a single shape.
 
 export type UnifiedTransactionType =
-  | "p2p"           // P2P buy/sell orders
-  | "deposit"       // Flutterwave fiat→USDT deposits
-  | "withdrawal"    // USDT→fiat bank withdrawals
-  | "spot_deposit"  // Spot trading deposits
-  | "spot_trade"    // Executed spot trades (LI.FI swaps)
-  | "spot_order"    // Spot market/limit orders
-  | "swap"          // Cross-chain bridge swaps
-  | "transfer";     // Wallet sends & internal transfers
+  | "p2p" // P2P buy/sell orders
+  | "deposit" // Flutterwave fiat→USDT deposits
+  | "withdrawal" // USDT→fiat bank withdrawals
+  | "spot_deposit" // Spot trading deposits
+  | "spot_trade" // Executed spot trades (LI.FI swaps)
+  | "spot_order" // Spot market/limit orders
+  | "swap" // Cross-chain bridge swaps
+  | "transfer" // Wallet sends & internal transfers
 
 export type UnifiedTransactionStatus =
   | "pending"
@@ -17,90 +17,96 @@ export type UnifiedTransactionStatus =
   | "completed"
   | "failed"
   | "cancelled"
-  | "expired";
+  | "expired"
 
 export interface UnifiedTransaction {
-  id: string;
-  type: UnifiedTransactionType;
-  subType?: string; // e.g. "buy"/"sell", "send"/"receive"/"internal", "market"/"limit"
+  id: string
+  type: UnifiedTransactionType
+  subType?: string // e.g. "buy"/"sell", "send"/"receive"/"internal", "market"/"limit"
 
   // Amount
-  amount: number;
-  valueUsd?: number;
-  token: string;     // "USDT", "ETH", "SOL", "USDC", etc.
-  chain?: string;    // "solana", "ethereum", "arbitrum", etc.
+  amount: number
+  valueUsd?: number
+  token: string // "USDT", "ETH", "SOL", "USDC", etc.
+  chain?: string // "solana", "ethereum", "arbitrum", etc.
 
   // Status
-  status: UnifiedTransactionStatus;
+  status: UnifiedTransactionStatus
 
   // Fiat info (for deposits/withdrawals/p2p)
-  fiatAmount?: number;
-  fiatCurrency?: string;
-  exchangeRate?: number;
+  fiatAmount?: number
+  fiatCurrency?: string
+  exchangeRate?: number
 
   // Addresses
-  fromAddress?: string;
-  toAddress?: string;
-  txHash?: string;
+  fromAddress?: string
+  toAddress?: string
+  txHash?: string
 
   // Trade-specific
-  pair?: string;                // "BTC/USDT", etc.
-  side?: "buy" | "sell" | "BUY" | "SELL";
-  price?: number;
+  pair?: string // "BTC/USDT", etc.
+  side?: "buy" | "sell" | "BUY" | "SELL"
+  price?: number
 
   // Swap-specific
-  fromToken?: string;
-  toToken?: string;
-  toAmount?: number | string;
-  fromChain?: string;
-  toChain?: string;
+  fromToken?: string
+  toToken?: string
+  toAmount?: number | string
+  fromChain?: string
+  toChain?: string
 
   // Bank details (withdrawals)
   bankDetails?: {
-    bankName: string;
-    accountNumber: string;
-    accountName: string;
-  };
+    bankName: string
+    accountNumber: string
+    accountName: string
+  }
 
   // Transfer direction
-  direction?: string;
+  direction?: string
+
+  /** Product surface where the movement is visible to the user. */
+  location?: "wallet" | "spot" | "futures" | "fiat"
 
   // Dates
-  createdAt: string;
-  completedAt?: string;
+  createdAt: string
+  completedAt?: string
 }
 
 export interface UnifiedTransactionsResponse {
-  success: boolean;
-  transactions: UnifiedTransaction[];
+  success: boolean
+  transactions: UnifiedTransaction[]
   pagination: {
-    hasMore: boolean;
-    nextCursor?: string;     // Base64-encoded cursor for infinite scroll
-    total: number;
-  };
-  stats: TransactionStats;
+    hasMore: boolean
+    nextCursor?: string // Base64-encoded cursor for infinite scroll
+    total: number
+  }
+  stats: TransactionStats
 }
 
 export interface TransactionStats {
-  valuationComplete?: boolean;
-  depositValuationComplete?: boolean;
-  withdrawalValuationComplete?: boolean;
-  totalDeposits: number;
-  totalWithdrawals: number;
-  totalTrades: number;
-  totalSwaps: number;
-  totalTransfers: number;
-  depositVolume: number;    // Total USDT deposited
-  withdrawalVolume: number; // Total USDT withdrawn
-  netVolume: number;
+  valuationComplete?: boolean
+  depositValuationComplete?: boolean
+  withdrawalValuationComplete?: boolean
+  totalDeposits: number
+  totalWithdrawals: number
+  totalTrades: number
+  totalSwaps: number
+  totalTransfers: number
+  depositVolume: number // Total USDT deposited
+  withdrawalVolume: number // Total USDT withdrawn
+  netVolume: number
+  /** Rows whose asset could not be valued with the current USD index. */
+  depositValuationMissing?: number
+  withdrawalValuationMissing?: number
 }
 
 export interface TransactionFilters {
-  type?: UnifiedTransactionType;
-  status?: UnifiedTransactionStatus;
-  search?: string;
-  dateFrom?: string;  // ISO date string
-  dateTo?: string;    // ISO date string
-  cursor?: string;    // For pagination
-  limit?: number;
+  type?: UnifiedTransactionType
+  status?: UnifiedTransactionStatus
+  search?: string
+  dateFrom?: string // ISO date string
+  dateTo?: string // ISO date string
+  cursor?: string // For pagination
+  limit?: number
 }
