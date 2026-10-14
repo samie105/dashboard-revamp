@@ -16,12 +16,21 @@ export function getPrivyClient(privyType = 0) {
   return new PrivyClient({ appId, appSecret })
 }
 
-if (!process.env.PRIVY_APP_ID) {
-  throw new Error("PRIVY_APP_ID is not set")
-}
+/**
+ * Legacy Privy is independently disableable. Do not fail module evaluation
+ * when its credentials are intentionally absent: Next still evaluates the
+ * legacy route during a production build even when the product flag disables
+ * that route. Keep the failure at call time for any accidental legacy use.
+ */
+const missingPrivyClient = new Proxy({}, {
+  get() {
+    return () => {
+      throw new Error("Legacy Privy is disabled because PRIVY_APP_ID/PRIVY_APP_SECRET are not configured")
+    }
+  },
+}) as unknown as PrivyClient
 
-if (!process.env.PRIVY_APP_SECRET) {
-  throw new Error("PRIVY_APP_SECRET is not set")
-}
-
-export const privyClient = getPrivyClient(0)
+export const privyClient =
+  process.env.PRIVY_APP_ID && process.env.PRIVY_APP_SECRET
+    ? getPrivyClient(0)
+    : missingPrivyClient

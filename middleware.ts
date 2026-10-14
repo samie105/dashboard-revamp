@@ -1,6 +1,11 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+import {
+  DASHBOARD_TEST_SESSION_COOKIE,
+  verifyDashboardTestSession,
+} from "@/lib/dashboard-test-auth"
+import { SERVER_DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 
 const isProduction = process.env.NODE_ENV === "production"
 const LOGIN_URL = isProduction
@@ -54,6 +59,44 @@ const isWebhookRoute = createRouteMatcher([
   "/api/webhooks(.*)",
 ])
 
+const isDashboardTestLogin = createRouteMatcher(["/test/login"])
+const isDashboardTestSessionApi = createRouteMatcher(["/api/test/session"])
+
+async function dashboardTestMiddleware(req: NextRequest) {
+  // This function is only selected when the deployment has explicitly opted
+  // into the dashboard-test host. The access key itself is never sent to
+  // Clerk or to the crypto backend; only the fixed dummy bearer token is.
+  if (isDashboardTestLogin(req) || isDashboardTestSessionApi(req)) {
+    return NextResponse.next()
+  }
+
+  // Keep the design previews shareable on the test host. Normal dashboard
+  // routes below still require the scoped HTTP-only test session.
+  if (isPublicRoute(req) && !req.nextUrl.pathname.startsWith("/login") && !req.nextUrl.pathname.startsWith("/register")) {
+    return NextResponse.next()
+  }
+
+  if (req.nextUrl.pathname.startsWith("/login") || req.nextUrl.pathname.startsWith("/register")) {
+    return NextResponse.redirect(new URL("/test/login", req.url))
+  }
+
+  const secret = process.env.WORLDSTREET_DASHBOARD_TEST_AUTH_SECRET
+  const session = req.cookies.get(DASHBOARD_TEST_SESSION_COOKIE)?.value
+  const valid = await verifyDashboardTestSession(session, secret)
+  if (valid) return NextResponse.next()
+
+  if (req.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      { success: false, error: { code: "UNAUTHORIZED", message: "Dashboard test session required" } },
+      { status: 401 },
+    )
+  }
+
+  const login = new URL("/test/login", req.url)
+  login.searchParams.set("returnTo", `${req.nextUrl.pathname}${req.nextUrl.search}`)
+  return NextResponse.redirect(login)
+}
+
 const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
   // Skip auth for webhook routes (called by external services)
   if (isWebhookRoute(req)) {
@@ -101,9 +144,11 @@ const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
 // domain-locked production key it dead-ends every route at /login before the
 // handler's own checks could run. Every request waves through — the mocked
 // server seams answer downstream. (Inert outside development builds.)
-export default DEV_AUTH_BYPASS
-  ? () => NextResponse.next()
-  : clerkAuthMiddleware
+export default SERVER_DASHBOARD_TEST_MODE
+  ? dashboardTestMiddleware
+  : DEV_AUTH_BYPASS
+    ? () => NextResponse.next()
+    : clerkAuthMiddleware
 
 export const config = {
   matcher: [

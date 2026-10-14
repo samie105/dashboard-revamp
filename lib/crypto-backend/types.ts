@@ -318,6 +318,11 @@ export interface FiatOrder {
   channel: string
   asset: string
   network: string
+  /** Persisted pricing legs let history show fiat input and crypto settlement together. */
+  sourceAmount?: string
+  sourceCurrency?: string
+  destinationAmount?: string
+  destinationCurrency?: string
   beneficiaryId?: string
   quoteId?: string
   localCryptoIntentId?: string

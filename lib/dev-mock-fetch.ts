@@ -26,6 +26,7 @@
  */
 
 import { DEV_AUTH_BYPASS } from "./dev-auth-bypass"
+import { DASHBOARD_TEST_MODE, DASHBOARD_TEST_LIVE_FIAT } from "./dashboard-test-mode"
 import { FIAT_MOCKS_ENABLED } from "./fiat-mocks"
 import { respondFromFiatFixtures } from "./crypto-backend/dev-mock-fiat-responder"
 import {
@@ -59,6 +60,23 @@ export const devMockFetch: typeof fetch = async (input, init) => {
     // 404 matches what the proxy route does with an unlisted path, so the
     // client's error handling is identical in both places.
     return response ?? new Response(null, { status: 404 })
+  }
+
+  // The deployed test host keeps the dashboard's non-fiat surfaces deterministic
+  // but sends real fiat and modern-wallet calls through the isolated backend.
+  // The backend is still behind the dashboard proxy, so provider credentials
+  // never reach this browser.
+  if (DASHBOARD_TEST_MODE && DASHBOARD_TEST_LIVE_FIAT) {
+    const liveBackendPath = path.startsWith("fiat/")
+      || path === "auth/me"
+      || path === "networks"
+      || path === "wallets"
+      || path.startsWith("wallets/me")
+    if (!liveBackendPath) {
+      const response = await devMockCryptoApiResponse(request, path)
+      persistMockCryptoState()
+      return response ?? new Response(null, { status: 404 })
+    }
   }
 
   // FIAT_MOCKS_ENABLED (no full DEV_AUTH_BYPASS): only fiat/* is mocked.

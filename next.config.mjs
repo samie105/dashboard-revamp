@@ -4,6 +4,13 @@ const nextConfig = {
   // .next/standalone, so node_modules never reaches the runtime image.
   output: "standalone",
   serverExternalPackages: ["mongoose"],
+  // The isolated dashboard-test image is built on the small Watchup VPS.
+  // Keep its static-generation worker count bounded without changing the
+  // normal production build profile.
+  experimental:
+    process.env.NEXT_PUBLIC_WORLDSTREET_DASHBOARD_TEST_MODE === "true"
+      ? { cpus: 1 }
+      : undefined,
   // Nav menus link to account pages that don't exist yet — land somewhere
   // sensible instead of a 404 until those pages are built.
   async redirects() {

@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import { devMockApiResponse } from "@/lib/dev-mock-data"
+import { SERVER_DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 
 /**
  * Proxy to worldstreet-crypto.
@@ -129,6 +130,11 @@ async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> 
     if (mock) return mock
   }
 
+  if (SERVER_DASHBOARD_TEST_MODE) {
+    const mock = await devMockApiResponse(req, path)
+    if (mock) return mock
+  }
+
   const isDollarBalances = path === "dollar/balances" && req.method === "GET"
 
   if (!isForwarded(path) && !isDollarBalances) {
@@ -136,7 +142,9 @@ async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> 
   }
 
   if (isDollarBalances) {
-    const { userId, getToken } = await auth()
+    const { userId, getToken } = SERVER_DASHBOARD_TEST_MODE
+      ? { userId: "dev_bypass_user", getToken: async () => process.env.WORLDSTREET_TEST_BACKEND_TOKEN }
+      : await auth()
     const token = await getToken()
     if (!userId || !token) return Response.json({ error: "Unauthorized" }, { status: 401 })
     return forwardDollarBalances(userId, token)
@@ -147,7 +155,9 @@ async function forward(req: Request, ctx: { params: Promise<{ path: string[] }> 
     return Response.json({ error: "Crypto service is not configured" }, { status: 503 })
   }
 
-  const { getToken } = await auth()
+  const { getToken } = SERVER_DASHBOARD_TEST_MODE
+    ? { getToken: async () => process.env.WORLDSTREET_TEST_BACKEND_TOKEN }
+    : await auth()
   const token = await getToken()
   if (!token) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })

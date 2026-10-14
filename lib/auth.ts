@@ -9,6 +9,7 @@ import { auth, currentUser } from "@clerk/nextjs/server"
 import { UserWallet } from "@/models/UserWallet"
 import { connectDB } from "@/lib/mongodb"
 import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
+import { SERVER_DASHBOARD_TEST_MODE, DASHBOARD_TEST_USER } from "@/lib/dashboard-test-mode"
 
 export interface AuthUser {
   userId: string
@@ -31,6 +32,15 @@ export async function getAuthUser(fetchPrivyType: boolean = false): Promise<Auth
       email: DEV_BYPASS_USER.email,
       firstName: DEV_BYPASS_USER.firstName,
       lastName: DEV_BYPASS_USER.lastName,
+    }
+  }
+
+  if (SERVER_DASHBOARD_TEST_MODE) {
+    return {
+      userId: DASHBOARD_TEST_USER.userId,
+      email: DASHBOARD_TEST_USER.email,
+      firstName: DASHBOARD_TEST_USER.firstName,
+      lastName: DASHBOARD_TEST_USER.lastName,
     }
   }
 

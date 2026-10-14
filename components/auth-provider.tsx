@@ -4,6 +4,7 @@ import * as React from "react"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { useProfile } from "@/components/profile-provider"
 import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
+import { DASHBOARD_TEST_MODE, DASHBOARD_TEST_USER } from "@/lib/dashboard-test-mode"
 
 export type AuthUser = {
   userId: string
@@ -37,12 +38,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // the tree at all (see app/layout.tsx), so Clerk's hooks would throw before
   // clerk-js even got the chance to fail its domain check. The flag is a
   // module-level constant, so the same component mounts for the app's lifetime.
-  if (DEV_AUTH_BYPASS) return <BypassAuthProvider>{children}</BypassAuthProvider>
+  if (DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE) return <BypassAuthProvider>{children}</BypassAuthProvider>
   return <ClerkAuthProvider>{children}</ClerkAuthProvider>
 }
 
 function BypassAuthProvider({ children }: { children: React.ReactNode }) {
   const { fetchProfile } = useProfile()
+
+  const bypassUser = DASHBOARD_TEST_MODE ? DASHBOARD_TEST_USER : DEV_BYPASS_USER
 
   React.useEffect(() => {
     fetchProfile()
@@ -50,12 +53,12 @@ function BypassAuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = React.useMemo(
     () => ({
-      user: { ...DEV_BYPASS_USER, isLoaded: true },
+      user: { ...bypassUser, isLoaded: true },
       isSignedIn: true,
       isLoaded: true,
       signOut: async () => {},
     }),
-    [],
+    [bypassUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

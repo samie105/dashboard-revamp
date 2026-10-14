@@ -25,6 +25,12 @@ import { FIAT_ORDER_PAUSE_STATES, FIAT_ORDER_TERMINAL_STATES } from "@/lib/crypt
 import type { FiatOrder } from "@/lib/crypto-backend/types"
 import { savePendingFlow, type PendingFlowKind } from "@/lib/pending-flow"
 import { CARD_HUE } from "@/components/ui/surface"
+import {
+  fiatOrderCryptoLeg,
+  fiatOrderFiatLeg,
+  formatFiatOrderAmount,
+  networkLabel,
+} from "@/lib/crypto-backend/fiat-order-display"
 
 const FIAT_HISTORY_LIMIT = 50
 
@@ -33,8 +39,9 @@ function providerLabel(provider: FiatOrder["provider"]): string {
 }
 
 function directionLabel(order: FiatOrder): string {
-  if (order.direction === "onramp") return `Buy ${order.asset} with ${order.currency}`
-  return `Sell ${order.asset} for ${order.currency}`
+  const crypto = fiatOrderCryptoLeg(order)
+  if (order.direction === "onramp") return `Deposit ${order.currency} → receive ${crypto.symbol}`
+  return `Sell ${crypto.symbol} for ${order.currency}`
 }
 
 function stateLabel(state: string): string {
@@ -48,13 +55,6 @@ function stateClass(state: string): string {
   if (FIAT_ORDER_TERMINAL_STATES.has(state)) return "bg-debit-chip text-debit"
   if (FIAT_ORDER_PAUSE_STATES.has(state)) return "bg-warning-chip text-warning"
   return "bg-warning-chip text-warning"
-}
-
-function formatAmount(value: string | undefined, currency: string): string | null {
-  if (!value) return null
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return `${value} ${currency}`
-  return `${parsed.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${currency}`
 }
 
 function formatDate(value: string): string {
@@ -140,8 +140,13 @@ function FiatOrderRow({ order }: { order: FiatOrder }) {
   const detail = useFiatOrderPoll(expanded ? order.id : undefined)
   const current = detail.data ?? order
   const recovery = recoveryFor(current)
-  const expected = formatAmount(current.expectedDepositAmount, current.currency)
-  const observed = formatAmount(current.observedDepositAmount, current.asset)
+  const fiat = fiatOrderFiatLeg(current)
+  const crypto = fiatOrderCryptoLeg(current)
+  const fiatAmount = formatFiatOrderAmount(fiat?.amount, fiat?.currency ?? current.currency)
+  const cryptoAmount = formatFiatOrderAmount(crypto.amount, crypto.symbol)
+  const amountSummary = current.direction === "onramp"
+    ? [fiatAmount, cryptoAmount ?? `${crypto.symbol} · ${networkLabel(crypto.network)}`].filter(Boolean).join(" → ")
+    : [cryptoAmount, fiatAmount].filter(Boolean).join(" → ")
   const reason = current.failureReason ?? current.reviewReason ?? current.refundReason
 
   function continueOrder() {
@@ -168,7 +173,7 @@ function FiatOrderRow({ order }: { order: FiatOrder }) {
           </span>
         </span>
         <span className="hidden shrink-0 text-right text-[12.5px] tabular-nums text-muted-foreground sm:block">
-          {expected ?? observed ?? "—"}
+          {amountSummary || "—"}
         </span>
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${stateClass(current.state)}`}>
           {stateLabel(current.state)}
@@ -183,12 +188,12 @@ function FiatOrderRow({ order }: { order: FiatOrder }) {
           <dl className="grid gap-x-6 gap-y-2 text-[12.5px] sm:grid-cols-2">
             <OrderDetail label="Reference" value={current.publicReference} />
             <OrderDetail label="Created" value={formatDate(current.createdAt)} />
-            <OrderDetail label="Network" value={current.network} />
-            <OrderDetail label="Asset" value={current.asset} />
+            <OrderDetail label="Settlement network" value={networkLabel(crypto.network)} />
+            <OrderDetail label="Settlement asset" value={crypto.symbol} />
             <OrderDetail label="Currency" value={current.currency} />
             <OrderDetail label="Payment rail" value={current.channel} />
-            {expected && <OrderDetail label="Expected fiat deposit" value={expected} />}
-            {observed && <OrderDetail label="Observed crypto deposit" value={observed} />}
+            {fiatAmount && <OrderDetail label={current.direction === "onramp" ? "Fiat deposit" : "Fiat payout"} value={fiatAmount} />}
+            {cryptoAmount && <OrderDetail label={current.direction === "onramp" ? "Crypto settlement" : "Crypto deposit"} value={`${cryptoAmount} · ${networkLabel(crypto.network)}`} />}
             {current.observedDepositTxHash && <OrderDetail label="Deposit transaction" value={current.observedDepositTxHash} />}
           </dl>
 

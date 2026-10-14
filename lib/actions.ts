@@ -1,6 +1,7 @@
 "use server"
 
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+import { SERVER_DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 import { DEV_MOCK_USER_BALANCES } from "@/lib/dev-mock-data"
 import { buildMarketHistory, type MarketHistory, type Points } from "@/lib/market-history"
 import { parseFearGreed, type FearGreed } from "@/lib/fear-greed"
@@ -1697,6 +1698,11 @@ export async function getUserBalances(
   // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts):
   // the legacy trading backend has no record for the bypass user.
   if (DEV_AUTH_BYPASS) {
+    const balances = DEV_MOCK_USER_BALANCES
+    const totalUsd = balances.reduce((sum, b) => sum + b.available + b.locked, 0)
+    return { success: true, balances, totalUsd }
+  }
+  if (SERVER_DASHBOARD_TEST_MODE) {
     const balances = DEV_MOCK_USER_BALANCES
     const totalUsd = balances.reduce((sum, b) => sum + b.available + b.locked, 0)
     return { success: true, balances, totalUsd }

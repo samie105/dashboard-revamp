@@ -3,6 +3,7 @@
 import * as React from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
+import { DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 
 // Kept in step with `isPublicRoute` in middleware.ts. The *-unauth routes are
 // the dummy-data design previews — no session, no wallet, nothing to gate.
@@ -20,6 +21,7 @@ const PUBLIC_ROUTES = [
   "/sell-unauth",
   "/settings-unauth",
   "/launchpad-unauth",
+  "/test/login",
 ]
 const LOGIN_URL =
   process.env.NODE_ENV === "production"
@@ -31,15 +33,20 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r))
 
+  // The test host is authenticated by its scoped HTTP-only session cookie in
+  // middleware. AuthProvider supplies the matching fixed user after that
+  // check, so Clerk must not be allowed to redirect this host.
+  const isDashboardTest = DASHBOARD_TEST_MODE
+
   /* Hooks before early returns, always: three of the four branches below
      return before this point, so an effect placed lower would run on some
      renders and not others. */
   React.useEffect(() => {
-    if (!isPublic && isLoaded && !isSignedIn) window.location.href = LOGIN_URL
-  }, [isPublic, isLoaded, isSignedIn])
+    if (!isDashboardTest && !isPublic && isLoaded && !isSignedIn) window.location.href = LOGIN_URL
+  }, [isDashboardTest, isPublic, isLoaded, isSignedIn])
 
   // Public routes bypass the gate entirely
-  if (isPublic) {
+  if (isDashboardTest || isPublic) {
     return <>{children}</>
   }
 

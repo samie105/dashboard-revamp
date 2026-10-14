@@ -7,13 +7,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { CryptoBackendError } from "@/lib/crypto-backend"
 import { clearUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
+import { DASHBOARD_TEST_MODE, DASHBOARD_TEST_USER } from "@/lib/dashboard-test-mode"
 
 // Under the dev bypass ClerkProvider isn't mounted (see app/layout.tsx), so
 // Clerk's useUser would throw. The pick is a module-level constant — the same
 // implementation runs on every render, so the rules of hooks hold. The mock
 // user never changes identity, so the cache-clearing effect below stays inert.
-const useUser = DEV_AUTH_BYPASS
-  ? () => ({ user: { id: DEV_BYPASS_USER.userId }, isLoaded: true })
+const useUser = DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE
+  ? () => ({ user: { id: DASHBOARD_TEST_MODE ? DASHBOARD_TEST_USER.userId : DEV_BYPASS_USER.userId }, isLoaded: true })
   : useClerkUser
 
 export function CryptoQueryProvider({ children }: { children: React.ReactNode }) {

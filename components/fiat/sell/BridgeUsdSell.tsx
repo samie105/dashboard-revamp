@@ -361,7 +361,7 @@ export function BridgeUsdSell({
     const intentId = order.data?.cryptoIntent?.id
     if (!intentId || adoptedIntentId.current === intentId) return
     adoptedIntentId.current = intentId
-    adoptIntent(intentId)
+    adoptIntent(intentId, { sponsorFees: true })
   }, [adoptIntent, order.data?.cryptoIntent?.id])
 
   React.useEffect(() => {
@@ -394,7 +394,7 @@ export function BridgeUsdSell({
       return
     }
     try {
-      const submitted = await transfer.submitIntent({ useSponsorship: false })
+      const submitted = await transfer.submitIntent({ useSponsorship: true, requireSponsorship: true })
       const txHash = readTxHash(submitted, transfer.intent)
       if (!txHash) throw new Error("The wallet did not return a transaction hash.")
       await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.fiatOrder(userId, orderId) })

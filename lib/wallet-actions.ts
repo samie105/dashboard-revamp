@@ -5,6 +5,7 @@ import { UserWallet } from "@/models/UserWallet"
 import { connectDB } from "@/lib/mongodb"
 import { auth } from "@clerk/nextjs/server"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+import { SERVER_DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 import { DEV_MOCK_WALLETS, DEV_MOCK_TRADING_WALLET } from "@/lib/dev-mock-data"
 
 // The Privy app new signups are created in (0 = old, 1 = second, 2 = third,
@@ -147,6 +148,15 @@ export async function pregenerateWallet(email: string): Promise<WalletResult> {
       tradingWallet: DEV_MOCK_TRADING_WALLET,
     }
   }
+  if (SERVER_DASHBOARD_TEST_MODE) {
+    return {
+      success: true,
+      privyUserId: "did:privy:dashboard-test",
+      privy_type: 2,
+      wallets: DEV_MOCK_WALLETS,
+      tradingWallet: DEV_MOCK_TRADING_WALLET,
+    }
+  }
 
   try {
     const { userId: clerkUserId } = await auth()
@@ -260,6 +270,13 @@ export async function getTradingWalletStatus(email: string): Promise<TradingWall
       tradingWallet: { ...DEV_MOCK_TRADING_WALLET, initialized: true },
     }
   }
+  if (SERVER_DASHBOARD_TEST_MODE) {
+    return {
+      success: true,
+      hasTradingWallet: true,
+      tradingWallet: { ...DEV_MOCK_TRADING_WALLET, initialized: true },
+    }
+  }
 
   try {
     const { userId: clerkUserId } = await auth()
@@ -314,6 +331,15 @@ export async function refreshWallet(email: string): Promise<WalletResult> {
     return {
       success: true,
       privyUserId: "did:privy:dev-bypass",
+      privy_type: 2,
+      wallets: DEV_MOCK_WALLETS,
+      tradingWallet: DEV_MOCK_TRADING_WALLET,
+    }
+  }
+  if (SERVER_DASHBOARD_TEST_MODE) {
+    return {
+      success: true,
+      privyUserId: "did:privy:dashboard-test",
       privy_type: 2,
       wallets: DEV_MOCK_WALLETS,
       tradingWallet: DEV_MOCK_TRADING_WALLET,

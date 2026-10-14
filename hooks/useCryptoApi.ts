@@ -5,11 +5,12 @@ import { useAuth as useClerkAuth } from "@clerk/nextjs"
 import { CryptoApi } from "@/lib/crypto/api"
 import { cryptoBackendUrl } from "@/lib/crypto/config"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
+import { DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 
 // Under the dev bypass ClerkProvider isn't mounted (see app/layout.tsx), so
 // Clerk's useAuth would throw. Module-level constant pick keeps hook order
 // stable; the synthetic dev token below already covers the missing session.
-const useAuth = DEV_AUTH_BYPASS
+const useAuth = DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE
   ? () => ({ getToken: async (): Promise<string | null> => null })
   : useClerkAuth
 
@@ -27,7 +28,7 @@ export function useCryptoApi(): CryptoApi {
         baseUrl: cryptoBackendUrl(),
         getClerkToken: async () =>
           (await getToken()) ??
-          (process.env.NODE_ENV === "development" ? "dev-local-token" : undefined),
+          (process.env.NODE_ENV === "development" || DASHBOARD_TEST_MODE ? "dashboard-test-token" : undefined),
       }),
     [getToken],
   )

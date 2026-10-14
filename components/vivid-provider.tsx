@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { VividProvider } from "@worldstreet/vivid-voice"
 import { useUser as useClerkUser, useAuth as useClerkAuth } from "@clerk/nextjs"
 import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
+import { DASHBOARD_TEST_MODE, DASHBOARD_TEST_USER } from "@/lib/dashboard-test-mode"
 import { usePathname, useRouter } from "next/navigation"
 import { useProfile } from "@/components/profile-provider"
 import { allFunctions } from "@/lib/vivid-functions"
@@ -37,17 +38,17 @@ const HIDE_MIC_ROUTES = ["/login", "/register", "/vivid", "/community"]
 // Under the dev bypass ClerkProvider isn't mounted (see app/layout.tsx), so
 // Clerk's hooks would throw. The pick is a module-level constant — the same
 // implementation runs on every render, so the rules of hooks hold.
-const useUser = DEV_AUTH_BYPASS
+const useUser = DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE
   ? () => ({
       user: {
-        id: DEV_BYPASS_USER.userId,
-        firstName: DEV_BYPASS_USER.firstName,
-        lastName: DEV_BYPASS_USER.lastName,
-        primaryEmailAddress: { emailAddress: DEV_BYPASS_USER.email },
+        id: DASHBOARD_TEST_MODE ? DASHBOARD_TEST_USER.userId : DEV_BYPASS_USER.userId,
+        firstName: DASHBOARD_TEST_MODE ? DASHBOARD_TEST_USER.firstName : DEV_BYPASS_USER.firstName,
+        lastName: DASHBOARD_TEST_MODE ? DASHBOARD_TEST_USER.lastName : DEV_BYPASS_USER.lastName,
+        primaryEmailAddress: { emailAddress: DASHBOARD_TEST_MODE ? DASHBOARD_TEST_USER.email : DEV_BYPASS_USER.email },
       },
     })
   : useClerkUser
-const useAuth = DEV_AUTH_BYPASS ? () => ({ isSignedIn: true }) : useClerkAuth
+const useAuth = DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE ? () => ({ isSignedIn: true }) : useClerkAuth
 
 export function VividVoiceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser()
@@ -93,7 +94,7 @@ export function VividVoiceProvider({ children }: { children: React.ReactNode }) 
         {/* The hosted widget's config is domain-locked like Clerk's keys —
             on localhost it can only 403 into the console, so the bypass build
             drops it entirely. */}
-        {!hideMic && !DEV_AUTH_BYPASS && <VividWidget />}
+        {!hideMic && !DEV_AUTH_BYPASS && !DASHBOARD_TEST_MODE && <VividWidget />}
       </>
     )
   }

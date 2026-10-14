@@ -16,6 +16,12 @@ import { CopyButton } from "@/components/fiat/shared/SensitiveValue"
 import { FlowHeader } from "@/components/ui/flow"
 import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
 import {
+  fiatOrderCryptoLeg,
+  fiatOrderFiatLeg,
+  formatFiatOrderAmount,
+  networkLabel,
+} from "@/lib/crypto-backend/fiat-order-display"
+import {
   ONRAMP_STAGES,
   quoteSecondsLeft,
   type OnrampOrderView,
@@ -75,13 +81,19 @@ export function OnrampOrderScreen({
   )
   const canDiscard = ["failed", "reversed", "refunded", "expired"].includes(order.state)
   const problemCaption = discardError ? <><FiatErrorDetail error={describeFiatError(discardError)} />{reasonCaption}</> : reasonCaption
+  const fiat = fiatOrderFiatLeg(order)
+  const crypto = fiatOrderCryptoLeg(order)
+  const fiatAmount = formatFiatOrderAmount(fiat?.amount, fiat?.currency ?? order.currency)
+  const settlementAmount = figure ?? formatFiatOrderAmount(crypto.amount, crypto.symbol) ?? undefined
+  const settlementText = settlementAmount ? `${settlementAmount} on ${networkLabel(crypto.network)}` : `${crypto.symbol} on ${networkLabel(crypto.network)}`
+  const flowSummary = fiatAmount ? `${fiatAmount} → ${settlementText}` : settlementText
 
   if (view.screen === "pay" && checkingPayment) {
     return (
       <StatusScreen
         state="processing"
         direction="in"
-        figure={figure}
+        figure={settlementAmount}
         headline="Checking your payment"
         caption={
           <>
@@ -109,8 +121,18 @@ export function OnrampOrderScreen({
         <FlowHeader
           direction="in"
           title="Send the bank transfer"
-          subtitle={figure ? `${figure} arrives in your wallet once it's confirmed` : "Your crypto arrives once the payment is confirmed"}
+          subtitle={`${flowSummary} · payment is confirmed by OnSwitch`}
         />
+        <div className="grid gap-3 rounded-2xl bg-surface-sunken/55 px-4 py-3 ring-1 ring-border/25 sm:grid-cols-2" data-testid="fiat-settlement-summary">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">You deposit</p>
+            <p className="mt-1 text-base font-semibold tabular-nums">{fiatAmount ?? `Local ${order.currency}`}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Settles as</p>
+            <p className="mt-1 text-base font-semibold tabular-nums">{settlementText}</p>
+          </div>
+        </div>
         {instructions.rows.length > 0 ? (
           <dl className="divide-y divide-border/40 rounded-xl border border-border/40 bg-background/40 px-3">
             {instructions.rows.map((row) => <div key={row.label} className="flex flex-col gap-1 py-3">
@@ -146,7 +168,7 @@ export function OnrampOrderScreen({
       <StatusScreen
         state="processing"
         direction="in"
-        figure={figure}
+        figure={settlementAmount}
         headline="Your order is being reviewed"
         caption={reasonCaption}
         reference={order.publicReference}
@@ -161,7 +183,7 @@ export function OnrampOrderScreen({
       <StatusScreen
         state="failure"
         direction="in"
-        figure={figure}
+        figure={settlementAmount}
         headline={PROBLEM_HEADLINE[order.state] ?? "This order didn't complete"}
         caption={problemCaption}
         reference={order.publicReference}
@@ -181,7 +203,7 @@ export function OnrampOrderScreen({
       <StatusScreen
         state="success"
         direction="in"
-        figure={figure}
+        figure={settlementAmount}
         headline="Done — your crypto is in your Worldstreet wallet"
         stages={stages}
         activeIndex={ONRAMP_STAGES.length}
@@ -198,7 +220,7 @@ export function OnrampOrderScreen({
     <StatusScreen
       state="processing"
       direction="in"
-      figure={figure}
+      figure={settlementAmount}
       headline={
         tracking
           ? "Checking your payment"

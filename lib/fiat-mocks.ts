@@ -11,6 +11,8 @@
  * so `next build` cannot ship a mock-serving artifact even if the env var
  * leaks into the deployed environment.
  */
+import { DASHBOARD_TEST_LIVE_FIAT } from "@/lib/dashboard-test-mode"
+
 export const FIAT_MOCKS_ENABLED: boolean =
-  process.env.NODE_ENV === "development" &&
-  process.env.NEXT_PUBLIC_FIAT_MOCKS === "true"
+  (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_FIAT_MOCKS === "true") ||
+  (process.env.NEXT_PUBLIC_WORLDSTREET_DASHBOARD_TEST_MODE === "true" && !DASHBOARD_TEST_LIVE_FIAT)

@@ -1,6 +1,7 @@
 import { CryptoBackendError } from "./errors"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import { FIAT_MOCKS_ENABLED } from "@/lib/fiat-mocks"
+import { DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 import type {
   CryptoBalance,
   CryptoBalanceSnapshot,
@@ -107,7 +108,7 @@ export class CryptoBackendClient {
   private async resolveFetcher(): Promise<typeof fetch> {
     if (this.fetcherInjected) return this.fetcher
     if (typeof window === "undefined") return this.fetcher
-    if (!DEV_AUTH_BYPASS && !FIAT_MOCKS_ENABLED) return this.fetcher
+    if (!DEV_AUTH_BYPASS && !FIAT_MOCKS_ENABLED && !DASHBOARD_TEST_MODE) return this.fetcher
     try {
       const mockModule = await import("@/lib/dev-mock-fetch")
       this.fetcher = mockModule.devMockFetch
@@ -632,6 +633,7 @@ export class CryptoBackendClient {
       asset: { kind: "native" | "token"; identifier: string }
       to: string
       amount: string
+      sponsorFees?: boolean
       idempotencyKey?: string
     },
     walletSessionToken?: string

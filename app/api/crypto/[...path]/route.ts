@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server"
 import { isCryptoProxyEnabled } from "@/lib/crypto-backend/config"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import { devMockCryptoApiResponse } from "@/lib/dev-mock-crypto-backend"
+import { isDashboardTestBackendPath, SERVER_DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 
 const CRYPTO_API = process.env.CRYPTO_API_URL?.replace(/\/+$/, "")
 const PROXY_TIMEOUT_MS = 15_000
@@ -152,6 +153,15 @@ async function forward(
     if (mock) return mock
   }
 
+  // dashboard-revamp test deployments use the in-process mock for the broad
+  // dashboard surface, but intentionally pass fiat and modern-wallet calls
+  // through to the isolated backend. This keeps the test UI deterministic
+  // without replacing the real OnSwitch/Bridge provider adapters.
+  if (SERVER_DASHBOARD_TEST_MODE && !isDashboardTestBackendPath(path)) {
+    const mock = await devMockCryptoApiResponse(req, path)
+    if (mock) return mock
+  }
+
   if (!isCryptoProxyEnabled) {
     return jsonError(
       "Crypto backend proxy is disabled",
@@ -206,7 +216,9 @@ async function forward(
   // it; anything else rejects it and the client shows its error state.
   const token = DEV_AUTH_BYPASS
     ? "dev-bypass-token"
-    : await (await auth()).getToken()
+    : SERVER_DASHBOARD_TEST_MODE
+      ? process.env.WORLDSTREET_TEST_BACKEND_TOKEN
+      : await (await auth()).getToken()
   if (!token) return jsonError("Unauthorized", 401, "UNAUTHORIZED")
 
   const upstreamHeaders = new Headers({

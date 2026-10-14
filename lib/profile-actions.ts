@@ -5,6 +5,7 @@ import { connectDB } from "@/lib/mongodb"
 import DashboardProfile from "@/models/DashboardProfile"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import { isCountry, isTimezone, normalizeUsername, usernameProblem } from "@/lib/profile-fields"
+import { SERVER_DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 import {
   getDevMockProfile,
   updateDevMockProfile,
@@ -67,6 +68,9 @@ export async function fetchProfile(): Promise<ProfileResult> {
   // Clerk auth() has no session on localhost and the profile lives in Mongo,
   // so serve the in-memory mock profile instead.
   if (DEV_AUTH_BYPASS) {
+    return { success: true, profile: getDevMockProfile() }
+  }
+  if (SERVER_DASHBOARD_TEST_MODE) {
     return { success: true, profile: getDevMockProfile() }
   }
 
@@ -145,6 +149,9 @@ export async function updateProfile(
   if (DEV_AUTH_BYPASS) {
     return { success: true, profile: updateDevMockProfile(updates) as ProfileData }
   }
+  if (SERVER_DASHBOARD_TEST_MODE) {
+    return { success: true, profile: updateDevMockProfile(updates) as ProfileData }
+  }
 
   try {
     const { userId } = await auth()
@@ -208,6 +215,10 @@ export async function markOnboardingComplete(
 ): Promise<{ success: boolean; error?: string }> {
   // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
   if (DEV_AUTH_BYPASS) {
+    addDevMockOnboarding(key)
+    return { success: true }
+  }
+  if (SERVER_DASHBOARD_TEST_MODE) {
     addDevMockOnboarding(key)
     return { success: true }
   }

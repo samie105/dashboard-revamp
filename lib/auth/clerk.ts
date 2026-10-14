@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { NextRequest } from "next/server"
 import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
+import { SERVER_DASHBOARD_TEST_MODE, DASHBOARD_TEST_USER } from "@/lib/dashboard-test-mode"
 
 /**
  * Verify Clerk session and get JWT token.
@@ -11,6 +12,10 @@ export async function verifyClerkJWT(request: NextRequest) {
   // External services will reject this token; callers get empty/error states.
   if (DEV_AUTH_BYPASS) {
     return { userId: DEV_BYPASS_USER.userId, token: "dev-bypass-token" }
+  }
+
+  if (SERVER_DASHBOARD_TEST_MODE) {
+    return { userId: DASHBOARD_TEST_USER.userId, token: process.env.WORLDSTREET_TEST_BACKEND_TOKEN ?? "dashboard-test-token" }
   }
 
   try {
@@ -47,6 +52,10 @@ export async function getCurrentUser() {
   // Dev-only bypass (inert in production builds — see lib/dev-auth-bypass.ts)
   if (DEV_AUTH_BYPASS) {
     return { userId: DEV_BYPASS_USER.userId }
+  }
+
+  if (SERVER_DASHBOARD_TEST_MODE) {
+    return { userId: DASHBOARD_TEST_USER.userId }
   }
 
   const { userId } = await auth()

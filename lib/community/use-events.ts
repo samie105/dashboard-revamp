@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import * as Ably from "ably"
 import type { CallEventPayload, MessageEventPayload, TypingEventPayload, SSEEventPayload } from "@/lib/community/events"
+import { DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 
 type RealtimeEventHandler = (event: SSEEventPayload) => void
 
@@ -38,7 +39,11 @@ export function useSSEEvents(userId: string | null, onEvent: RealtimeEventHandle
   }, [onEvent])
 
   useEffect(() => {
-    if (!userId) return
+    // The dashboard-test deployment uses its own signed dummy session and
+    // intentionally does not have the Clerk-backed community identity that
+    // signs Ably token requests. Keep the unrelated global realtime client
+    // from retrying a provider it cannot authenticate against in this mode.
+    if (!userId || DASHBOARD_TEST_MODE) return
 
     const ably = getAblyClient()
     const channelName = `user:${userId}`

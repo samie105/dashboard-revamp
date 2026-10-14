@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { Suspense, useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import gsap from "gsap"
 import { AnimatePresence, motion } from "motion/react"
@@ -53,6 +53,14 @@ import type { MessageEventPayload, TypingEventPayload } from "@/lib/community/ev
 type OptimisticMessage = MessageWithDetails & { status?: "pending" | "sent" | "error"; uploadProgress?: number; isNew?: boolean }
 
 export default function CommunityPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <CommunityPageContent />
+    </Suspense>
+  )
+}
+
+function CommunityPageContent() {
   const { profile } = useProfile()
   const userId = profile?.authUserId ?? ""
   const searchParams = useSearchParams()
