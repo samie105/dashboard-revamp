@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import { Dashboard } from "@/components/dashboard/redesign/dashboard"
 import { WalletCardSkeleton, DashboardGridSkeleton } from "@/components/dashboard/skeletons"
+import { MobileHomeSkeleton } from "@/components/dashboard/redesign/mobile-home"
 import { DashboardOnboarding } from "@/components/dashboard/dashboard-onboarding"
 // TEMPORARILY OFF — the house-token work is still in progress (2026-09-02).
 // The banner's only action scrolls to #worldstreet-token-card and flashes it
@@ -31,7 +32,7 @@ export default function Page() {
   return (
     // overflow-x-hidden clips the hero's full-bleed negative margins; without
     // it the -mx-4 bleed widens the document by 32px on a phone.
-    <div className="flex flex-col gap-6 overflow-x-hidden p-4 md:p-6">
+    <div className="flex flex-col gap-6 overflow-x-hidden px-4 pb-4 pt-3 md:p-6">
       {/* House-token strip — the one marketing surface above the balance
           hero (it renders nothing once dismissed).
           TEMPORARILY OFF: see the commented import above. */}
@@ -39,10 +40,15 @@ export default function Page() {
 
       <Suspense
         fallback={
-          <div className="flex flex-col gap-6">
-            <WalletCardSkeleton />
-            <DashboardGridSkeleton />
-          </div>
+          <>
+            <div className="md:hidden">
+              <MobileHomeSkeleton />
+            </div>
+            <div className="hidden flex-col gap-6 md:flex">
+              <WalletCardSkeleton />
+              <DashboardGridSkeleton />
+            </div>
+          </>
         }
       >
         <DashboardLoader />
