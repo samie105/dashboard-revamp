@@ -162,7 +162,7 @@ const ECOSYSTEM: Item[] = [
   { name: "Store", url: "https://shop.worldstreetgold.com", icon: Store01Icon, external: true },
   { name: "Academy", url: "https://academy.worldstreetgold.com", icon: Book01Icon, external: true },
   { name: "Social", url: "https://social.worldstreetgold.com", icon: UserGroup02Icon, external: true },
-  { name: "Xstream", url: "https://xtreme.worldstreetgold.com", icon: Video01Icon, external: true },
+  { name: "Xstream", url: "https://xtream.worldstreetgold.com", icon: Video01Icon, external: true },
   { name: "Forex", url: "https://portal.worldstreetgold.com", icon: DollarCircleIcon, external: true },
   { name: "Vivid AI", url: "/vivid", icon: Brain01Icon },
   { name: "Vision", url: "https://vision.worldstreetgold.com", icon: EyeIcon, external: true },
