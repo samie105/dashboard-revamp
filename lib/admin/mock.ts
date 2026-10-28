@@ -198,12 +198,14 @@ function allUsers(c: Ctx): AdminUserRow[] {
     const joinedAt = c.now - Math.round(random() * 500 * DAY)
     const sinceActive = Math.round(random() * 90 * DAY)
     const lastActive = Math.max(joinedAt, c.now - sinceActive)
-    const active = !c.quiet && c.now - lastActive <= activeWindow
+    // A few accounts never did anything; they can't be active.
+    const neverActive = random() <= 0.05
+    const active = !c.quiet && !neverActive && c.now - lastActive <= activeWindow
     return {
       id: `usr_${(1_000 + i).toString(36)}`,
       userLabel: userLabel(random),
       joinedAt: new Date(joinedAt).toISOString(),
-      lastActiveAt: random() > 0.05 ? new Date(lastActive).toISOString() : null,
+      lastActiveAt: neverActive ? null : new Date(lastActive).toISOString(),
       wallets: 1 + Math.floor(random() * 4),
       volumeUsd: Math.round(random() * random() * 180_000),
       status: active ? "active" : "dormant",

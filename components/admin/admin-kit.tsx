@@ -143,10 +143,10 @@ export function KpiCard({
   const change = kpi ? kpiChange(kpi) : null
   const delta = kpi ? kpiDelta(kpi) : null
   const comparison = compare === "absolute"
-    ? delta === null ? null : <><DeltaChip value={delta} format={format} /><span className="truncate">in {periodLong(period)}</span></>
-    : change === null ? null : <><ChangeChip value={change} /><span className="truncate">vs {periodPrevious(period)}</span></>
+    ? delta === null ? null : <><DeltaChip value={delta} format={format} /><span className="hidden truncate sm:inline">in {periodLong(period)}</span></>
+    : change === null ? null : <><ChangeChip value={change} /><span className="hidden truncate sm:inline">vs {periodPrevious(period)}</span></>
   return (
-    <Panel className={cn("flex min-w-0 flex-col gap-3 p-4 transition-opacity md:p-5", dim && "opacity-55")} aria-busy={!kpi || dim}>
+    <Panel className={cn("flex min-w-0 flex-col gap-2.5 p-3.5 transition-opacity sm:gap-3 sm:p-4 md:p-5", dim && "opacity-55")} aria-busy={!kpi || dim}>
       <div className="flex min-w-0 items-center gap-1">
         <p className="truncate text-[12.5px] font-medium text-muted-foreground">{label}</p>
         {definition && (
@@ -171,7 +171,7 @@ export function KpiCard({
         <>
           {/* The figure gets the full width (it must never be cut off); the
               trend sits under it, stretched to the card. */}
-          <p className="whitespace-nowrap font-display text-[26px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground">{format(kpi.value)}</p>
+          <p className="whitespace-nowrap font-display text-[20px] font-semibold sm:text-[26px] leading-none tracking-[-0.03em] tabular-nums text-foreground">{format(kpi.value)}</p>
           {kpi.spark.length > 1 && kpi.spark.some((v) => v !== kpi.spark[0]) ? (
             <Spark points={kpi.spark} width={200} height={28} tone="brand" fluid />
           ) : (
@@ -194,7 +194,9 @@ export function KpiCard({
 }
 
 export function KpiGrid({ children, columns = 4 }: { children: React.ReactNode; columns?: 3 | 4 }) {
-  return <div className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4", columns === 4 ? "xl:grid-cols-4" : "xl:grid-cols-3")}>{children}</div>
+  // Two per row on phones (one per row made the overview a long scroll);
+  // a third card in a 3-up grid spans the row there.
+  return <div className={cn("grid grid-cols-2 gap-3 md:gap-4", columns === 4 ? "xl:grid-cols-4" : "[&>*:last-child:nth-child(odd)]:col-span-2 xl:grid-cols-3 xl:[&>*:last-child:nth-child(odd)]:col-span-1")}>{children}</div>
 }
 
 export type ChartMetric<K extends string> = { key: K; label: string; values: number[]; format: (v: number) => string; formatAxis: (v: number) => string }

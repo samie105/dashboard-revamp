@@ -83,6 +83,14 @@ describe("mock figures", () => {
     for (const label of labels) expect(label).toMatch(/^[a-z]•••@[a-z.]+$/)
   })
 
+  it("never marks a user active without a last-active time inside the period", () => {
+    const { rows } = mockUsers("30d", { pageSize: 100 }, "ok", NOW).users
+    for (const u of rows.filter((r) => r.status === "active")) {
+      expect(u.lastActiveAt).not.toBeNull()
+      expect(NOW - Date.parse(u.lastActiveAt!)).toBeLessThanOrEqual(30 * 24 * 3_600_000)
+    }
+  })
+
   it("searches and pages users", () => {
     const first = mockUsers("30d", { page: 1, pageSize: 20 }, "ok", NOW)
     expect(first.users.rows).toHaveLength(20)
