@@ -222,6 +222,8 @@ export function MetricChart<K extends string>({
 }) {
   const [metricKey, setMetricKey] = React.useState<K>(metrics[0]!.key)
   const [comparing, setComparing] = React.useState(true)
+  // The same numbers as a table: for screen readers, and for reading exact values.
+  const [asTable, setAsTable] = React.useState(false)
   const metric = metrics.find((m) => m.key === metricKey) ?? metrics[0]!
   const labels = React.useMemo(() => (at ? at.map((a) => bucketLabel(a, period)) : []), [at, period])
   return (
@@ -238,6 +240,29 @@ export function MetricChart<K extends string>({
         <EmptyPanel compact title="No activity in this period" description={`Nothing to chart for ${periodLong(period)}. Try a longer period.`} />
       ) : (
         <div className={cn("pt-3 transition-opacity", dim && "opacity-55")} aria-busy={dim}>
+          {asTable ? (
+            <div className="max-h-[260px] overflow-auto rounded-xl border border-foreground/[0.06]">
+              <table className="w-full text-[12.5px] tabular-nums">
+                <caption className="sr-only">{metric.label} per {bucketUnit(period)}, {periodLong(period)}</caption>
+                <thead className="sticky top-0 bg-card text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="px-3 py-2 text-left font-medium">{bucketUnit(period) === "hour" ? "Hour (UTC)" : bucketUnit(period) === "month" ? "Month" : "Day"}</th>
+                    <th scope="col" className="px-3 py-2 text-right font-medium">{metric.label}</th>
+                    {metric.previous && <th scope="col" className="px-3 py-2 text-right font-medium">{periodPrevious(period).replace(/^p/, "P")}</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {metric.values.map((v, i) => (
+                    <tr key={i} className="border-t border-foreground/[0.05]">
+                      <th scope="row" className="px-3 py-1.5 text-left font-normal text-muted-foreground">{labels[i]}</th>
+                      <td className="px-3 py-1.5 text-right font-semibold text-foreground">{metric.format(v)}</td>
+                      {metric.previous && <td className="px-3 py-1.5 text-right text-muted-foreground">{metric.format(metric.previous[i] ?? 0)}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
           <PriceChart
             points={metric.values}
             compare={comparing ? metric.previous : undefined}
@@ -248,6 +273,7 @@ export function MetricChart<K extends string>({
             formatAxis={metric.formatAxis}
             height={260}
           />
+          )}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-muted-foreground">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1.5"><span aria-hidden className="h-0.5 w-4 rounded-full bg-primary" />This period</span>
@@ -259,7 +285,12 @@ export function MetricChart<K extends string>({
                 </label>
               )}
             </div>
-            <span className="text-muted-foreground/70">Per {bucketUnit(period)} · times in UTC</span>
+            <span className="flex items-center gap-3 text-muted-foreground/70">
+              Per {bucketUnit(period)} · times in UTC
+              <button type="button" onClick={() => setAsTable((v) => !v)} aria-pressed={asTable} className="rounded font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60">
+                {asTable ? "View as chart" : "View as table"}
+              </button>
+            </span>
           </div>
         </div>
       )}
