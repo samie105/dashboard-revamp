@@ -2,8 +2,7 @@
 
 /**
  * The admin console's shared pieces, in the redesign's language
- * (components/dash on the app's tokens, both themes): the console sidebar,
- * the page header (period, last update, refresh), KPI cards with their
+ * (components/dash on the app's tokens, both themes): the page header (period, last update, refresh), KPI cards with their
  * change and trend, the switchable main chart, breakdown bars, and one panel
  * per non-figure state, so every admin page draws loading, switching
  * period, no access, signed out, not connected, failed, empty and quiet
@@ -14,10 +13,9 @@
  */
 
 import * as React from "react"
-import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Analytics01Icon, DashboardSquare01Icon, RefreshIcon, UserGroupIcon, Wallet01Icon } from "@hugeicons/core-free-icons"
+import { RefreshIcon } from "@hugeicons/core-free-icons"
 
 import { ChangeChip, Chip, EmptyPanel, ErrorPanel, Panel, PanelHeader, PillTabs, PriceChart, SkeletonBlock, StatePanel, UnavailableState } from "@/components/dash"
 import { Spark, UnderlineTabs } from "@/components/dashboard/redesign/ui"
@@ -27,50 +25,6 @@ import { bucketLabel, kpiChange, PERIOD_OPTIONS, periodLong, periodPrevious, sha
 import { cn } from "@/lib/utils"
 
 /* ── Frame ────────────────────────────────────────────────────────────── */
-
-const SECTIONS = [
-  { href: "/admin", label: "Overview", icon: DashboardSquare01Icon },
-  { href: "/admin/users", label: "Users", icon: UserGroupIcon },
-  { href: "/admin/wallets", label: "Wallets", icon: Wallet01Icon },
-  { href: "/admin/volume", label: "Volume", icon: Analytics01Icon },
-] as const
-
-function sectionActive(pathname: string, href: string) {
-  return href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`)
-}
-
-/** The console's own navigation: a sidebar from lg, a scrolling strip above that. Keeps `?period=` across pages. */
-export function AdminNav() {
-  const pathname = usePathname()
-  const search = useSearchParams()
-  const period = search.get("period")
-  const withPeriod = (href: string) => (period ? `${href}?period=${encodeURIComponent(period)}` : href)
-  return (
-    <nav aria-label="Admin sections" className="lg:sticky lg:top-4 lg:self-start">
-      <p className="mb-2 hidden px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground/80 lg:block">Admin console</p>
-      <ul className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0">
-        {SECTIONS.map((s) => {
-          const on = sectionActive(pathname, s.href)
-          return (
-            <li key={s.href} className="shrink-0">
-              <Link
-                href={withPeriod(s.href)}
-                aria-current={on ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13.5px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/60",
-                  on ? "bg-foreground/[0.07] text-foreground" : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
-                )}
-              >
-                <HugeiconsIcon icon={s.icon} className={cn("size-[18px]", on && "text-primary")} strokeWidth={1.8} />
-                {s.label}
-              </Link>
-            </li>
-          )
-        })}
-      </ul>
-    </nav>
-  )
-}
 
 /** The period lives in the URL (`?period=7d`), so it survives navigation and can be shared. */
 export function useAdminPeriod(): [AdminPeriod, (period: AdminPeriod) => void] {
