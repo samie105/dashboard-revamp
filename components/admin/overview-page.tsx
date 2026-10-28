@@ -14,7 +14,9 @@
 
 import * as React from "react"
 
-import { DataTable, Panel, PanelHeader, StatusBadge, type DataColumn } from "@/components/dash"
+import { useMediaQuery } from "@/hooks/use-media-query"
+
+import { DataTable, Panel, PanelHeader, PillTabs, StatusBadge, type DataColumn } from "@/components/dash"
 import { useAdminOverview } from "@/hooks/admin/useAdminData"
 import { ADMIN_ACTIVITY_TYPES, type AdminActivity, type AdminActivityStatus, type AdminActivityType } from "@/lib/admin/types"
 import { ACTIVITY_LABEL, activeShare, filterActivity, type ActivityFilter, formatCount, formatCountCompact, overviewState, periodLong, STATUS_TONE, timeAgo, METRIC_DEFINITIONS } from "@/lib/admin/view"
@@ -44,6 +46,13 @@ function activityColumns(open: (a: AdminActivity) => void): DataColumn<AdminActi
   ]
 }
 
+type VolumeSplit = "network" | "product"
+const VOLUME_SPLITS: readonly { key: VolumeSplit; label: string }[] = [
+  { key: "network", label: "Network" },
+  { key: "product", label: "Product" },
+]
+const ACTIVITY_PREVIEW = 6
+
 const TYPE_OPTIONS: readonly { key: AdminActivityType | "all"; label: string }[] = [{ key: "all", label: "All" }, ...ADMIN_ACTIVITY_TYPES.map((t) => ({ key: t, label: ACTIVITY_LABEL[t] }))]
 const STATUS_OPTIONS: readonly { key: AdminActivityStatus | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -72,11 +81,17 @@ export function AdminOverviewPage() {
   const dim = state.kind === "switching"
   const quiet = state.kind === "no-data"
   const retry = () => void query.refetch()
+  // From xl the chart sits beside "Needs attention"; a taller chart lines the two up.
+  const sideBySide = useMediaQuery("(min-width: 1280px)")
   const [filter, setFilter] = React.useState<ActivityFilter>({ type: "all", status: "all" })
   const [opened, setOpened] = React.useState<AdminActivity | null>(null)
   const columns = React.useMemo(() => activityColumns(setOpened), [])
   const activity = data ? filterActivity(data.recentActivity, filter) : undefined
   const filtering = filter.type !== "all" || filter.status !== "all"
+  const [volumeSplit, setVolumeSplit] = React.useState<VolumeSplit>("network")
+  // Six rows keep the page short; the rest are one click away.
+  const [showAll, setShowAll] = React.useState(false)
+  const shown = activity && !showAll ? activity.slice(0, ACTIVITY_PREVIEW) : activity
 
   return (
     <>
@@ -94,8 +109,6 @@ export function AdminOverviewPage() {
         <AdminStatePanel state={state} period={period} subject="users" onRetry={retry} />
       ) : (
         <>
-          <AttentionPanel attention={data?.attention} dim={dim} />
-
           <KpiGrid>
             <KpiCard label="Total users" definition={METRIC_DEFINITIONS.totalUsers} compare="absolute" kpi={data?.kpis.totalUsers} format={formatCount} period={period} dim={dim} />
             <KpiCard
@@ -110,6 +123,9 @@ export function AdminOverviewPage() {
             <KpiCard label="Total wallets" definition={METRIC_DEFINITIONS.totalWallets} compare="absolute" kpi={data?.kpis.totalWallets} format={formatCount} period={period} dim={dim} />
           </KpiGrid>
 
+          {/* The chart and what needs attention side by side on wide screens,
+              so the page reads numbers → trend + problems → detail. */}
+          <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <MetricChart
             id="admin-overview-chart"
             title="Activity"
@@ -117,6 +133,7 @@ export function AdminOverviewPage() {
             at={data?.series.map((p) => p.at)}
             quiet={quiet}
             dim={dim}
+            height={sideBySide ? 350 : 260}
             metrics={[
               { key: "active", label: "Active users", values: data?.series.map((p) => p.activeUsers) ?? [], previous: data?.previousSeries.map((p) => p.activeUsers), format: formatCount, formatAxis: formatCountCompact },
               { key: "volume", label: "Volume", values: data?.series.map((p) => p.volumeUsd) ?? [], previous: data?.previousSeries.map((p) => p.volumeUsd), format: whole, formatAxis: usdCompact },
@@ -124,10 +141,19 @@ export function AdminOverviewPage() {
               { key: "wallets", label: "Active wallets", values: data?.series.map((p) => p.activeWallets) ?? [], previous: data?.previousSeries.map((p) => p.activeWallets), format: formatCount, formatAxis: formatCountCompact },
             ]}
           />
+          <AttentionPanel attention={data?.attention} dim={dim} />
+          </div>
 
-          <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-3">
-            <BreakdownPanel title="Volume by network" subtitle={periodLong(period)} items={data?.volumeByNetwork} format={usdCompact} dim={dim} emptyText={`No volume in ${periodLong(period)}.`} />
-            <BreakdownPanel title="Volume by product" subtitle={periodLong(period)} items={data?.volumeByProduct} format={usdCompact} dim={dim} emptyText={`No volume in ${periodLong(period)}.`} />
+          <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2">
+            <BreakdownPanel
+              title="Where the volume is"
+              subtitle={periodLong(period)}
+              items={volumeSplit === "network" ? data?.volumeByNetwork : data?.volumeByProduct}
+              format={usdCompact}
+              dim={dim}
+              emptyText={`No volume in ${periodLong(period)}.`}
+              action={<PillTabs label="Split volume by" options={VOLUME_SPLITS} value={volumeSplit} onChange={setVolumeSplit} />}
+            />
             <BreakdownPanel title="Wallets by network" subtitle="All time" items={data?.walletsByNetwork} format={formatCount} dim={dim} emptyText="No wallets yet." />
           </div>
 
@@ -146,7 +172,7 @@ export function AdminOverviewPage() {
             </div>
             <DataTable
               label="Recent activity"
-              rows={activity}
+              rows={shown}
               columns={columns}
               rowKey={(a) => a.id}
               card={ActivityCard}
@@ -159,6 +185,13 @@ export function AdminOverviewPage() {
               }
               skeletonRows={6}
             />
+            {activity && activity.length > ACTIVITY_PREVIEW && (
+              <div className="border-t border-foreground/[0.06] px-4 py-3 text-center md:px-5">
+                <button type="button" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} className="rounded text-[13px] font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/60">
+                  {showAll ? "Show fewer" : `Show all ${activity.length}`}
+                </button>
+              </div>
+            )}
           </Panel>
           <ActivitySheet activity={opened} onClose={() => setOpened(null)} />
         </>

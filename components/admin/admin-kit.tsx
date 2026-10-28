@@ -288,6 +288,7 @@ export function MetricChart<K extends string>({
   metrics,
   quiet,
   dim,
+  height = 260,
 }: {
   id: string
   title: string
@@ -297,6 +298,8 @@ export function MetricChart<K extends string>({
   metrics: ChartMetric<K>[]
   quiet: boolean
   dim: boolean
+  /** Chart height in px (the overview raises it to line up with the column beside it). */
+  height?: number
 }) {
   const [metricKey, setMetricKey] = React.useState<K>(metrics[0]!.key)
   const [comparing, setComparing] = React.useState(true)
@@ -312,14 +315,14 @@ export function MetricChart<K extends string>({
       </div>
       {!at ? (
         <div role="status" aria-busy="true" aria-label="Loading chart" className="pt-3">
-          <SkeletonBlock className="h-[260px] w-full rounded-2xl" />
+          <div style={{ height }}><SkeletonBlock className="h-full w-full rounded-2xl" /></div>
         </div>
       ) : quiet || metric.values.every((v) => v === 0) ? (
         <EmptyPanel compact title="No activity in this period" description={`Nothing to chart for ${periodLong(period)}. Try a longer period.`} />
       ) : (
         <div className={cn("pt-3 transition-opacity", dim && "opacity-55")} aria-busy={dim}>
           {asTable ? (
-            <div className="max-h-[260px] overflow-auto rounded-xl border border-foreground/[0.06]">
+            <div className="overflow-auto rounded-xl border border-foreground/[0.06]" style={{ maxHeight: height }}>
               <table className="w-full text-[12.5px] tabular-nums">
                 <caption className="sr-only">{metric.label} per {bucketUnit(period)}, {periodLong(period)}</caption>
                 <thead className="sticky top-0 bg-card text-muted-foreground">
@@ -349,7 +352,7 @@ export function MetricChart<K extends string>({
             ticks={spreadTicks(labels)}
             format={metric.format}
             formatAxis={metric.formatAxis}
-            height={260}
+            height={height}
           />
           )}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-muted-foreground">
@@ -377,11 +380,11 @@ export function MetricChart<K extends string>({
 }
 
 /** A ranked share list: label, figure, share bar. */
-export function BreakdownPanel({ title, subtitle, items, format, dim, emptyText }: { title: string; subtitle?: string; items?: AdminBreakdown[]; format: (v: number) => string; dim: boolean; emptyText: string }) {
+export function BreakdownPanel({ title, subtitle, items, format, dim, emptyText, action }: { title: string; subtitle?: string; items?: AdminBreakdown[]; format: (v: number) => string; dim: boolean; emptyText: string; /** e.g. a switch between breakdowns */ action?: React.ReactNode }) {
   const pct = items ? shares(items.map((i) => i.value)) : []
   return (
     <Panel className="flex flex-col gap-4 p-4 md:p-5">
-      <PanelHeader title={title} subtitle={subtitle} />
+      <PanelHeader title={title} subtitle={subtitle} action={action} />
       {!items ? (
         <div role="status" aria-busy="true" aria-label={`Loading ${title}`} className="flex flex-col gap-3.5">
           {Array.from({ length: 4 }, (_, i) => (
@@ -425,47 +428,57 @@ const SERVICE_WORD: Record<AdminServiceStatus, string> = { operational: "Operati
 
 /**
  * What an admin should act on now (worst first, lib/admin/view.ts
- * attentionItems), and every dependency's health. "All clear" when there's
- * nothing, so an empty panel never reads as "didn't load".
+ * attentionItems), and every dependency's health, in a compact column that
+ * sits beside the main chart on wide screens. A one-line summary heads it;
+ * "All clear" when there's nothing, so an empty panel never reads as
+ * "didn't load".
  */
-export function AttentionPanel({ attention, dim }: { attention?: AdminAttention; dim: boolean }) {
+export function AttentionPanel({ attention, dim, className }: { attention?: AdminAttention; dim: boolean; className?: string }) {
   const items = attention ? attentionItems(attention) : []
+  const critical = items.filter((i) => i.tone === "danger").length
+  const warnings = items.length - critical
+  const summary = [critical ? `${critical} critical` : "", warnings ? `${warnings} warning${warnings === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ")
   return (
-    <Panel className={cn("flex flex-col gap-4 p-4 transition-opacity md:p-5", dim && "opacity-55")} aria-busy={!attention || dim}>
-      <PanelHeader title="Needs attention" subtitle="Queues are live; failures count for the chosen period" />
+    <Panel className={cn("flex min-w-0 flex-col gap-3 p-4 transition-opacity md:p-5", dim && "opacity-55", className)} aria-busy={!attention || dim}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h2 className="font-display text-[16px] font-semibold tracking-[-0.01em] text-foreground">Needs attention</h2>
+          <p className="text-[12px] text-muted-foreground">Queues are live; failures count for the chosen period</p>
+        </div>
+        {attention && items.length > 0 && (
+          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-bold tabular-nums", critical ? "bg-debit/[0.12] text-debit" : "bg-warning/[0.12] text-warning")}>{summary}</span>
+        )}
+      </div>
       {!attention ? (
         <div role="status" aria-label="Loading what needs attention" className="flex flex-col gap-2">
-          <SkeletonBlock className="h-12 w-full rounded-xl" />
-          <SkeletonBlock className="h-12 w-full rounded-xl" />
+          {Array.from({ length: 3 }, (_, i) => <SkeletonBlock key={i} className="h-10 w-full rounded-xl" />)}
         </div>
       ) : items.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-xl border border-credit/20 bg-credit/[0.06] px-3.5 py-3" role="status">
-          <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-5 shrink-0 text-credit" strokeWidth={1.8} />
+        <div className="flex items-center gap-2.5 rounded-xl bg-credit/[0.07] px-3 py-2.5" role="status">
+          <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-[18px] shrink-0 text-credit" strokeWidth={1.8} />
           <p className="text-[13px] font-semibold text-foreground">All clear. Nothing needs a look right now.</p>
         </div>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="-mx-1 flex flex-col">
           {items.map((item) => (
-            <li key={item.key} className={cn("flex items-start gap-3 rounded-xl border px-3.5 py-3", item.tone === "danger" ? "border-debit/25 bg-debit/[0.06]" : "border-warning/25 bg-warning/[0.06]")}>
-              <HugeiconsIcon icon={item.tone === "danger" ? CancelCircleIcon : Alert02Icon} className={cn("mt-0.5 size-[18px] shrink-0", item.tone === "danger" ? "text-debit" : "text-warning")} strokeWidth={1.8} />
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <p className="text-[13.5px] font-semibold text-foreground">{item.title}</p>
-                <p className="text-[12.5px] text-muted-foreground">{item.detail}</p>
+            <li key={item.key} className="flex items-start gap-2.5 rounded-xl px-1 py-2 transition-colors hover:bg-foreground/[0.03]">
+              <HugeiconsIcon icon={item.tone === "danger" ? CancelCircleIcon : Alert02Icon} className={cn("mt-px size-4 shrink-0", item.tone === "danger" ? "text-debit" : "text-warning")} strokeWidth={2} />
+              <div className="flex min-w-0 flex-col">
+                <p className="text-[13px] font-semibold leading-snug text-foreground">{item.title}</p>
+                <p className="text-[12px] leading-snug text-muted-foreground">{item.detail}</p>
               </div>
             </li>
           ))}
         </ul>
       )}
       {attention && attention.services.length > 0 && (
-        <div className="flex flex-col gap-2 border-t border-foreground/[0.06] pt-3">
+        <div className="mt-auto flex flex-col gap-1.5 border-t border-foreground/[0.06] pt-3">
           <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">Services</p>
-          <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="flex flex-col gap-1">
             {attention.services.map((svc) => (
-              <li key={svc.key} className="flex items-center justify-between gap-3 text-[12.5px]">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span aria-hidden className={cn("size-2 shrink-0 rounded-full", SERVICE_DOT[svc.status])} />
-                  <span className="truncate text-foreground">{svc.label}</span>
-                </span>
+              <li key={svc.key} className="flex items-center gap-2 text-[12.5px]">
+                <span aria-hidden className={cn("size-2 shrink-0 rounded-full", SERVICE_DOT[svc.status])} />
+                <span className="min-w-0 flex-1 truncate text-foreground" title={svc.detail}>{svc.label}</span>
                 <span className={cn("shrink-0 font-semibold", svc.status === "operational" ? "text-muted-foreground" : svc.status === "degraded" ? "text-warning" : "text-debit")}>{SERVICE_WORD[svc.status]}</span>
               </li>
             ))}
