@@ -257,3 +257,25 @@ export function toCsv(header: string[], rows: (string | number | null)[][]): str
   }
   return [header, ...rows].map((r) => r.map(cell).join(",")).join("\r\n")
 }
+
+export type FunnelRow = { key: string; label: string; count: number; ofSignups: number; fromPrevious: number | null }
+
+/** Each step as a share of signups and of the step before (null for the first). Shares are 0–100. */
+export function funnelRows(steps: { key: string; label: string; count: number }[]): FunnelRow[] {
+  const first = steps[0]?.count ?? 0
+  return steps.map((s, i) => {
+    const prev = i > 0 ? steps[i - 1]!.count : null
+    return {
+      ...s,
+      ofSignups: first > 0 ? (s.count / first) * 100 : 0,
+      fromPrevious: prev === null ? null : prev > 0 ? (s.count / prev) * 100 : 0,
+    }
+  })
+}
+
+/** Heat-map strength for a retention share (0–1), as one of five steps so Tailwind sees every class. */
+export const RETENTION_SHADES = ["bg-primary/[0.06]", "bg-primary/[0.14]", "bg-primary/[0.24]", "bg-primary/[0.36]", "bg-primary/[0.5]"] as const
+export function retentionShade(share: number): (typeof RETENTION_SHADES)[number] {
+  const i = Math.min(RETENTION_SHADES.length - 1, Math.max(0, Math.floor(share * RETENTION_SHADES.length)))
+  return RETENTION_SHADES[i]!
+}

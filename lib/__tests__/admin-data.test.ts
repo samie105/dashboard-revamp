@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
 import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus } from "@/lib/admin/types"
-import { activeShare, attentionItems, bucketLabel, filterActivity, safeExternalUrl, toCsv, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
+import { activeShare, attentionItems, bucketLabel, funnelRows, retentionShade, filterActivity, safeExternalUrl, toCsv, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
 import { shouldRetryAdmin } from "@/hooks/admin/useAdminData"
 
 async function importUnderEnv<T>(env: Record<string, string | undefined>, loader: () => Promise<T>): Promise<T> {
@@ -222,6 +222,24 @@ describe("helpers", () => {
       `"'=HYPERLINK(""x"")",""`,
       `"say ""hi""","-3"`,
     ])
+  })
+
+  it("turns funnel counts into shares of signups and of the step before", () => {
+    const rows = funnelRows([{ key: "a", label: "A", count: 200 }, { key: "b", label: "B", count: 150 }, { key: "c", label: "C", count: 30 }])
+    expect(rows.map((r) => [r.ofSignups, r.fromPrevious])).toEqual([[100, null], [75, 75], [15, 20]])
+    expect(funnelRows([{ key: "a", label: "A", count: 0 }, { key: "b", label: "B", count: 0 }]).map((r) => r.ofSignups)).toEqual([0, 0])
+  })
+
+  it("models retention: newer cohorts have fewer weeks, shares stay within 0–1", () => {
+    const { cohorts } = mockUsers("7d", {}, "ok", NOW).retention
+    expect(cohorts.map((c) => c.retained.length)).toEqual([7, 6, 5, 4, 3, 2, 1, 0])
+    for (const r of cohorts.flatMap((c) => c.retained)) {
+      expect(r).toBeGreaterThan(0)
+      expect(r).toBeLessThanOrEqual(1)
+    }
+    expect(mockUsers("7d", {}, "empty", NOW).retention.cohorts).toEqual([])
+    expect(retentionShade(0)).toBe("bg-primary/[0.06]")
+    expect(retentionShade(0.99)).toBe("bg-primary/[0.5]")
   })
 
   it("maps HTTP statuses to error kinds", () => {

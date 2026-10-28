@@ -24,6 +24,7 @@ import { activeShare, formatCount, formatCountCompact, periodLong, timeAgo, user
 import { usd, usdCompact } from "@/lib/num"
 import { cn } from "@/lib/utils"
 import { CsvButton, MiniSelect, UserSheet } from "@/components/admin/details"
+import { FunnelPanel, RetentionPanel } from "@/components/admin/growth"
 import { AdminPageHeader, AdminStatePanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
 
 const PAGE_SIZE = 20
@@ -139,6 +140,11 @@ export function AdminUsersPage() {
               { key: "new", label: "New users", values: data?.series.map((p) => p.newUsers) ?? [], previous: data?.previousSeries.map((p) => p.newUsers), format: formatCount, formatAxis: formatCountCompact },
             ]}
           />
+
+          <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+            <FunnelPanel steps={data?.funnel} period={period} dim={dim} />
+            <RetentionPanel retention={data?.retention} />
+          </div>
 
           <Panel className="flex flex-col gap-3 pt-4 md:pt-5">
             <div className="flex flex-col gap-3 px-4 md:flex-row md:items-start md:justify-between md:px-5">

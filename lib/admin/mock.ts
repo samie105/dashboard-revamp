@@ -15,6 +15,8 @@ import {
   AdminDataError,
   ADMIN_ACTIVITY_TYPES,
   type AdminActivity,
+  type AdminCohort,
+  type AdminFunnelStep,
   type AdminAttention,
   type AdminBreakdown,
   type AdminDataSource,
@@ -251,6 +253,31 @@ export function mockOverview(period: AdminPeriod, state: AdminMockState, now = D
   }
 }
 
+function funnel(newUsers: number): AdminFunnelStep[] {
+  const steps = [
+    { key: "signup", label: "Signed up", share: 1 },
+    { key: "wallet", label: "Created a wallet", share: 0.81 },
+    { key: "deposit", label: "First deposit", share: 0.47 },
+    { key: "transaction", label: "First transaction", share: 0.36 },
+  ]
+  return steps.map((s) => ({ key: s.key, label: s.label, count: Math.round(newUsers * s.share) }))
+}
+
+const RETENTION_WEEKS = 8
+
+function retention(c: Ctx): { weeks: number; cohorts: AdminCohort[] } {
+  if (c.empty) return { weeks: RETENTION_WEEKS, cohorts: [] }
+  const random = seeded(808)
+  const thisWeek = Math.floor(c.now / (7 * DAY)) * 7 * DAY
+  const cohorts = Array.from({ length: RETENTION_WEEKS }, (_, i) => {
+    const age = RETENTION_WEEKS - 1 - i // weeks since the cohort started
+    let share = 0.62 + random() * 0.08
+    const retained = Array.from({ length: age }, () => (share = Math.max(0.05, share * (0.78 + random() * 0.12))))
+    return { weekStart: new Date(thisWeek - age * 7 * DAY).toISOString(), size: Math.round(1_150 + random() * 600), retained: retained.map((r) => Math.round(r * 1000) / 1000) }
+  })
+  return { weeks: RETENTION_WEEKS - 1, cohorts }
+}
+
 export function mockUsers(period: AdminPeriod, query: AdminUsersQuery, state: AdminMockState, now = Date.now()): AdminUsers {
   const c = ctx(period, state, now)
   const h = headline(c)
@@ -275,6 +302,8 @@ export function mockUsers(period: AdminPeriod, query: AdminUsersQuery, state: Ad
     series: h.series,
     previousSeries: c.empty ? h.before.map((p) => ({ ...p, activeUsers: 0, newUsers: 0, volumeUsd: 0, transactions: 0, activeWallets: 0, newWallets: 0 })) : h.before,
     users: { rows: matching.slice((page - 1) * pageSize, page * pageSize), totalMatching: matching.length, page, pageSize, search, sort },
+    funnel: funnel(h.newUsers.value),
+    retention: retention(c),
   }
 }
 

@@ -114,6 +114,16 @@ export type AdminUserSort = (typeof ADMIN_USER_SORTS)[number]
 /** Sorting is newest/most first for every key. */
 export type AdminUsersQuery = { search?: string; page?: number; pageSize?: number; sort?: AdminUserSort }
 
+/** One step of the new-user funnel: how many of the period's signups got this far. */
+export type AdminFunnelStep = { key: string; label: string; count: number }
+
+/**
+ * One weekly signup cohort: its size, and the share of it (0–1) still
+ * active in each week after signing up (index 0 = week 1). Shorter for
+ * recent cohorts, whose later weeks haven't happened yet.
+ */
+export type AdminCohort = { weekStart: string; size: number; retained: number[] }
+
 export type AdminUsers = {
   period: AdminPeriod
   asOf: string
@@ -122,6 +132,10 @@ export type AdminUsers = {
   /** The period before, bucketed the same way (same length), for the comparison line. */
   previousSeries: AdminSeriesPoint[]
   users: { rows: AdminUserRow[]; totalMatching: number; page: number; pageSize: number; search: string; sort: AdminUserSort }
+  /** Users who signed up in the period, and how far they got. First step = all signups. */
+  funnel: AdminFunnelStep[]
+  /** The last 8 weekly cohorts, newest last. Independent of the chosen period. */
+  retention: { weeks: number; cohorts: AdminCohort[] }
 }
 
 export type AdminNetworkWallets = { key: string; label: string; total: number; active: number }
