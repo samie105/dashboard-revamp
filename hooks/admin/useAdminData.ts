@@ -7,7 +7,7 @@ import { AdminDataError, type AdminPeriod, type AdminUsersQuery } from "@/lib/ad
 
 export const adminQueryKeys = {
   overview: (period: AdminPeriod) => ["admin", "overview", period] as const,
-  users: (period: AdminPeriod, query: AdminUsersQuery) => ["admin", "users", period, query.search ?? "", query.page ?? 1, query.pageSize ?? 20] as const,
+  users: (period: AdminPeriod, query: AdminUsersQuery) => ["admin", "users", period, query.search ?? "", query.page ?? 1, query.pageSize ?? 20, query.sort ?? "joined"] as const,
   wallets: (period: AdminPeriod) => ["admin", "wallets", period] as const,
   volume: (period: AdminPeriod) => ["admin", "volume", period] as const,
 }

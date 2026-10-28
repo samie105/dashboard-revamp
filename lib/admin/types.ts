@@ -48,6 +48,10 @@ export type AdminActivity = {
   networkLabel: string
   amountUsd: number
   status: AdminActivityStatus
+  /** The on-chain transaction, when there is one. */
+  txHash?: string
+  /** A block-explorer link for it, supplied by the backend (only https links are shown). */
+  explorerUrl?: string
 }
 
 export type AdminServiceStatus = "operational" | "degraded" | "down"
@@ -104,7 +108,11 @@ export type AdminUserRow = {
   status: "active" | "dormant"
 }
 
-export type AdminUsersQuery = { search?: string; page?: number; pageSize?: number }
+export const ADMIN_USER_SORTS = ["joined", "lastActive", "volume"] as const
+export type AdminUserSort = (typeof ADMIN_USER_SORTS)[number]
+
+/** Sorting is newest/most first for every key. */
+export type AdminUsersQuery = { search?: string; page?: number; pageSize?: number; sort?: AdminUserSort }
 
 export type AdminUsers = {
   period: AdminPeriod
@@ -113,7 +121,7 @@ export type AdminUsers = {
   series: AdminSeriesPoint[]
   /** The period before, bucketed the same way (same length), for the comparison line. */
   previousSeries: AdminSeriesPoint[]
-  users: { rows: AdminUserRow[]; totalMatching: number; page: number; pageSize: number; search: string }
+  users: { rows: AdminUserRow[]; totalMatching: number; page: number; pageSize: number; search: string; sort: AdminUserSort }
 }
 
 export type AdminNetworkWallets = { key: string; label: string; total: number; active: number }

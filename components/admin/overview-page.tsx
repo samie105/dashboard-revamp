@@ -16,20 +16,40 @@ import * as React from "react"
 
 import { DataTable, Panel, PanelHeader, StatusBadge, type DataColumn } from "@/components/dash"
 import { useAdminOverview } from "@/hooks/admin/useAdminData"
-import type { AdminActivity } from "@/lib/admin/types"
-import { ACTIVITY_LABEL, activeShare, formatCount, formatCountCompact, overviewState, periodLong, STATUS_TONE, timeAgo, METRIC_DEFINITIONS } from "@/lib/admin/view"
+import { ADMIN_ACTIVITY_TYPES, type AdminActivity, type AdminActivityStatus, type AdminActivityType } from "@/lib/admin/types"
+import { ACTIVITY_LABEL, activeShare, filterActivity, type ActivityFilter, formatCount, formatCountCompact, overviewState, periodLong, STATUS_TONE, timeAgo, METRIC_DEFINITIONS } from "@/lib/admin/view"
 import { usd, usdCompact } from "@/lib/num"
+import { ActivitySheet, CsvButton, MiniSelect } from "@/components/admin/details"
 import { AdminPageHeader, AdminStatePanel, AttentionPanel, BreakdownPanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
 
 const whole = (v: number) => usd(v, { min: 0, max: 0 })
 
-const ACTIVITY_COLUMNS: DataColumn<AdminActivity>[] = [
-  { key: "time", header: "Time", cell: (a) => <span className="tabular-nums text-muted-foreground">{timeAgo(a.at)}</span> },
-  { key: "user", header: "User", cell: (a) => <span className="font-medium text-foreground">{a.userLabel}</span> },
-  { key: "type", header: "Type", cell: (a) => ACTIVITY_LABEL[a.type] },
-  { key: "network", header: "Network", cell: (a) => <span className="text-muted-foreground">{a.networkLabel}</span>, showFrom: "lg" },
-  { key: "amount", header: "Amount", align: "right", cell: (a) => <span className="font-semibold tabular-nums text-foreground">{usd(a.amountUsd)}</span> },
-  { key: "status", header: "Status", align: "right", cell: (a) => <StatusBadge tone={STATUS_TONE[a.status]} label={a.status} /> },
+/** The first cell is a real button, so a keyboard user can open a row too (the row click is for the mouse). */
+function activityColumns(open: (a: AdminActivity) => void): DataColumn<AdminActivity>[] {
+  return [
+    {
+      key: "time",
+      header: "Time",
+      cell: (a) => (
+        <button type="button" onClick={(e) => { e.stopPropagation(); open(a) }} className="rounded tabular-nums text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60" aria-label={`Open ${ACTIVITY_LABEL[a.type]} of ${usd(a.amountUsd)}, ${timeAgo(a.at)}`}>
+          {timeAgo(a.at)}
+        </button>
+      ),
+    },
+    { key: "user", header: "User", cell: (a) => <span className="font-medium text-foreground">{a.userLabel}</span> },
+    { key: "type", header: "Type", cell: (a) => ACTIVITY_LABEL[a.type] },
+    { key: "network", header: "Network", cell: (a) => <span className="text-muted-foreground">{a.networkLabel}</span>, showFrom: "lg" },
+    { key: "amount", header: "Amount", align: "right", cell: (a) => <span className="font-semibold tabular-nums text-foreground">{usd(a.amountUsd)}</span> },
+    { key: "status", header: "Status", align: "right", cell: (a) => <StatusBadge tone={STATUS_TONE[a.status]} label={a.status} /> },
+  ]
+}
+
+const TYPE_OPTIONS: readonly { key: AdminActivityType | "all"; label: string }[] = [{ key: "all", label: "All" }, ...ADMIN_ACTIVITY_TYPES.map((t) => ({ key: t, label: ACTIVITY_LABEL[t] }))]
+const STATUS_OPTIONS: readonly { key: AdminActivityStatus | "all"; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "completed", label: "Completed" },
+  { key: "pending", label: "Pending" },
+  { key: "failed", label: "Failed" },
 ]
 
 function ActivityCard(a: AdminActivity) {
@@ -52,6 +72,11 @@ export function AdminOverviewPage() {
   const dim = state.kind === "switching"
   const quiet = state.kind === "no-data"
   const retry = () => void query.refetch()
+  const [filter, setFilter] = React.useState<ActivityFilter>({ type: "all", status: "all" })
+  const [opened, setOpened] = React.useState<AdminActivity | null>(null)
+  const columns = React.useMemo(() => activityColumns(setOpened), [])
+  const activity = data ? filterActivity(data.recentActivity, filter) : undefined
+  const filtering = filter.type !== "all" || filter.status !== "all"
 
   return (
     <>
@@ -107,18 +132,35 @@ export function AdminOverviewPage() {
           </div>
 
           <Panel className="flex flex-col gap-3 pt-4 md:pt-5">
-            <PanelHeader className="px-4 md:px-5" title="Recent activity" subtitle="Latest transactions across the platform" />
+            <div className="flex flex-col gap-3 px-4 md:flex-row md:items-start md:justify-between md:px-5">
+              <PanelHeader title="Recent activity" subtitle="Latest transactions across the platform. Select one for details." />
+              <div className="flex flex-wrap items-center gap-2">
+                <MiniSelect label="Type" value={filter.type} options={TYPE_OPTIONS} onChange={(type) => setFilter((f) => ({ ...f, type }))} />
+                <MiniSelect label="Status" value={filter.status} options={STATUS_OPTIONS} onChange={(status) => setFilter((f) => ({ ...f, status }))} />
+                <CsvButton
+                  filename={`worldstreet-activity-${period}-${new Date().toISOString().slice(0, 10)}.csv`}
+                  header={["Time (UTC)", "User", "Type", "Network", "Amount (USD)", "Status", "Reference", "Transaction"]}
+                  rows={(activity ?? []).map((a) => [a.at, a.userLabel, ACTIVITY_LABEL[a.type], a.networkLabel, a.amountUsd, a.status, a.id, a.txHash ?? null])}
+                />
+              </div>
+            </div>
             <DataTable
               label="Recent activity"
-              rows={data?.recentActivity}
-              columns={ACTIVITY_COLUMNS}
+              rows={activity}
+              columns={columns}
               rowKey={(a) => a.id}
               card={ActivityCard}
+              onRowClick={setOpened}
               loading={!data}
-              empty={{ title: quiet ? "No activity in this period" : "No activity yet", description: quiet ? `Nothing happened in ${periodLong(period)}.` : "Transactions will show here as they happen." }}
+              empty={
+                filtering
+                  ? { title: "No activity matches", description: "Nothing recent matches these filters. Try All." }
+                  : { title: quiet ? "No activity in this period" : "No activity yet", description: quiet ? `Nothing happened in ${periodLong(period)}.` : "Transactions will show here as they happen." }
+              }
               skeletonRows={6}
             />
           </Panel>
+          <ActivitySheet activity={opened} onClose={() => setOpened(null)} />
         </>
       )}
     </>

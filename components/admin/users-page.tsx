@@ -19,23 +19,41 @@ import { ArrowLeft01Icon, ArrowRight01Icon, Search01Icon } from "@hugeicons/core
 
 import { DataTable, NeutralButton, Panel, PanelHeader, StatusBadge, type DataColumn } from "@/components/dash"
 import { useAdminUsers } from "@/hooks/admin/useAdminData"
-import type { AdminUserRow } from "@/lib/admin/types"
+import type { AdminUserRow, AdminUserSort } from "@/lib/admin/types"
 import { activeShare, formatCount, formatCountCompact, periodLong, timeAgo, usersState, METRIC_DEFINITIONS } from "@/lib/admin/view"
 import { usd, usdCompact } from "@/lib/num"
 import { cn } from "@/lib/utils"
+import { CsvButton, MiniSelect, UserSheet } from "@/components/admin/details"
 import { AdminPageHeader, AdminStatePanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
 
 const PAGE_SIZE = 20
 
 const joined = (at: string) => new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
 
-const USER_COLUMNS: DataColumn<AdminUserRow>[] = [
-  { key: "user", header: "User", cell: (u) => <span className="font-medium text-foreground">{u.userLabel}</span> },
-  { key: "joined", header: "Joined", showFrom: "md", cell: (u) => <span className="tabular-nums text-muted-foreground">{joined(u.joinedAt)}</span> },
-  { key: "active", header: "Last active", cell: (u) => <span className="tabular-nums text-muted-foreground">{timeAgo(u.lastActiveAt)}</span> },
-  { key: "wallets", header: "Wallets", align: "right", showFrom: "lg", cell: (u) => <span className="tabular-nums">{u.wallets}</span> },
-  { key: "volume", header: "Volume", align: "right", cell: (u) => <span className="font-semibold tabular-nums text-foreground">{usdCompact(u.volumeUsd)}</span> },
-  { key: "status", header: "Status", align: "right", cell: (u) => <StatusBadge tone={u.status === "active" ? "success" : "neutral"} label={u.status} /> },
+/** The first cell is a real button, so a keyboard user can open a row too. */
+function userColumns(open: (u: AdminUserRow) => void): DataColumn<AdminUserRow>[] {
+  return [
+    {
+      key: "user",
+      header: "User",
+      cell: (u) => (
+        <button type="button" onClick={(e) => { e.stopPropagation(); open(u) }} className="rounded font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/60">
+          {u.userLabel}
+        </button>
+      ),
+    },
+    { key: "joined", header: "Joined", showFrom: "md", cell: (u) => <span className="tabular-nums text-muted-foreground">{joined(u.joinedAt)}</span> },
+    { key: "active", header: "Last active", cell: (u) => <span className="tabular-nums text-muted-foreground">{timeAgo(u.lastActiveAt)}</span> },
+    { key: "wallets", header: "Wallets", align: "right", showFrom: "lg", cell: (u) => <span className="tabular-nums">{u.wallets}</span> },
+    { key: "volume", header: "Volume", align: "right", cell: (u) => <span className="font-semibold tabular-nums text-foreground">{usdCompact(u.volumeUsd)}</span> },
+    { key: "status", header: "Status", align: "right", cell: (u) => <StatusBadge tone={u.status === "active" ? "success" : "neutral"} label={u.status} /> },
+  ]
+}
+
+const SORT_OPTIONS: readonly { key: AdminUserSort; label: string }[] = [
+  { key: "joined", label: "Newest" },
+  { key: "lastActive", label: "Recently active" },
+  { key: "volume", label: "Highest volume" },
 ]
 
 function UserCard(u: AdminUserRow) {
@@ -65,10 +83,13 @@ export function AdminUsersPage() {
   const [searchText, setSearchText] = React.useState("")
   const search = useDebounced(searchText.trim())
   const [page, setPage] = React.useState(1)
+  const [sort, setSort] = React.useState<AdminUserSort>("joined")
+  const [opened, setOpened] = React.useState<AdminUserRow | null>(null)
+  const columns = React.useMemo(() => userColumns(setOpened), [])
   // A new search or period starts from the first page.
-  React.useEffect(() => setPage(1), [search, period])
+  React.useEffect(() => setPage(1), [search, period, sort])
 
-  const query = useAdminUsers(period, { search, page, pageSize: PAGE_SIZE })
+  const query = useAdminUsers(period, { search, page, pageSize: PAGE_SIZE, sort })
   const state = usersState({ period, data: query.data, error: query.error })
   const data = state.kind === "loading" ? undefined : query.data
   const dim = state.kind === "switching"
@@ -122,6 +143,14 @@ export function AdminUsersPage() {
           <Panel className="flex flex-col gap-3 pt-4 md:pt-5">
             <div className="flex flex-col gap-3 px-4 md:flex-row md:items-start md:justify-between md:px-5">
               <PanelHeader title="All users" subtitle={list ? `${formatCount(list.totalMatching)} ${list.search ? "matching" : "users"} · active means active in ${periodLong(period)}` : "Loading users"} />
+              <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
+              <MiniSelect label="Sort" value={sort} options={SORT_OPTIONS} onChange={setSort} />
+              <CsvButton
+                label="Export page"
+                filename={`worldstreet-users-${period}-page${list?.page ?? 1}-${new Date().toISOString().slice(0, 10)}.csv`}
+                header={["User ID", "User", "Joined (UTC)", "Last active (UTC)", "Wallets", "Volume (USD)", `Status (${period})`]}
+                rows={(list?.rows ?? []).map((u) => [u.id, u.userLabel, u.joinedAt, u.lastActiveAt, u.wallets, u.volumeUsd, u.status])}
+              />
               <label className="flex h-9 w-full items-center gap-2 rounded-full border border-foreground/[0.08] bg-foreground/[0.025] px-3 focus-within:ring-2 focus-within:ring-primary/60 md:w-72">
                 <HugeiconsIcon icon={Search01Icon} className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.8} />
                 <span className="sr-only">Search users</span>
@@ -134,12 +163,14 @@ export function AdminUsersPage() {
                   className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
                 />
               </label>
+              </div>
             </div>
             <div className={cn("transition-opacity", rowsStale && list && "opacity-55")} aria-busy={rowsStale}>
               <DataTable
                 label="Users"
                 rows={list?.rows}
-                columns={USER_COLUMNS}
+                columns={columns}
+                onRowClick={setOpened}
                 rowKey={(u) => u.id}
                 card={UserCard}
                 loading={!list}
@@ -163,6 +194,7 @@ export function AdminUsersPage() {
               </div>
             )}
           </Panel>
+          <UserSheet user={opened} periodText={periodLong(period)} onClose={() => setOpened(null)} />
         </>
       )}
     </>

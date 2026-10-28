@@ -185,7 +185,9 @@ function recentActivity(c: Ctx): AdminActivity[] {
       networkLabel: NETWORKS[Math.floor(random() * NETWORKS.length)]!.label,
       amountUsd: Math.round((40 + random() * 4_800) * 100) / 100,
       status: r > 0.92 ? "failed" : r > 0.8 ? "pending" : "completed",
-    }
+      // Deposits and withdrawals are on-chain; the rest happen inside the platform.
+      ...(i % 3 === 0 ? { txHash: `0x${Math.floor(random() * 1e15).toString(16).padStart(16, "0")}${"a".repeat(48)}`, explorerUrl: `https://etherscan.io/tx/0x${"a".repeat(64)}` } : {}),
+    } as AdminActivity
   })
 }
 
@@ -254,7 +256,16 @@ export function mockUsers(period: AdminPeriod, query: AdminUsersQuery, state: Ad
   const h = headline(c)
   const search = (query.search ?? "").trim().toLowerCase()
   const pageSize = Math.min(Math.max(query.pageSize ?? 20, 1), 100)
-  const matching = allUsers(c).filter((u) => !search || u.userLabel.toLowerCase().includes(search) || u.id.toLowerCase().includes(search))
+  const sort = query.sort ?? "joined"
+  const time = (at: string | null) => (at ? Date.parse(at) : 0)
+  const order: Record<typeof sort, (a: AdminUserRow, b: AdminUserRow) => number> = {
+    joined: (a, b) => time(b.joinedAt) - time(a.joinedAt),
+    lastActive: (a, b) => time(b.lastActiveAt) - time(a.lastActiveAt),
+    volume: (a, b) => b.volumeUsd - a.volumeUsd,
+  }
+  const matching = allUsers(c)
+    .filter((u) => !search || u.userLabel.toLowerCase().includes(search) || u.id.toLowerCase().includes(search))
+    .sort(order[sort])
   const pages = Math.max(1, Math.ceil(matching.length / pageSize))
   const page = Math.min(Math.max(query.page ?? 1, 1), pages)
   return {
@@ -263,7 +274,7 @@ export function mockUsers(period: AdminPeriod, query: AdminUsersQuery, state: Ad
     kpis: { totalUsers: h.totalUsers, activeUsers: h.activeUsers, newUsers: h.newUsers },
     series: h.series,
     previousSeries: c.empty ? h.before.map((p) => ({ ...p, activeUsers: 0, newUsers: 0, volumeUsd: 0, transactions: 0, activeWallets: 0, newWallets: 0 })) : h.before,
-    users: { rows: matching.slice((page - 1) * pageSize, page * pageSize), totalMatching: matching.length, page, pageSize, search },
+    users: { rows: matching.slice((page - 1) * pageSize, page * pageSize), totalMatching: matching.length, page, pageSize, search, sort },
   }
 }
 

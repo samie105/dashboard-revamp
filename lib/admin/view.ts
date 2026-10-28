@@ -7,6 +7,7 @@
 
 import {
   AdminDataError,
+  type AdminActivity,
   type AdminActivityStatus,
   type AdminActivityType,
   type AdminAttention,
@@ -224,4 +225,35 @@ export function attentionItems(a: AdminAttention): AttentionItem[] {
   }
   const rank = { danger: 0, warning: 1 }
   return items.sort((x, y) => rank[x.tone] - rank[y.tone])
+}
+
+export type ActivityFilter = { type: AdminActivityType | "all"; status: AdminActivityStatus | "all" }
+
+export function filterActivity(rows: AdminActivity[], filter: ActivityFilter): AdminActivity[] {
+  return rows.filter((a) => (filter.type === "all" || a.type === filter.type) && (filter.status === "all" || a.status === filter.status))
+}
+
+/** Only an https link is ever rendered (a backend value is still untrusted text). */
+export function safeExternalUrl(url: string | undefined): string | null {
+  if (!url) return null
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === "https:" ? parsed.toString() : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Rows → CSV text. Quotes every cell, doubles inner quotes, and prefixes
+ * cells that a spreadsheet would run as a formula (=, +, -, @, tab, CR) with
+ * an apostrophe, so an exported user label can't execute in Excel/Sheets.
+ */
+export function toCsv(header: string[], rows: (string | number | null)[][]): string {
+  const cell = (value: string | number | null) => {
+    let text = value === null ? "" : String(value)
+    if (typeof value === "string" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`
+    return `"${text.replace(/"/g, '""')}"`
+  }
+  return [header, ...rows].map((r) => r.map(cell).join(",")).join("\r\n")
 }

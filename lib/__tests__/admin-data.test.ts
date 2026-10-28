@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
 import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus } from "@/lib/admin/types"
-import { activeShare, attentionItems, bucketLabel, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
+import { activeShare, attentionItems, bucketLabel, filterActivity, safeExternalUrl, toCsv, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
 import { shouldRetryAdmin } from "@/hooks/admin/useAdminData"
 
 async function importUnderEnv<T>(env: Record<string, string | undefined>, loader: () => Promise<T>): Promise<T> {
@@ -190,6 +190,38 @@ describe("helpers", () => {
     const items = attentionItems({ ...calm, failedTransactions: { count: 40, rate: 0.05 }, payoutsInReview: 2, services: [{ key: "fw", label: "Payouts", status: "degraded", detail: "slow", checkedAt: "" }, { key: "sol", label: "Solana", status: "down", checkedAt: "" }] })
     expect(items.map((i) => i.key)).toEqual(["service:sol", "payouts:review", "service:fw", "tx:failed"])
     expect(items[1]!.title).toBe("2 payouts waiting for review")
+  })
+
+  it("filters activity by type and status", () => {
+    const rows = mockOverview("30d", "ok", NOW).recentActivity
+    expect(filterActivity(rows, { type: "all", status: "all" })).toEqual(rows)
+    expect(filterActivity(rows, { type: "all", status: "failed" }).every((a) => a.status === "failed")).toBe(true)
+    expect(filterActivity(rows, { type: "swap", status: "failed" }).every((a) => a.type === "swap" && a.status === "failed")).toBe(true)
+  })
+
+  it("sorts users newest/most first by the chosen key", () => {
+    const byVolume = mockUsers("30d", { sort: "volume", pageSize: 50 }, "ok", NOW).users.rows.map((u) => u.volumeUsd)
+    expect(byVolume).toEqual([...byVolume].sort((a, b) => b - a))
+    const byJoined = mockUsers("30d", { sort: "joined", pageSize: 50 }, "ok", NOW).users.rows.map((u) => Date.parse(u.joinedAt))
+    expect(byJoined).toEqual([...byJoined].sort((a, b) => b - a))
+  })
+
+  it("only renders https links", () => {
+    expect(safeExternalUrl("https://etherscan.io/tx/0xabc")).toBe("https://etherscan.io/tx/0xabc")
+    expect(safeExternalUrl("javascript:alert(1)")).toBeNull()
+    expect(safeExternalUrl("http://example.com")).toBeNull()
+    expect(safeExternalUrl("not a url")).toBeNull()
+    expect(safeExternalUrl(undefined)).toBeNull()
+  })
+
+  it("writes CSV that spreadsheets can't execute", () => {
+    const csv = toCsv(["user", "volume"], [["a•••@gmail.com", 12], ['=HYPERLINK("x")', null], ['say "hi"', -3]])
+    expect(csv.split("\r\n")).toEqual([
+      `"user","volume"`,
+      `"a•••@gmail.com","12"`,
+      `"'=HYPERLINK(""x"")",""`,
+      `"say ""hi""","-3"`,
+    ])
   })
 
   it("maps HTTP statuses to error kinds", () => {
