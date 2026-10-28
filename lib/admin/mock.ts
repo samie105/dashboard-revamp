@@ -15,6 +15,10 @@ import {
   AdminDataError,
   ADMIN_ACTIVITY_TYPES,
   type AdminActivity,
+  type AdminAuditEntry,
+  type AdminAuditLog,
+  type AdminAuditQuery,
+  type AdminClientEvent,
   type AdminCohort,
   type AdminFunnelStep,
   type AdminAttention,
@@ -403,6 +407,46 @@ export function mockFiat(period: AdminPeriod, state: AdminMockState, now = Date.
   }
 }
 
+const ADMINS = ["o•••@worldstreetgold.com", "s•••@worldstreetgold.com", "t•••@worldstreetgold.com"]
+const AUDIT_PAGES = ["Overview", "Users page", "Wallets page", "Volume page", "Fiat page"]
+/** Exports recorded this session (newest first), so the mock log shows them like the backend would. */
+const recorded: AdminAuditEntry[] = []
+
+function auditEntries(now: number): AdminAuditEntry[] {
+  const random = seeded(9_001)
+  const base = Array.from({ length: 64 }, (_, i): AdminAuditEntry => {
+    const r = random()
+    const action = r > 0.97 ? "role_changed" : r > 0.93 ? "setting_changed" : r > 0.8 ? "exported" : r > 0.62 ? "signed_in" : "viewed"
+    const target =
+      action === "viewed" ? AUDIT_PAGES[Math.floor(random() * AUDIT_PAGES.length)]!
+        : action === "exported" ? `users-30d-page${1 + Math.floor(random() * 4)}.csv`
+          : action === "role_changed" ? "t•••@worldstreetgold.com → analyst"
+            : action === "setting_changed" ? "Sell minimum → $5"
+              : "Admin console"
+    return {
+      id: `aud_${i}`,
+      at: new Date(now - Math.round((i + random()) * 47 * 60 * 1_000)).toISOString(),
+      actorLabel: ADMINS[Math.floor(random() * ADMINS.length)]!,
+      action,
+      target,
+      ipLabel: `${100 + Math.floor(random() * 90)}.${Math.floor(random() * 255)}.•••.•••`,
+    }
+  })
+  return [...recorded, ...base]
+}
+
+export function mockAuditLog(query: AdminAuditQuery, state: AdminMockState, now = Date.now()): AdminAuditLog {
+  const pageSize = Math.min(Math.max(query.pageSize ?? 25, 1), 100)
+  const matching = state === "empty" ? [] : auditEntries(now).filter((e) => !query.action || e.action === query.action)
+  const pages = Math.max(1, Math.ceil(matching.length / pageSize))
+  const page = Math.min(Math.max(query.page ?? 1, 1), pages)
+  return { rows: matching.slice((page - 1) * pageSize, page * pageSize), totalMatching: matching.length, page, pageSize, action: query.action ?? null, asOf: new Date(now).toISOString() }
+}
+
+function recordMockEvent(event: AdminClientEvent) {
+  recorded.unshift({ id: `aud_local_${recorded.length}`, at: new Date().toISOString(), actorLabel: "you (this session)", action: event.action, target: event.target, ipLabel: "—" })
+}
+
 /** Wait like a network call would, and stop if the caller gives up. */
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -431,4 +475,6 @@ export const mockAdminData: AdminDataSource = {
   getWallets: (period, options) => respond((state) => mockWallets(period, state), options?.signal),
   getVolume: (period, options) => respond((state) => mockVolume(period, state), options?.signal),
   getFiat: (period, options) => respond((state) => mockFiat(period, state), options?.signal),
+  getAuditLog: (query, options) => respond((state) => mockAuditLog(query, state), options?.signal),
+  recordEvent: async (event) => recordMockEvent(event),
 }

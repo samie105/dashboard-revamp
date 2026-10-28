@@ -3,7 +3,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 
 import { adminData } from "@/lib/admin/source"
-import { AdminDataError, type AdminPeriod, type AdminUsersQuery } from "@/lib/admin/types"
+import { AdminDataError, type AdminAuditQuery, type AdminPeriod, type AdminUsersQuery } from "@/lib/admin/types"
 
 export const adminQueryKeys = {
   overview: (period: AdminPeriod) => ["admin", "overview", period] as const,
@@ -11,6 +11,7 @@ export const adminQueryKeys = {
   wallets: (period: AdminPeriod) => ["admin", "wallets", period] as const,
   volume: (period: AdminPeriod) => ["admin", "volume", period] as const,
   fiat: (period: AdminPeriod) => ["admin", "fiat", period] as const,
+  audit: (query: AdminAuditQuery) => ["admin", "audit", query.action ?? "all", query.page ?? 1, query.pageSize ?? 25] as const,
 }
 
 /** A refusal or "not connected" won't change on retry; anything else gets two more tries. */
@@ -48,4 +49,8 @@ export function useAdminVolume(period: AdminPeriod) {
 
 export function useAdminFiat(period: AdminPeriod) {
   return useQuery({ queryKey: adminQueryKeys.fiat(period), queryFn: ({ signal }) => adminData.getFiat(period, { signal }), ...COMMON })
+}
+
+export function useAdminAuditLog(query: AdminAuditQuery) {
+  return useQuery({ queryKey: adminQueryKeys.audit(query), queryFn: ({ signal }) => adminData.getAuditLog(query, { signal }), ...COMMON })
 }

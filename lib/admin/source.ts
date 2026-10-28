@@ -24,6 +24,9 @@ const notConnected: AdminDataSource = {
   async getWallets() { throw notConnectedError() },
   async getVolume() { throw notConnectedError() },
   async getFiat() { throw notConnectedError() },
+  async getAuditLog() { throw notConnectedError() },
+  // Nowhere to send it yet; the export itself still works.
+  async recordEvent() {},
 }
 
 // The mock is loaded on demand, behind the gate, so a production bundle never
@@ -35,6 +38,8 @@ const mock: AdminDataSource = {
   getWallets: async (period, options) => (await loadMock()).getWallets(period, options),
   getVolume: async (period, options) => (await loadMock()).getVolume(period, options),
   getFiat: async (period, options) => (await loadMock()).getFiat(period, options),
+  getAuditLog: async (query, options) => (await loadMock()).getAuditLog(query, options),
+  recordEvent: async (event) => (await loadMock()).recordEvent(event),
 }
 
 export const adminData: AdminDataSource = ADMIN_MOCKS_ENABLED ? mock : notConnected

@@ -11,6 +11,7 @@ import {
   type AdminActivityStatus,
   type AdminActivityType,
   type AdminAttention,
+  type AdminAuditAction,
   type AdminFiat,
   type AdminKpi,
   type AdminOverview,
@@ -52,7 +53,8 @@ export function bucketUnit(period: AdminPeriod): string {
   return period === "24h" ? "hour" : period === "1y" ? "month" : "day"
 }
 
-function errorState(error: unknown): AdminViewState {
+/** The view state for a failed request (also used by pages that aren't period-based). */
+export function adminErrorState(error: unknown): AdminViewState {
   if (error instanceof AdminDataError) {
     if (error.kind === "forbidden") return { kind: "forbidden" }
     if (error.kind === "unauthenticated") return { kind: "signed-out" }
@@ -71,7 +73,7 @@ function errorState(error: unknown): AdminViewState {
 function baseState<T extends { period: AdminPeriod }>(period: AdminPeriod, data: T | undefined, error: unknown): { state: AdminViewState } | { data: T } {
   const current = data?.period === period ? data : undefined
   if (current) return { data: current }
-  if (error) return { state: errorState(error) }
+  if (error) return { state: adminErrorState(error) }
   return { state: data ? { kind: "switching" } : { kind: "loading" } }
 }
 
@@ -287,4 +289,17 @@ export const RETENTION_SHADES = ["bg-primary/[0.06]", "bg-primary/[0.14]", "bg-p
 export function retentionShade(share: number): (typeof RETENTION_SHADES)[number] {
   const i = Math.min(RETENTION_SHADES.length - 1, Math.max(0, Math.floor(share * RETENTION_SHADES.length)))
   return RETENTION_SHADES[i]!
+}
+
+export const AUDIT_ACTION_LABEL: Record<AdminAuditAction, string> = {
+  signed_in: "Signed in",
+  viewed: "Viewed",
+  exported: "Exported",
+  role_changed: "Changed a role",
+  setting_changed: "Changed a setting",
+}
+
+/** Actions that change something (shown with a warning tone in the log). */
+export function auditActionChanges(action: AdminAuditAction): boolean {
+  return action === "role_changed" || action === "setting_changed"
 }

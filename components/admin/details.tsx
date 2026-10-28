@@ -12,6 +12,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Download04Icon, LinkSquare02Icon } from "@hugeicons/core-free-icons"
 
 import { NeutralButton, StatusBadge } from "@/components/dash"
+import { adminData } from "@/lib/admin/source"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import type { AdminActivity, AdminUserRow } from "@/lib/admin/types"
 import { ACTIVITY_LABEL, safeExternalUrl, STATUS_TONE, timeAgo, toCsv } from "@/lib/admin/view"
@@ -117,7 +118,11 @@ export function MiniSelect<T extends string>({ label, value, options, onChange }
   )
 }
 
-/** Download rows as a CSV file (built by lib/admin/view.ts toCsv, which neutralises formulas). */
+/**
+ * Download rows as a CSV file (built by lib/admin/view.ts toCsv, which
+ * neutralises formulas), then tell the backend so the export lands in the
+ * audit log. That report is best effort and never blocks the download.
+ */
 export function CsvButton({ filename, header, rows, label = "Export CSV" }: { filename: string; header: string[]; rows: (string | number | null)[][]; label?: string }) {
   const download = () => {
     const blob = new Blob([`﻿${toCsv(header, rows)}`], { type: "text/csv;charset=utf-8" })
@@ -127,6 +132,7 @@ export function CsvButton({ filename, header, rows, label = "Export CSV" }: { fi
     a.download = filename
     a.click()
     URL.revokeObjectURL(url)
+    void adminData.recordEvent({ action: "exported", target: filename }).catch(() => {})
   }
   return (
     <NeutralButton onClick={download} disabled={rows.length === 0}>

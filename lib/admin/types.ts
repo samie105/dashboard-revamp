@@ -192,6 +192,31 @@ export type AdminFiat = {
   payoutProviders: AdminPayoutProvider[]
 }
 
+export const ADMIN_AUDIT_ACTIONS = ["signed_in", "viewed", "exported", "role_changed", "setting_changed"] as const
+export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number]
+
+/** One recorded admin action. Who did it is masked by the backend, like user labels. */
+export type AdminAuditEntry = {
+  id: string
+  at: string
+  actorLabel: string
+  action: AdminAuditAction
+  /** What it was done to, e.g. "Users page", "users-7d.csv". */
+  target: string
+  /** Masked by the backend, e.g. "102.89.•••.•••". */
+  ipLabel: string
+}
+
+export type AdminAuditQuery = { action?: AdminAuditAction; page?: number; pageSize?: number }
+export type AdminAuditLog = { rows: AdminAuditEntry[]; totalMatching: number; page: number; pageSize: number; action: AdminAuditAction | null; asOf: string }
+
+/**
+ * An action only the browser sees (a CSV export is built from data already
+ * loaded), sent so the backend can add it to the audit log. Page views and
+ * sign-ins are recorded by the backend itself when it serves the request.
+ */
+export type AdminClientEvent = { action: "exported"; target: string }
+
 export type AdminRequestOptions = { signal?: AbortSignal }
 
 /** What every admin screen reads through. One implementation is live at a time (source.ts). */
@@ -201,6 +226,9 @@ export interface AdminDataSource {
   getWallets(period: AdminPeriod, options?: AdminRequestOptions): Promise<AdminWallets>
   getVolume(period: AdminPeriod, options?: AdminRequestOptions): Promise<AdminVolume>
   getFiat(period: AdminPeriod, options?: AdminRequestOptions): Promise<AdminFiat>
+  getAuditLog(query: AdminAuditQuery, options?: AdminRequestOptions): Promise<AdminAuditLog>
+  /** Best effort: a failure here never blocks the admin's action. */
+  recordEvent(event: AdminClientEvent): Promise<void>
 }
 
 /**

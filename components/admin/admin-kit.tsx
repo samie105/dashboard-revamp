@@ -56,8 +56,9 @@ export function AdminPageHeader({
 }: {
   title: string
   subtitle: string
-  period: AdminPeriod
-  onPeriod: (p: AdminPeriod) => void
+  /** Omit both for a page that isn't period-based (the audit log). */
+  period?: AdminPeriod
+  onPeriod?: (p: AdminPeriod) => void
   asOf?: string
   refreshing: boolean
   onRefresh: () => void
@@ -90,7 +91,7 @@ export function AdminPageHeader({
         >
           <HugeiconsIcon icon={RefreshIcon} className={cn("size-4", refreshing && "animate-spin motion-reduce:animate-none")} strokeWidth={1.8} />
         </button>
-        <PillTabs label="Period" options={PERIOD_OPTIONS} value={period} onChange={onPeriod} />
+        {period && onPeriod && <PillTabs label="Period" options={PERIOD_OPTIONS} value={period} onChange={onPeriod} />}
       </div>
     </header>
   )

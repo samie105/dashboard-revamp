@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { mockFiat, mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
+import { mockAuditLog, mockFiat, mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
 import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus } from "@/lib/admin/types"
 import { activeShare, attentionItems, bucketLabel, fiatState, funnelRows, retentionShade, filterActivity, safeExternalUrl, toCsv, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
 import { shouldRetryAdmin } from "@/hooks/admin/useAdminData"
@@ -39,7 +39,7 @@ describe("admin data source", () => {
   it("in a production build serves no mock figures: every call reports 'not connected'", async () => {
     const { adminData, ADMIN_DATA_IS_MOCK } = await importUnderEnv({ NODE_ENV: "production", NEXT_PUBLIC_ADMIN_MOCKS: "true" }, () => import("@/lib/admin/source"))
     expect(ADMIN_DATA_IS_MOCK).toBe(false)
-    for (const call of [adminData.getOverview("7d"), adminData.getUsers("7d", {}), adminData.getWallets("7d"), adminData.getVolume("7d"), adminData.getFiat("7d")]) {
+    for (const call of [adminData.getOverview("7d"), adminData.getUsers("7d", {}), adminData.getWallets("7d"), adminData.getVolume("7d"), adminData.getFiat("7d"), adminData.getAuditLog({})]) {
       await expect(call).rejects.toMatchObject({ kind: "unavailable" })
     }
   })
@@ -125,6 +125,16 @@ describe("mock figures", () => {
     for (const p of f.payoutProviders) expect(p.successRate).toBeLessThanOrEqual(1)
     expect(fiatState({ period: "30d", data: f }).kind).toBe("ready")
     expect(fiatState({ period: "30d", data: mockFiat("30d", "no-data", NOW) }).kind).toBe("no-data")
+  })
+
+  it("filters and pages the audit log, newest first", () => {
+    const all = mockAuditLog({ pageSize: 100 }, "ok", NOW)
+    expect(all.rows.map((r) => Date.parse(r.at))).toEqual([...all.rows.map((r) => Date.parse(r.at))].sort((a, b) => b - a))
+    const exports = mockAuditLog({ action: "exported", pageSize: 100 }, "ok", NOW)
+    expect(exports.rows.every((r) => r.action === "exported")).toBe(true)
+    expect(mockAuditLog({ page: 99, pageSize: 25 }, "ok", NOW).page).toBe(Math.ceil(all.totalMatching / 25))
+    expect(mockAuditLog({}, "empty", NOW).totalMatching).toBe(0)
+    for (const r of all.rows) expect(r.ipLabel).toMatch(/•••/)
   })
 
   it("only accepts known mock states", () => {
