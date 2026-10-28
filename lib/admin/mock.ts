@@ -30,6 +30,7 @@ import {
   type AdminNetworkWallets,
   type AdminOverview,
   type AdminPeriod,
+  type AdminPreset,
   type AdminSeriesPoint,
   type AdminUserRow,
   type AdminUsers,
@@ -37,6 +38,7 @@ import {
   type AdminVolume,
   type AdminWallets,
 } from "@/lib/admin/types"
+import { periodBuckets } from "@/lib/admin/view"
 
 export const ADMIN_MOCK_STATES = ["ok", "loading", "empty", "no-data", "error", "forbidden", "unavailable", "slow"] as const
 export type AdminMockState = (typeof ADMIN_MOCK_STATES)[number]
@@ -53,8 +55,8 @@ function currentMockState(): AdminMockState {
 const HOUR = 60 * 60 * 1_000
 const DAY = 24 * HOUR
 
-/** Buckets per period: hourly for a day, daily for a week and a month, monthly for a year. */
-export const PERIOD_BUCKETS: Record<AdminPeriod, { count: number; stepMs: number }> = {
+/** Buckets per preset (custom ranges: lib/admin/view.ts periodBuckets). */
+export const PERIOD_BUCKETS: Record<AdminPreset, { count: number; stepMs: number }> = {
   "24h": { count: 24, stepMs: HOUR },
   "7d": { count: 7, stepMs: DAY },
   "30d": { count: 30, stepMs: DAY },
@@ -73,15 +75,22 @@ function seeded(seed: number) {
   }
 }
 
-const SEED: Record<AdminPeriod, number> = { "24h": 24, "7d": 7, "30d": 30, "1y": 365 }
+const PRESET_SEED: Record<AdminPreset, number> = { "24h": 24, "7d": 7, "30d": 30, "1y": 365 }
+/** A stable seed per period, custom ranges included. */
+function seedOf(period: AdminPeriod): number {
+  if (period in PRESET_SEED) return PRESET_SEED[period as AdminPreset]
+  let h = 2_166_136_261
+  for (const ch of period) h = Math.imul(h ^ ch.charCodeAt(0), 16_777_619)
+  return h >>> 0
+}
 const TOTAL_USERS = 48_217
 const TOTAL_WALLETS = 61_904
 /** Active users across the whole period, as a share of all users. */
-const ACTIVE_SHARE: Record<AdminPeriod, number> = { "24h": 0.06, "7d": 0.19, "30d": 0.41, "1y": 0.78 }
+const ACTIVE_SHARE: Record<AdminPreset, number> = { "24h": 0.06, "7d": 0.19, "30d": 0.41, "1y": 0.78 }
 /** Typical active users within ONE bucket (an hour, a day, a month). */
-const ACTIVE_PER_BUCKET: Record<AdminPeriod, number> = { "24h": 260, "7d": 2_900, "30d": 2_700, "1y": 14_000 }
-const NEW_USERS_PER_BUCKET: Record<AdminPeriod, number> = { "24h": 9, "7d": 210, "30d": 190, "1y": 3_400 }
-const VOLUME_PER_BUCKET: Record<AdminPeriod, number> = { "24h": 52_000, "7d": 1_180_000, "30d": 1_090_000, "1y": 31_500_000 }
+const ACTIVE_PER_BUCKET: Record<AdminPreset, number> = { "24h": 260, "7d": 2_900, "30d": 2_700, "1y": 14_000 }
+const NEW_USERS_PER_BUCKET: Record<AdminPreset, number> = { "24h": 9, "7d": 210, "30d": 190, "1y": 3_400 }
+const VOLUME_PER_BUCKET: Record<AdminPreset, number> = { "24h": 52_000, "7d": 1_180_000, "30d": 1_090_000, "1y": 31_500_000 }
 const AVERAGE_TICKET_USD = 286
 
 const NETWORKS = [
@@ -109,17 +118,17 @@ function ctx(period: AdminPeriod, state: AdminMockState, now: number): Ctx {
 
 /** The period's buckets. `previous` builds the period before it, for the change figures. */
 function buildSeries({ period, now, quiet }: Ctx, previous = false): AdminSeriesPoint[] {
-  const { count, stepMs } = PERIOD_BUCKETS[period]
-  const random = seeded(SEED[period] + (previous ? 1_000 : 0))
-  const end = Math.floor(now / stepMs) * stepMs - (previous ? count * stepMs : 0)
+  const { count, stepMs, endMs, profile } = periodBuckets(period, now)
+  const random = seeded(seedOf(period) + (previous ? 1_000 : 0))
+  const end = endMs - (previous ? count * stepMs : 0)
   const drift = previous ? 0.9 : 1
   return Array.from({ length: count }, (_, i) => {
     const at = new Date(end - (count - 1 - i) * stepMs).toISOString()
     if (quiet && !previous) return { at, activeUsers: 0, newUsers: 0, volumeUsd: 0, transactions: 0, activeWallets: 0, newWallets: 0 }
     const wave = (0.6 + random() * 0.8) * (0.85 + (i / count) * 0.3) * drift
-    const volumeUsd = Math.round(VOLUME_PER_BUCKET[period] * wave)
-    const activeUsers = Math.round(ACTIVE_PER_BUCKET[period] * (0.7 + random() * 0.6) * drift)
-    const newUsers = Math.round(NEW_USERS_PER_BUCKET[period] * (0.5 + random()) * drift)
+    const volumeUsd = Math.round(VOLUME_PER_BUCKET[profile] * wave)
+    const activeUsers = Math.round(ACTIVE_PER_BUCKET[profile] * (0.7 + random() * 0.6) * drift)
+    const newUsers = Math.round(NEW_USERS_PER_BUCKET[profile] * (0.5 + random()) * drift)
     return {
       at,
       activeUsers,
@@ -148,6 +157,13 @@ function split<T extends { key: string; label: string }>(items: readonly T[], wh
   return items.map((item) => ({ key: item.key, label: item.label, value: Math.round(whole * share(item)) })).sort((a, b) => b.value - a.value)
 }
 
+/** Share of all users active across the period: the preset's, or scaled by length for a custom range. */
+function activeShareOf(period: AdminPeriod): number {
+  if (period in ACTIVE_SHARE) return ACTIVE_SHARE[period as AdminPreset]
+  const { count, stepMs } = periodBuckets(period)
+  return Math.min(0.8, 0.06 + (count * stepMs) / (24 * 60 * 60 * 1_000) * 0.012)
+}
+
 function headline(c: Ctx) {
   const series = buildSeries(c)
   const before = buildSeries(c, true)
@@ -155,9 +171,9 @@ function headline(c: Ctx) {
   const totalWallets = c.empty ? 0 : TOTAL_WALLETS
   const newUsers = sum(series, "newUsers")
   const newWallets = sum(series, "newWallets")
-  const activeUsers = c.quiet ? 0 : Math.round(TOTAL_USERS * ACTIVE_SHARE[c.period])
-  const activeBefore = Math.round(TOTAL_USERS * ACTIVE_SHARE[c.period] * 0.94)
-  const activeWallets = c.quiet ? 0 : Math.round(TOTAL_WALLETS * ACTIVE_SHARE[c.period] * 0.92)
+  const activeUsers = c.quiet ? 0 : Math.round(TOTAL_USERS * activeShareOf(c.period))
+  const activeBefore = Math.round(TOTAL_USERS * activeShareOf(c.period) * 0.94)
+  const activeWallets = c.quiet ? 0 : Math.round(TOTAL_WALLETS * activeShareOf(c.period) * 0.92)
   return {
     series,
     before,
@@ -181,13 +197,16 @@ function userLabel(random: () => number): string {
 
 function recentActivity(c: Ctx): AdminActivity[] {
   if (c.quiet) return []
-  const random = seeded(SEED[c.period] + 7)
-  const span = PERIOD_BUCKETS[c.period].count * PERIOD_BUCKETS[c.period].stepMs
+  const random = seeded(seedOf(c.period) + 7)
+  const { count, stepMs, endMs } = periodBuckets(c.period, c.now)
+  const span = count * stepMs
+  // A custom range in the past ends on its last day, not now.
+  const end = Math.min(c.now, endMs + stepMs)
   return Array.from({ length: 12 }, (_, i) => {
     const r = random()
     return {
       id: `act_${c.period}_${i}`,
-      at: new Date(c.now - Math.round((i + random()) * Math.min(span / 12, 40 * 60 * 1_000))).toISOString(),
+      at: new Date(end - Math.round((i + random()) * Math.min(span / 12, 40 * 60 * 1_000))).toISOString(),
       userLabel: userLabel(random),
       type: ADMIN_ACTIVITY_TYPES[Math.floor(random() * ADMIN_ACTIVITY_TYPES.length)]!,
       networkLabel: NETWORKS[Math.floor(random() * NETWORKS.length)]!.label,
@@ -204,7 +223,8 @@ const USER_COUNT = 240
 function allUsers(c: Ctx): AdminUserRow[] {
   if (c.empty) return []
   const random = seeded(4_242)
-  const activeWindow = PERIOD_BUCKETS[c.period].count * PERIOD_BUCKETS[c.period].stepMs
+  const { count, stepMs } = periodBuckets(c.period, c.now)
+  const activeWindow = count * stepMs
   return Array.from({ length: USER_COUNT }, (_, i) => {
     const joinedAt = c.now - Math.round(random() * 500 * DAY)
     const sinceActive = Math.round(random() * 90 * DAY)
@@ -371,8 +391,8 @@ export function mockFiat(period: AdminPeriod, state: AdminMockState, now = Date.
       return { at: p.at, buyUsd, sellUsd, orders: Math.round((buyUsd + sellUsd) / 190) }
     })
   }
-  const series = fiatPoints(h.series, SEED[period] + 50)
-  const before = fiatPoints(h.before, SEED[period] + 51)
+  const series = fiatPoints(h.series, seedOf(period) + 50)
+  const before = fiatPoints(h.before, seedOf(period) + 51)
   const total = (pts: AdminFiatPoint[], k: "buyUsd" | "sellUsd" | "orders") => pts.reduce((s, p) => s + p[k], 0)
   const orders = total(series, "orders")
   const statuses = [

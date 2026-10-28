@@ -10,8 +10,52 @@
  * and supplying every field marked here — belongs in source.ts.
  */
 
+/** The preset periods. */
 export const ADMIN_PERIODS = ["24h", "7d", "30d", "1y"] as const
-export type AdminPeriod = (typeof ADMIN_PERIODS)[number]
+export type AdminPreset = (typeof ADMIN_PERIODS)[number]
+
+/**
+ * A custom range travels as one value, `custom:YYYY-MM-DD:YYYY-MM-DD` (UTC
+ * days, both inclusive), so query keys, the URL and "is this the period I
+ * asked for" work the same for presets and ranges. source.ts turns it into
+ * from/to for the backend with parseCustomPeriod.
+ */
+export type AdminCustomPeriod = `custom:${string}:${string}`
+export type AdminPeriod = AdminPreset | AdminCustomPeriod
+
+const DAY_MS = 24 * 60 * 60 * 1_000
+/** The longest custom range: a year and a day (so a leap year fits). */
+export const MAX_CUSTOM_DAYS = 366
+
+export function customPeriod(from: string, to: string): AdminCustomPeriod {
+  return `custom:${from}:${to}`
+}
+
+function utcDay(text: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null
+  const t = Date.parse(`${text}T00:00:00Z`)
+  // Reject dates that roll over (2026-02-31 → March).
+  return Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== text ? null : t
+}
+
+/**
+ * A valid custom range: real dates, `from` ≤ `to`, not in the future, at most
+ * MAX_CUSTOM_DAYS. Null for anything else (a bad URL never reaches the backend).
+ */
+export function parseCustomPeriod(period: string, now = Date.now()): { from: string; to: string; fromMs: number; toMs: number; days: number } | null {
+  const match = /^custom:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/.exec(period)
+  if (!match) return null
+  const fromMs = utcDay(match[1]!)
+  const toMs = utcDay(match[2]!)
+  if (fromMs === null || toMs === null || fromMs > toMs || toMs > now) return null
+  const days = Math.round((toMs - fromMs) / DAY_MS) + 1
+  return days > MAX_CUSTOM_DAYS ? null : { from: match[1]!, to: match[2]!, fromMs, toMs, days }
+}
+
+export function isAdminPeriod(value: string | null | undefined, now = Date.now()): value is AdminPeriod {
+  if (!value) return false
+  return (ADMIN_PERIODS as readonly string[]).includes(value) || parseCustomPeriod(value, now) !== null
+}
 
 /**
  * One headline figure. `previous` is the same figure for the period before

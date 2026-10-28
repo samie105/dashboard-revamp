@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { mockAuditLog, mockFiat, mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
-import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus } from "@/lib/admin/types"
+import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus, customPeriod, isAdminPeriod, parseCustomPeriod } from "@/lib/admin/types"
+import { periodBuckets, periodLong, periodPrevious } from "@/lib/admin/view"
 import { activeShare, attentionItems, bucketLabel, fiatState, funnelRows, retentionShade, filterActivity, safeExternalUrl, toCsv, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
 import { shouldRetryAdmin } from "@/hooks/admin/useAdminData"
 
@@ -137,6 +138,18 @@ describe("mock figures", () => {
     for (const r of all.rows) expect(r.ipLabel).toMatch(/•••/)
   })
 
+  it("charts a custom range day by day inside the range", () => {
+    const period = customPeriod("2026-10-01", "2026-10-14")
+    const o = mockOverview(period, "ok", NOW)
+    expect(o.series).toHaveLength(14)
+    expect(o.series[0]!.at).toBe("2026-10-01T00:00:00.000Z")
+    expect(o.series.at(-1)!.at).toBe("2026-10-14T00:00:00.000Z")
+    expect(o.previousSeries).toHaveLength(14)
+    expect(Date.parse(o.previousSeries.at(-1)!.at)).toBeLessThan(Date.parse(o.series[0]!.at))
+    expect(o.kpis.activeUsers.value).toBeLessThanOrEqual(o.kpis.totalUsers.value)
+    expect(mockOverview(period, "ok", NOW)).toEqual(o)
+  })
+
   it("only accepts known mock states", () => {
     expect(parseMockState("forbidden")).toBe("forbidden")
     expect(parseMockState("drop table")).toBe("ok")
@@ -261,6 +274,29 @@ describe("helpers", () => {
     expect(mockUsers("7d", {}, "empty", NOW).retention.cohorts).toEqual([])
     expect(retentionShade(0)).toBe("bg-primary/[0.06]")
     expect(retentionShade(0.99)).toBe("bg-primary/[0.5]")
+  })
+
+  it("accepts only real, past custom ranges of at most a year", () => {
+    expect(parseCustomPeriod("custom:2026-10-01:2026-10-14", NOW)).toMatchObject({ from: "2026-10-01", to: "2026-10-14", days: 14 })
+    expect(parseCustomPeriod("custom:2026-10-14:2026-10-14", NOW)?.days).toBe(1)
+    expect(parseCustomPeriod("custom:2026-02-31:2026-03-02", NOW)).toBeNull() // rolls over
+    expect(parseCustomPeriod("custom:2026-10-14:2026-10-01", NOW)).toBeNull() // backwards
+    expect(parseCustomPeriod("custom:2026-10-01:2026-12-01", NOW)).toBeNull() // future
+    expect(parseCustomPeriod("custom:2024-01-01:2026-10-01", NOW)).toBeNull() // too long
+    expect(parseCustomPeriod("custom:2026-10-01", NOW)).toBeNull()
+    expect(isAdminPeriod("7d", NOW)).toBe(true)
+    expect(isAdminPeriod("custom:2026-10-01:2026-10-14", NOW)).toBe(true)
+    expect(isAdminPeriod("90d", NOW)).toBe(false)
+    expect(isAdminPeriod(null, NOW)).toBe(false)
+  })
+
+  it("buckets custom ranges daily up to 92 days, monthly beyond", () => {
+    expect(periodBuckets("custom:2026-10-01:2026-10-14", NOW)).toMatchObject({ count: 14, unit: "day" })
+    expect(periodBuckets("custom:2026-01-01:2026-10-01", NOW)).toMatchObject({ count: 10, unit: "month" })
+    expect(periodBuckets("24h", NOW)).toMatchObject({ count: 24, unit: "hour" })
+    expect(periodLong("custom:2026-10-01:2026-10-14")).toBe("Oct 1 – Oct 14, 2026")
+    expect(periodLong("custom:2026-10-14:2026-10-14")).toBe("Oct 14, 2026")
+    expect(periodPrevious("custom:2026-10-01:2026-10-14")).toBe("previous 14 days")
   })
 
   it("maps HTTP statuses to error kinds", () => {

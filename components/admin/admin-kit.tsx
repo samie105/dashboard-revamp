@@ -17,10 +17,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Alert02Icon, CancelCircleIcon, CheckmarkCircle02Icon, InformationCircleIcon, RefreshIcon } from "@hugeicons/core-free-icons"
 
-import { ChangeChip, Chip, EmptyPanel, ErrorPanel, Panel, PanelHeader, PillTabs, PriceChart, SkeletonBlock, StatePanel, UnavailableState } from "@/components/dash"
+import { ChangeChip, Chip, EmptyPanel, GoldButton, NeutralButton, ErrorPanel, Panel, PanelHeader, PillTabs, PriceChart, SkeletonBlock, StatePanel, UnavailableState } from "@/components/dash"
 import { Spark, UnderlineTabs } from "@/components/dashboard/redesign/ui"
 import { ADMIN_DATA_IS_MOCK } from "@/lib/admin/source"
-import { ADMIN_PERIODS, type AdminAttention, type AdminBreakdown, type AdminKpi, type AdminPeriod, type AdminServiceStatus } from "@/lib/admin/types"
+import { customPeriod, isAdminPeriod, MAX_CUSTOM_DAYS, parseCustomPeriod, type AdminAttention, type AdminBreakdown, type AdminKpi, type AdminPeriod, type AdminServiceStatus } from "@/lib/admin/types"
 import { attentionItems, bucketLabel, bucketUnit, kpiChange, kpiDelta, PERIOD_OPTIONS, periodLong, periodPrevious, shares, spreadTicks, timeAgo, type AdminViewState } from "@/lib/admin/view"
 import { cn } from "@/lib/utils"
 
@@ -32,7 +32,9 @@ export function useAdminPeriod(): [AdminPeriod, (period: AdminPeriod) => void] {
   const router = useRouter()
   const pathname = usePathname()
   const raw = search.get("period")
-  const period = (ADMIN_PERIODS as readonly string[]).includes(raw ?? "") ? (raw as AdminPeriod) : "7d"
+  // Anything that isn't a preset or a valid custom range (bad dates, future,
+  // too long) falls back to 7d rather than reaching the backend.
+  const period: AdminPeriod = isAdminPeriod(raw) ? raw : "7d"
   const setPeriod = React.useCallback(
     (next: AdminPeriod) => {
       const params = new URLSearchParams(search.toString())
@@ -91,9 +93,77 @@ export function AdminPageHeader({
         >
           <HugeiconsIcon icon={RefreshIcon} className={cn("size-4", refreshing && "animate-spin motion-reduce:animate-none")} strokeWidth={1.8} />
         </button>
-        {period && onPeriod && <PillTabs label="Period" options={PERIOD_OPTIONS} value={period} onChange={onPeriod} />}
+        {period && onPeriod && <PeriodPicker period={period} onPeriod={onPeriod} />}
       </div>
     </header>
+  )
+}
+
+/* ── Period picker ────────────────────────────────────────────────────── */
+
+const todayUtc = () => new Date().toISOString().slice(0, 10)
+const daysAgoUtc = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
+
+/**
+ * The presets, plus "Custom": two dates (UTC days, both included, up to a
+ * year, not in the future), checked by parseCustomPeriod before they're
+ * applied. The chosen range shows under the tabs.
+ */
+function PeriodPicker({ period, onPeriod }: { period: AdminPeriod; onPeriod: (p: AdminPeriod) => void }) {
+  const current = parseCustomPeriod(period)
+  const [open, setOpen] = React.useState(false)
+  const [from, setFrom] = React.useState(current?.from ?? daysAgoUtc(13))
+  const [to, setTo] = React.useState(current?.to ?? todayUtc())
+  const [problem, setProblem] = React.useState<string | null>(null)
+  const fromId = React.useId()
+  const toId = React.useId()
+  const options = [...PERIOD_OPTIONS.map((o) => ({ key: o.key as string, label: o.label })), { key: "custom", label: "Custom" }]
+
+  const apply = () => {
+    const next = customPeriod(from, to)
+    if (!parseCustomPeriod(next)) {
+      setProblem(from > to ? "The start date must be on or before the end date." : to > todayUtc() ? "The range can't end in the future." : `Pick a range of at most ${MAX_CUSTOM_DAYS} days.`)
+      return
+    }
+    setProblem(null)
+    setOpen(false)
+    onPeriod(next)
+  }
+
+  return (
+    <div className="relative flex flex-col items-end gap-1">
+      <PillTabs
+        label="Period"
+        options={options}
+        value={current ? "custom" : period}
+        onChange={(key) => (key === "custom" ? setOpen(true) : (setOpen(false), onPeriod(key as AdminPeriod)))}
+      />
+      {current && !open && (
+        <button type="button" onClick={() => setOpen(true)} className="rounded text-[11.5px] font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60">
+          {periodLong(period)} · change
+        </button>
+      )}
+      {open && (
+        <div role="group" aria-label="Custom range" className="ds-panel absolute right-0 top-full z-30 mt-2 flex w-[min(320px,calc(100vw-2rem))] flex-col gap-3 rounded-2xl p-4 shadow-xl">
+          <div className="grid grid-cols-2 gap-2">
+            <label htmlFor={fromId} className="flex flex-col gap-1 text-[12px] text-muted-foreground">
+              From
+              <input id={fromId} type="date" value={from} max={to || todayUtc()} onChange={(e) => setFrom(e.target.value)} className="h-9 rounded-xl border border-foreground/[0.08] bg-foreground/[0.025] px-2 text-[13px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/60" />
+            </label>
+            <label htmlFor={toId} className="flex flex-col gap-1 text-[12px] text-muted-foreground">
+              To
+              <input id={toId} type="date" value={to} min={from} max={todayUtc()} onChange={(e) => setTo(e.target.value)} className="h-9 rounded-xl border border-foreground/[0.08] bg-foreground/[0.025] px-2 text-[13px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/60" />
+            </label>
+          </div>
+          <p className="text-[11.5px] text-muted-foreground">Whole days in UTC, both included. Up to {MAX_CUSTOM_DAYS} days.</p>
+          {problem && <p role="alert" className="text-[12px] font-semibold text-debit">{problem}</p>}
+          <div className="flex justify-end gap-2">
+            <NeutralButton onClick={() => { setOpen(false); setProblem(null) }}>Cancel</NeutralButton>
+            <GoldButton onClick={apply}>Apply</GoldButton>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

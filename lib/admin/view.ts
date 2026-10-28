@@ -7,6 +7,8 @@
 
 import {
   AdminDataError,
+  parseCustomPeriod,
+  type AdminPreset,
   type AdminActivity,
   type AdminActivityStatus,
   type AdminActivityType,
@@ -33,24 +35,55 @@ export type AdminViewState =
   | { kind: "no-data" }
   | { kind: "ready" }
 
-export const PERIOD_OPTIONS: readonly { key: AdminPeriod; label: string; long: string; previous: string }[] = [
+export const PERIOD_OPTIONS: readonly { key: AdminPreset; label: string; long: string; previous: string }[] = [
   { key: "24h", label: "24h", long: "the last 24 hours", previous: "previous 24h" },
   { key: "7d", label: "7d", long: "the last 7 days", previous: "previous 7d" },
   { key: "30d", label: "30d", long: "the last 30 days", previous: "previous 30d" },
   { key: "1y", label: "1y", long: "the last year", previous: "previous year" },
 ]
 
+const HOUR_MS = 60 * 60 * 1_000
+const DAY_MS = 24 * HOUR_MS
+
+export type BucketUnit = "hour" | "day" | "month"
+
+/**
+ * How a period splits into chart buckets. Presets: hourly for 24h, daily for
+ * 7d/30d, ~monthly (30-day steps) for 1y, ending at the current bucket.
+ * Custom ranges: daily up to 92 days, ~monthly beyond, ending on the range's
+ * last day. `profile` is the preset whose scale the range resembles (the
+ * mock uses it to size invented figures).
+ */
+export function periodBuckets(period: AdminPeriod, now = Date.now()): { count: number; stepMs: number; endMs: number; unit: BucketUnit; profile: AdminPreset } {
+  const custom = parseCustomPeriod(period, now + DAY_MS)
+  if (custom) {
+    if (custom.days <= 92) return { count: custom.days, stepMs: DAY_MS, endMs: custom.toMs, unit: "day", profile: "30d" }
+    return { count: Math.ceil(custom.days / 30), stepMs: 30 * DAY_MS, endMs: custom.toMs, unit: "month", profile: "1y" }
+  }
+  const preset = period as AdminPreset
+  const step = preset === "24h" ? HOUR_MS : preset === "1y" ? 30 * DAY_MS : DAY_MS
+  const count = preset === "24h" ? 24 : preset === "7d" ? 7 : preset === "30d" ? 30 : 12
+  return { count, stepMs: step, endMs: Math.floor(now / step) * step, unit: preset === "24h" ? "hour" : preset === "1y" ? "month" : "day", profile: preset }
+}
+
+const shortDay = (ms: number, withYear: boolean) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", ...(withYear ? { year: "numeric" } : {}), timeZone: "UTC" })
+
+/** "the last 7 days", or "Oct 1 – Oct 15, 2026" for a custom range. */
 export function periodLong(period: AdminPeriod): string {
+  const custom = parseCustomPeriod(period, Number.MAX_SAFE_INTEGER)
+  if (custom) return custom.days === 1 ? shortDay(custom.fromMs, true) : `${shortDay(custom.fromMs, false)} – ${shortDay(custom.toMs, true)}`
   return PERIOD_OPTIONS.find((p) => p.key === period)?.long ?? period
 }
 
 export function periodPrevious(period: AdminPeriod): string {
+  const custom = parseCustomPeriod(period, Number.MAX_SAFE_INTEGER)
+  if (custom) return `previous ${custom.days} day${custom.days === 1 ? "" : "s"}`
   return PERIOD_OPTIONS.find((p) => p.key === period)?.previous ?? "previous period"
 }
 
 /** "hour" / "day" / "month": what one point of the period's series covers. */
-export function bucketUnit(period: AdminPeriod): string {
-  return period === "24h" ? "hour" : period === "1y" ? "month" : "day"
+export function bucketUnit(period: AdminPeriod): BucketUnit {
+  return periodBuckets(period).unit
 }
 
 /** The view state for a failed request (also used by pages that aren't period-based). */
@@ -168,8 +201,9 @@ export function formatCountCompact(value: number): string {
 export function bucketLabel(at: string, period: AdminPeriod): string {
   const date = new Date(at)
   if (Number.isNaN(date.getTime())) return ""
-  if (period === "24h") return date.toLocaleTimeString("en-US", { hour: "numeric", timeZone: "UTC" })
-  if (period === "1y") return date.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
+  const unit = bucketUnit(period)
+  if (unit === "hour") return date.toLocaleTimeString("en-US", { hour: "numeric", timeZone: "UTC" })
+  if (unit === "month") return date.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
 }
 
