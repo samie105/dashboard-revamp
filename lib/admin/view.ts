@@ -9,6 +9,7 @@ import {
   AdminDataError,
   type AdminActivityStatus,
   type AdminActivityType,
+  type AdminAttention,
   type AdminKpi,
   type AdminOverview,
   type AdminPeriod,
@@ -195,4 +196,32 @@ export function spreadTicks(labels: string[], count = 5): string[] {
   if (labels.length <= count) return labels
   const step = (labels.length - 1) / (count - 1)
   return Array.from({ length: count }, (_, i) => labels[Math.round(i * step)] ?? "")
+}
+
+export type AttentionItem = { key: string; tone: "danger" | "warning"; title: string; detail: string }
+
+/** Failure rate above which failed transactions need a look (2%). TODO(lead): confirm the threshold. */
+export const FAILED_RATE_ALERT = 0.02
+
+/**
+ * Turn the attention data into the items an admin should act on, worst
+ * first. Nothing to show → an empty list (the panel then says "all clear").
+ */
+export function attentionItems(a: AdminAttention): AttentionItem[] {
+  const items: AttentionItem[] = []
+  for (const s of a.services) {
+    if (s.status === "operational") continue
+    items.push({ key: `service:${s.key}`, tone: s.status === "down" ? "danger" : "warning", title: `${s.label} ${s.status === "down" ? "is down" : "is degraded"}`, detail: s.detail ?? "Check the provider's status." })
+  }
+  if (a.payoutsInReview > 0) {
+    items.push({ key: "payouts:review", tone: "danger", title: `${formatCount(a.payoutsInReview)} payout${a.payoutsInReview === 1 ? "" : "s"} waiting for review`, detail: "Crypto was received but the bank payout needs a person to check it." })
+  }
+  if (a.payoutsPendingLong > 0) {
+    items.push({ key: "payouts:pending", tone: "warning", title: `${formatCount(a.payoutsPendingLong)} payout${a.payoutsPendingLong === 1 ? "" : "s"} pending over ${a.pendingThresholdHours}h`, detail: "Still not confirmed by the payout provider." })
+  }
+  if (a.failedTransactions.count > 0 && a.failedTransactions.rate >= FAILED_RATE_ALERT) {
+    items.push({ key: "tx:failed", tone: "warning", title: `${formatCount(a.failedTransactions.count)} failed transactions (${(a.failedTransactions.rate * 100).toFixed(1)}%)`, detail: "More than usual failed in this period." })
+  }
+  const rank = { danger: 0, warning: 1 }
+  return items.sort((x, y) => rank[x.tone] - rank[y.tone])
 }

@@ -15,13 +15,13 @@
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { InformationCircleIcon, RefreshIcon } from "@hugeicons/core-free-icons"
+import { Alert02Icon, CancelCircleIcon, CheckmarkCircle02Icon, InformationCircleIcon, RefreshIcon } from "@hugeicons/core-free-icons"
 
 import { ChangeChip, Chip, EmptyPanel, ErrorPanel, Panel, PanelHeader, PillTabs, PriceChart, SkeletonBlock, StatePanel, UnavailableState } from "@/components/dash"
 import { Spark, UnderlineTabs } from "@/components/dashboard/redesign/ui"
 import { ADMIN_DATA_IS_MOCK } from "@/lib/admin/source"
-import { ADMIN_PERIODS, type AdminBreakdown, type AdminKpi, type AdminPeriod } from "@/lib/admin/types"
-import { bucketLabel, bucketUnit, kpiChange, kpiDelta, PERIOD_OPTIONS, periodLong, periodPrevious, shares, spreadTicks, timeAgo, type AdminViewState } from "@/lib/admin/view"
+import { ADMIN_PERIODS, type AdminAttention, type AdminBreakdown, type AdminKpi, type AdminPeriod, type AdminServiceStatus } from "@/lib/admin/types"
+import { attentionItems, bucketLabel, bucketUnit, kpiChange, kpiDelta, PERIOD_OPTIONS, periodLong, periodPrevious, shares, spreadTicks, timeAgo, type AdminViewState } from "@/lib/admin/view"
 import { cn } from "@/lib/utils"
 
 /* ── Frame ────────────────────────────────────────────────────────────── */
@@ -278,6 +278,68 @@ export function BreakdownPanel({ title, subtitle, items, format, dim, emptyText 
             </li>
           ))}
         </ul>
+      )}
+    </Panel>
+  )
+}
+
+/* ── Needs attention ──────────────────────────────────────────────────── */
+
+const SERVICE_DOT: Record<AdminServiceStatus, string> = {
+  operational: "bg-credit",
+  degraded: "bg-warning",
+  down: "bg-debit",
+}
+const SERVICE_WORD: Record<AdminServiceStatus, string> = { operational: "Operational", degraded: "Degraded", down: "Down" }
+
+/**
+ * What an admin should act on now (worst first, lib/admin/view.ts
+ * attentionItems), and every dependency's health. "All clear" when there's
+ * nothing, so an empty panel never reads as "didn't load".
+ */
+export function AttentionPanel({ attention, dim }: { attention?: AdminAttention; dim: boolean }) {
+  const items = attention ? attentionItems(attention) : []
+  return (
+    <Panel className={cn("flex flex-col gap-4 p-4 transition-opacity md:p-5", dim && "opacity-55")} aria-busy={!attention || dim}>
+      <PanelHeader title="Needs attention" subtitle="Queues are live; failures count for the chosen period" />
+      {!attention ? (
+        <div role="status" aria-label="Loading what needs attention" className="flex flex-col gap-2">
+          <SkeletonBlock className="h-12 w-full rounded-xl" />
+          <SkeletonBlock className="h-12 w-full rounded-xl" />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="flex items-center gap-3 rounded-xl border border-credit/20 bg-credit/[0.06] px-3.5 py-3" role="status">
+          <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-5 shrink-0 text-credit" strokeWidth={1.8} />
+          <p className="text-[13px] font-semibold text-foreground">All clear. Nothing needs a look right now.</p>
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {items.map((item) => (
+            <li key={item.key} className={cn("flex items-start gap-3 rounded-xl border px-3.5 py-3", item.tone === "danger" ? "border-debit/25 bg-debit/[0.06]" : "border-warning/25 bg-warning/[0.06]")}>
+              <HugeiconsIcon icon={item.tone === "danger" ? CancelCircleIcon : Alert02Icon} className={cn("mt-0.5 size-[18px] shrink-0", item.tone === "danger" ? "text-debit" : "text-warning")} strokeWidth={1.8} />
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <p className="text-[13.5px] font-semibold text-foreground">{item.title}</p>
+                <p className="text-[12.5px] text-muted-foreground">{item.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {attention && attention.services.length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-foreground/[0.06] pt-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">Services</p>
+          <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3">
+            {attention.services.map((svc) => (
+              <li key={svc.key} className="flex items-center justify-between gap-3 text-[12.5px]">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span aria-hidden className={cn("size-2 shrink-0 rounded-full", SERVICE_DOT[svc.status])} />
+                  <span className="truncate text-foreground">{svc.label}</span>
+                </span>
+                <span className={cn("shrink-0 font-semibold", svc.status === "operational" ? "text-muted-foreground" : svc.status === "degraded" ? "text-warning" : "text-debit")}>{SERVICE_WORD[svc.status]}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </Panel>
   )

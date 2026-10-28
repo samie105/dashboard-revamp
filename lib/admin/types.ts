@@ -50,6 +50,32 @@ export type AdminActivity = {
   status: AdminActivityStatus
 }
 
+export type AdminServiceStatus = "operational" | "degraded" | "down"
+
+/** One dependency the platform needs (a payout provider, the rate feed, a chain connection). */
+export type AdminServiceHealth = {
+  key: string
+  label: string
+  status: AdminServiceStatus
+  /** A short, safe explanation for anything not operational. */
+  detail?: string
+  checkedAt: string
+}
+
+/**
+ * What an admin should look at now. Counts are for the chosen period except
+ * the queues, which are "right now".
+ */
+export type AdminAttention = {
+  failedTransactions: { count: number; rate: number }
+  /** Sell payouts stopped for a person to check (crypto received, payout unclear). */
+  payoutsInReview: number
+  /** Payouts still pending after `pendingThresholdHours`. */
+  payoutsPendingLong: number
+  pendingThresholdHours: number
+  services: AdminServiceHealth[]
+}
+
 export type AdminOverview = {
   period: AdminPeriod
   /** When the figures were computed, ISO 8601. */
@@ -61,6 +87,7 @@ export type AdminOverview = {
   walletsByNetwork: AdminBreakdown[]
   /** Newest first. */
   recentActivity: AdminActivity[]
+  attention: AdminAttention
 }
 
 export type AdminUserRow = {

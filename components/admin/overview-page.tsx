@@ -19,7 +19,7 @@ import { useAdminOverview } from "@/hooks/admin/useAdminData"
 import type { AdminActivity } from "@/lib/admin/types"
 import { ACTIVITY_LABEL, activeShare, formatCount, formatCountCompact, overviewState, periodLong, STATUS_TONE, timeAgo, METRIC_DEFINITIONS } from "@/lib/admin/view"
 import { usd, usdCompact } from "@/lib/num"
-import { AdminPageHeader, AdminStatePanel, BreakdownPanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
+import { AdminPageHeader, AdminStatePanel, AttentionPanel, BreakdownPanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
 
 const whole = (v: number) => usd(v, { min: 0, max: 0 })
 
@@ -69,6 +69,8 @@ export function AdminOverviewPage() {
         <AdminStatePanel state={state} period={period} subject="users" onRetry={retry} />
       ) : (
         <>
+          <AttentionPanel attention={data?.attention} dim={dim} />
+
           <KpiGrid>
             <KpiCard label="Total users" definition={METRIC_DEFINITIONS.totalUsers} compare="absolute" kpi={data?.kpis.totalUsers} format={formatCount} period={period} dim={dim} />
             <KpiCard

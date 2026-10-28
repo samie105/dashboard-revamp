@@ -15,6 +15,7 @@ import {
   AdminDataError,
   ADMIN_ACTIVITY_TYPES,
   type AdminActivity,
+  type AdminAttention,
   type AdminBreakdown,
   type AdminDataSource,
   type AdminKpi,
@@ -213,6 +214,24 @@ function allUsers(c: Ctx): AdminUserRow[] {
   })
 }
 
+function attention(c: Ctx, transactions: number, now: number): AdminAttention {
+  const checkedAt = new Date(now - 60_000).toISOString()
+  const failed = c.quiet ? 0 : Math.round(transactions * 0.021)
+  return {
+    failedTransactions: { count: failed, rate: transactions > 0 ? failed / transactions : 0 },
+    payoutsInReview: c.empty ? 0 : 3,
+    payoutsPendingLong: c.empty ? 0 : 1,
+    pendingThresholdHours: 6,
+    services: [
+      { key: "flutterwave", label: "Bank payouts (Flutterwave)", status: "degraded", detail: "Exchange rates endpoint failing; payouts still sending", checkedAt },
+      { key: "paystack", label: "Bank payouts (Paystack)", status: "operational", checkedAt },
+      { key: "rates", label: "Exchange rate feed", status: "operational", checkedAt },
+      { key: "solana-rpc", label: "Solana connection", status: "operational", checkedAt },
+      { key: "ethereum-rpc", label: "Ethereum connection", status: "operational", checkedAt },
+    ],
+  }
+}
+
 export function mockOverview(period: AdminPeriod, state: AdminMockState, now = Date.now()): AdminOverview {
   const c = ctx(period, state, now)
   const h = headline(c)
@@ -225,6 +244,7 @@ export function mockOverview(period: AdminPeriod, state: AdminMockState, now = D
     volumeByProduct: c.quiet ? [] : split(PRODUCTS, h.volumeUsd.value, (p) => p.share),
     walletsByNetwork: c.empty ? [] : split(NETWORKS, h.totalWallets.value, (n) => n.wallets),
     recentActivity: recentActivity(c),
+    attention: attention(c, h.transactions.value, now),
   }
 }
 

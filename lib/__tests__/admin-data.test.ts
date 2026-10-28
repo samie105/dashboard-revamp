@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
 import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus } from "@/lib/admin/types"
-import { activeShare, bucketLabel, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
+import { activeShare, attentionItems, bucketLabel, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
 import { shouldRetryAdmin } from "@/hooks/admin/useAdminData"
 
 async function importUnderEnv<T>(env: Record<string, string | undefined>, loader: () => Promise<T>): Promise<T> {
@@ -179,6 +179,14 @@ describe("helpers", () => {
     for (const key of new Set([...Object.keys(o), ...Object.keys(u), ...Object.keys(w), ...Object.keys(v)])) {
       expect(METRIC_DEFINITIONS[key as keyof typeof METRIC_DEFINITIONS], key).toBeTruthy()
     }
+  })
+
+  it("lists what needs attention, worst first, and nothing when all is well", () => {
+    const calm = { failedTransactions: { count: 3, rate: 0.001 }, payoutsInReview: 0, payoutsPendingLong: 0, pendingThresholdHours: 6, services: [{ key: "x", label: "X", status: "operational" as const, checkedAt: "" }] }
+    expect(attentionItems(calm)).toEqual([])
+    const items = attentionItems({ ...calm, failedTransactions: { count: 40, rate: 0.05 }, payoutsInReview: 2, services: [{ key: "fw", label: "Payouts", status: "degraded", detail: "slow", checkedAt: "" }, { key: "sol", label: "Solana", status: "down", checkedAt: "" }] })
+    expect(items.map((i) => i.key)).toEqual(["service:sol", "payouts:review", "service:fw", "tx:failed"])
+    expect(items[1]!.title).toBe("2 payouts waiting for review")
   })
 
   it("maps HTTP statuses to error kinds", () => {
