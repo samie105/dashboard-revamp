@@ -100,6 +100,34 @@ export function kpiChange(kpi: AdminKpi): number | null {
   return ((kpi.value - kpi.previous) / Math.abs(kpi.previous)) * 100
 }
 
+/**
+ * Absolute change against the previous period (for running totals, where a
+ * percentage hides the real number: "+1,388 new" beats "▲ 2.9%"); null
+ * when there's nothing to compare with.
+ */
+export function kpiDelta(kpi: AdminKpi): number | null {
+  if (kpi.previous === null || !Number.isFinite(kpi.previous)) return null
+  return kpi.value - kpi.previous
+}
+
+/**
+ * What each figure means, shown behind the ⓘ on its card.
+ * TODO(lead): these are DRAFTS written from the task's wording; the admin
+ * backend's own definitions (what counts as "active", which legs count as
+ * volume, fiat included or not) must replace them before release.
+ */
+export const METRIC_DEFINITIONS = {
+  totalUsers: "Every registered account, all time. The change is how many joined in the period.",
+  activeUsers: "Accounts that did at least one thing on the crypto dashboard in the period.",
+  newUsers: "Accounts created in the period.",
+  volumeUsd: "The USD value of all transactions in the period.",
+  transactions: "The number of transactions in the period.",
+  averageUsd: "Volume divided by the number of transactions.",
+  totalWallets: "Every wallet created, all time. The change is how many were created in the period.",
+  activeWallets: "Wallets used for at least one transaction in the period.",
+  newWallets: "Wallets created in the period.",
+} as const
+
 /** Active as a share of total, as a percentage ("—" when there's no total). */
 export function activeShare(active: number, total: number): string {
   if (!Number.isFinite(active) || !Number.isFinite(total) || total <= 0) return "—"

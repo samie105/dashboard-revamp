@@ -16,7 +16,7 @@ import * as React from "react"
 import { DataTable, Panel, PanelHeader, type DataColumn } from "@/components/dash"
 import { useAdminWallets } from "@/hooks/admin/useAdminData"
 import type { AdminNetworkWallets } from "@/lib/admin/types"
-import { activeShare, formatCount, formatCountCompact, periodLong, walletsState } from "@/lib/admin/view"
+import { activeShare, formatCount, formatCountCompact, periodLong, walletsState, METRIC_DEFINITIONS } from "@/lib/admin/view"
 import { AdminPageHeader, AdminStatePanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
 
 function columns(period: string): DataColumn<AdminNetworkWallets>[] {
@@ -64,16 +64,16 @@ export function AdminWalletsPage() {
       ) : (
         <>
           <KpiGrid columns={3}>
-            <KpiCard label="Total wallets" kpi={data?.kpis.totalWallets} format={formatCount} period={period} dim={dim} />
+            <KpiCard label="Total wallets" definition={METRIC_DEFINITIONS.totalWallets} compare="absolute" kpi={data?.kpis.totalWallets} format={formatCount} period={period} dim={dim} />
             <KpiCard
-              label="Active wallets"
+              label="Active wallets" definition={METRIC_DEFINITIONS.activeWallets}
               kpi={data?.kpis.activeWallets}
               format={formatCount}
               period={period}
               dim={dim}
               note={data ? `${activeShare(data.kpis.activeWallets.value, data.kpis.totalWallets.value)} of all wallets` : undefined}
             />
-            <KpiCard label="New wallets" kpi={data?.kpis.newWallets} format={formatCount} period={period} dim={dim} />
+            <KpiCard label="New wallets" definition={METRIC_DEFINITIONS.newWallets} kpi={data?.kpis.newWallets} format={formatCount} period={period} dim={dim} />
           </KpiGrid>
 
           <MetricChart

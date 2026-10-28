@@ -14,7 +14,7 @@
 import * as React from "react"
 
 import { useAdminVolume } from "@/hooks/admin/useAdminData"
-import { formatCount, formatCountCompact, periodLong, volumeState } from "@/lib/admin/view"
+import { formatCount, formatCountCompact, periodLong, volumeState, METRIC_DEFINITIONS } from "@/lib/admin/view"
 import { usd, usdCompact } from "@/lib/num"
 import { AdminPageHeader, AdminStatePanel, BreakdownPanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
 
@@ -45,9 +45,9 @@ export function AdminVolumePage() {
       ) : (
         <>
           <KpiGrid columns={3}>
-            <KpiCard label="Volume" kpi={data?.kpis.volumeUsd} format={usdCompact} period={period} dim={dim} note={data ? whole(data.kpis.volumeUsd.value) : undefined} />
-            <KpiCard label="Transactions" kpi={data?.kpis.transactions} format={formatCount} period={period} dim={dim} />
-            <KpiCard label="Average transaction" kpi={data?.kpis.averageUsd} format={(v) => usd(v)} period={period} dim={dim} />
+            <KpiCard label="Volume" definition={METRIC_DEFINITIONS.volumeUsd} kpi={data?.kpis.volumeUsd} format={usdCompact} period={period} dim={dim} note={data ? whole(data.kpis.volumeUsd.value) : undefined} />
+            <KpiCard label="Transactions" definition={METRIC_DEFINITIONS.transactions} kpi={data?.kpis.transactions} format={formatCount} period={period} dim={dim} />
+            <KpiCard label="Average transaction" definition={METRIC_DEFINITIONS.averageUsd} kpi={data?.kpis.averageUsd} format={(v) => usd(v)} period={period} dim={dim} />
           </KpiGrid>
 
           <MetricChart

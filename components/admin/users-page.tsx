@@ -20,7 +20,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon, Search01Icon } from "@hugeicons/core
 import { DataTable, NeutralButton, Panel, PanelHeader, StatusBadge, type DataColumn } from "@/components/dash"
 import { useAdminUsers } from "@/hooks/admin/useAdminData"
 import type { AdminUserRow } from "@/lib/admin/types"
-import { activeShare, formatCount, formatCountCompact, periodLong, timeAgo, usersState } from "@/lib/admin/view"
+import { activeShare, formatCount, formatCountCompact, periodLong, timeAgo, usersState, METRIC_DEFINITIONS } from "@/lib/admin/view"
 import { usd, usdCompact } from "@/lib/num"
 import { cn } from "@/lib/utils"
 import { AdminPageHeader, AdminStatePanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
@@ -94,16 +94,16 @@ export function AdminUsersPage() {
       ) : (
         <>
           <KpiGrid columns={3}>
-            <KpiCard label="Total users" kpi={data?.kpis.totalUsers} format={formatCount} period={period} dim={dim} />
+            <KpiCard label="Total users" definition={METRIC_DEFINITIONS.totalUsers} compare="absolute" kpi={data?.kpis.totalUsers} format={formatCount} period={period} dim={dim} />
             <KpiCard
-              label="Active users"
+              label="Active users" definition={METRIC_DEFINITIONS.activeUsers}
               kpi={data?.kpis.activeUsers}
               format={formatCount}
               period={period}
               dim={dim}
               note={data ? `${activeShare(data.kpis.activeUsers.value, data.kpis.totalUsers.value)} of all users` : undefined}
             />
-            <KpiCard label="New users" kpi={data?.kpis.newUsers} format={formatCount} period={period} dim={dim} />
+            <KpiCard label="New users" definition={METRIC_DEFINITIONS.newUsers} kpi={data?.kpis.newUsers} format={formatCount} period={period} dim={dim} />
           </KpiGrid>
 
           <MetricChart

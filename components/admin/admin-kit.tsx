@@ -15,13 +15,13 @@
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { RefreshIcon } from "@hugeicons/core-free-icons"
+import { InformationCircleIcon, RefreshIcon } from "@hugeicons/core-free-icons"
 
 import { ChangeChip, Chip, EmptyPanel, ErrorPanel, Panel, PanelHeader, PillTabs, PriceChart, SkeletonBlock, StatePanel, UnavailableState } from "@/components/dash"
 import { Spark, UnderlineTabs } from "@/components/dashboard/redesign/ui"
 import { ADMIN_DATA_IS_MOCK } from "@/lib/admin/source"
 import { ADMIN_PERIODS, type AdminBreakdown, type AdminKpi, type AdminPeriod } from "@/lib/admin/types"
-import { bucketLabel, kpiChange, PERIOD_OPTIONS, periodLong, periodPrevious, shares, spreadTicks, timeAgo, type AdminViewState } from "@/lib/admin/view"
+import { bucketLabel, bucketUnit, kpiChange, kpiDelta, PERIOD_OPTIONS, periodLong, periodPrevious, shares, spreadTicks, timeAgo, type AdminViewState } from "@/lib/admin/view"
 import { cn } from "@/lib/utils"
 
 /* ── Frame ────────────────────────────────────────────────────────────── */
@@ -98,15 +98,75 @@ export function AdminPageHeader({
 
 /* ── Figures ──────────────────────────────────────────────────────────── */
 
+/** An absolute change: arrow + signed figure + colour (flat reads neutral). */
+function DeltaChip({ value, format }: { value: number; format: (v: number) => string }) {
+  const up = value > 0
+  const down = value < 0
+  return (
+    <span className={cn("inline-flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12px] font-semibold tabular-nums", up ? "bg-credit/[0.12] text-credit" : down ? "bg-debit/[0.12] text-debit" : "bg-foreground/[0.06] text-muted-foreground")}>
+      <span aria-hidden>{up ? "▲" : down ? "▼" : "•"}</span>
+      <span className="sr-only">{up ? "Up" : down ? "Down" : "Unchanged"}</span>
+      {up ? "+" : down ? "−" : ""}
+      {format(Math.abs(value))}
+    </span>
+  )
+}
+
 /**
  * One KPI: figure, change vs the previous period, and its trend across the
- * period. `kpi` undefined draws the skeleton; `dim` while a new period loads.
+ * period. `compare="absolute"` is for running totals (show "+1,388", not a
+ * percentage of the whole). `definition` sits behind an ⓘ that opens in
+ * place (works on touch and keyboard, unlike a hover tooltip). `kpi`
+ * undefined draws the skeleton; `dim` while a new period loads.
  */
-export function KpiCard({ label, kpi, format, period, note, dim = false }: { label: string; kpi?: AdminKpi; format: (v: number) => string; period: AdminPeriod; note?: string; dim?: boolean }) {
+export function KpiCard({
+  label,
+  kpi,
+  format,
+  period,
+  note,
+  definition,
+  compare = "percent",
+  dim = false,
+}: {
+  label: string
+  kpi?: AdminKpi
+  format: (v: number) => string
+  period: AdminPeriod
+  note?: string
+  definition?: string
+  compare?: "percent" | "absolute"
+  dim?: boolean
+}) {
+  const [explain, setExplain] = React.useState(false)
+  const definitionId = React.useId()
   const change = kpi ? kpiChange(kpi) : null
+  const delta = kpi ? kpiDelta(kpi) : null
+  const comparison = compare === "absolute"
+    ? delta === null ? null : <><DeltaChip value={delta} format={format} /><span className="truncate">in {periodLong(period)}</span></>
+    : change === null ? null : <><ChangeChip value={change} /><span className="truncate">vs {periodPrevious(period)}</span></>
   return (
     <Panel className={cn("flex min-w-0 flex-col gap-3 p-4 transition-opacity md:p-5", dim && "opacity-55")} aria-busy={!kpi || dim}>
-      <p className="truncate text-[12.5px] font-medium text-muted-foreground">{label}</p>
+      <div className="flex min-w-0 items-center gap-1">
+        <p className="truncate text-[12.5px] font-medium text-muted-foreground">{label}</p>
+        {definition && (
+          <button
+            type="button"
+            onClick={() => setExplain((v) => !v)}
+            aria-expanded={explain}
+            aria-controls={definitionId}
+            aria-label={`What "${label}" means`}
+            className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60"
+          >
+            <HugeiconsIcon icon={InformationCircleIcon} className="size-3.5" strokeWidth={2} />
+          </button>
+        )}
+      </div>
+      {definition && explain && (
+        <p id={definitionId} className="-mt-1.5 rounded-lg bg-foreground/[0.04] px-2.5 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+          {definition}
+        </p>
+      )}
       {kpi ? (
         <>
           {/* The figure gets the full width (it must never be cut off); the
@@ -118,7 +178,7 @@ export function KpiCard({ label, kpi, format, period, note, dim = false }: { lab
             <span aria-hidden className="h-7" />
           )}
           <p className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
-            {change === null ? <span>No earlier period to compare</span> : <><ChangeChip value={change} /><span className="truncate">vs {periodPrevious(period)}</span></>}
+            {comparison ?? <span>No earlier period to compare</span>}
           </p>
           {note && <p className="-mt-1.5 truncate text-[11.5px] text-muted-foreground/80">{note}</p>}
         </>
@@ -176,6 +236,7 @@ export function MetricChart<K extends string>({
       ) : (
         <div className={cn("pt-3 transition-opacity", dim && "opacity-55")} aria-busy={dim}>
           <PriceChart points={metric.values} pointLabels={labels} ticks={spreadTicks(labels)} format={metric.format} formatAxis={metric.formatAxis} height={260} />
+          <p className="mt-1 text-right text-[11px] text-muted-foreground/70">Per {bucketUnit(period)} · times in UTC</p>
         </div>
       )}
     </Panel>

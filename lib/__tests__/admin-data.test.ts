@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
 import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus } from "@/lib/admin/types"
-import { activeShare, bucketLabel, kpiChange, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
+import { activeShare, bucketLabel, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
 import { shouldRetryAdmin } from "@/hooks/admin/useAdminData"
 
 async function importUnderEnv<T>(env: Record<string, string | undefined>, loader: () => Promise<T>): Promise<T> {
@@ -155,6 +155,22 @@ describe("helpers", () => {
     expect(kpiChange({ value: 90, previous: 100, spark: [] })).toBeCloseTo(-10)
     expect(kpiChange({ value: 5, previous: 0, spark: [] })).toBeNull()
     expect(kpiChange({ value: 5, previous: null, spark: [] })).toBeNull()
+  })
+
+  it("gives running totals an absolute change", () => {
+    expect(kpiDelta({ value: 48_217, previous: 46_829, spark: [] })).toBe(1_388)
+    expect(kpiDelta({ value: 5, previous: 5, spark: [] })).toBe(0)
+    expect(kpiDelta({ value: 5, previous: null, spark: [] })).toBeNull()
+  })
+
+  it("defines every KPI the pages show", () => {
+    const o = mockOverview("7d", "ok", NOW).kpis
+    const u = mockUsers("7d", {}, "ok", NOW).kpis
+    const w = mockWallets("7d", "ok", NOW).kpis
+    const v = mockVolume("7d", "ok", NOW).kpis
+    for (const key of new Set([...Object.keys(o), ...Object.keys(u), ...Object.keys(w), ...Object.keys(v)])) {
+      expect(METRIC_DEFINITIONS[key as keyof typeof METRIC_DEFINITIONS], key).toBeTruthy()
+    }
   })
 
   it("maps HTTP statuses to error kinds", () => {

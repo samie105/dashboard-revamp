@@ -17,7 +17,7 @@ import * as React from "react"
 import { DataTable, Panel, PanelHeader, StatusBadge, type DataColumn } from "@/components/dash"
 import { useAdminOverview } from "@/hooks/admin/useAdminData"
 import type { AdminActivity } from "@/lib/admin/types"
-import { ACTIVITY_LABEL, activeShare, formatCount, formatCountCompact, overviewState, periodLong, STATUS_TONE, timeAgo } from "@/lib/admin/view"
+import { ACTIVITY_LABEL, activeShare, formatCount, formatCountCompact, overviewState, periodLong, STATUS_TONE, timeAgo, METRIC_DEFINITIONS } from "@/lib/admin/view"
 import { usd, usdCompact } from "@/lib/num"
 import { AdminPageHeader, AdminStatePanel, BreakdownPanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
 
@@ -70,17 +70,17 @@ export function AdminOverviewPage() {
       ) : (
         <>
           <KpiGrid>
-            <KpiCard label="Total users" kpi={data?.kpis.totalUsers} format={formatCount} period={period} dim={dim} />
+            <KpiCard label="Total users" definition={METRIC_DEFINITIONS.totalUsers} compare="absolute" kpi={data?.kpis.totalUsers} format={formatCount} period={period} dim={dim} />
             <KpiCard
-              label="Active users"
+              label="Active users" definition={METRIC_DEFINITIONS.activeUsers}
               kpi={data?.kpis.activeUsers}
               format={formatCount}
               period={period}
               dim={dim}
               note={data ? `${activeShare(data.kpis.activeUsers.value, data.kpis.totalUsers.value)} of all users` : undefined}
             />
-            <KpiCard label="Volume" kpi={data?.kpis.volumeUsd} format={usdCompact} period={period} dim={dim} note={data ? whole(data.kpis.volumeUsd.value) : undefined} />
-            <KpiCard label="Total wallets" kpi={data?.kpis.totalWallets} format={formatCount} period={period} dim={dim} />
+            <KpiCard label="Volume" definition={METRIC_DEFINITIONS.volumeUsd} kpi={data?.kpis.volumeUsd} format={usdCompact} period={period} dim={dim} note={data ? whole(data.kpis.volumeUsd.value) : undefined} />
+            <KpiCard label="Total wallets" definition={METRIC_DEFINITIONS.totalWallets} compare="absolute" kpi={data?.kpis.totalWallets} format={formatCount} period={period} dim={dim} />
           </KpiGrid>
 
           <MetricChart
