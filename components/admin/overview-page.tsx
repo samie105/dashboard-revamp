@@ -1,83 +1,124 @@
 "use client"
 
 /**
- * Admin overview: total users, active users and volume for the chosen
- * period (24h / 7d / 30d / 1y), with the period's volume curve.
+ * Admin overview (the analytics console): four KPIs with change vs the
+ * previous period and their trend; the main chart switching between active
+ * users, new users, volume and active wallets; volume by network and by
+ * product; wallets by network; and recent platform activity.
  *
- * States (lib/admin/view.ts overviewState): skeleton tiles while loading;
- * the previous period dimmed while a new one loads; one panel instead of the
+ * States (lib/admin/view.ts overviewState): skeletons while loading; the
+ * previous period dimmed while a new one loads; one panel instead of the
  * figures for no access, signed out, not connected, failed and an empty
- * platform; tiles plus a "no activity" panel when the period was quiet.
+ * platform; a quiet period keeps the KPIs and says so in each section.
  */
 
 import * as React from "react"
 
-import { DashScope, Panel, PanelHeader, PriceChart, SkeletonBlock } from "@/components/dash"
+import { DataTable, Panel, PanelHeader, StatusBadge, type DataColumn } from "@/components/dash"
 import { useAdminOverview } from "@/hooks/admin/useAdminData"
-import type { AdminPeriod } from "@/lib/admin/types"
-import { activeShare, bucketLabel, formatCount, overviewState, periodLong } from "@/lib/admin/view"
+import type { AdminActivity } from "@/lib/admin/types"
+import { ACTIVITY_LABEL, activeShare, formatCount, formatCountCompact, overviewState, periodLong, STATUS_TONE, timeAgo } from "@/lib/admin/view"
 import { usd, usdCompact } from "@/lib/num"
-import { ADMIN_PAGE, AdminHeader, AdminStatePanel, PeriodTabs, StatTile, blocksFigures } from "@/components/admin/admin-kit"
+import { AdminPageHeader, AdminStatePanel, BreakdownPanel, blocksFigures, KpiCard, KpiGrid, MetricChart, useAdminPeriod } from "@/components/admin/admin-kit"
 
-/** About five evenly spread axis labels. */
-function ticksFor(labels: string[]): string[] {
-  if (labels.length <= 5) return labels
-  const step = (labels.length - 1) / 4
-  return Array.from({ length: 5 }, (_, i) => labels[Math.round(i * step)] ?? "")
+const whole = (v: number) => usd(v, { min: 0, max: 0 })
+
+const ACTIVITY_COLUMNS: DataColumn<AdminActivity>[] = [
+  { key: "time", header: "Time", cell: (a) => <span className="tabular-nums text-muted-foreground">{timeAgo(a.at)}</span> },
+  { key: "user", header: "User", cell: (a) => <span className="font-medium text-foreground">{a.userLabel}</span> },
+  { key: "type", header: "Type", cell: (a) => ACTIVITY_LABEL[a.type] },
+  { key: "network", header: "Network", cell: (a) => <span className="text-muted-foreground">{a.networkLabel}</span>, showFrom: "lg" },
+  { key: "amount", header: "Amount", align: "right", cell: (a) => <span className="font-semibold tabular-nums text-foreground">{usd(a.amountUsd)}</span> },
+  { key: "status", header: "Status", align: "right", cell: (a) => <StatusBadge tone={STATUS_TONE[a.status]} label={a.status} /> },
+]
+
+function ActivityCard(a: AdminActivity) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-[13.5px] font-semibold text-foreground">{ACTIVITY_LABEL[a.type]} · {usd(a.amountUsd)}</span>
+        <span className="truncate text-[12px] text-muted-foreground">{a.userLabel} · {a.networkLabel} · {timeAgo(a.at)}</span>
+      </div>
+      <StatusBadge tone={STATUS_TONE[a.status]} label={a.status} />
+    </div>
+  )
 }
 
 export function AdminOverviewPage() {
-  const [period, setPeriod] = React.useState<AdminPeriod>("7d")
+  const [period, setPeriod] = useAdminPeriod()
   const query = useAdminOverview(period)
   const state = overviewState({ period, data: query.data, error: query.error })
   const data = state.kind === "loading" ? undefined : query.data
   const dim = state.kind === "switching"
-  const labels = React.useMemo(() => (data ? data.volume.points.map((p) => bucketLabel(p.at, data.period)) : []), [data])
+  const quiet = state.kind === "no-data"
+  const retry = () => void query.refetch()
 
   return (
-    <DashScope className={ADMIN_PAGE}>
-      <AdminHeader title="Overview" subtitle={`Users and volume across ${periodLong(period)}.`} action={<PeriodTabs value={period} onChange={setPeriod} />} />
+    <>
+      <AdminPageHeader
+        title="Overview"
+        subtitle={`Everything happening on the crypto dashboard across ${periodLong(period)}.`}
+        period={period}
+        onPeriod={setPeriod}
+        asOf={data?.asOf}
+        refreshing={query.isFetching && !query.isPending}
+        onRefresh={retry}
+      />
 
       {blocksFigures(state) ? (
-        <Panel>
-          <AdminStatePanel state={state} period={period} subject="users" onRetry={() => void query.refetch()} />
-        </Panel>
+        <AdminStatePanel state={state} period={period} subject="users" onRetry={retry} />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 md:gap-5">
-            <StatTile label="Total users" value={data ? formatCount(data.users.total) : null} sub="All time" dim={dim} />
-            <StatTile
+          <KpiGrid>
+            <KpiCard label="Total users" kpi={data?.kpis.totalUsers} format={formatCount} period={period} dim={dim} />
+            <KpiCard
               label="Active users"
-              value={data ? formatCount(data.users.active) : null}
-              sub={data ? `${activeShare(data.users.active, data.users.total)} of all users · ${periodLong(data.period)}` : undefined}
+              kpi={data?.kpis.activeUsers}
+              format={formatCount}
+              period={period}
               dim={dim}
+              note={data ? `${activeShare(data.kpis.activeUsers.value, data.kpis.totalUsers.value)} of all users` : undefined}
             />
-            <StatTile label="Volume" value={data ? usdCompact(data.volume.totalUsd) : null} sub={data ? `${usd(data.volume.totalUsd, { min: 0, max: 0 })} · ${periodLong(data.period)}` : undefined} dim={dim} />
+            <KpiCard label="Volume" kpi={data?.kpis.volumeUsd} format={usdCompact} period={period} dim={dim} note={data ? whole(data.kpis.volumeUsd.value) : undefined} />
+            <KpiCard label="Total wallets" kpi={data?.kpis.totalWallets} format={formatCount} period={period} dim={dim} />
+          </KpiGrid>
+
+          <MetricChart
+            id="admin-overview-chart"
+            title="Activity"
+            period={data?.period ?? period}
+            at={data?.series.map((p) => p.at)}
+            quiet={quiet}
+            dim={dim}
+            metrics={[
+              { key: "active", label: "Active users", values: data?.series.map((p) => p.activeUsers) ?? [], format: formatCount, formatAxis: formatCountCompact },
+              { key: "volume", label: "Volume", values: data?.series.map((p) => p.volumeUsd) ?? [], format: whole, formatAxis: usdCompact },
+              { key: "new", label: "New users", values: data?.series.map((p) => p.newUsers) ?? [], format: formatCount, formatAxis: formatCountCompact },
+              { key: "wallets", label: "Active wallets", values: data?.series.map((p) => p.activeWallets) ?? [], format: formatCount, formatAxis: formatCountCompact },
+            ]}
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-3">
+            <BreakdownPanel title="Volume by network" subtitle={periodLong(period)} items={data?.volumeByNetwork} format={usdCompact} dim={dim} emptyText={`No volume in ${periodLong(period)}.`} />
+            <BreakdownPanel title="Volume by product" subtitle={periodLong(period)} items={data?.volumeByProduct} format={usdCompact} dim={dim} emptyText={`No volume in ${periodLong(period)}.`} />
+            <BreakdownPanel title="Wallets by network" subtitle="All time" items={data?.walletsByNetwork} format={formatCount} dim={dim} emptyText="No wallets yet." />
           </div>
 
-          <Panel className="flex flex-col gap-4 p-5">
-            <PanelHeader title="Volume" subtitle={data ? `By ${data.period === "24h" ? "hour" : data.period === "1y" ? "month" : "day"}, in USD` : "In USD"} />
-            {state.kind === "no-data" ? (
-              <AdminStatePanel state={state} period={period} subject="users" onRetry={() => void query.refetch()} />
-            ) : data ? (
-              <div className={dim ? "opacity-55 transition-opacity" : "transition-opacity"} aria-busy={dim}>
-                <PriceChart
-                  points={data.volume.points.map((p) => p.usd)}
-                  pointLabels={labels}
-                  ticks={ticksFor(labels)}
-                  format={(v) => usd(v, { min: 0, max: 0 })}
-                  formatAxis={(v) => usdCompact(v)}
-                  height={240}
-                />
-              </div>
-            ) : (
-              <div role="status" aria-busy="true" aria-label="Loading volume">
-                <SkeletonBlock className="h-[240px] w-full rounded-2xl" />
-              </div>
-            )}
+          <Panel className="flex flex-col gap-3 pt-4 md:pt-5">
+            <PanelHeader className="px-4 md:px-5" title="Recent activity" subtitle="Latest transactions across the platform" />
+            <DataTable
+              label="Recent activity"
+              rows={data?.recentActivity}
+              columns={ACTIVITY_COLUMNS}
+              rowKey={(a) => a.id}
+              card={ActivityCard}
+              loading={!data}
+              empty={{ title: quiet ? "No activity in this period" : "No activity yet", description: quiet ? `Nothing happened in ${periodLong(period)}.` : "Transactions will show here as they happen." }}
+              skeletonRows={6}
+            />
           </Panel>
         </>
       )}
-    </DashScope>
+    </>
   )
 }

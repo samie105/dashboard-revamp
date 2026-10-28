@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
 
 import { AdminOverviewPage } from "@/components/admin/overview-page"
 
@@ -9,5 +10,9 @@ export const metadata: Metadata = { title: "Admin overview", robots: { index: fa
  * renders the backend's answer, including "no access".
  */
 export default function AdminPage() {
-  return <AdminOverviewPage />
+  return (
+    <Suspense fallback={null}>
+      <AdminOverviewPage />
+    </Suspense>
+  )
 }

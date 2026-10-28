@@ -1,11 +1,13 @@
 "use client"
 
 /**
- * The admin dashboard's shared pieces, in the redesign's language
- * (components/dash): the section tabs, the period picker, a stat tile with
- * its own skeleton, and one panel per non-figure state, so every admin screen
- * draws loading, refused, not connected, failed, empty and quiet periods the
- * same way.
+ * The admin console's shared pieces, in the redesign's language
+ * (components/dash on the app's tokens, both themes): the console sidebar,
+ * the page header (period, last update, refresh), KPI cards with their
+ * change and trend, the switchable main chart, breakdown bars, and one panel
+ * per non-figure state, so every admin page draws loading, switching
+ * period, no access, signed out, not connected, failed, empty and quiet
+ * periods the same way.
  *
  * Access is the backend's call (RBAC): these screens only render what it
  * answers. A 403 shows "no access"; nothing here checks a role.
@@ -13,106 +15,281 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { Analytics01Icon, DashboardSquare01Icon, RefreshIcon, UserGroupIcon, Wallet01Icon } from "@hugeicons/core-free-icons"
 
-import { Chip, EmptyPanel, ErrorPanel, Panel, PillTabs, SkeletonBlock, StatePanel, UnavailableState } from "@/components/dash"
+import { ChangeChip, Chip, EmptyPanel, ErrorPanel, Panel, PanelHeader, PillTabs, PriceChart, SkeletonBlock, StatePanel, UnavailableState } from "@/components/dash"
+import { Spark, UnderlineTabs } from "@/components/dashboard/redesign/ui"
 import { ADMIN_DATA_IS_MOCK } from "@/lib/admin/source"
-import type { AdminPeriod } from "@/lib/admin/types"
-import { PERIOD_OPTIONS, periodLong, type AdminViewState } from "@/lib/admin/view"
+import { ADMIN_PERIODS, type AdminBreakdown, type AdminKpi, type AdminPeriod } from "@/lib/admin/types"
+import { bucketLabel, kpiChange, PERIOD_OPTIONS, periodLong, periodPrevious, shares, spreadTicks, timeAgo, type AdminViewState } from "@/lib/admin/view"
 import { cn } from "@/lib/utils"
 
+/* ── Frame ────────────────────────────────────────────────────────────── */
+
 const SECTIONS = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/wallets", label: "Wallets" },
+  { href: "/admin", label: "Overview", icon: DashboardSquare01Icon },
+  { href: "/admin/users", label: "Users", icon: UserGroupIcon },
+  { href: "/admin/wallets", label: "Wallets", icon: Wallet01Icon },
+  { href: "/admin/volume", label: "Volume", icon: Analytics01Icon },
 ] as const
 
-/** Page title, the section tabs, and the "Demo data" tag while figures are mocked. */
-export function AdminHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) {
+function sectionActive(pathname: string, href: string) {
+  return href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`)
+}
+
+/** The console's own navigation: a sidebar from lg, a scrolling strip above that. Keeps `?period=` across pages. */
+export function AdminNav() {
   const pathname = usePathname()
+  const search = useSearchParams()
+  const period = search.get("period")
+  const withPeriod = (href: string) => (period ? `${href}?period=${encodeURIComponent(period)}` : href)
   return (
-    <div className="flex flex-col gap-4 px-1">
-      <nav aria-label="Admin sections" className="flex items-center gap-1">
+    <nav aria-label="Admin sections" className="lg:sticky lg:top-4 lg:self-start">
+      <p className="mb-2 hidden px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground/80 lg:block">Admin console</p>
+      <ul className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0">
         {SECTIONS.map((s) => {
-          const on = s.href === "/admin" ? pathname === "/admin" : pathname === s.href || pathname.startsWith(`${s.href}/`)
+          const on = sectionActive(pathname, s.href)
           return (
-            <Link
-              key={s.href}
-              href={s.href}
-              aria-current={on ? "page" : undefined}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-[13px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/60",
-                on ? "bg-foreground/[0.07] text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {s.label}
-            </Link>
+            <li key={s.href} className="shrink-0">
+              <Link
+                href={withPeriod(s.href)}
+                aria-current={on ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13.5px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/60",
+                  on ? "bg-foreground/[0.07] text-foreground" : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+                )}
+              >
+                <HugeiconsIcon icon={s.icon} className={cn("size-[18px]", on && "text-primary")} strokeWidth={1.8} />
+                {s.label}
+              </Link>
+            </li>
           )
         })}
-      </nav>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-[28px] font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-[32px]">{title}</h1>
-            {ADMIN_DATA_IS_MOCK && <Chip>Demo data</Chip>}
-          </div>
-          <p className="text-[14px] text-muted-foreground">{subtitle}</p>
-        </div>
-        {action}
-      </div>
-    </div>
+      </ul>
+    </nav>
   )
 }
 
-export function PeriodTabs({ value, onChange }: { value: AdminPeriod; onChange: (period: AdminPeriod) => void }) {
-  return <PillTabs label="Period" options={PERIOD_OPTIONS} value={value} onChange={onChange} />
+/** The period lives in the URL (`?period=7d`), so it survives navigation and can be shared. */
+export function useAdminPeriod(): [AdminPeriod, (period: AdminPeriod) => void] {
+  const search = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const raw = search.get("period")
+  const period = (ADMIN_PERIODS as readonly string[]).includes(raw ?? "") ? (raw as AdminPeriod) : "7d"
+  const setPeriod = React.useCallback(
+    (next: AdminPeriod) => {
+      const params = new URLSearchParams(search.toString())
+      params.set("period", next)
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    },
+    [search, router, pathname],
+  )
+  return [period, setPeriod]
 }
 
-/** One headline figure. `value` null draws its skeleton; `dim` while a new period loads. */
-export function StatTile({ label, value, sub, dim = false }: { label: string; value: React.ReactNode | null; sub?: React.ReactNode; dim?: boolean }) {
+/** Title, the "Demo data" tag while mocked, the period picker, and when the figures were computed (with refresh). */
+export function AdminPageHeader({
+  title,
+  subtitle,
+  period,
+  onPeriod,
+  asOf,
+  refreshing,
+  onRefresh,
+}: {
+  title: string
+  subtitle: string
+  period: AdminPeriod
+  onPeriod: (p: AdminPeriod) => void
+  asOf?: string
+  refreshing: boolean
+  onRefresh: () => void
+}) {
+  // Re-render the "updated" line every 30s so it doesn't go stale on screen.
+  const [, tick] = React.useReducer((n: number) => n + 1, 0)
+  React.useEffect(() => {
+    const id = setInterval(tick, 30_000)
+    return () => clearInterval(id)
+  }, [])
   return (
-    <Panel className={cn("flex min-w-0 flex-col gap-2 p-5 transition-opacity", dim && "opacity-55")} aria-busy={value === null || dim}>
-      <p className="text-[12.5px] font-medium text-muted-foreground">{label}</p>
-      {value === null ? (
+    <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <h1 className="font-display text-[26px] font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-[30px]">{title}</h1>
+          {ADMIN_DATA_IS_MOCK && <Chip>Demo data</Chip>}
+        </div>
+        <p className="text-[13.5px] text-muted-foreground">{subtitle}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12px] text-muted-foreground tabular-nums" aria-live="polite">
+          {refreshing ? "Updating…" : asOf ? `Updated ${timeAgo(asOf)}` : ""}
+        </span>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={refreshing}
+          aria-label="Refresh figures"
+          className="flex size-8 items-center justify-center rounded-full border border-foreground/[0.07] bg-foreground/[0.025] text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50"
+        >
+          <HugeiconsIcon icon={RefreshIcon} className={cn("size-4", refreshing && "animate-spin motion-reduce:animate-none")} strokeWidth={1.8} />
+        </button>
+        <PillTabs label="Period" options={PERIOD_OPTIONS} value={period} onChange={onPeriod} />
+      </div>
+    </header>
+  )
+}
+
+/* ── Figures ──────────────────────────────────────────────────────────── */
+
+/**
+ * One KPI: figure, change vs the previous period, and its trend across the
+ * period. `kpi` undefined draws the skeleton; `dim` while a new period loads.
+ */
+export function KpiCard({ label, kpi, format, period, note, dim = false }: { label: string; kpi?: AdminKpi; format: (v: number) => string; period: AdminPeriod; note?: string; dim?: boolean }) {
+  const change = kpi ? kpiChange(kpi) : null
+  return (
+    <Panel className={cn("flex min-w-0 flex-col gap-3 p-4 transition-opacity md:p-5", dim && "opacity-55")} aria-busy={!kpi || dim}>
+      <p className="truncate text-[12.5px] font-medium text-muted-foreground">{label}</p>
+      {kpi ? (
         <>
-          <SkeletonBlock className="h-8 w-32" />
-          <SkeletonBlock className="h-3 w-24" />
+          <div className="flex items-end justify-between gap-3">
+            <p className="truncate font-display text-[26px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground">{format(kpi.value)}</p>
+            {kpi.spark.length > 1 && kpi.spark.some((v) => v !== kpi.spark[0]) && <Spark points={kpi.spark} width={84} height={30} tone="brand" />}
+          </div>
+          <p className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
+            {change === null ? <span>No earlier period to compare</span> : <><ChangeChip value={change} /><span className="truncate">vs {periodPrevious(period)}</span></>}
+          </p>
+          {note && <p className="-mt-1.5 truncate text-[11.5px] text-muted-foreground/80">{note}</p>}
         </>
       ) : (
         <>
-          <p className="truncate font-display text-[28px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground">{value}</p>
-          {sub && <p className="truncate text-[12px] text-muted-foreground">{sub}</p>}
+          <div className="flex items-end justify-between gap-3">
+            <SkeletonBlock className="h-7 w-28" />
+            <SkeletonBlock className="h-7 w-20" />
+          </div>
+          <SkeletonBlock className="h-3 w-32" />
         </>
       )}
     </Panel>
   )
 }
 
-/**
- * The panel for every state that isn't figures. `subject` names what's
- * missing ("users", "wallets"); `onRetry` refetches.
- */
-export function AdminStatePanel({ state, period, subject, onRetry }: { state: AdminViewState; period: AdminPeriod; subject: string; onRetry: () => void }) {
-  switch (state.kind) {
-    case "forbidden":
-      return <StatePanel tone="warning" title="You don't have access to this" description="Your account doesn't have an admin role for this page. Ask an administrator if you need it." />
-    case "signed-out":
-      return <StatePanel tone="warning" title="Sign in again" description="Your session has ended. Sign in again to see admin data." />
-    case "unavailable":
-      return <UnavailableState title="Admin data isn't connected yet" description="These figures will appear once the admin service is wired up." />
-    case "error":
-      return <ErrorPanel title="Couldn't load admin data" message="Something went wrong on our side. Try again in a moment." onRetry={onRetry} reference={state.requestId} />
-    case "empty":
-      return <EmptyPanel title={`No ${subject} yet`} description={`Once people sign up, ${subject} will show here.`} />
-    case "no-data":
-      return <EmptyPanel title="No activity in this period" description={`Nothing happened in ${periodLong(period)}. Try a longer period.`} />
-    default:
-      return null
-  }
+export function KpiGrid({ children, columns = 4 }: { children: React.ReactNode; columns?: 3 | 4 }) {
+  return <div className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4", columns === 4 ? "xl:grid-cols-4" : "xl:grid-cols-3")}>{children}</div>
 }
+
+export type ChartMetric<K extends string> = { key: K; label: string; values: number[]; format: (v: number) => string; formatAxis: (v: number) => string }
+
+/** The main chart with a metric switch. `points` are bucket starts (ISO). */
+export function MetricChart<K extends string>({
+  id,
+  title,
+  period,
+  at,
+  metrics,
+  quiet,
+  dim,
+}: {
+  id: string
+  title: string
+  period: AdminPeriod
+  /** Bucket starts; undefined = loading. */
+  at?: string[]
+  metrics: ChartMetric<K>[]
+  quiet: boolean
+  dim: boolean
+}) {
+  const [metricKey, setMetricKey] = React.useState<K>(metrics[0]!.key)
+  const metric = metrics.find((m) => m.key === metricKey) ?? metrics[0]!
+  const labels = React.useMemo(() => (at ? at.map((a) => bucketLabel(a, period)) : []), [at, period])
+  return (
+    <Panel className="flex flex-col gap-2 p-4 md:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-2 border-b border-foreground/[0.06]">
+        <h2 className="pb-3.5 font-display text-[16px] font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
+        <UnderlineTabs id={id} options={metrics.map((m) => ({ key: m.key, label: m.label }))} value={metric.key} onChange={setMetricKey} className="-mb-px overflow-x-auto" />
+      </div>
+      {!at ? (
+        <div role="status" aria-busy="true" aria-label="Loading chart" className="pt-3">
+          <SkeletonBlock className="h-[260px] w-full rounded-2xl" />
+        </div>
+      ) : quiet || metric.values.every((v) => v === 0) ? (
+        <EmptyPanel compact title="No activity in this period" description={`Nothing to chart for ${periodLong(period)}. Try a longer period.`} />
+      ) : (
+        <div className={cn("pt-3 transition-opacity", dim && "opacity-55")} aria-busy={dim}>
+          <PriceChart points={metric.values} pointLabels={labels} ticks={spreadTicks(labels)} format={metric.format} formatAxis={metric.formatAxis} height={260} />
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+/** A ranked share list: label, figure, share bar. */
+export function BreakdownPanel({ title, subtitle, items, format, dim, emptyText }: { title: string; subtitle?: string; items?: AdminBreakdown[]; format: (v: number) => string; dim: boolean; emptyText: string }) {
+  const pct = items ? shares(items.map((i) => i.value)) : []
+  return (
+    <Panel className="flex flex-col gap-4 p-4 md:p-5">
+      <PanelHeader title={title} subtitle={subtitle} />
+      {!items ? (
+        <div role="status" aria-busy="true" aria-label={`Loading ${title}`} className="flex flex-col gap-3.5">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="flex flex-col gap-1.5">
+              <SkeletonBlock className="h-3 w-40" />
+              <SkeletonBlock className="h-2 w-full rounded-full" />
+            </div>
+          ))}
+        </div>
+      ) : items.length === 0 || items.every((i) => i.value === 0) ? (
+        <EmptyPanel compact title="Nothing to break down" description={emptyText} />
+      ) : (
+        <ul className={cn("flex flex-col gap-3.5 transition-opacity", dim && "opacity-55")}>
+          {items.map((item, i) => (
+            <li key={item.key} className="flex flex-col gap-1.5">
+              <div className="flex items-baseline justify-between gap-3 text-[13px]">
+                <span className="truncate font-semibold text-foreground">{item.label}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  <span className="font-semibold text-foreground">{format(item.value)}</span> · {pct[i]!.toFixed(pct[i]! < 10 ? 1 : 0)}%
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-foreground/[0.06]" aria-hidden>
+                <div className={cn("h-full rounded-full", i === 0 ? "bg-primary" : i === 1 ? "bg-primary/70" : i === 2 ? "bg-primary/50" : "bg-primary/30")} style={{ width: `${pct[i]}%` }} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  )
+}
+
+/* ── States ───────────────────────────────────────────────────────────── */
 
 /** States that replace the figures entirely (rather than sitting beside them). */
 export function blocksFigures(state: AdminViewState): boolean {
   return state.kind === "forbidden" || state.kind === "signed-out" || state.kind === "unavailable" || state.kind === "error" || state.kind === "empty"
 }
 
-export const ADMIN_PAGE = "ws-icon-mono [&_button:not(:disabled)]:cursor-pointer mx-auto flex w-full max-w-[1720px] flex-col gap-4 p-4 md:gap-5 md:p-6"
+/** The panel for every state that isn't figures. `subject` names what's missing ("users", "wallets"). */
+export function AdminStatePanel({ state, period, subject, onRetry }: { state: AdminViewState; period: AdminPeriod; subject: string; onRetry: () => void }) {
+  const body = (() => {
+    switch (state.kind) {
+      case "forbidden":
+        return <StatePanel tone="warning" title="You don't have access to this" description="Your account doesn't have an admin role for this page. Ask an administrator if you need it." />
+      case "signed-out":
+        return <StatePanel tone="warning" title="Sign in again" description="Your session has ended. Sign in again to see admin data." />
+      case "unavailable":
+        return <UnavailableState title="Admin data isn't connected yet" description="These figures will appear once the admin service is wired up." />
+      case "error":
+        return <ErrorPanel title="Couldn't load admin data" message="Something went wrong on our side. Try again in a moment." onRetry={onRetry} reference={state.requestId} />
+      case "empty":
+        return <EmptyPanel title={`No ${subject} yet`} description={`Once people sign up, ${subject} will show here.`} />
+      case "no-data":
+        return <EmptyPanel compact title="No activity in this period" description={`Nothing happened in ${periodLong(period)}. Try a longer period.`} />
+      default:
+        return null
+    }
+  })()
+  return body ? <Panel>{body}</Panel> : null
+}

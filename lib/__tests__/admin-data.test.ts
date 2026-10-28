@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { mockOverview, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
-import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus, type AdminOverview } from "@/lib/admin/types"
-import { activeShare, bucketLabel, overviewState, walletsState } from "@/lib/admin/view"
+import { mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
+import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus } from "@/lib/admin/types"
+import { activeShare, bucketLabel, kpiChange, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
 import { shouldRetryAdmin } from "@/hooks/admin/useAdminData"
 
 async function importUnderEnv<T>(env: Record<string, string | undefined>, loader: () => Promise<T>): Promise<T> {
@@ -39,44 +39,70 @@ describe("admin data source", () => {
   it("in a production build serves no mock figures: every call reports 'not connected'", async () => {
     const { adminData, ADMIN_DATA_IS_MOCK } = await importUnderEnv({ NODE_ENV: "production", NEXT_PUBLIC_ADMIN_MOCKS: "true" }, () => import("@/lib/admin/source"))
     expect(ADMIN_DATA_IS_MOCK).toBe(false)
-    await expect(adminData.getOverview("7d")).rejects.toMatchObject({ kind: "unavailable" })
-    await expect(adminData.getWallets("7d")).rejects.toMatchObject({ kind: "unavailable" })
+    for (const call of [adminData.getOverview("7d"), adminData.getUsers("7d", {}), adminData.getWallets("7d"), adminData.getVolume("7d")]) {
+      await expect(call).rejects.toMatchObject({ kind: "unavailable" })
+    }
   })
 })
 
-describe("mock figures", () => {
-  const now = Date.parse("2026-10-28T12:34:00Z")
+const NOW = Date.parse("2026-10-28T12:34:00Z")
 
+describe("mock figures", () => {
   it("gives each period its own bucket count, oldest first", () => {
     for (const period of ADMIN_PERIODS) {
-      const { points } = mockOverview(period, "ok", now).volume
-      expect(points).toHaveLength(PERIOD_BUCKETS[period].count)
-      expect(points.map((p) => Date.parse(p.at))).toEqual([...points.map((p) => Date.parse(p.at))].sort((a, b) => a - b))
+      const { series } = mockOverview(period, "ok", NOW)
+      expect(series).toHaveLength(PERIOD_BUCKETS[period].count)
+      const times = series.map((p) => Date.parse(p.at))
+      expect(times).toEqual([...times].sort((a, b) => a - b))
     }
   })
 
-  it("adds the buckets up to the period total, and is stable between calls", () => {
-    const a = mockOverview("30d", "ok", now)
-    expect(a.volume.totalUsd).toBe(a.volume.points.reduce((s, p) => s + p.usd, 0))
-    expect(mockOverview("30d", "ok", now)).toEqual(a)
+  it("keeps KPIs consistent with their series and breakdowns", () => {
+    const o = mockOverview("30d", "ok", NOW)
+    expect(o.kpis.volumeUsd.value).toBe(o.series.reduce((s, p) => s + p.volumeUsd, 0))
+    expect(o.kpis.volumeUsd.spark).toEqual(o.series.map((p) => p.volumeUsd))
+    expect(o.kpis.totalUsers.spark.at(-1)).toBe(o.kpis.totalUsers.value)
+    const byNetwork = o.volumeByNetwork.reduce((s, b) => s + b.value, 0)
+    expect(Math.abs(byNetwork - o.kpis.volumeUsd.value)).toBeLessThan(10)
+    expect(o.recentActivity.map((a) => Date.parse(a.at))).toEqual([...o.recentActivity.map((a) => Date.parse(a.at))].sort((a, b) => b - a))
   })
 
-  it("keeps active within total", () => {
+  it("is stable between calls and keeps active within total", () => {
+    expect(mockOverview("7d", "ok", NOW)).toEqual(mockOverview("7d", "ok", NOW))
     for (const period of ADMIN_PERIODS) {
-      const o = mockOverview(period, "ok", now)
-      const w = mockWallets(period, "ok", now)
-      expect(o.users.active).toBeLessThanOrEqual(o.users.total)
-      expect(w.active).toBeLessThanOrEqual(w.total)
+      const o = mockOverview(period, "ok", NOW)
+      const w = mockWallets(period, "ok", NOW)
+      expect(o.kpis.activeUsers.value).toBeLessThanOrEqual(o.kpis.totalUsers.value)
+      expect(w.kpis.activeWallets.value).toBeLessThanOrEqual(w.kpis.totalWallets.value)
+      for (const n of w.byNetwork) expect(n.active).toBeLessThanOrEqual(n.total)
     }
   })
 
-  it("models 'no data for this period' and an empty platform", () => {
-    const noData = mockOverview("24h", "no-data", now)
-    expect(noData.users.total).toBeGreaterThan(0)
-    expect(noData.users.active).toBe(0)
-    expect(noData.volume.totalUsd).toBe(0)
-    expect(mockOverview("24h", "empty", now).users.total).toBe(0)
-    expect(mockWallets("24h", "empty", now).total).toBe(0)
+  it("never puts a full email in user labels", () => {
+    const labels = [...mockOverview("7d", "ok", NOW).recentActivity.map((a) => a.userLabel), ...mockUsers("7d", { pageSize: 100 }, "ok", NOW).users.rows.map((u) => u.userLabel)]
+    for (const label of labels) expect(label).toMatch(/^[a-z]•••@[a-z.]+$/)
+  })
+
+  it("searches and pages users", () => {
+    const first = mockUsers("30d", { page: 1, pageSize: 20 }, "ok", NOW)
+    expect(first.users.rows).toHaveLength(20)
+    expect(first.users.totalMatching).toBe(240)
+    const last = mockUsers("30d", { page: 99, pageSize: 20 }, "ok", NOW)
+    expect(last.users.page).toBe(12)
+    const gmail = mockUsers("30d", { search: "GMAIL", pageSize: 100 }, "ok", NOW)
+    expect(gmail.users.rows.every((u) => u.userLabel.includes("gmail"))).toBe(true)
+    expect(mockUsers("30d", { search: "nobody-matches" }, "ok", NOW).users.totalMatching).toBe(0)
+  })
+
+  it("models a quiet period and an empty platform", () => {
+    const quiet = mockOverview("24h", "no-data", NOW)
+    expect(quiet.kpis.totalUsers.value).toBeGreaterThan(0)
+    expect(quiet.kpis.activeUsers.value).toBe(0)
+    expect(quiet.kpis.volumeUsd.value).toBe(0)
+    expect(quiet.recentActivity).toEqual([])
+    const empty = mockOverview("24h", "empty", NOW)
+    expect(empty.kpis.totalUsers).toMatchObject({ value: 0, previous: null })
+    expect(mockWallets("24h", "empty", NOW).byNetwork).toEqual([])
   })
 
   it("only accepts known mock states", () => {
@@ -87,7 +113,7 @@ describe("mock figures", () => {
 })
 
 describe("view states", () => {
-  const ok = mockOverview("7d", "ok", Date.parse("2026-10-28T00:00:00Z"))
+  const ok = mockOverview("7d", "ok", NOW)
 
   it("walks loading → figures", () => {
     expect(overviewState({ period: "7d" })).toEqual({ kind: "loading" })
@@ -111,17 +137,26 @@ describe("view states", () => {
     expect(overviewState({ period: "7d", error: new Error("network") })).toEqual({ kind: "error" })
   })
 
-  it("tells an empty platform from a quiet period", () => {
-    expect(overviewState({ period: "7d", data: mockOverview("7d", "empty") })).toEqual({ kind: "empty" })
-    expect(overviewState({ period: "7d", data: mockOverview("7d", "no-data") })).toEqual({ kind: "no-data" })
-    const someVolumeNoActive: AdminOverview = { ...ok, users: { ...ok.users, active: 0 } }
-    expect(overviewState({ period: "7d", data: someVolumeNoActive })).toEqual({ kind: "ready" })
-    expect(walletsState({ period: "7d", data: mockWallets("7d", "no-data") })).toEqual({ kind: "no-data" })
-    expect(walletsState({ period: "7d", data: mockWallets("7d", "empty") })).toEqual({ kind: "empty" })
+  it("tells an empty platform from a quiet period on every page", () => {
+    expect(overviewState({ period: "7d", data: mockOverview("7d", "empty", NOW) }).kind).toBe("empty")
+    expect(overviewState({ period: "7d", data: mockOverview("7d", "no-data", NOW) }).kind).toBe("no-data")
+    expect(usersState({ period: "7d", data: mockUsers("7d", {}, "empty", NOW) }).kind).toBe("empty")
+    expect(usersState({ period: "7d", data: mockUsers("7d", {}, "no-data", NOW) }).kind).toBe("no-data")
+    expect(walletsState({ period: "7d", data: mockWallets("7d", "empty", NOW) }).kind).toBe("empty")
+    expect(walletsState({ period: "7d", data: mockWallets("7d", "no-data", NOW) }).kind).toBe("no-data")
+    expect(volumeState({ period: "7d", data: mockVolume("7d", "no-data", NOW) }).kind).toBe("no-data")
+    expect(volumeState({ period: "7d", data: mockVolume("7d", "ok", NOW) }).kind).toBe("ready")
   })
 })
 
 describe("helpers", () => {
+  it("computes change vs the previous period, or nothing to compare", () => {
+    expect(kpiChange({ value: 110, previous: 100, spark: [] })).toBeCloseTo(10)
+    expect(kpiChange({ value: 90, previous: 100, spark: [] })).toBeCloseTo(-10)
+    expect(kpiChange({ value: 5, previous: 0, spark: [] })).toBeNull()
+    expect(kpiChange({ value: 5, previous: null, spark: [] })).toBeNull()
+  })
+
   it("maps HTTP statuses to error kinds", () => {
     expect(adminErrorKindForStatus(401)).toBe("unauthenticated")
     expect(adminErrorKindForStatus(403)).toBe("forbidden")
@@ -136,12 +171,17 @@ describe("helpers", () => {
     expect(shouldRetryAdmin(2, new AdminDataError("failed", "x"))).toBe(false)
   })
 
-  it("formats shares and bucket labels", () => {
+  it("formats shares, ticks, bucket labels and times", () => {
     expect(activeShare(41, 100)).toBe("41%")
     expect(activeShare(1, 400)).toBe("0.3%")
     expect(activeShare(5, 0)).toBe("—")
+    expect(shares([1, 3])).toEqual([25, 75])
+    expect(shares([0, 0])).toEqual([0, 0])
+    expect(spreadTicks(["a", "b", "c", "d", "e", "f", "g", "h", "i"], 5)).toEqual(["a", "c", "e", "g", "i"])
     expect(bucketLabel("2026-10-28T14:00:00Z", "24h")).toBe("2 PM")
     expect(bucketLabel("2026-10-28T00:00:00Z", "7d")).toBe("Oct 28")
     expect(bucketLabel("2026-10-01T00:00:00Z", "1y")).toBe("Oct")
+    expect(timeAgo("2026-10-28T12:30:00Z", NOW)).toBe("4m ago")
+    expect(timeAgo(null, NOW)).toBe("Never")
   })
 })
