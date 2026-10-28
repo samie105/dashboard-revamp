@@ -155,10 +155,14 @@ export function KpiCard({ label, kpi, format, period, note, dim = false }: { lab
       <p className="truncate text-[12.5px] font-medium text-muted-foreground">{label}</p>
       {kpi ? (
         <>
-          <div className="flex items-end justify-between gap-3">
-            <p className="truncate font-display text-[26px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground">{format(kpi.value)}</p>
-            {kpi.spark.length > 1 && kpi.spark.some((v) => v !== kpi.spark[0]) && <Spark points={kpi.spark} width={84} height={30} tone="brand" />}
-          </div>
+          {/* The figure gets the full width (it must never be cut off); the
+              trend sits under it, stretched to the card. */}
+          <p className="whitespace-nowrap font-display text-[26px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground">{format(kpi.value)}</p>
+          {kpi.spark.length > 1 && kpi.spark.some((v) => v !== kpi.spark[0]) ? (
+            <Spark points={kpi.spark} width={200} height={28} tone="brand" fluid />
+          ) : (
+            <span aria-hidden className="h-7" />
+          )}
           <p className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
             {change === null ? <span>No earlier period to compare</span> : <><ChangeChip value={change} /><span className="truncate">vs {periodPrevious(period)}</span></>}
           </p>
@@ -166,10 +170,8 @@ export function KpiCard({ label, kpi, format, period, note, dim = false }: { lab
         </>
       ) : (
         <>
-          <div className="flex items-end justify-between gap-3">
-            <SkeletonBlock className="h-7 w-28" />
-            <SkeletonBlock className="h-7 w-20" />
-          </div>
+          <SkeletonBlock className="h-[26px] w-28" />
+          <SkeletonBlock className="h-7 w-full" />
           <SkeletonBlock className="h-3 w-32" />
         </>
       )}
