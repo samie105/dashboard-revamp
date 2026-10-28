@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
+import { mockFiat, mockOverview, mockUsers, mockVolume, mockWallets, parseMockState, PERIOD_BUCKETS } from "@/lib/admin/mock"
 import { AdminDataError, ADMIN_PERIODS, adminErrorKindForStatus } from "@/lib/admin/types"
-import { activeShare, attentionItems, bucketLabel, funnelRows, retentionShade, filterActivity, safeExternalUrl, toCsv, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
+import { activeShare, attentionItems, bucketLabel, fiatState, funnelRows, retentionShade, filterActivity, safeExternalUrl, toCsv, kpiChange, kpiDelta, METRIC_DEFINITIONS, overviewState, shares, spreadTicks, timeAgo, usersState, volumeState, walletsState } from "@/lib/admin/view"
 import { shouldRetryAdmin } from "@/hooks/admin/useAdminData"
 
 async function importUnderEnv<T>(env: Record<string, string | undefined>, loader: () => Promise<T>): Promise<T> {
@@ -39,7 +39,7 @@ describe("admin data source", () => {
   it("in a production build serves no mock figures: every call reports 'not connected'", async () => {
     const { adminData, ADMIN_DATA_IS_MOCK } = await importUnderEnv({ NODE_ENV: "production", NEXT_PUBLIC_ADMIN_MOCKS: "true" }, () => import("@/lib/admin/source"))
     expect(ADMIN_DATA_IS_MOCK).toBe(false)
-    for (const call of [adminData.getOverview("7d"), adminData.getUsers("7d", {}), adminData.getWallets("7d"), adminData.getVolume("7d")]) {
+    for (const call of [adminData.getOverview("7d"), adminData.getUsers("7d", {}), adminData.getWallets("7d"), adminData.getVolume("7d"), adminData.getFiat("7d")]) {
       await expect(call).rejects.toMatchObject({ kind: "unavailable" })
     }
   })
@@ -114,6 +114,17 @@ describe("mock figures", () => {
     const empty = mockOverview("24h", "empty", NOW)
     expect(empty.kpis.totalUsers).toMatchObject({ value: 0, previous: null })
     expect(mockWallets("24h", "empty", NOW).byNetwork).toEqual([])
+  })
+
+  it("keeps fiat figures consistent with their series", () => {
+    const f = mockFiat("30d", "ok", NOW)
+    expect(f.series).toHaveLength(30)
+    expect(f.previousSeries).toHaveLength(30)
+    expect(f.kpis.buyVolumeUsd.value).toBe(f.series.reduce((s, p) => s + p.buyUsd, 0))
+    expect(f.kpis.orders.value).toBe(f.series.reduce((s, p) => s + p.orders, 0))
+    for (const p of f.payoutProviders) expect(p.successRate).toBeLessThanOrEqual(1)
+    expect(fiatState({ period: "30d", data: f }).kind).toBe("ready")
+    expect(fiatState({ period: "30d", data: mockFiat("30d", "no-data", NOW) }).kind).toBe("no-data")
   })
 
   it("only accepts known mock states", () => {

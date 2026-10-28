@@ -23,6 +23,7 @@ const notConnected: AdminDataSource = {
   async getUsers() { throw notConnectedError() },
   async getWallets() { throw notConnectedError() },
   async getVolume() { throw notConnectedError() },
+  async getFiat() { throw notConnectedError() },
 }
 
 // The mock is loaded on demand, behind the gate, so a production bundle never
@@ -33,6 +34,7 @@ const mock: AdminDataSource = {
   getUsers: async (period, query, options) => (await loadMock()).getUsers(period, query, options),
   getWallets: async (period, options) => (await loadMock()).getWallets(period, options),
   getVolume: async (period, options) => (await loadMock()).getVolume(period, options),
+  getFiat: async (period, options) => (await loadMock()).getFiat(period, options),
 }
 
 export const adminData: AdminDataSource = ADMIN_MOCKS_ENABLED ? mock : notConnected

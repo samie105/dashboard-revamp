@@ -11,6 +11,7 @@ import {
   type AdminActivityStatus,
   type AdminActivityType,
   type AdminAttention,
+  type AdminFiat,
   type AdminKpi,
   type AdminOverview,
   type AdminPeriod,
@@ -96,6 +97,9 @@ export const walletsState = (input: { period: AdminPeriod; data?: AdminWallets; 
 export const volumeState = (input: { period: AdminPeriod; data?: AdminVolume; error?: unknown }) =>
   decide(input, () => false, (d) => d.kpis.volumeUsd.value === 0 && d.kpis.transactions.value === 0)
 
+export const fiatState = (input: { period: AdminPeriod; data?: AdminFiat; error?: unknown }) =>
+  decide(input, () => false, (d) => d.kpis.orders.value === 0)
+
 /** Change against the previous period, in percent; null when there's nothing to compare with. */
 export function kpiChange(kpi: AdminKpi): number | null {
   if (kpi.previous === null || !Number.isFinite(kpi.previous) || kpi.previous === 0) return null
@@ -128,6 +132,11 @@ export const METRIC_DEFINITIONS = {
   totalWallets: "Every wallet created, all time. The change is how many were created in the period.",
   activeWallets: "Wallets used for at least one transaction in the period.",
   newWallets: "Wallets created in the period.",
+  buyVolumeUsd: "USD value of crypto bought with local money in the period.",
+  sellVolumeUsd: "USD value of crypto sold to bank accounts in the period.",
+  orders: "Buy and sell orders created in the period.",
+  payoutSuccessPct: "Share of bank payouts in the period that completed.",
+  averagePayoutMinutes: "Average time from the crypto arriving to the bank payout completing.",
 } as const
 
 /** Active as a share of total, as a percentage ("—" when there's no total). */

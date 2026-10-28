@@ -99,11 +99,15 @@ export function AdminPageHeader({
 /* ── Figures ──────────────────────────────────────────────────────────── */
 
 /** An absolute change: arrow + signed figure + colour (flat reads neutral). */
-function DeltaChip({ value, format }: { value: number; format: (v: number) => string }) {
+function DeltaChip({ value, format, lowerIsBetter = false }: { value: number; format: (v: number) => string; lowerIsBetter?: boolean }) {
   const up = value > 0
   const down = value < 0
+  // Colour says good/bad, the arrow says direction: for "lower is better"
+  // figures (payout time) a rise is red.
+  const good = lowerIsBetter ? down : up
+  const bad = lowerIsBetter ? up : down
   return (
-    <span className={cn("inline-flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12px] font-semibold tabular-nums", up ? "bg-credit/[0.12] text-credit" : down ? "bg-debit/[0.12] text-debit" : "bg-foreground/[0.06] text-muted-foreground")}>
+    <span className={cn("inline-flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12px] font-semibold tabular-nums", good ? "bg-credit/[0.12] text-credit" : bad ? "bg-debit/[0.12] text-debit" : "bg-foreground/[0.06] text-muted-foreground")}>
       <span aria-hidden>{up ? "▲" : down ? "▼" : "•"}</span>
       <span className="sr-only">{up ? "Up" : down ? "Down" : "Unchanged"}</span>
       {up ? "+" : down ? "−" : ""}
@@ -127,6 +131,7 @@ export function KpiCard({
   note,
   definition,
   compare = "percent",
+  lowerIsBetter = false,
   dim = false,
 }: {
   label: string
@@ -136,6 +141,8 @@ export function KpiCard({
   note?: string
   definition?: string
   compare?: "percent" | "absolute"
+  /** For figures where a fall is good (e.g. payout time): flips the change colour. Absolute comparisons only. */
+  lowerIsBetter?: boolean
   dim?: boolean
 }) {
   const [explain, setExplain] = React.useState(false)
@@ -143,7 +150,7 @@ export function KpiCard({
   const change = kpi ? kpiChange(kpi) : null
   const delta = kpi ? kpiDelta(kpi) : null
   const comparison = compare === "absolute"
-    ? delta === null ? null : <><DeltaChip value={delta} format={format} /><span className="hidden truncate sm:inline">in {periodLong(period)}</span></>
+    ? delta === null ? null : <><DeltaChip value={delta} format={format} lowerIsBetter={lowerIsBetter} /><span className="hidden truncate sm:inline">in {periodLong(period)}</span></>
     : change === null ? null : <><ChangeChip value={change} /><span className="hidden truncate sm:inline">vs {periodPrevious(period)}</span></>
   return (
     <Panel className={cn("flex min-w-0 flex-col gap-2.5 p-3.5 transition-opacity sm:gap-3 sm:p-4 md:p-5", dim && "opacity-55")} aria-busy={!kpi || dim}>

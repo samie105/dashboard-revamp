@@ -161,6 +161,37 @@ export type AdminVolume = {
   byProduct: AdminBreakdown[]
 }
 
+/** One time bucket of fiat activity (same buckets as AdminSeriesPoint). */
+export type AdminFiatPoint = { at: string; buyUsd: number; sellUsd: number; orders: number }
+
+export type AdminPayoutProvider = {
+  key: string
+  label: string
+  payouts: number
+  /** Share of payouts that completed, 0–1. */
+  successRate: number
+  averageMinutes: number | null
+}
+
+/** Fiat ramp: buying crypto with local money and selling it to a bank account. */
+export type AdminFiat = {
+  period: AdminPeriod
+  asOf: string
+  kpis: {
+    buyVolumeUsd: AdminKpi
+    sellVolumeUsd: AdminKpi
+    orders: AdminKpi
+    /** Completed payouts as a percentage, 0–100. */
+    payoutSuccessPct: AdminKpi
+    averagePayoutMinutes: AdminKpi
+  }
+  series: AdminFiatPoint[]
+  previousSeries: AdminFiatPoint[]
+  ordersByStatus: AdminBreakdown[]
+  volumeByCurrency: AdminBreakdown[]
+  payoutProviders: AdminPayoutProvider[]
+}
+
 export type AdminRequestOptions = { signal?: AbortSignal }
 
 /** What every admin screen reads through. One implementation is live at a time (source.ts). */
@@ -169,6 +200,7 @@ export interface AdminDataSource {
   getUsers(period: AdminPeriod, query: AdminUsersQuery, options?: AdminRequestOptions): Promise<AdminUsers>
   getWallets(period: AdminPeriod, options?: AdminRequestOptions): Promise<AdminWallets>
   getVolume(period: AdminPeriod, options?: AdminRequestOptions): Promise<AdminVolume>
+  getFiat(period: AdminPeriod, options?: AdminRequestOptions): Promise<AdminFiat>
 }
 
 /**

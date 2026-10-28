@@ -10,6 +10,7 @@ export const adminQueryKeys = {
   users: (period: AdminPeriod, query: AdminUsersQuery) => ["admin", "users", period, query.search ?? "", query.page ?? 1, query.pageSize ?? 20, query.sort ?? "joined"] as const,
   wallets: (period: AdminPeriod) => ["admin", "wallets", period] as const,
   volume: (period: AdminPeriod) => ["admin", "volume", period] as const,
+  fiat: (period: AdminPeriod) => ["admin", "fiat", period] as const,
 }
 
 /** A refusal or "not connected" won't change on retry; anything else gets two more tries. */
@@ -43,4 +44,8 @@ export function useAdminWallets(period: AdminPeriod) {
 
 export function useAdminVolume(period: AdminPeriod) {
   return useQuery({ queryKey: adminQueryKeys.volume(period), queryFn: ({ signal }) => adminData.getVolume(period, { signal }), ...COMMON })
+}
+
+export function useAdminFiat(period: AdminPeriod) {
+  return useQuery({ queryKey: adminQueryKeys.fiat(period), queryFn: ({ signal }) => adminData.getFiat(period, { signal }), ...COMMON })
 }

@@ -14,7 +14,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Analytics01Icon, ArrowLeft01Icon, DashboardSquare01Icon, UserGroupIcon, Wallet01Icon } from "@hugeicons/core-free-icons"
+import { Analytics01Icon, ArrowLeft01Icon, BankIcon, DashboardSquare01Icon, UserGroupIcon, Wallet01Icon } from "@hugeicons/core-free-icons"
 
 import { ThemeToggle } from "@/components/theme-toggle"
 import { cn } from "@/lib/utils"
@@ -24,6 +24,7 @@ const SECTIONS = [
   { href: "/admin/users", label: "Users", icon: UserGroupIcon },
   { href: "/admin/wallets", label: "Wallets", icon: Wallet01Icon },
   { href: "/admin/volume", label: "Volume", icon: Analytics01Icon },
+  { href: "/admin/fiat", label: "Fiat", icon: BankIcon },
 ] as const
 
 function sectionActive(pathname: string, href: string) {

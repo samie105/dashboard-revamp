@@ -20,6 +20,8 @@ import {
   type AdminAttention,
   type AdminBreakdown,
   type AdminDataSource,
+  type AdminFiat,
+  type AdminFiatPoint,
   type AdminKpi,
   type AdminNetworkWallets,
   type AdminOverview,
@@ -346,6 +348,61 @@ export function mockVolume(period: AdminPeriod, state: AdminMockState, now = Dat
   }
 }
 
+const FIAT_CURRENCIES = [
+  { key: "NGN", label: "Nigerian naira (NGN)", share: 0.71 },
+  { key: "GHS", label: "Ghanaian cedi (GHS)", share: 0.11 },
+  { key: "KES", label: "Kenyan shilling (KES)", share: 0.09 },
+  { key: "USD", label: "US dollar (USD)", share: 0.06 },
+  { key: "ZAR", label: "South African rand (ZAR)", share: 0.03 },
+] as const
+
+export function mockFiat(period: AdminPeriod, state: AdminMockState, now = Date.now()): AdminFiat {
+  const c = ctx(period, state, now)
+  const h = headline(c)
+  const fiatPoints = (points: AdminSeriesPoint[], seed: number): AdminFiatPoint[] => {
+    const random = seeded(seed)
+    return points.map((p) => {
+      const buyUsd = Math.round(p.volumeUsd * (0.1 + random() * 0.04))
+      const sellUsd = Math.round(p.volumeUsd * (0.07 + random() * 0.04))
+      return { at: p.at, buyUsd, sellUsd, orders: Math.round((buyUsd + sellUsd) / 190) }
+    })
+  }
+  const series = fiatPoints(h.series, SEED[period] + 50)
+  const before = fiatPoints(h.before, SEED[period] + 51)
+  const total = (pts: AdminFiatPoint[], k: "buyUsd" | "sellUsd" | "orders") => pts.reduce((s, p) => s + p[k], 0)
+  const orders = total(series, "orders")
+  const statuses = [
+    { key: "completed", label: "Completed", share: 0.9 },
+    { key: "processing", label: "Processing", share: 0.055 },
+    { key: "failed", label: "Failed", share: 0.035 },
+    { key: "manual_review", label: "Manual review", share: 0.01 },
+  ] as const
+  const prev = (v: number) => (c.empty ? null : v)
+  return {
+    period,
+    asOf: new Date(now).toISOString(),
+    kpis: {
+      buyVolumeUsd: kpi(total(series, "buyUsd"), prev(total(before, "buyUsd")), series.map((p) => p.buyUsd)),
+      sellVolumeUsd: kpi(total(series, "sellUsd"), prev(total(before, "sellUsd")), series.map((p) => p.sellUsd)),
+      orders: kpi(orders, prev(total(before, "orders")), series.map((p) => p.orders)),
+      payoutSuccessPct: kpi(c.quiet ? 0 : 97.4, prev(96.9), series.map((_, i) => (c.quiet ? 0 : 96 + ((i * 7) % 3)))),
+      averagePayoutMinutes: kpi(c.quiet ? 0 : 6.2, prev(7.1), series.map((_, i) => (c.quiet ? 0 : 5 + ((i * 5) % 4)))),
+    },
+    series,
+    previousSeries: before,
+    ordersByStatus: c.quiet ? [] : split(statuses, orders, (s) => s.share),
+    volumeByCurrency: c.quiet ? [] : split(FIAT_CURRENCIES, total(series, "buyUsd") + total(series, "sellUsd"), (cur) => cur.share),
+    payoutProviders: c.quiet
+      ? []
+      : [
+          { key: "flutterwave", label: "Flutterwave", payouts: Math.round(orders * 0.36), successRate: 0.968, averageMinutes: 7.4 },
+          { key: "paystack", label: "Paystack", payouts: Math.round(orders * 0.08), successRate: 0.991, averageMinutes: 4.1 },
+          { key: "onswitch", label: "OnSwitch", payouts: Math.round(orders * 0.04), successRate: 0.95, averageMinutes: 11.8 },
+          { key: "bridge", label: "Bridge (USD)", payouts: Math.round(orders * 0.03), successRate: 0.99, averageMinutes: null },
+        ],
+  }
+}
+
 /** Wait like a network call would, and stop if the caller gives up. */
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -373,4 +430,5 @@ export const mockAdminData: AdminDataSource = {
   getUsers: (period, query, options) => respond((state) => mockUsers(period, query, state), options?.signal),
   getWallets: (period, options) => respond((state) => mockWallets(period, state), options?.signal),
   getVolume: (period, options) => respond((state) => mockVolume(period, state), options?.signal),
+  getFiat: (period, options) => respond((state) => mockFiat(period, state), options?.signal),
 }
