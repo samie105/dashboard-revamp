@@ -58,8 +58,8 @@ export function AdminVolumePage() {
             quiet={state.kind === "no-data"}
             dim={dim}
             metrics={[
-              { key: "volume", label: "Volume", values: data?.series.map((p) => p.volumeUsd) ?? [], format: whole, formatAxis: usdCompact },
-              { key: "transactions", label: "Transactions", values: data?.series.map((p) => p.transactions) ?? [], format: formatCount, formatAxis: formatCountCompact },
+              { key: "volume", label: "Volume", values: data?.series.map((p) => p.volumeUsd) ?? [], previous: data?.previousSeries.map((p) => p.volumeUsd), format: whole, formatAxis: usdCompact },
+              { key: "transactions", label: "Transactions", values: data?.series.map((p) => p.transactions) ?? [], previous: data?.previousSeries.map((p) => p.transactions), format: formatCount, formatAxis: formatCountCompact },
             ]}
           />
 

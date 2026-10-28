@@ -93,10 +93,10 @@ export function AdminOverviewPage() {
             quiet={quiet}
             dim={dim}
             metrics={[
-              { key: "active", label: "Active users", values: data?.series.map((p) => p.activeUsers) ?? [], format: formatCount, formatAxis: formatCountCompact },
-              { key: "volume", label: "Volume", values: data?.series.map((p) => p.volumeUsd) ?? [], format: whole, formatAxis: usdCompact },
-              { key: "new", label: "New users", values: data?.series.map((p) => p.newUsers) ?? [], format: formatCount, formatAxis: formatCountCompact },
-              { key: "wallets", label: "Active wallets", values: data?.series.map((p) => p.activeWallets) ?? [], format: formatCount, formatAxis: formatCountCompact },
+              { key: "active", label: "Active users", values: data?.series.map((p) => p.activeUsers) ?? [], previous: data?.previousSeries.map((p) => p.activeUsers), format: formatCount, formatAxis: formatCountCompact },
+              { key: "volume", label: "Volume", values: data?.series.map((p) => p.volumeUsd) ?? [], previous: data?.previousSeries.map((p) => p.volumeUsd), format: whole, formatAxis: usdCompact },
+              { key: "new", label: "New users", values: data?.series.map((p) => p.newUsers) ?? [], previous: data?.previousSeries.map((p) => p.newUsers), format: formatCount, formatAxis: formatCountCompact },
+              { key: "wallets", label: "Active wallets", values: data?.series.map((p) => p.activeWallets) ?? [], previous: data?.previousSeries.map((p) => p.activeWallets), format: formatCount, formatAxis: formatCountCompact },
             ]}
           />
 

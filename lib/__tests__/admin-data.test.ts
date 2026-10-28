@@ -50,8 +50,11 @@ const NOW = Date.parse("2026-10-28T12:34:00Z")
 describe("mock figures", () => {
   it("gives each period its own bucket count, oldest first", () => {
     for (const period of ADMIN_PERIODS) {
-      const { series } = mockOverview(period, "ok", NOW)
+      const { series, previousSeries } = mockOverview(period, "ok", NOW)
       expect(series).toHaveLength(PERIOD_BUCKETS[period].count)
+      // The comparison line needs one previous bucket per current bucket, all earlier.
+      expect(previousSeries).toHaveLength(series.length)
+      expect(Date.parse(previousSeries.at(-1)!.at)).toBeLessThan(Date.parse(series[0]!.at))
       const times = series.map((p) => Date.parse(p.at))
       expect(times).toEqual([...times].sort((a, b) => a - b))
     }

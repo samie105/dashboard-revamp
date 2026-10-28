@@ -82,6 +82,8 @@ export type AdminOverview = {
   asOf: string
   kpis: { totalUsers: AdminKpi; activeUsers: AdminKpi; volumeUsd: AdminKpi; totalWallets: AdminKpi }
   series: AdminSeriesPoint[]
+  /** The period before, bucketed the same way (same length), for the comparison line. */
+  previousSeries: AdminSeriesPoint[]
   volumeByNetwork: AdminBreakdown[]
   volumeByProduct: AdminBreakdown[]
   walletsByNetwork: AdminBreakdown[]
@@ -109,6 +111,8 @@ export type AdminUsers = {
   asOf: string
   kpis: { totalUsers: AdminKpi; activeUsers: AdminKpi; newUsers: AdminKpi }
   series: AdminSeriesPoint[]
+  /** The period before, bucketed the same way (same length), for the comparison line. */
+  previousSeries: AdminSeriesPoint[]
   users: { rows: AdminUserRow[]; totalMatching: number; page: number; pageSize: number; search: string }
 }
 
@@ -119,6 +123,8 @@ export type AdminWallets = {
   asOf: string
   kpis: { totalWallets: AdminKpi; activeWallets: AdminKpi; newWallets: AdminKpi }
   series: AdminSeriesPoint[]
+  /** The period before, bucketed the same way (same length), for the comparison line. */
+  previousSeries: AdminSeriesPoint[]
   byNetwork: AdminNetworkWallets[]
 }
 
@@ -127,6 +133,8 @@ export type AdminVolume = {
   asOf: string
   kpis: { volumeUsd: AdminKpi; transactions: AdminKpi; averageUsd: AdminKpi }
   series: AdminSeriesPoint[]
+  /** The period before, bucketed the same way (same length), for the comparison line. */
+  previousSeries: AdminSeriesPoint[]
   byNetwork: AdminBreakdown[]
   byProduct: AdminBreakdown[]
 }

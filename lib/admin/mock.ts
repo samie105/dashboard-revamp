@@ -240,6 +240,7 @@ export function mockOverview(period: AdminPeriod, state: AdminMockState, now = D
     asOf: new Date(now).toISOString(),
     kpis: { totalUsers: h.totalUsers, activeUsers: h.activeUsers, volumeUsd: h.volumeUsd, totalWallets: h.totalWallets },
     series: h.series,
+    previousSeries: c.empty ? h.before.map((p) => ({ ...p, activeUsers: 0, newUsers: 0, volumeUsd: 0, transactions: 0, activeWallets: 0, newWallets: 0 })) : h.before,
     volumeByNetwork: c.quiet ? [] : split(NETWORKS, h.volumeUsd.value, (n) => n.volume),
     volumeByProduct: c.quiet ? [] : split(PRODUCTS, h.volumeUsd.value, (p) => p.share),
     walletsByNetwork: c.empty ? [] : split(NETWORKS, h.totalWallets.value, (n) => n.wallets),
@@ -261,6 +262,7 @@ export function mockUsers(period: AdminPeriod, query: AdminUsersQuery, state: Ad
     asOf: new Date(now).toISOString(),
     kpis: { totalUsers: h.totalUsers, activeUsers: h.activeUsers, newUsers: h.newUsers },
     series: h.series,
+    previousSeries: c.empty ? h.before.map((p) => ({ ...p, activeUsers: 0, newUsers: 0, volumeUsd: 0, transactions: 0, activeWallets: 0, newWallets: 0 })) : h.before,
     users: { rows: matching.slice((page - 1) * pageSize, page * pageSize), totalMatching: matching.length, page, pageSize, search },
   }
 }
@@ -276,6 +278,7 @@ export function mockWallets(period: AdminPeriod, state: AdminMockState, now = Da
     asOf: new Date(now).toISOString(),
     kpis: { totalWallets: h.totalWallets, activeWallets: h.activeWallets, newWallets: h.newWallets },
     series: h.series,
+    previousSeries: c.empty ? h.before.map((p) => ({ ...p, activeUsers: 0, newUsers: 0, volumeUsd: 0, transactions: 0, activeWallets: 0, newWallets: 0 })) : h.before,
     byNetwork,
   }
 }
@@ -297,6 +300,7 @@ export function mockVolume(period: AdminPeriod, state: AdminMockState, now = Dat
       ),
     },
     series: h.series,
+    previousSeries: c.empty ? h.before.map((p) => ({ ...p, activeUsers: 0, newUsers: 0, volumeUsd: 0, transactions: 0, activeWallets: 0, newWallets: 0 })) : h.before,
     byNetwork: c.quiet ? [] : split(NETWORKS, h.volumeUsd.value, (n) => n.volume),
     byProduct: c.quiet ? [] : split(PRODUCTS, h.volumeUsd.value, (p) => p.share),
   }

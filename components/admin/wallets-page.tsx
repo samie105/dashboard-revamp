@@ -84,8 +84,8 @@ export function AdminWalletsPage() {
             quiet={state.kind === "no-data"}
             dim={dim}
             metrics={[
-              { key: "active", label: "Active wallets", values: data?.series.map((p) => p.activeWallets) ?? [], format: formatCount, formatAxis: formatCountCompact },
-              { key: "new", label: "New wallets", values: data?.series.map((p) => p.newWallets) ?? [], format: formatCount, formatAxis: formatCountCompact },
+              { key: "active", label: "Active wallets", values: data?.series.map((p) => p.activeWallets) ?? [], previous: data?.previousSeries.map((p) => p.activeWallets), format: formatCount, formatAxis: formatCountCompact },
+              { key: "new", label: "New wallets", values: data?.series.map((p) => p.newWallets) ?? [], previous: data?.previousSeries.map((p) => p.newWallets), format: formatCount, formatAxis: formatCountCompact },
             ]}
           />
 

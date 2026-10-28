@@ -114,8 +114,8 @@ export function AdminUsersPage() {
             quiet={state.kind === "no-data"}
             dim={dim}
             metrics={[
-              { key: "active", label: "Active users", values: data?.series.map((p) => p.activeUsers) ?? [], format: formatCount, formatAxis: formatCountCompact },
-              { key: "new", label: "New users", values: data?.series.map((p) => p.newUsers) ?? [], format: formatCount, formatAxis: formatCountCompact },
+              { key: "active", label: "Active users", values: data?.series.map((p) => p.activeUsers) ?? [], previous: data?.previousSeries.map((p) => p.activeUsers), format: formatCount, formatAxis: formatCountCompact },
+              { key: "new", label: "New users", values: data?.series.map((p) => p.newUsers) ?? [], previous: data?.previousSeries.map((p) => p.newUsers), format: formatCount, formatAxis: formatCountCompact },
             ]}
           />
 

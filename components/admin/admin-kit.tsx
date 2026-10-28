@@ -199,7 +199,7 @@ export function KpiGrid({ children, columns = 4 }: { children: React.ReactNode; 
   return <div className={cn("grid grid-cols-2 gap-3 md:gap-4", columns === 4 ? "xl:grid-cols-4" : "[&>*:last-child:nth-child(odd)]:col-span-2 xl:grid-cols-3 xl:[&>*:last-child:nth-child(odd)]:col-span-1")}>{children}</div>
 }
 
-export type ChartMetric<K extends string> = { key: K; label: string; values: number[]; format: (v: number) => string; formatAxis: (v: number) => string }
+export type ChartMetric<K extends string> = { key: K; label: string; values: number[]; previous?: number[]; format: (v: number) => string; formatAxis: (v: number) => string }
 
 /** The main chart with a metric switch. `points` are bucket starts (ISO). */
 export function MetricChart<K extends string>({
@@ -221,6 +221,7 @@ export function MetricChart<K extends string>({
   dim: boolean
 }) {
   const [metricKey, setMetricKey] = React.useState<K>(metrics[0]!.key)
+  const [comparing, setComparing] = React.useState(true)
   const metric = metrics.find((m) => m.key === metricKey) ?? metrics[0]!
   const labels = React.useMemo(() => (at ? at.map((a) => bucketLabel(a, period)) : []), [at, period])
   return (
@@ -237,8 +238,29 @@ export function MetricChart<K extends string>({
         <EmptyPanel compact title="No activity in this period" description={`Nothing to chart for ${periodLong(period)}. Try a longer period.`} />
       ) : (
         <div className={cn("pt-3 transition-opacity", dim && "opacity-55")} aria-busy={dim}>
-          <PriceChart points={metric.values} pointLabels={labels} ticks={spreadTicks(labels)} format={metric.format} formatAxis={metric.formatAxis} height={260} />
-          <p className="mt-1 text-right text-[11px] text-muted-foreground/70">Per {bucketUnit(period)} · times in UTC</p>
+          <PriceChart
+            points={metric.values}
+            compare={comparing ? metric.previous : undefined}
+            compareLabel={periodPrevious(period).replace(/^p/, "P")}
+            pointLabels={labels}
+            ticks={spreadTicks(labels)}
+            format={metric.format}
+            formatAxis={metric.formatAxis}
+            height={260}
+          />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-muted-foreground">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5"><span aria-hidden className="h-0.5 w-4 rounded-full bg-primary" />This period</span>
+              {metric.previous && (
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <input type="checkbox" checked={comparing} onChange={(e) => setComparing(e.target.checked)} className="size-3.5 accent-[var(--primary)]" />
+                  <span aria-hidden className="w-4 border-t-[1.5px] border-dashed border-muted-foreground/60" />
+                  {periodPrevious(period).replace(/^p/, "P")}
+                </label>
+              )}
+            </div>
+            <span className="text-muted-foreground/70">Per {bucketUnit(period)} · times in UTC</span>
+          </div>
         </div>
       )}
     </Panel>
