@@ -254,7 +254,6 @@ function attention(c: Ctx, transactions: number, now: number): AdminAttention {
     pendingThresholdHours: 6,
     services: [
       { key: "flutterwave", label: "Bank payouts (Flutterwave)", status: "degraded", detail: "Exchange rates endpoint failing; payouts still sending", checkedAt },
-      { key: "paystack", label: "Bank payouts (Paystack)", status: "operational", checkedAt },
       { key: "rates", label: "Exchange rate feed", status: "operational", checkedAt },
       { key: "solana-rpc", label: "Solana connection", status: "operational", checkedAt },
       { key: "ethereum-rpc", label: "Ethereum connection", status: "operational", checkedAt },
@@ -420,7 +419,6 @@ export function mockFiat(period: AdminPeriod, state: AdminMockState, now = Date.
       ? []
       : [
           { key: "flutterwave", label: "Flutterwave", payouts: Math.round(orders * 0.36), successRate: 0.968, averageMinutes: 7.4 },
-          { key: "paystack", label: "Paystack", payouts: Math.round(orders * 0.08), successRate: 0.991, averageMinutes: 4.1 },
           { key: "onswitch", label: "OnSwitch", payouts: Math.round(orders * 0.04), successRate: 0.95, averageMinutes: 11.8 },
           { key: "bridge", label: "Bridge (USD)", payouts: Math.round(orders * 0.03), successRate: 0.99, averageMinutes: null },
         ],
