@@ -29,9 +29,13 @@ const notConnected: AdminDataSource = {
   async recordEvent() {},
 }
 
-// The mock is loaded on demand, behind the gate, so a production bundle never
-// executes it.
-const loadMock = () => import("@/lib/admin/mock").then((m) => m.mockAdminData)
+// The mock's import sits behind `process.env.NODE_ENV`, which the bundler
+// replaces with a literal at build time: in a production build the branch is
+// dead and the mock module isn't bundled at all (not merely never run).
+const loadMock: () => Promise<AdminDataSource> =
+  process.env.NODE_ENV === "development"
+    ? () => import("@/lib/admin/mock").then((m) => m.mockAdminData)
+    : () => Promise.reject(notConnectedError())
 const mock: AdminDataSource = {
   getOverview: async (period, options) => (await loadMock()).getOverview(period, options),
   getUsers: async (period, query, options) => (await loadMock()).getUsers(period, query, options),
