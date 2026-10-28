@@ -31,6 +31,14 @@ type Props = {
   formatAxis: (v: number) => string
   height?: number
   className?: string
+  /**
+   * Optional comparison series (e.g. the previous period), drawn as a quiet
+   * dashed line on the same scale and named in the hover readout. Ignored
+   * unless it has exactly as many points as `points`. Without it the chart
+   * is unchanged.
+   */
+  compare?: number[]
+  compareLabel?: string
 }
 
 /** Catmull-Rom → cubic Bézier, so a price curve reads as a curve. */
@@ -59,7 +67,7 @@ function band(points: number[]) {
   return { lo: min - span * 0.12, hi: max + span * 0.12 }
 }
 
-export function PriceChart({ points, ticks, pointLabels, format, formatAxis, height = 220, className }: Props) {
+export function PriceChart({ points, ticks, pointLabels, format, formatAxis, height = 220, className, compare, compareLabel = "Previous" }: Props) {
   const id = React.useId().replace(/:/g, "")
   const wrapRef = React.useRef<HTMLDivElement>(null)
   const [width, setWidth] = React.useState(0)
@@ -77,7 +85,9 @@ export function PriceChart({ points, ticks, pointLabels, format, formatAxis, hei
   // On a range change both the POINTS and the vertical band tween from what
   // is on screen to the new series, driven by one progress value — so the
   // curve reshapes and re-scales as a single movement.
-  const target = React.useMemo(() => band(points), [points])
+  const comparison = compare && compare.length === points.length ? compare : undefined
+  // The band spans both series, so neither is clipped.
+  const target = React.useMemo(() => band(comparison ? [...points, ...comparison] : points), [points, comparison])
   const progress = useMotionValue(1)
   const from = React.useRef({ points, band: target })
   const shown = React.useRef({ points, band: target })
@@ -111,6 +121,7 @@ export function PriceChart({ points, ticks, pointLabels, format, formatAxis, hei
 
   const xy = drawn.map((v, i) => [x(i), y(v)] as [number, number])
   const line = smoothPath(xy)
+  const compareLine = comparison ? smoothPath(comparison.map((v, i) => [x(i), y(v)] as [number, number])) : ""
   const area = line ? `${line} L${plotW.toFixed(2)},${plotH} L0,${plotH} Z` : ""
 
   // Four rules, labelled on the right. Values are the band's own quarters, so
@@ -181,6 +192,9 @@ export function PriceChart({ points, ticks, pointLabels, format, formatAxis, hei
           ))}
 
           <g clipPath={`url(#clip-${id})`}>
+            {compareLine && (
+              <path d={compareLine} fill="none" stroke="currentColor" className="text-muted-foreground/45" strokeWidth={1.5} strokeDasharray="4 4" strokeLinecap="round" />
+            )}
             <path d={area} fill={`url(#fill-${id})`} />
             {/* The glow is a blurred copy under the line, not a CSS filter on
                 it — a filter on the stroke itself softens its edge too. */}
@@ -231,6 +245,11 @@ export function PriceChart({ points, ticks, pointLabels, format, formatAxis, hei
           </span>
           {pointLabels?.[hover] && (
             <span className="block text-[11px] font-medium text-muted-foreground">{pointLabels[hover]}</span>
+          )}
+          {comparison && (
+            <span className="block text-[11px] font-medium tabular-nums text-muted-foreground">
+              {compareLabel}: {format(comparison[hover])}
+            </span>
           )}
         </div>
       )}

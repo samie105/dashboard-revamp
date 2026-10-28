@@ -17,10 +17,14 @@ import { MigrationNoticePopup } from "@/components/crypto/MigrationNotice"
  *  like its preview, with the rail held to an icon strip (AppFrame). */
 const FULL_BLEED_ROUTES = ["/vivid"]
 const AUTH_ROUTES = ["/login", "/register"]
+/** The admin console brings its own frame (app/admin/layout.tsx): no user
+ *  rail, top bar, money actions, bottom bar or wallet announcements. */
+const ADMIN_ROUTES = ["/admin"]
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+  const isAdminRoute = ADMIN_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
   const isFullBleed =
     isRedesignPath(pathname) || FULL_BLEED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
 
@@ -30,7 +34,8 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
      time is free, the cache is shared, and a failure here is silent because
      nobody asked for it yet. */
   React.useEffect(() => {
-    if (isAuthRoute) return
+    // The admin console never opens /trade, so it skips the warm-up.
+    if (isAuthRoute || isAdminRoute) return
     const idle = window.requestIdleCallback
     if (typeof idle === "function") {
       const handle = idle(() => prefetchSpotMarkets(), { timeout: 4000 })
@@ -38,7 +43,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     }
     const timer = window.setTimeout(prefetchSpotMarkets, 1500)
     return () => window.clearTimeout(timer)
-  }, [isAuthRoute])
+  }, [isAuthRoute, isAdminRoute])
 
 
   // Scroll-adaptive chrome: content moving beneath the nav pills firms
@@ -48,7 +53,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   const handleMainScroll = React.useCallback((e: React.UIEvent<HTMLElement>) => {
     rootRef.current?.toggleAttribute("data-ws-scrolled", (e.target as HTMLElement).scrollTop > 8)
   }, [])
-  if (isAuthRoute) return <>{children}</>
+  if (isAuthRoute || isAdminRoute) return <>{children}</>
   // The gold "silk" atmosphere that sat behind the dashboard and wallet hero
   // (components/ui/silk-backdrop.tsx) was removed at the lead's request, in
   // favour of the redesign frame's static gold bloom (below).
