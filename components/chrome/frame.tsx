@@ -137,7 +137,7 @@ const RAIL: RailGroup[] = [
       { name: "Swap", href: "/swap", icon: RepeatIcon },
       { name: "Bridge", href: "/bridge", icon: ArrowLeftRightIcon },
       { name: "Earn", icon: Coins01Icon, soon: true },
-      { name: "Copy Trading", icon: UserSwitchIcon, soon: true },
+      { name: "Copy Trading", href: "/copy-trading", icon: UserSwitchIcon },
       { name: "Launchpad", href: "/launchpad", icon: Rocket01Icon },
       { name: "Rewards", icon: GiftIcon, soon: true },
       { name: "Analytics", icon: Analytics01Icon, soon: true },
