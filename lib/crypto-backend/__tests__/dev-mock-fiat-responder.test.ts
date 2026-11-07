@@ -302,3 +302,27 @@ describe("dev-mock-fiat-responder — unknown fiat path", () => {
     expect(response).toBeNull()
   })
 })
+
+describe("dev-mock-fiat-responder neutral payout endpoints", () => {
+  beforeEach(() => __resetFiatMockState())
+
+  it("compare returns options that never name a provider, and requires an idempotency key", async () => {
+    const missing = await respondFromFiatFixtures(request("POST", "fiat/quotes/compare", { body: { amount: "100" } }), "fiat/quotes/compare")
+    expect(missing?.status).toBe(400)
+
+    const response = await respondFromFiatFixtures(request("POST", "fiat/quotes/compare", { body: { amount: "100" }, idempotencyKey: "cmp-1" }), "fiat/quotes/compare")
+    expect(response?.status).toBe(201)
+    const text = JSON.stringify(await response!.json())
+    expect(text).toContain("Option A")
+    expect(text).not.toMatch(/onswitch|bridge|breet/i)
+  })
+
+  it("lists payout banks for a quote and places an order from it", async () => {
+    const banks = await respondFromFiatFixtures(request("GET", "fiat/quotes/mock-option-a/payout-banks"), "fiat/quotes/mock-option-a/payout-banks")
+    expect(banks?.status).toBe(200)
+    expect(((await banks!.json()) as { data: unknown[] }).data.length).toBeGreaterThan(0)
+
+    const order = await respondFromFiatFixtures(request("POST", "fiat/orders/from-quote", { body: { quoteId: "mock-option-a" }, idempotencyKey: "ord-1" }), "fiat/orders/from-quote")
+    expect(order?.status).toBe(201)
+  })
+})
