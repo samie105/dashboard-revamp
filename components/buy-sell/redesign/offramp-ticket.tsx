@@ -27,6 +27,7 @@ import { AmountBox, Breakdown, FlagArt, Joint, MethodGrid, Picker, amountInput, 
 import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
 import { countryFlagForCode, countryNameForCode } from "@/lib/crypto-backend/fiat-country"
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
+import { serviceFeeRows } from "@/lib/crypto-backend/fiat-fee"
 import type { FiatErrorDescription } from "@/lib/crypto-backend/fiat-errors"
 import type { OfframpOption } from "@/lib/crypto-backend/fiat-offramp"
 import type { FiatQuote } from "@/lib/crypto-backend/types"
@@ -249,7 +250,7 @@ export function OfframpTicket({
         { label: "You send", value: `${quote.sourceAmount} ${quote.sourceCurrency}` },
         ...(quote.providerRate ? [{ label: "Rate", value: quote.providerRate }] : []),
         ...(quote.providerFee ? [{ label: "Provider fee", value: quote.providerFee }] : []),
-        ...(quote.worldstreetFee ? [{ label: "Worldstreet fee", value: quote.worldstreetFee }] : []),
+        ...serviceFeeRows(quote),
         { label: "Network", value: quote.network },
         { label: "Quote valid for", value: quoteUsable ? formatCountdown(secondsLeft) : "Expired" },
         { label: "You receive", value: `${quote.destinationAmount} ${quote.destinationCurrency}`, strong: true },

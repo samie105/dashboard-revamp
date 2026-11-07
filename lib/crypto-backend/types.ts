@@ -300,6 +300,8 @@ export interface FiatQuote {
   providerRate?: string
   providerFee?: string
   worldstreetFee?: string
+  /** Everything that leaves the wallet: the amount plus any bundled fee. */
+  totalDebit?: string
   expectedSettlementSeconds?: number
   expiresAt: string
   state: "active" | "accepted" | "expired" | "superseded" | string
@@ -328,6 +330,10 @@ export interface FiatOrder {
   localCryptoIntentId?: string
   transactionRecordId?: string
   expectedDepositAmount?: string
+  /** Service fee bundled into the same transaction, in the sent asset. */
+  worldstreetFee?: string
+  /** Everything that leaves the wallet: the provider amount plus the fee. */
+  totalDebit?: string
   observedDepositAmount?: string
   observedDepositAsset?: string
   observedDepositNetwork?: string

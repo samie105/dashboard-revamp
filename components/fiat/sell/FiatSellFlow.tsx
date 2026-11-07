@@ -42,6 +42,7 @@ import {
 import { countryFlagForCode, countryNameForCode } from "@/lib/crypto-backend/fiat-country"
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backend/fiat-errors"
+import { orderSentFigure, serviceFeeRows } from "@/lib/crypto-backend/fiat-fee"
 import { fiatReadRetry } from "@/lib/crypto-backend/fiat-errors"
 import {
   beneficiaryRequirementLabel,
@@ -134,11 +135,12 @@ function OfframpOrderStatus({
       <span className="block">{supportLine}</span>
     </>
   )
-  const figure = order.cryptoIntent?.normalizedSummary?.amount
-    ? `${order.cryptoIntent.normalizedSummary.amount} ${order.asset.split(":").at(-1)?.toUpperCase() ?? order.asset}`
-    : order.expectedDepositAmount
-      ? `${order.expectedDepositAmount} ${order.asset.split(":").at(-1)?.toUpperCase() ?? order.asset}`
-      : undefined
+  const figure = orderSentFigure({
+    symbol: order.asset.split(":").at(-1)?.toUpperCase() ?? order.asset,
+    amount: order.cryptoIntent?.normalizedSummary?.amount ?? order.expectedDepositAmount,
+    worldstreetFee: order.worldstreetFee,
+    totalDebit: order.totalDebit,
+  })
   const canDiscard = ["failed", "reversed", "refunded", "expired"].includes(order.state)
     || (order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash)
   const stuckBeforeSigning = order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash
@@ -598,7 +600,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
         { label: "You send", value: `${currentQuote.sourceAmount} ${currentQuote.sourceCurrency}` },
         ...(currentQuote.providerRate ? [{ label: "Rate", value: currentQuote.providerRate }] : []),
         ...(currentQuote.providerFee ? [{ label: "Provider fee", value: currentQuote.providerFee }] : []),
-        ...(currentQuote.worldstreetFee ? [{ label: "Worldstreet fee", value: currentQuote.worldstreetFee }] : []),
+        ...serviceFeeRows(currentQuote),
         { label: "Network", value: currentQuote.network },
         { label: "Quote valid for", value: quoteUsable ? formatCountdown(secondsLeft) : "Expired" },
         { label: "You receive", value: `${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}`, strong: true },
