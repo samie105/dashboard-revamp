@@ -43,6 +43,8 @@ import { countryFlagForCode, countryNameForCode } from "@/lib/crypto-backend/fia
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backend/fiat-errors"
 import { orderSentFigure, serviceFeeRows } from "@/lib/crypto-backend/fiat-fee"
+import { readableAmount } from "@/lib/crypto-backend/amount-format"
+import { preferredRoute } from "@/lib/crypto-backend/network-label"
 import { fiatReadRetry } from "@/lib/crypto-backend/fiat-errors"
 import {
   beneficiaryRequirementLabel,
@@ -333,7 +335,12 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
   const stageProgress = useStageProgress(stageIndex ?? 0, order.data?.id ?? orderId ?? "none")
 
   const options = offrampOptions(config.data)
-  const selected: OfframpOption | undefined = options.find((option) => option.key === optionKey) ?? options[0]
+  // Start on the cheapest network for the first corridor; nobody should have to pick one.
+  const firstOption = options[0]
+  const defaultOption = firstOption
+    ? preferredRoute(options.filter((option) => option.countryCode === firstOption.countryCode && option.currencyCode === firstOption.currencyCode && option.channel === firstOption.channel)) ?? firstOption
+    : undefined
+  const selected: OfframpOption | undefined = options.find((option) => option.key === optionKey) ?? defaultOption
   const currentRequest = selected && isValidAmount(amount) ? buildOfframpQuoteRequest(selected, amount) : null
   const currentQuote = quote && sameRequest(quotedRequest, currentRequest) ? quote : null
   const quoteUsable = currentQuote ? isOfframpQuoteUsable(currentQuote) : false
@@ -700,7 +707,7 @@ export function FiatSellFlow({ variant = "page", onInFlightChange, onCompactChan
               ? "Get a quote"
               : !quoteUsable
                 ? "Get a new quote"
-                : `Sell for ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}`
+                : `Sell for ${readableAmount(currentQuote.destinationAmount)} ${currentQuote.destinationCurrency}`
   const submitting = quoteMutation.isPending || orderMutation.isPending
 
   if (isRedesign) {

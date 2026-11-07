@@ -17,7 +17,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { TradeCta, TradeGhost, TradeNotice } from "@/components/buy-sell/redesign/kit"
 import { TradeStatus } from "@/components/buy-sell/redesign/order-status"
-import { Breakdown } from "@/components/buy-sell/redesign/ticket-parts"
+import { RowsCard } from "@/components/buy-sell/redesign/trade-ui"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
 import type { FiatOrder } from "@/lib/crypto-backend/types"
@@ -50,13 +50,13 @@ function SignScreen({
   discard?: { label: string; onClick: () => void; disabled: boolean }
 }) {
   return (
-    <section aria-live="polite" className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1">
-        <span className="font-display text-[22px] font-semibold tracking-[-0.02em]">{title}</span>
-        <span className="text-[13.5px] text-muted-foreground">{subtitle}</span>
+    <section aria-live="polite" className="flex flex-col gap-8">
+      <div className="flex flex-col gap-1.5">
+        <h2 className="font-display text-[24px] font-semibold tracking-[-0.02em]">{title}</h2>
+        <p className="text-[14.5px] text-muted-foreground">{subtitle}</p>
       </div>
-      <Breakdown rows={rows} />
-      <TradeNotice tone="info" title={notice} />
+      <RowsCard rows={rows} />
+      <p className="text-[13.5px] leading-relaxed text-muted-foreground">{notice}</p>
       {Boolean(signError) && <FiatErrorDetail error={describeFiatError(signError)} />}
       {intentNotice}
       <TradeCta label={signing ? "Signing and submitting…" : "Unlock and sign"} onClick={onSign} disabled={!canSign || signing} busy={signing} />
@@ -119,15 +119,13 @@ export function RedesignOfframpOrder({
   if (view.screen === "sign") {
     return (
       <SignScreen
-        title="Review and sign"
-        subtitle="Review your payout, then approve the crypto transfer."
+        title="Confirm your sale"
+        subtitle="Check the details, then approve it from your wallet."
         rows={[
-          { label: "You send", value: figure ?? "Crypto amount prepared by the backend" },
-          { label: "Receive", value: `${order.currency} payout after processing` },
-          { label: "Network", value: order.network },
-          { label: "Destination", value: "The payout deposit address" },
+          { label: "You send", value: figure ?? "Getting your amount ready…" },
+          { label: "You receive", value: `${order.currency}, paid to your bank` },
         ]}
-        notice="Check the amount and network before you sign. Signing submits your crypto transfer for this payout."
+        notice="Approving sends the crypto from your wallet. Your money follows once it arrives."
         signError={signError}
         intentNotice={
           !order.cryptoIntent?.id ? (
@@ -254,13 +252,12 @@ export function RedesignUsdWithdrawalOrder({
   if (view.screen === "sign") {
     return (
       <SignScreen
-        title="Review and sign USD withdrawal"
-        subtitle="We've prepared the exact USDC transfer for this payout."
+        title="Confirm your withdrawal"
+        subtitle="We've prepared the exact transfer for this payout."
         rows={[
-          { label: "You send", value: figure ?? "USDC amount prepared by the backend" },
-          { label: "Receive", value: "USD after processing" },
-          { label: "Network", value: order.network },
-          { label: "Payment rail", value: railLabel },
+          { label: "You send", value: figure ?? "Getting your amount ready…" },
+          { label: "You receive", value: "US dollars" },
+          { label: "Paid by", value: railLabel },
         ]}
         notice="This isn't a quote. The USDC amount above is what's sent; the payout provider controls final USD settlement timing and any payout terms."
         signError={signError}

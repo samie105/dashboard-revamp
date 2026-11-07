@@ -10,7 +10,6 @@
  * an onramp is never confirmed (guide §9.3 line 878).
  */
 
-import { Breakdown } from "@/components/buy-sell/redesign/ticket-parts"
 import { TradeCta, TradeNotice } from "@/components/buy-sell/redesign/kit"
 import { TradeStatus } from "@/components/buy-sell/redesign/order-status"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
@@ -99,42 +98,46 @@ export function RedesignOnrampOrder({
     const secondsLeft = instructions.expiresAt ? quoteSecondsLeft({ expiresAt: instructions.expiresAt }, now) : null
     const expired = secondsLeft === 0
     return (
-      <section aria-live="polite" className="flex flex-col gap-5">
-        <div className="flex flex-col gap-1">
-          <span className="font-display text-[22px] font-semibold tracking-[-0.02em]">Send the bank transfer</span>
-          <span className="text-[13.5px] text-muted-foreground">
+      <section aria-live="polite" className="flex flex-col gap-8">
+        <div className="flex flex-col gap-1.5">
+          <h2 className="font-display text-[24px] font-semibold tracking-[-0.02em]">Send the bank transfer</h2>
+          <p className="text-[14.5px] text-muted-foreground">
             {figure ? `${figure} arrives in your wallet once it's confirmed` : "Your crypto arrives once the payment is confirmed"}
-          </span>
+          </p>
         </div>
         {instructions.rows.length > 0 ? (
-          <dl className="flex flex-col divide-y divide-foreground/[0.06] rounded-2xl border border-foreground/[0.06] bg-foreground/[0.015] px-4">
+          <dl className="flex flex-col divide-y divide-foreground/[0.06] rounded-3xl border border-foreground/[0.09] bg-foreground/[0.025] px-5 sm:px-6">
             {instructions.rows.map((row) => (
-              <div key={row.label} className="flex flex-col gap-1 py-3">
-                <dt className="text-[12px] text-muted-foreground">{row.label}</dt>
+              <div key={row.label} className="flex flex-col gap-1.5 py-4">
+                <dt className="text-[13px] text-muted-foreground">{row.label}</dt>
                 <dd className="flex items-start gap-2">
-                  <span className="min-w-0 flex-1 whitespace-pre-line break-words text-[14px] font-semibold tabular-nums text-foreground">{row.value}</span>
+                  <span className="min-w-0 flex-1 whitespace-pre-line break-words text-[16px] font-semibold tabular-nums text-foreground">{row.value}</span>
                   <CopyButton value={row.value} />
                 </dd>
               </div>
             ))}
           </dl>
         ) : (
-          <p className="rounded-2xl border border-foreground/[0.06] bg-foreground/[0.015] px-4 py-3 text-[13px] text-muted-foreground">
+          <p className="rounded-3xl border border-foreground/[0.09] bg-foreground/[0.025] px-5 py-4 text-[14px] text-muted-foreground">
             Payment details aren&apos;t available yet. We&apos;ll keep checking.
           </p>
         )}
         {expired ? (
           <TradeNotice tone="error" title="These payment details have expired" detail={<>Don&apos;t send money to them. {supportLine}</>} />
         ) : secondsLeft !== null ? (
-          <Breakdown rows={[{ label: "These details expire in", value: formatCountdown(secondsLeft) }]} />
+          <p className="text-[14px] tabular-nums text-muted-foreground">These details expire in <span className="font-semibold text-foreground">{formatCountdown(secondsLeft)}</span></p>
         ) : null}
-        <p className="text-[12px] leading-relaxed text-muted-foreground">Send the exact amount using the details above. Use this account only for this order.</p>
-        <p className="break-all text-[12px] text-muted-foreground">Order reference {order.publicReference}</p>
-        {expired ? (
-          <TradeCta label="Start a new buy" onClick={onStartOver} />
-        ) : (
-          <TradeCta label="I've made the transfer" onClick={onRefresh} disabled={instructions.rows.length === 0} />
-        )}
+        <div className="flex flex-col gap-4">
+          {expired ? (
+            <TradeCta label="Start a new buy" onClick={onStartOver} />
+          ) : (
+            <TradeCta label="I've made the transfer" onClick={onRefresh} disabled={instructions.rows.length === 0} />
+          )}
+          <p className="text-center text-[12.5px] leading-relaxed text-muted-foreground">
+            Send the exact amount, and use this account only for this order.
+            <span className="mt-1 block break-all">Reference {order.publicReference}</span>
+          </p>
+        </div>
       </section>
     )
   }

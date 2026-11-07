@@ -55,6 +55,8 @@ import { buyRails, type BuyRail } from "@/lib/crypto-backend/fiat-bridge-onramp"
 import { countryFlagForCode, countryNameForCode } from "@/lib/crypto-backend/fiat-country"
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError, shouldRefetchCapabilities } from "@/lib/crypto-backend/fiat-errors"
+import { preferredRoute } from "@/lib/crypto-backend/network-label"
+import { readableAmount } from "@/lib/crypto-backend/amount-format"
 import {
   buildOnrampQuoteRequest,
   createOnrampOrder,
@@ -148,7 +150,8 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
   const channels = Array.from(new Set(inCorridor.map((o) => o.channel)))
   const activeChannel = channels.includes(channel) ? channel : channels[0]
   const routes = inCorridor.filter((o) => o.channel === activeChannel)
-  const selected: OnrampOption | undefined = routes.find((o) => o.key === routeKey) ?? routes[0]
+  // Start on the cheapest network; nobody should have to pick one to buy a stablecoin.
+  const selected: OnrampOption | undefined = routes.find((o) => o.key === routeKey) ?? preferredRoute(routes)
   const currentRequest = selected && isValidAmount(amount) ? buildOnrampQuoteRequest(selected, amount) : null
   // A quote only counts for the exact request it was made for; changing the
   // amount or a picker drops it and the CTA goes back to "Get a quote".
@@ -541,7 +544,7 @@ export function FiatBuyFlow({ variant = "page", onInFlightChange, onCompactChang
               ? "Get a new quote"
               : !holderNameReady
                 ? "Add your name to continue"
-                : `Buy ${currentQuote.destinationAmount} ${currentQuote.destinationCurrency}`
+                : `Buy ${readableAmount(currentQuote.destinationAmount)} ${currentQuote.destinationCurrency}`
 
   const onCta = () => {
     if (!currentRequest) return

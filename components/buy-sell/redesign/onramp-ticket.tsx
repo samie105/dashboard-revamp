@@ -14,37 +14,33 @@
  */
 
 import * as React from "react"
-import { BankIcon, CreditCardIcon, SmartPhone01Icon, UserSwitchIcon, Wallet02Icon } from "@hugeicons/core-free-icons"
 
 import { cn } from "@/lib/utils"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { QuoteClock } from "@/components/ui/quote-clock"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { formatCountdown } from "@/components/fiat/shared/format"
-import { Segments, TradeCta, TradeNotice } from "@/components/buy-sell/redesign/kit"
-import { AmountBox, Breakdown, FlagArt, Joint, MethodGrid, Picker, amountInput, type BreakdownRow, type MethodCard, type PickerItem } from "@/components/buy-sell/redesign/ticket-parts"
+import { TradeCta, TradeNotice } from "@/components/buy-sell/redesign/kit"
+import { Choice, AmountHero, QuietChoice, QuoteSummary, type SummaryRow } from "@/components/buy-sell/redesign/trade-ui"
+import { FlagArt, Picker, type PickerItem } from "@/components/buy-sell/redesign/ticket-parts"
 import { countryFlagForCode, countryNameForCode } from "@/lib/crypto-backend/fiat-country"
-import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import type { FiatErrorDescription } from "@/lib/crypto-backend/fiat-errors"
+import { readableAmount } from "@/lib/crypto-backend/amount-format"
+import { addDecimalStrings } from "@/lib/crypto-backend/fiat-fee"
 import { MINIMUM_BUY_USD, type OnrampOption } from "@/lib/crypto-backend/fiat-onramp"
+import { networkLabel, preferredRoute } from "@/lib/crypto-backend/network-label"
 import type { BuyRail } from "@/lib/crypto-backend/fiat-bridge-onramp"
 import type { FiatQuote } from "@/lib/crypto-backend/types"
 
-/** The preview's other ways to pay. Not offered by the backend: shown, not selectable. */
-const SOON_METHODS: MethodCard[] = [
-  { key: "soon:dollar", label: "Dollar Account", detail: "Pay from your Dollar Account", icon: Wallet02Icon, soon: true },
-  { key: "soon:card", label: "Debit / credit card", detail: "Visa or Mastercard", icon: CreditCardIcon, soon: true },
-  { key: "soon:p2p", label: "P2P", detail: "Buy directly from people", icon: UserSwitchIcon, soon: true },
-]
-
-const channelIcon = (channel: string) => (channel.toUpperCase().includes("MOBILE") ? SmartPhone01Icon : BankIcon)
+const CHANNEL_NAMES: Record<string, string> = { BANK: "Bank transfer", MOBILEMONEY: "Mobile money", CARD: "Card" }
+const channelName = (channel: string) => CHANNEL_NAMES[channel.toUpperCase()] ?? channel.charAt(0).toUpperCase() + channel.slice(1).toLowerCase()
 
 export const corridorKeyOf = (o: Pick<OnrampOption, "countryCode" | "currencyCode">) => `${o.countryCode}|${o.currencyCode}`
 
-/** The rail switch, shown when /fiat/config offers both rails. Labels as before. */
+/** The rail switch, shown only when /fiat/config offers both rails. */
 export function BuyRailSwitch({ rails, rail, onRail }: { rails: BuyRail[]; rail: BuyRail; onRail: (rail: BuyRail) => void }) {
   if (rails.length < 2) return null
-  return <Segments id="buy-rail" label="Pay in" options={rails.map((r) => ({ key: r, label: r === "local" ? "Local currency" : "USD" }))} value={rail} onChange={onRail} />
+  return <Choice label="Pay in" options={rails.map((r) => ({ key: r, label: r === "local" ? "Local currency" : "US dollars" }))} value={rail} onChange={onRail} />
 }
 
 /**
@@ -88,7 +84,6 @@ export function OnrampTicket({
   onAmountInput,
   submitting,
   amountProblem,
-  hint,
   quote,
   quoteUsable,
   secondsLeft,
@@ -113,7 +108,8 @@ export function OnrampTicket({
   onAmountInput: (value: string) => void
   submitting: boolean
   amountProblem: string | null
-  hint: string
+  /** Kept for callers; the helper line under the amount is fixed copy now. */
+  hint?: string
   quote: FiatQuote | null
   quoteUsable: boolean
   secondsLeft: number
@@ -130,103 +126,85 @@ export function OnrampTicket({
     art: <FlagArt flag={countryFlagForCode(o.countryCode)} />,
   }))
 
-  // The route list, as a coin chip plus (when a coin rides more than one
-  // network) the "Deliver on" choice. Both just pick a route key.
+  // Coins are a choice. Networks are not: the cheapest one is picked for the
+  // user, and the few who care can change it from one quiet line.
   const symbols = Array.from(new Set(routes.map((r) => r.symbol)))
-  const assetItems: PickerItem[] = symbols.map((symbol) => ({
-    key: symbol,
-    label: symbol,
-    sub: routes.filter((r) => r.symbol === symbol).map((r) => r.network).join(", "),
-    art: <CoinAvatar symbol={symbol} size="lg" className="size-8 ring-1 ring-foreground/10" />,
-  }))
   const networks = routes.filter((r) => r.symbol === selected.symbol)
 
-  const methods: MethodCard[] = [
-    ...channels.map((c) => ({ key: c, label: humanizeValue(c), detail: `Pay in ${corridor.currencyCode}`, icon: channelIcon(c) })),
-    ...SOON_METHODS,
-  ]
-
-  const rows: BreakdownRow[] = quote
+  const fees = quote ? [quote.providerFee, quote.worldstreetFee].filter((fee): fee is string => Number(fee) > 0).reduce((sum, fee) => addDecimalStrings(sum, fee), "0") : "0"
+  const rows: SummaryRow[] = quote
     ? [
-        { label: "You pay", value: `${quote.sourceAmount} ${quote.sourceCurrency}` },
-        ...(quote.providerRate ? [{ label: "Rate", value: `1 ${quote.destinationCurrency} = ${quote.providerRate} ${quote.sourceCurrency}` }] : []),
-        ...(quote.providerFee ? [{ label: "Provider fee", value: `${quote.providerFee} ${quote.sourceCurrency}` }] : []),
-        ...(quote.worldstreetFee ? [{ label: "Worldstreet fee", value: `${quote.worldstreetFee} ${quote.sourceCurrency}` }] : []),
-        { label: "Minimum buy", value: `$${MINIMUM_BUY_USD} USD equivalent` },
-        { label: "Network", value: quote.network },
-        ...(quote.expectedSettlementSeconds
-          ? [{ label: "Usually arrives in", value: `about ${Math.max(1, Math.round(quote.expectedSettlementSeconds / 60))} min` }]
-          : []),
-        { label: "Quote valid for", value: quoteUsable ? formatCountdown(secondsLeft) : "Expired" },
-        { label: "You receive", value: `${quote.destinationAmount} ${quote.destinationCurrency}`, strong: true },
+        ...(quote.providerRate ? [{ label: "Rate", value: `1 ${quote.destinationCurrency} = ${readableAmount(quote.providerRate, 2)} ${quote.sourceCurrency}` }] : []),
+        ...(Number(fees) > 0 ? [{ label: "Fees", value: `${readableAmount(fees, 2)} ${quote.sourceCurrency}` }] : []),
+        ...(quote.expectedSettlementSeconds ? [{ label: "Arrives in", value: `about ${Math.max(1, Math.round(quote.expectedSettlementSeconds / 60))} min` }] : []),
       ]
-    : [
-        { label: "Rate", value: "—" },
-        { label: "Fees", value: "—" },
-        { label: "Minimum buy", value: `$${MINIMUM_BUY_USD} USD equivalent` },
-        { label: "Network", value: selected.network },
-        { label: "You receive", value: "—", strong: true },
-      ]
+    : []
+  const quoteTotal = quote ? Math.max(1, Math.round((Date.parse(quote.expiresAt) - Date.parse(quote.createdAt)) / 1000)) || 1 : 1
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-8">
       {railSwitch}
       {banners}
 
-      <div className="relative flex flex-col gap-2">
-        <AmountBox
-          label="You pay"
-          tone={amountProblem ? "error" : "default"}
-          footer={
-            <span className={cn("text-[12px]", amountProblem ? "font-semibold text-debit" : "text-muted-foreground")}>{amountProblem ?? hint}</span>
-          }
-        >
-          <input
-            inputMode="decimal"
-            aria-label={`Amount in ${corridor.currencyCode}`}
-            value={amount}
-            onChange={(e) => onAmountInput(e.target.value)}
-            placeholder="0"
-            disabled={submitting}
-            className={amountInput}
-          />
-          <Picker label="Currency" items={currencyItems} value={corridorKeyOf(corridor)} onChange={onCorridor} disabled={submitting} />
-        </AmountBox>
+      <AmountHero
+        label="You pay"
+        ariaLabel={`Amount in ${corridor.currencyCode}`}
+        value={amount}
+        onChange={onAmountInput}
+        disabled={submitting}
+        problem={amountProblem}
+        helper={`Minimum $${MINIMUM_BUY_USD} equivalent`}
+        chip={<Picker label="Currency" items={currencyItems} value={corridorKeyOf(corridor)} onChange={onCorridor} disabled={submitting} />}
+      />
 
-        <Joint />
+      <Choice
+        label="You'll receive"
+        options={symbols.map((symbol) => ({ key: symbol, label: symbol, art: <CoinAvatar symbol={symbol} size="lg" className="size-8 ring-1 ring-foreground/10" /> }))}
+        value={selected.symbol}
+        onChange={(symbol) => {
+          const next = preferredRoute(routes.filter((r) => r.symbol === symbol))
+          if (next) onRoute(next.key)
+        }}
+        disabled={submitting}
+      />
 
-        <AmountBox label="You receive" tone="muted" aside={quote ? (quoteUsable ? "From your quote" : "Quote expired") : "Shown with your quote"}>
-          <span className={cn(amountInput, "truncate", !quote && "text-muted-foreground/30")}>{quote ? quote.destinationAmount : "0"}</span>
-          <Picker
-            label="Coin"
-            items={assetItems}
-            value={selected.symbol}
-            onChange={(symbol) => {
-              const first = routes.find((r) => r.symbol === symbol)
-              if (first) onRoute(first.key)
-            }}
-            disabled={submitting}
-          />
-        </AmountBox>
-      </div>
+      <QuietChoice
+        prefix="Goes straight to your Worldstreet wallet on"
+        current={networkLabel(selected.network)}
+        label="Network"
+        options={networks.map((r) => ({ key: r.key, label: networkLabel(r.network) }))}
+        value={selected.key}
+        onChange={onRoute}
+        disabled={submitting}
+      />
 
-      {networks.length > 1 && (
-        <Segments id="buy-network" label="Deliver on" options={networks.map((r) => ({ key: r.key, label: r.network }))} value={selected.key} onChange={(k) => !submitting && onRoute(k)} />
+      {channels.length > 1 && (
+        <Choice label="Pay with" options={channels.map((c) => ({ key: c, label: channelName(c) }))} value={channel} onChange={onChannel} disabled={submitting} />
       )}
 
-      <MethodGrid id="buy-method" label="Pay with" methods={methods} value={channel} onChange={onChannel} disabled={submitting} />
-
-      <Breakdown rows={rows} />
+      {quote && (
+        <QuoteSummary
+          caption="You'll receive"
+          headline={`${readableAmount(quote.destinationAmount)} ${quote.destinationCurrency}`}
+          sub={`for ${readableAmount(quote.sourceAmount)} ${quote.sourceCurrency}`}
+          rows={rows}
+          seconds={secondsLeft}
+          total={quoteTotal}
+          usable={quoteUsable}
+        />
+      )}
 
       {showHolderNotice && (
         <TradeNotice title="Add your name" detail="Add your name to your Worldstreet account before starting an African local-currency buy." />
       )}
       {error && <FiatErrorDetail error={error} />}
 
-      <TradeCta label={ctaLabel} onClick={onCta} disabled={ctaDisabled} busy={submitting} />
-      <p className="-mt-2 text-center text-[11.5px] leading-relaxed text-muted-foreground">
-        {quote ? "Funds are sent to the bank details returned after your order is created. Never reuse expired details." : "Your live quote appears here before any order is created."}
-      </p>
+      <div className="flex flex-col gap-4">
+        <TradeCta label={ctaLabel} onClick={onCta} disabled={ctaDisabled} busy={submitting} />
+        <p className="text-center text-[12.5px] leading-relaxed text-muted-foreground">
+          {quote ? "You'll get payment details after you confirm. A quote doesn't hold your funds." : "You'll see the exact price before you pay."}
+        </p>
+      </div>
     </div>
   )
 }
