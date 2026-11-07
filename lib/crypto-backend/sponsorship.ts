@@ -9,11 +9,9 @@
  * could pay for themselves — lives here once, and is testable without a
  * network or a component tree.
  *
- * `useTransactionIntent.create` is what makes the outage non-fatal: a
- * `quoteSponsorship`/`prepareSponsorship` failure is caught there and comes
- * back as `sponsorshipError` alongside a perfectly good intent, not as a
- * failed mutation. This function is what turns `(operation, quoteError)` into
- * the three states the UI actually renders.
+ * The backend now owns quote/prepare and returns either a prepared operation
+ * or a rebuilt user-paid intent. This pure function remains useful for
+ * rendering and tests, but provider errors never need to cross into the UI.
  */
 
 import { CryptoBackendError } from "./errors"

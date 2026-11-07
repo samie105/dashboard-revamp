@@ -21,6 +21,7 @@ import { swapView } from "@/lib/swap-view"
 import type { UiMode } from "@/lib/ui-mode"
 import type { CoinData } from "@/lib/actions"
 import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoBalances"
+import { useCryptoNetworks } from "@/hooks/crypto/useCryptoNetworks"
 import { useCryptoWalletState } from "@/hooks/crypto/useCryptoWallet"
 import { useAuth } from "@/components/auth-provider"
 import { cryptoBackendClient, cryptoQueryKeys, isCryptoBackendEnabled } from "@/lib/crypto-backend"
@@ -128,6 +129,7 @@ export function useSwapTicket({ coins, prices, mode }: { coins: CoinData[]; pric
 
   const { user } = useAuth()
   const { balances: modernBalances, refresh: refreshBalances } = useCryptoBalances()
+  const networks = useCryptoNetworks()
   const modernWallet = useCryptoWalletState()
   const modernPackage = useQuery({
     queryKey: cryptoQueryKeys.walletPackage(user?.userId ?? "anonymous"),
@@ -258,7 +260,17 @@ export function useSwapTicket({ coins, prices, mode }: { coins: CoinData[]; pric
   const fromSupported = (SUPPORTED_SWAP_TOKENS[fromChain]?.includes(fromCoin?.symbol ?? "") ?? false) || Boolean(fromCoin?.contractAddress)
   const toSupported = (SUPPORTED_SWAP_TOKENS[toChain]?.includes(toCoin?.symbol ?? "") ?? false) || Boolean(toCoin?.contractAddress)
   const selectedRouter = routerForPair(fromChain, toChain)
-  const canQuote = fromSupported && toSupported && !!selectedRouter && isCryptoBackendEnabled
+  const providerRouteEnabled = React.useMemo(() => {
+    if (!selectedRouter || selectedRouter !== "lifi") return false
+    const source = networks.data?.find((network) => network.id === BALANCE_NETWORK_ID[fromChain])
+    const destination = networks.data?.find((network) => network.id === BALANCE_NETWORK_ID[toChain])
+    // The backend publishes this as a positive capability only after the
+    // provider transaction decoder/policy is installed for that network. A
+    // missing field is deliberately treated as disabled so stale dashboard
+    // data cannot reach an opaque provider route.
+    return source?.capabilities?.providerSwap === true && destination?.capabilities?.providerSwap === true
+  }, [networks.data, fromChain, toChain, selectedRouter])
+  const canQuote = fromSupported && toSupported && !!selectedRouter && providerRouteEnabled && isCryptoBackendEnabled
 
   /* Simple has no slippage dial. It is not therefore unprotected: the house
      default rides on every quote and every intent it sends. */
@@ -541,6 +553,7 @@ export function useSwapTicket({ coins, prices, mode }: { coins: CoinData[]; pric
     quoteData,
     quoteDebounceMs,
     quoteError,
+    providerRouteEnabled,
     quoteLoading,
     quotedAt,
     refreshBalances,

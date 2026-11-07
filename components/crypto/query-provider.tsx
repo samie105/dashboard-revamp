@@ -8,16 +8,33 @@ import { CryptoBackendError } from "@/lib/crypto-backend"
 import { clearUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
 import { DASHBOARD_TEST_MODE, DASHBOARD_TEST_USER } from "@/lib/dashboard-test-mode"
-
-// Under the dev bypass ClerkProvider isn't mounted (see app/layout.tsx), so
-// Clerk's useUser would throw. The pick is a module-level constant — the same
-// implementation runs on every render, so the rules of hooks hold. The mock
-// user never changes identity, so the cache-clearing effect below stays inert.
-const useUser = DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE
-  ? () => ({ user: { id: DASHBOARD_TEST_MODE ? DASHBOARD_TEST_USER.userId : DEV_BYPASS_USER.userId }, isLoaded: true })
-  : useClerkUser
+import { useClerkEnabled } from "@/components/conditional-clerk-provider"
 
 export function CryptoQueryProvider({ children }: { children: React.ReactNode }) {
+  const clerkEnabled = useClerkEnabled()
+
+  if (!clerkEnabled) {
+    const userId = DASHBOARD_TEST_MODE ? DASHBOARD_TEST_USER.userId : DEV_AUTH_BYPASS ? DEV_BYPASS_USER.userId : null
+    return <CryptoQueryProviderFrame userId={userId} isLoaded={true}>{children}</CryptoQueryProviderFrame>
+  }
+
+  return <ClerkCryptoQueryProvider>{children}</ClerkCryptoQueryProvider>
+}
+
+function ClerkCryptoQueryProvider({ children }: { children: React.ReactNode }) {
+  const { user, isLoaded } = useClerkUser()
+  return <CryptoQueryProviderFrame userId={user?.id ?? null} isLoaded={isLoaded}>{children}</CryptoQueryProviderFrame>
+}
+
+function CryptoQueryProviderFrame({
+  children,
+  userId,
+  isLoaded,
+}: {
+  children: React.ReactNode
+  userId: string | null
+  isLoaded: boolean
+}) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -40,13 +57,11 @@ export function CryptoQueryProvider({ children }: { children: React.ReactNode })
         },
       }),
   )
-  const { user, isLoaded } = useUser()
   const previousUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isLoaded) return
 
-    const userId = user?.id ?? null
     if (previousUserIdRef.current !== null && previousUserIdRef.current !== userId) {
       // Wallet, intent, and balance data is user-scoped. Never allow a
       // signed-out user's cache to become visible to the next Clerk user.
@@ -54,7 +69,7 @@ export function CryptoQueryProvider({ children }: { children: React.ReactNode })
       clearUnlockedWalletState()
     }
     previousUserIdRef.current = userId
-  }, [isLoaded, queryClient, user?.id])
+  }, [isLoaded, queryClient, userId])
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 }

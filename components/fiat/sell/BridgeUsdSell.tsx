@@ -394,7 +394,7 @@ export function BridgeUsdSell({
       return
     }
     try {
-      const submitted = await transfer.submitIntent({ useSponsorship: true, requireSponsorship: true })
+      const submitted = await transfer.submitIntent({ useSponsorship: true })
       const txHash = readTxHash(submitted, transfer.intent)
       if (!txHash) throw new Error("The wallet did not return a transaction hash.")
       await queryClient.invalidateQueries({ queryKey: cryptoQueryKeys.fiatOrder(userId, orderId) })

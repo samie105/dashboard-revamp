@@ -14,6 +14,7 @@ import type {
   CryptoNetwork,
   CryptoServiceHealth,
   CryptoTransactionIntent,
+  CryptoTransferIntentResult,
   LaunchpadAvailability,
   LaunchpadCurve,
   LaunchpadDraftInput,
@@ -637,16 +638,43 @@ export class CryptoBackendClient {
       idempotencyKey?: string
     },
     walletSessionToken?: string
-  ): Promise<CryptoTransactionIntent> {
+  ): Promise<CryptoTransferIntentResult> {
     const response = await this.request<{
       data: CryptoTransactionIntent
       existing: boolean
+      feeMode?: "sponsored" | "self-paid"
+      sponsorship?: SponsorshipOperation
     }>(
       "/transactions/intents",
       { method: "POST", body: JSON.stringify(input) },
       { walletSessionToken, unwrap: false }
     )
-    return response.data
+    return {
+      intent: response.data,
+      sponsorship: response.sponsorship,
+      feeMode: response.feeMode,
+      existing: response.existing,
+    }
+  }
+
+  async routeIntentFees(
+    intentId: string,
+    signal?: AbortSignal,
+  ): Promise<CryptoTransferIntentResult> {
+    const response = await this.request<{
+      data: CryptoTransactionIntent
+      feeMode?: "sponsored" | "self-paid"
+      sponsorship?: SponsorshipOperation
+    }>(
+      `/transactions/intents/${encodeURIComponent(intentId)}/fee-routing`,
+      { method: "POST" },
+      { signal, unwrap: false },
+    )
+    return {
+      intent: response.data,
+      sponsorship: response.sponsorship,
+      feeMode: response.feeMode,
+    }
   }
 
   async simulateIntent(
@@ -659,6 +687,14 @@ export class CryptoBackendClient {
         method: "POST",
       },
       { signal }
+    )
+  }
+
+  async fallbackIntentToSelfPaid(intentId: string, signal?: AbortSignal): Promise<CryptoTransactionIntent> {
+    return this.request<CryptoTransactionIntent>(
+      `/transactions/intents/${encodeURIComponent(intentId)}/fallback-direct`,
+      { method: "POST" },
+      { signal },
     )
   }
 
@@ -1112,7 +1148,7 @@ export class CryptoBackendClient {
       networkId: string
       amount: number
       intents: CryptoTransactionIntent[]
-      sponsorship: SponsorshipOperation
+      sponsorship?: SponsorshipOperation
     }>(
       "/trading/hyperliquid/deposit/intents",
       {

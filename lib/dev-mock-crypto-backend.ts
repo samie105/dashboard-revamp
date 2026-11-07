@@ -761,7 +761,7 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
   if (method === "POST" && path === "transactions/sync") return json({ started: true })
   if (method === "POST" && path === "transactions/intents") return createTransferIntent(await readBody())
   {
-    const match = path.match(/^transactions\/intents\/([^/]+)(?:\/(simulate|submit))?$/)
+    const match = path.match(/^transactions\/intents\/([^/]+)(?:\/(simulate|submit|fee-routing))?$/)
     if (match) {
       const [, intentId, action] = match
       if (!action && method === "GET") return getIntent(decodeURIComponent(intentId))
@@ -770,6 +770,11 @@ export async function devMockCryptoApiResponse(req: Request, path: string): Prom
         if (!entry) return jsonError("WALLET_NOT_FOUND", "Unknown intent", 404)
         entry.intent.status = "simulated"
         return json({ validation: { ok: true, errors: [], warnings: [] }, simulation: { ok: true, gasEstimate: "21000" } })
+      }
+      if (action === "fee-routing" && method === "POST") {
+        const entry = state.intents.get(decodeURIComponent(intentId))
+        if (!entry) return jsonError("WALLET_NOT_FOUND", "Unknown intent", 404)
+        return jsonRaw({ success: true, data: entry.intent, feeMode: "self-paid" })
       }
       if (action === "submit" && method === "POST") return submitIntent(decodeURIComponent(intentId))
     }

@@ -82,7 +82,7 @@ export type SendAssetChoice = {
 }
 import { SendReviewScreen } from "./SendReviewScreen"
 import { SendStatusScreen } from "./SendStatusScreen"
-import { feeRowValue, useSponsorshipOffer } from "./use-sponsorship-offer"
+import { feeRowValue } from "./use-sponsorship-offer"
 import {
   assetKeyOf,
   baseUnitsOf,
@@ -108,7 +108,7 @@ const WALLET_HREF = "/wallet/modern"
  *
  * Captured BEFORE `transfer.createIntent` is awaited, from the same read as
  * the values handed to that call — never after. `createIntent` is a
- * multi-second round trip (intent + sponsorship quote + prepare), and the
+ * multi-second round trip (intent + backend fee routing), and the
  * pickers are still live on screen for however long the form isn't disabled
  * during it; reading this snapshot back out afterwards would risk it
  * disagreeing with what was actually signed.
@@ -190,7 +190,10 @@ export function SendFlow({
   const [assetKey, setAssetKey] = React.useState("")
   const [to, setTo] = React.useState("")
   const [amount, setAmount] = React.useState("")
-  const [sponsorFees, setSponsorFees] = React.useState(false)
+  // Fee routing is automatic. The backend attempts sponsorship and returns a
+  // normal user-paid intent when sponsorship is unavailable; the client never
+  // exposes that implementation detail as a user choice.
+  const sponsorFees = true
   const [addressTouched, setAddressTouched] = React.useState(false)
 
   const [committed, setCommitted] = React.useState<CommittedTransfer | null>(null)
@@ -333,27 +336,17 @@ export function SendFlow({
 
   /* ── Fee sponsorship ───────────────────────────────────────────────────── */
 
-  const assetKind = selectedBalance?.asset.kind ?? "native"
-  const { offered: feeOffered } = useSponsorshipOffer({ networkId, family: account?.chainFamily, assetKind })
-  React.useEffect(() => {
-    // Never carry a sponsored choice into a network/asset that isn't offered
-    // one — the request would ask for a quote the service already refused.
-    if (!feeOffered && sponsorFees) setSponsorFees(false)
-  }, [feeOffered, sponsorFees])
-
-  // Spec §11: the review screen's one source of truth for who pays the
-  // network fee — never inferred from "does a sponsorship object exist"
-  // alone. A quote/prepare outage is caught inside `useTransactionIntent.
-  // create` and arrives here as `sponsorshipError` instead of failing the
-  // mutation; this is what turns that pair into the self-paid fallback.
+  // A prepared operation is the only time the review may say Worldstreet is
+  // paying. Otherwise the fee row simply describes the normal user-paid
+  // route; provider availability is intentionally not shown.
   const feePresentation = resolveFeePresentation({
     requested: sponsorFees,
     operation: transfer.sponsorship ?? null,
-    quoteError: transfer.sponsorshipError ?? null,
+    quoteError: null,
   })
-  // The FINAL choice for `submitIntent` — not merely "is a sponsorship object
-  // present" (an expired or stale one must never be signed down that path).
-  const useSponsorshipFinal = feePresentation.kind === "sponsored"
+  // Keep automatic routing enabled at submit time so an expired prepared
+  // quote can be replaced by a direct intent before any signature is made.
+  const useSponsorshipFinal = sponsorFees
 
   /* ── The intent, and its clock ─────────────────────────────────────────── */
 
@@ -630,7 +623,6 @@ export function SendFlow({
         router.refresh()
         break
       case "pay-gas":
-        setSponsorFees(false)
         startOver()
         break
       case "retry":
@@ -804,7 +796,6 @@ export function SendFlow({
         tokenContract={committed.tokenContract}
         amount={committed.amount}
         feeValue={feeRowValue(feePresentation, gasEstimate)}
-        feeFallbackReason={feePresentation.kind === "self-paid-fallback" ? feePresentation.reason : null}
         countdown={countdown}
         expired={expired}
         validationErrors={validationErrors}

@@ -4,8 +4,10 @@ import { useSyncExternalStore } from "react"
 
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import { DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
+import { useClerkEnabled } from "@/components/conditional-clerk-provider"
 
 export function LocalClerkConfigurationNotice() {
+  const clerkEnabled = useClerkEnabled()
   const isLocalhost = useSyncExternalStore(
     () => () => undefined,
     () => ["localhost", "127.0.0.1"].includes(window.location.hostname),
@@ -17,7 +19,7 @@ export function LocalClerkConfigurationNotice() {
 
   // Under the dev bypass Clerk is deliberately not mounted, so the key being
   // production-only is expected — the notice would only mislead.
-  if (DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE) return null
+  if (!clerkEnabled || DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE) return null
   if (!isLocalhost || (!isProductionKey && !isMissingKey)) return null
 
   return (

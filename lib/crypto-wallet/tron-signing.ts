@@ -1,4 +1,4 @@
-import { TronWeb } from "tronweb"
+import { TronWeb, utils as tronUtils } from "tronweb"
 
 import type { CryptoTransactionIntent, CryptoWalletPackageDocument } from "@/lib/crypto-backend"
 import { decryptLocalAccountKey } from "./account-secrets"
@@ -24,11 +24,11 @@ export async function signTronIntent(
     const privateKey = bytesToHex(secret)
     const derived = TronWeb.address.fromPrivateKey(privateKey)
     if (!derived || derived !== unsigned.from) throw new Error("Local key does not match the intent account")
-    // LI.FI returns a mainnet transaction. Signing is local, but using the
-    // mainnet provider keeps TronWeb's address/transaction handling aligned
-    // with the network being signed.
-    const tron = new TronWeb({ fullHost: "https://api.trongrid.io" })
-    const signed = await tron.trx.sign(transaction as never, privateKey)
+    // Signing is pure local cryptography. Do not construct a network client or
+    // hardcode a mainnet host in the browser: the backend's intent already
+    // binds the transaction to the configured network and the signed payload
+    // is re-verified server-side before broadcast.
+    const signed = tronUtils.crypto.signTransaction(privateKey, transaction)
     return JSON.stringify(signed)
   } finally {
     wipeBytes(secret)

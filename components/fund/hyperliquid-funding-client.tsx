@@ -169,21 +169,24 @@ export function HyperliquidFundingClient({ mode, variant = "page", onDismiss, on
           idempotencyKey: crypto.randomUUID(),
         })
         const prepared = pendingDeposit ?? created?.intents ?? []
-        if (prepared.length !== 1) throw new Error("The backend returned an incomplete sponsored Hyperliquid deposit")
+        if (prepared.length !== 1) throw new Error("The backend returned an incomplete Hyperliquid deposit")
         const start = pendingDeposit ? depositStage : 0
         setPendingDeposit(prepared)
-        const intent = prepared[0]
+        const initialIntent = prepared[0]
+        const routed = pendingDeposit
+          ? await cryptoBackendClient.routeIntentFees(initialIntent.id)
+          : { intent: initialIntent, sponsorship: created?.sponsorship }
+        const intent = routed.intent
         setDepositStage(start as 0 | 1 | 2)
-        savePendingFlow("hyperliquid-deposit", JSON.stringify({ intents: prepared, amount: amountValue, stage: start }), Date.now())
-        const sponsorship = created?.sponsorship ?? await cryptoBackendClient.quoteSponsorship({
-          accountId: evmAccount.id,
-          networkId: "arbitrum-one",
-          operation: "hyperliquid-deposit",
-          intentId: intent.id,
-        })
-        if (!sponsorship.signingPayload) throw new Error("The Hyperliquid gas sponsor did not return a signing request")
-        const signed = await signSponsoredEvmOperation(user.userId, wallet.data.id, packageQuery.data, sponsorship.signingPayload, evmAccount.id)
-        await cryptoBackendClient.submitSponsorship(sponsorship.id, signed)
+        savePendingFlow("hyperliquid-deposit", JSON.stringify({ intents: [intent], amount: amountValue, stage: start }), Date.now())
+        if (routed.sponsorship) {
+          if (!routed.sponsorship.signingPayload) throw new Error("The transaction signing request is not ready")
+          const signed = await signSponsoredEvmOperation(user.userId, wallet.data.id, packageQuery.data, routed.sponsorship.signingPayload, evmAccount.id)
+          await cryptoBackendClient.submitSponsorship(routed.sponsorship.id, signed)
+        } else {
+          const signed = await signEvmIntent(user.userId, wallet.data.id, packageQuery.data, intent, evmAccount.id)
+          await cryptoBackendClient.submitIntent(intent.id, signed)
+        }
         setDepositStage(1)
         savePendingFlow("hyperliquid-deposit", JSON.stringify({ intents: prepared, amount: amountValue, stage: 1 }), Date.now())
         clearPendingFlow("hyperliquid-deposit")

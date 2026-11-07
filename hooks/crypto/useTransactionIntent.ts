@@ -9,6 +9,7 @@ import {
   cryptoQueryKeys,
   isCryptoBackendEnabled,
 } from "@/lib/crypto-backend"
+import { CryptoBackendError } from "@/lib/crypto-backend/errors"
 import type { CryptoTransactionIntent, CryptoWalletPackageDocument, SponsorshipOperation } from "@/lib/crypto-backend"
 import { createIdempotencyKeyStore } from "@/lib/crypto-backend/idempotency"
 import { signEvmIntent } from "@/lib/crypto-wallet/evm-signing"
@@ -31,9 +32,7 @@ type TransferInput = {
 type CreateIntentResult = {
   intent: CryptoTransactionIntent
   sponsorship: SponsorshipOperation | undefined
-  /** Whatever `quoteSponsorship`/`prepareSponsorship` threw — never fails the
-   *  mutation itself (spec §11). Read via `resolveFeePresentation`. */
-  sponsorshipError: unknown
+  feeMode: "sponsored" | "self-paid"
 }
 
 type AdoptIntentOptions = {
@@ -55,7 +54,7 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
     enabled: enabled && Boolean(intentId),
     refetchInterval: (query) => {
       const status = query.state.data?.status
-      return status === "submitted" || status === "pending" || status === "unknown" ? 5_000 : false
+      return status === "submitting" || status === "submitted" || status === "pending" || status === "unknown" ? 5_000 : false
     },
   })
 
@@ -65,7 +64,7 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
     enabled: enabled && Boolean(sponsorshipId),
     refetchInterval: (query) => {
       const status = query.state.data?.status
-      return status === "submitted" || status === "prepared" ? 5_000 : false
+      return status === "submitting" || status === "submitted" || status === "prepared" ? 5_000 : false
     },
   })
 
@@ -77,30 +76,15 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
   const create = useMutation({
     mutationFn: async (input: TransferInput): Promise<CreateIntentResult> => {
       const { sponsorFees, ...transferInput } = input
-      const intent = await cryptoBackendClient.createTransferIntent({
+      const routed = await cryptoBackendClient.createTransferIntent({
         ...transferInput,
         sponsorFees,
         idempotencyKey: idempotency.current.keyFor(transferInput),
       })
-      if (!sponsorFees) return { intent, sponsorship: undefined, sponsorshipError: undefined }
-      try {
-        const sponsorship = await cryptoBackendClient.quoteSponsorship({
-          accountId: input.accountId,
-          networkId: input.networkId,
-          operation: input.asset.kind === "token" ? "token-transfer" : "native-transfer",
-          intentId: intent.id,
-        })
-        const prepared = sponsorship.status === "prepared"
-          ? sponsorship
-          : await cryptoBackendClient.prepareSponsorship(sponsorship.id, intent.id)
-        return { intent, sponsorship: prepared, sponsorshipError: undefined }
-      } catch (error) {
-        // Spec §11: an outage in the sponsorship path must never kill a
-        // transfer the user could pay for themselves — the mutation still
-        // succeeds with the intent alone, and `resolveFeePresentation`
-        // (lib/crypto-backend/sponsorship.ts) is what turns this caught error
-        // into the review screen's self-paid-fallback reason.
-        return { intent, sponsorship: undefined, sponsorshipError: error }
+      return {
+        intent: routed.intent,
+        sponsorship: routed.sponsorship,
+        feeMode: routed.feeMode ?? (sponsorFees ? "self-paid" : "self-paid"),
       }
     },
     retry: false,
@@ -130,19 +114,33 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
   })
 
   const submit = useMutation({
-    mutationFn: async ({ useSponsorship, requireSponsorship = false }: { useSponsorship: boolean; requireSponsorship?: boolean }) => {
+    mutationFn: async ({ useSponsorship }: { useSponsorship: boolean }) => {
       if (!intentId || !intentQuery.data || !walletId || !packageValue) throw new Error("Create an intent and unlock the wallet before signing")
-      const intent = intentQuery.data
-      const sponsorship = sponsorshipQuery.data ?? create.data?.sponsorship
+      let intent = intentQuery.data
+      let sponsorship = sponsorshipQuery.data ?? create.data?.sponsorship
+      const sponsorshipReady = sponsorship?.status === "prepared" && Boolean(sponsorship.signingPayload) && new Date(sponsorship.expiresAt).getTime() > Date.now()
+
+      // Re-route at the last safe point too. This covers a page-resume race
+      // and a prepared relay quote expiring while the review screen is open.
+      // The backend either returns a fresh prepared payload or rebuilds the
+      // same intent as a normal user-paid transaction; the browser never
+      // mutates a sponsored transaction into a direct one.
+      if (useSponsorship && !sponsorshipReady) {
+        const routed = await cryptoBackendClient.routeIntentFees(intent.id)
+        intent = routed.intent
+        sponsorship = routed.sponsorship
+        queryClient.setQueryData<CryptoTransactionIntent>(cryptoQueryKeys.intent(userId, intent.id), intent)
+        setSponsorshipId(sponsorship?.id)
+        if (sponsorship) queryClient.setQueryData<SponsorshipOperation>(["crypto", "sponsorship", userId, sponsorship.id], sponsorship)
+      }
+
       // Spec §11 edge case: branch on the user's FINAL choice, not merely on
       // whether an operation object happens to exist — an operation that
       // expired (or was quoted for a choice the user has since walked back)
       // must never be signed down the sponsored path just because it's still
       // sitting in the cache.
-      if (useSponsorship && !sponsorship && requireSponsorship) {
-        throw adoptedSponsorshipError ?? create.data?.sponsorshipError ?? new Error("Fee sponsorship is not ready for this transfer")
-      }
-      if (useSponsorship && sponsorship) {
+      const shouldSubmitSponsored = useSponsorship && sponsorship?.status === "prepared" && Boolean(sponsorship.signingPayload) && new Date(sponsorship.expiresAt).getTime() > Date.now()
+      if (shouldSubmitSponsored && sponsorship) {
         if (!sponsorship.signingPayload) throw new Error("Sponsored signing payload is not ready")
         const signedPayload = intent.chainFamily === "solana"
           ? await signSponsoredSolanaTransaction(userId, walletId, packageValue, sponsorship.signingPayload, String(intent.accountId))
@@ -176,6 +174,14 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
       await intentQuery.refetch()
       if ("operation" in record) await sponsorshipQuery.refetch()
     },
+    onError: async (error) => {
+      // The backend durably claims before broadcasting. If another tab owns
+      // that claim, refresh immediately so the status poll follows the same
+      // intent instead of leaving this tab displaying awaiting_signature.
+      if (error instanceof CryptoBackendError && ["SUBMISSION_IN_PROGRESS", "BROADCAST_UNKNOWN", "SUBMISSION_STATE_UNCERTAIN", "SUBMISSION_RECOVERY_REQUIRED"].includes(error.code)) {
+        await intentQuery.refetch()
+      }
+    },
   })
 
   /**
@@ -195,20 +201,10 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
     setIsAdoptingSponsorship(true)
     void (async () => {
       try {
-        const intent = await cryptoBackendClient.getIntent(id)
-        const asset = intent.normalizedSummary?.asset
-        if (!asset || !intent.accountId || !intent.networkId) throw new Error("The adopted wallet intent is missing sponsorship details")
-        const sponsorship = await cryptoBackendClient.quoteSponsorship({
-          accountId: intent.accountId,
-          networkId: intent.networkId,
-          operation: asset.kind === "token" ? "token-transfer" : "native-transfer",
-          intentId: intent.id,
-        })
-        const prepared = sponsorship.status === "prepared"
-          ? sponsorship
-          : await cryptoBackendClient.prepareSponsorship(sponsorship.id, intent.id)
-        setSponsorshipId(prepared.id)
-        queryClient.setQueryData<SponsorshipOperation>(["crypto", "sponsorship", userId, prepared.id], prepared)
+        const routed = await cryptoBackendClient.routeIntentFees(id)
+        queryClient.setQueryData<CryptoTransactionIntent>(cryptoQueryKeys.intent(userId, id), routed.intent)
+        setSponsorshipId(routed.sponsorship?.id)
+        if (routed.sponsorship) queryClient.setQueryData<SponsorshipOperation>(["crypto", "sponsorship", userId, routed.sponsorship.id], routed.sponsorship)
       } catch (error) {
         setAdoptedSponsorshipError(error)
       } finally {
@@ -234,16 +230,12 @@ export function useTransactionIntent(walletId?: string, packageValue?: CryptoWal
   return {
     intent: enabled ? intentQuery.data ?? create.data?.intent : undefined,
     sponsorship: enabled ? sponsorshipQuery.data ?? create.data?.sponsorship : undefined,
-    // Spec §11: a quote/prepare outage is caught inside `create` and comes
-    // back here instead of failing the mutation — this is how the review
-    // screen's fee row (via `resolveFeePresentation`) learns why it fell back.
-    sponsorshipError: enabled ? adoptedSponsorshipError ?? create.data?.sponsorshipError : undefined,
     isSponsorshipPreparing: isAdoptingSponsorship,
     intentId,
     isLoading: create.isPending || intentQuery.isLoading,
     isSimulating: simulate.isPending,
     isSubmitting: submit.isPending,
-    error: create.error ?? simulate.error ?? submit.error ?? intentQuery.error ?? null,
+    error: adoptedSponsorshipError ?? create.error ?? simulate.error ?? submit.error ?? intentQuery.error ?? null,
     createIntent: create.mutateAsync,
     simulateIntent: simulate.mutateAsync,
     submitIntent: submit.mutateAsync,

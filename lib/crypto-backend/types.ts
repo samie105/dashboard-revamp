@@ -38,7 +38,15 @@ export interface CryptoNetwork {
   chainId?: number
   cluster?: string
   nativeAsset: string
-  capabilities: Record<string, boolean> & { balance?: boolean }
+  capabilities: Record<string, boolean> & {
+    balance?: boolean
+    transfer?: boolean
+    directTransfer?: boolean
+    providerSwap?: boolean
+    accountCreation?: boolean
+    confirmation?: boolean
+    sponsorship?: boolean
+  }
   metadata?: {
     protocolChainId?: string
     rpcUrl?: string
@@ -113,6 +121,18 @@ export interface CryptoTransactionIntent {
     logs?: unknown[]
   }
   [key: string]: unknown
+}
+
+/**
+ * The backend chooses the fee route before the wallet signs. `sponsorship`
+ * is an internal signing path, not a user-facing choice; it is absent when
+ * the same intent was safely rebuilt as a normal user-paid transaction.
+ */
+export interface CryptoTransferIntentResult {
+  intent: CryptoTransactionIntent
+  sponsorship?: SponsorshipOperation
+  feeMode?: "sponsored" | "self-paid"
+  existing?: boolean
 }
 
 export interface CryptoSpotIntentPlan {
@@ -300,6 +320,8 @@ export interface FiatQuote {
   providerRate?: string
   providerFee?: string
   worldstreetFee?: string
+  /** Everything that leaves the wallet: the amount plus any bundled fee. */
+  totalDebit?: string
   expectedSettlementSeconds?: number
   expiresAt: string
   state: "active" | "accepted" | "expired" | "superseded" | string
@@ -328,6 +350,10 @@ export interface FiatOrder {
   localCryptoIntentId?: string
   transactionRecordId?: string
   expectedDepositAmount?: string
+  /** Service fee bundled into the same transaction, in the sent asset. */
+  worldstreetFee?: string
+  /** Everything that leaves the wallet: the provider amount plus the fee. */
+  totalDebit?: string
   observedDepositAmount?: string
   observedDepositAsset?: string
   observedDepositNetwork?: string
@@ -573,6 +599,7 @@ export interface SponsorshipOperation {
   providerStatus?: string
   txHash?: string
   providerError?: string
+  manualReconciliationRequired?: boolean
 }
 
 export interface RecoveryStatus {

@@ -3,8 +3,10 @@
 import * as React from "react"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { useProfile } from "@/components/profile-provider"
+import { useClerkEnabled } from "@/components/conditional-clerk-provider"
 import { DEV_AUTH_BYPASS, DEV_BYPASS_USER } from "@/lib/dev-auth-bypass"
 import { DASHBOARD_TEST_MODE, DASHBOARD_TEST_USER } from "@/lib/dashboard-test-mode"
+import { CLERK_SIGN_IN_URL } from "@/lib/clerk-config"
 
 export type AuthUser = {
   userId: string
@@ -34,6 +36,19 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const clerkEnabled = useClerkEnabled()
+
+  // Admin authentication is intentionally independent of Clerk. Keep the
+  // customer auth hooks out of this subtree so an admin page can render even
+  // when the customer Clerk configuration is unavailable or domain-locked.
+  if (!clerkEnabled) {
+    return (
+      <AuthContext.Provider value={{ user: null, isSignedIn: false, isLoaded: true, signOut: async () => {} }}>
+        {children}
+      </AuthContext.Provider>
+    )
+  }
+
   // Two components, not one branch: under the bypass ClerkProvider isn't in
   // the tree at all (see app/layout.tsx), so Clerk's hooks would throw before
   // clerk-js even got the chance to fail its domain check. The flag is a
@@ -102,7 +117,7 @@ function ClerkAuthProvider({ children }: { children: React.ReactNode }) {
     }
     const redirectUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
       ? `${window.location.origin}/login`
-      : "https://www.worldstreetgold.com/login"
+      : CLERK_SIGN_IN_URL
     await clerkSignOut({ redirectUrl })
   }, [clerkSignOut])
 

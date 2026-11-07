@@ -42,7 +42,24 @@ export type WalletAccount = {
 }
 
 export type WalletDetails = Wallet & { accounts: WalletAccount[] }
-export type Network = { id: string; family: string; name: string; environment: string; chainId?: number; cluster?: string; nativeAsset: string; capabilities: Record<string, boolean> }
+export type Network = {
+  id: string
+  family: string
+  name: string
+  environment: string
+  chainId?: number
+  cluster?: string
+  nativeAsset: string
+  capabilities: Record<string, boolean> & {
+    balance?: boolean
+    transfer?: boolean
+    directTransfer?: boolean
+    providerSwap?: boolean
+    accountCreation?: boolean
+    confirmation?: boolean
+    sponsorship?: boolean
+  }
+}
 export type WalletPackage = Record<string, unknown>
 export type PasskeyOptions = Record<string, unknown>
 export type PasskeyResponse = Record<string, unknown>

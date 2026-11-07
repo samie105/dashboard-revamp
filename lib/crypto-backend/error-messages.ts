@@ -229,6 +229,50 @@ export function describeCryptoError(error: unknown): CryptoErrorDescription {
           action: "new-intent",
           requestId,
         }
+      case "SUBMISSION_IN_PROGRESS":
+        return {
+          title: "Submission in progress",
+          message: "This transaction is already being sent. We’re checking its status now.",
+          action: "retry",
+          requestId,
+        }
+      case "SUBMISSION_RECOVERY_REQUIRED":
+      case "BROADCAST_UNKNOWN":
+      case "SUBMISSION_STATE_UNCERTAIN":
+        return {
+          title: "Submission needs checking",
+          message: "The network did not give a definitive result. We have held the transaction safely so it cannot be sent twice.",
+          action: "retry",
+          requestId,
+        }
+      case "IDEMPOTENCY_KEY_REUSED":
+        return {
+          title: "Request changed",
+          message: "This request key is already tied to different transaction details. Start a new request.",
+          action: "new-intent",
+          requestId,
+        }
+      case "ACCOUNT_OPERATION_IN_PROGRESS":
+        return {
+          title: "Another transaction is in progress",
+          message: "Finish or wait for the current wallet operation before starting another one.",
+          action: "retry",
+          requestId,
+        }
+      case "BLOCKHASH_STALE":
+        return {
+          title: "Review expired",
+          message: "The Solana review expired before submission. Get a fresh transaction and sign it again.",
+          action: "new-intent",
+          requestId,
+        }
+      case "TOKEN_EXTENSION_UNSUPPORTED":
+        return {
+          title: "Token not supported yet",
+          message: "This token uses transfer rules the wallet cannot safely execute yet.",
+          action: "none",
+          requestId,
+        }
       case "DUPLICATE_REQUEST":
         return {
           title: "Already in progress",

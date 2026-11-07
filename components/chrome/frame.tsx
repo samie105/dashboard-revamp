@@ -196,7 +196,7 @@ const TOP_NAV: TopItem[] = [
       { name: "Spot", hint: "Buy and sell at market or limit", href: "/trade", icon: Exchange01Icon },
       { name: "Futures", hint: "Perpetual futures", href: "/trade?market=futures", icon: ChartLineData02Icon },
       { name: "Swap", hint: "Exchange one coin for another", href: "/swap", icon: ArrowLeftRightIcon },
-      { name: "Copy Trading", hint: "Mirror proven traders", icon: UserSwitchIcon, soon: true },
+      { name: "Copy Trading", hint: "Mirror proven traders", href: "/copy-trading", icon: UserSwitchIcon },
     ],
   },
   { name: "Markets", href: "/trading/markets" },

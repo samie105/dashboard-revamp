@@ -46,6 +46,17 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value ? value : null
 }
 
+// Bitcoin's genesis block; no real movement predates it. A backend that
+// reports an unset time as epoch 0 would otherwise render as "20748d ago".
+const EARLIEST_PLAUSIBLE_MS = Date.UTC(2009, 0, 3)
+
+function plausibleTime(value: unknown): string | null {
+  const text = str(value)
+  if (!text) return null
+  const ms = Date.parse(text)
+  return Number.isFinite(ms) && ms >= EARLIEST_PLAUSIBLE_MS ? text : null
+}
+
 function shortAddress(address: string | null): string {
   if (!address) return "Unknown"
   return `${address.slice(0, 4)}…${address.slice(-4)}`
@@ -76,7 +87,7 @@ export function describeLedgerRecord(
     status: String(record.status ?? "unknown"),
     networkId,
     txHash: String(record.txHash ?? ""),
-    createdAt: str(record.submittedAt) ?? str(record.createdAt),
+    createdAt: plausibleTime(record.submittedAt) ?? plausibleTime(record.createdAt),
   }
 
   const lookup = (address: string | null, chain = networkId) => {

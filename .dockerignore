@@ -9,6 +9,12 @@ out
 dist
 build
 
+# The vivid-voice workspace dependency is a committed local package. Its
+# runtime entrypoints are published from this dist directory and must be in
+# the Docker build context.
+!packages/vivid-voice/dist
+!packages/vivid-voice/dist/**
+
 # Local tooling / editor state
 .claude
 .vscode

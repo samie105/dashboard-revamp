@@ -4,6 +4,7 @@ import * as React from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
 import { DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
+import { clerkLoginUrl } from "@/lib/clerk-config"
 
 // Kept in step with `isPublicRoute` in middleware.ts. The *-unauth routes are
 // the dummy-data design previews — no session, no wallet, nothing to gate.
@@ -23,15 +24,11 @@ const PUBLIC_ROUTES = [
   "/launchpad-unauth",
   "/test/login",
 ]
-const LOGIN_URL =
-  process.env.NODE_ENV === "production"
-    ? "https://www.worldstreetgold.com/login"
-    : "/login"
-
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth()
   const pathname = usePathname()
   const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r))
+  const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")
 
   // The test host is authenticated by its scoped HTTP-only session cookie in
   // middleware. AuthProvider supplies the matching fixed user after that
@@ -42,11 +39,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
      return before this point, so an effect placed lower would run on some
      renders and not others. */
   React.useEffect(() => {
-    if (!isDashboardTest && !isPublic && isLoaded && !isSignedIn) window.location.href = LOGIN_URL
-  }, [isDashboardTest, isPublic, isLoaded, isSignedIn])
+    if (!isDashboardTest && !isPublic && !isAdminRoute && isLoaded && !isSignedIn) {
+      window.location.href = clerkLoginUrl(window.location.href, window.location.origin)
+    }
+  }, [isAdminRoute, isDashboardTest, isPublic, isLoaded, isSignedIn])
 
   // Public routes bypass the gate entirely
-  if (isDashboardTest || isPublic) {
+  if (isDashboardTest || isPublic || isAdminRoute) {
     return <>{children}</>
   }
 

@@ -10,6 +10,7 @@ import { useProfile } from "@/components/profile-provider"
 import { allFunctions } from "@/lib/vivid-functions"
 import { getPageInfo } from "@/lib/vivid-page-context"
 import { isPreviewPath } from "@/components/preview/routes"
+import { useClerkEnabled } from "@/components/conditional-clerk-provider"
 import VividVoiceControl from "@/components/vivid/vivid-voice-control"
 import VividSpotlight from "@/components/vivid/vivid-spotlight"
 import VividWidget from "@/components/vivid/VividWidget"
@@ -51,6 +52,16 @@ const useUser = DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE
 const useAuth = DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE ? () => ({ isSignedIn: true }) : useClerkAuth
 
 export function VividVoiceProvider({ children }: { children: React.ReactNode }) {
+  const clerkEnabled = useClerkEnabled()
+
+  // The admin console has its own authentication plane and must not mount
+  // customer Clerk hooks or the customer voice surface.
+  if (!clerkEnabled) return <>{children}</>
+
+  return <CustomerVividVoiceProvider>{children}</CustomerVividVoiceProvider>
+}
+
+function CustomerVividVoiceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser()
   const { isSignedIn } = useAuth()
   const pathname = usePathname()

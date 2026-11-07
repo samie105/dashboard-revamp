@@ -30,7 +30,6 @@ export const viewport: Viewport = {
 }
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils";
-import { ClerkProvider } from "@clerk/nextjs"
 import { ProfileProvider } from "@/components/profile-provider"
 import { AuthProvider } from "@/components/auth-provider"
 import { AuthGate } from "@/components/auth-gate"
@@ -61,31 +60,28 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { LayoutShell } from "@/components/layout-shell"
 import { VividVoiceProvider } from "@/components/vivid-provider"
 import { LocalClerkConfigurationNotice } from "@/components/auth/local-clerk-configuration-notice"
-import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
-import { DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
+import { ConditionalClerkProvider } from "@/components/conditional-clerk-provider"
 
-// Under the dev bypass, ClerkProvider must not mount at all: clerk-js boots in
-// the browser with the production, domain-locked key and floods the console
-// with origin/403 errors it can never resolve on localhost. The server seams
-// are already mocked, and AuthProvider skips Clerk's hooks when the flag is on.
-function MaybeClerk({ children }: { children: React.ReactNode }) {
-  if (DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE) return <>{children}</>
-  return <ClerkProvider signInUrl="/login" signUpUrl="/register">{children}</ClerkProvider>
-}
+// The satellite must receive the public key explicitly. Reading it in the
+// server layout also lets a container platform inject the value at runtime;
+// relying on Clerk's implicit client-side env lookup can leave useUser() in an
+// endless `isLoaded === false` state when the dashboard was built without the
+// public build argument.
+export const dynamic = "force-dynamic"
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const clerkPublishableKey = process.env["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"] ?? ""
+
   return (
-    // This app IS www.worldstreetgold.com — the PRIMARY Clerk domain, where
-    // sign-in actually happens. It must NOT declare isSatellite/domain: doing
-    // so made it a satellite of itself, so Clerk waited forever on a handshake
-    // with a primary that was this very app. `useUser().isLoaded` never flipped
-    // true and every visit hung on "Verifying identity…". Satellite config
-    // belongs only on academy/vision/arcade, which point back here.
-    <MaybeClerk>
+    // The dashboard is a Clerk satellite in production: sign-in happens on
+    // www.worldstreetgold.com and the authenticated session returns here.
+    // Local/test deployments can remain a primary app through the host-aware
+    // config in lib/clerk-config.ts.
+    <ConditionalClerkProvider publishableKey={clerkPublishableKey}>
       <html
         lang="en"
         suppressHydrationWarning
@@ -124,6 +120,6 @@ export default function RootLayout({
           </ThemeProvider>
         </body>
       </html>
-    </MaybeClerk>
+    </ConditionalClerkProvider>
   )
 }

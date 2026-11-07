@@ -34,7 +34,6 @@ export function SendReviewScreen({
   tokenContract,
   amount,
   feeValue,
-  feeFallbackReason,
   countdown,
   expired,
   validationErrors,
@@ -56,9 +55,6 @@ export function SendReviewScreen({
   tokenContract: string | null
   amount: string
   feeValue: string
-  /** Spec §11: why the fee row fell back to self-paid — null when it didn't
-   *  (either it was never requested, or sponsorship is live). */
-  feeFallbackReason: string | null
   /** `mm:ss` left on the quote, or the sponsorship offer — whichever is
    *  sooner — or null when neither carries an expiry. */
   countdown: string | null
@@ -145,8 +141,6 @@ export function SendReviewScreen({
           </button>
         </div>
       </div>
-
-      {feeFallbackReason && <InlineNotice tone="warning">{feeFallbackReason}</InlineNotice>}
 
       {expired && <InlineNotice tone="warning">{QUOTE_EXPIRED_MESSAGE}</InlineNotice>}
 

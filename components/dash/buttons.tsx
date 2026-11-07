@@ -22,6 +22,7 @@ const NEUTRAL = "border border-foreground/[0.09] bg-foreground/[0.04] text-foreg
 const BLOCKED = "cursor-not-allowed border border-foreground/[0.07] bg-foreground/[0.04] text-muted-foreground"
 
 type ButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "type"> & {
+  type?: "button" | "submit" | "reset"
   size?: Size
   busy?: boolean
   fullWidth?: boolean
@@ -31,11 +32,11 @@ function Spinner() {
   return <span aria-hidden className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
 }
 
-export function GoldButton({ size = "md", busy = false, fullWidth = false, disabled, className, children, ...rest }: ButtonProps) {
+export function GoldButton({ type = "button", size = "md", busy = false, fullWidth = false, disabled, className, children, ...rest }: ButtonProps) {
   const blocked = disabled && !busy
   return (
     <button
-      type="button"
+      type={type}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
       className={cn(BASE, SIZE[size], blocked ? BLOCKED : "ds-gold", busy && "cursor-progress", fullWidth && "w-full", className)}
@@ -47,10 +48,10 @@ export function GoldButton({ size = "md", busy = false, fullWidth = false, disab
   )
 }
 
-export function NeutralButton({ size = "md", busy = false, fullWidth = false, disabled, className, children, ...rest }: ButtonProps) {
+export function NeutralButton({ type = "button", size = "md", busy = false, fullWidth = false, disabled, className, children, ...rest }: ButtonProps) {
   return (
     <button
-      type="button"
+      type={type}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
       className={cn(BASE, SIZE[size], NEUTRAL, "disabled:cursor-not-allowed disabled:opacity-50", fullWidth && "w-full", className)}

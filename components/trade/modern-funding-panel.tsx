@@ -566,17 +566,22 @@ function DepositFlow({
   async function submitPending(intents: CryptoTransactionIntent[], preparedSponsorship?: SponsorshipOperation) {
     if (!evm) throw new Error("Your wallet doesn't have an active account for this network yet")
     if (intents.length === 1) {
-      const intent = intents[0]
-      const sponsorship = preparedSponsorship ?? await cryptoBackendClient.quoteSponsorship({
-        accountId: evm.id,
-        networkId: "arbitrum-one",
-        operation: "hyperliquid-deposit",
-        intentId: intent.id,
-      })
-      if (!sponsorship.signingPayload) throw new Error("The Hyperliquid gas sponsor did not return a signing request")
-      const signed = await signSponsoredEvmOperation(userId, wallet.id, packageValue, sponsorship.signingPayload, evm.id)
-      await cryptoBackendClient.submitSponsorship(sponsorship.id, signed)
-      setSubmittedIds((current) => (current.includes(intent.id) ? current : [...current, intent.id]))
+      const initialIntent = intents[0]
+      const sponsorshipReady = preparedSponsorship?.status === "prepared"
+        && Boolean(preparedSponsorship.signingPayload)
+        && new Date(preparedSponsorship.expiresAt).getTime() > Date.now()
+      const routed = sponsorshipReady
+        ? { intent: initialIntent, sponsorship: preparedSponsorship }
+        : await cryptoBackendClient.routeIntentFees(initialIntent.id)
+      if (routed.sponsorship) {
+        if (!routed.sponsorship.signingPayload) throw new Error("The transaction signing request is not ready")
+        const signed = await signSponsoredEvmOperation(userId, wallet.id, packageValue, routed.sponsorship.signingPayload, evm.id)
+        await cryptoBackendClient.submitSponsorship(routed.sponsorship.id, signed)
+      } else {
+        const signed = await signEvmIntent(userId, wallet.id, packageValue, routed.intent, evm.id)
+        await cryptoBackendClient.submitIntent(routed.intent.id, signed)
+      }
+      setSubmittedIds((current) => (current.includes(routed.intent.id) ? current : [...current, routed.intent.id]))
       return { signedCount: 1, skippedUnknown: 0 }
     }
     let signedCount = 0

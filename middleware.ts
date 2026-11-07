@@ -1,16 +1,22 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
-import { NextRequest, NextResponse } from "next/server"
+import { NextFetchEvent, NextRequest, NextResponse } from "next/server"
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import {
   DASHBOARD_TEST_SESSION_COOKIE,
   verifyDashboardTestSession,
 } from "@/lib/dashboard-test-auth"
 import { SERVER_DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
+import {
+  CLERK_DOMAIN,
+  CLERK_APP_ORIGIN,
+  CLERK_IS_SATELLITE,
+  CLERK_SIGN_IN_URL,
+  CLERK_SIGN_UP_URL,
+  clerkLoginUrl,
+} from "@/lib/clerk-config"
 
 const isProduction = process.env.NODE_ENV === "production"
-const LOGIN_URL = isProduction
-  ? "https://www.worldstreetgold.com/login"
-  : "/login"
+const LOGIN_URL = isProduction ? CLERK_SIGN_IN_URL : "/login"
 
 // Routes that don't require authentication.
 //
@@ -55,12 +61,12 @@ const isCryptoHealthRoute = createRouteMatcher([
 const isApiRoute = createRouteMatcher(["/api/(.*)"])
 
 // Webhook/cron routes that should NOT require auth (called by external services)
-const isWebhookRoute = createRouteMatcher([
-  "/api/webhooks(.*)",
-])
+const isWebhookRoute = createRouteMatcher(["/api/webhooks(.*)"])
 
 const isDashboardTestLogin = createRouteMatcher(["/test/login"])
 const isDashboardTestSessionApi = createRouteMatcher(["/api/test/session"])
+const isAdminPageRoute = createRouteMatcher(["/admin(.*)"])
+const isAdminApiRoute = createRouteMatcher(["/api/admin(.*)"])
 
 async function dashboardTestMiddleware(req: NextRequest) {
   // This function is only selected when the deployment has explicitly opted
@@ -70,13 +76,25 @@ async function dashboardTestMiddleware(req: NextRequest) {
     return NextResponse.next()
   }
 
+  // Admins use the separate email/session identity plane. The admin BFF and
+  // client gate enforce that session; this host-level middleware must not
+  // redirect external admins into the customer Clerk flow.
+  if (isAdminPageRoute(req) || isAdminApiRoute(req)) return NextResponse.next()
+
   // Keep the design previews shareable on the test host. Normal dashboard
   // routes below still require the scoped HTTP-only test session.
-  if (isPublicRoute(req) && !req.nextUrl.pathname.startsWith("/login") && !req.nextUrl.pathname.startsWith("/register")) {
+  if (
+    isPublicRoute(req) &&
+    !req.nextUrl.pathname.startsWith("/login") &&
+    !req.nextUrl.pathname.startsWith("/register")
+  ) {
     return NextResponse.next()
   }
 
-  if (req.nextUrl.pathname.startsWith("/login") || req.nextUrl.pathname.startsWith("/register")) {
+  if (
+    req.nextUrl.pathname.startsWith("/login") ||
+    req.nextUrl.pathname.startsWith("/register")
+  ) {
     return NextResponse.redirect(new URL("/test/login", req.url))
   }
 
@@ -87,68 +105,105 @@ async function dashboardTestMiddleware(req: NextRequest) {
 
   if (req.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.json(
-      { success: false, error: { code: "UNAUTHORIZED", message: "Dashboard test session required" } },
-      { status: 401 },
+      {
+        success: false,
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Dashboard test session required",
+        },
+      },
+      { status: 401 }
     )
   }
 
   const login = new URL("/test/login", req.url)
-  login.searchParams.set("returnTo", `${req.nextUrl.pathname}${req.nextUrl.search}`)
+  login.searchParams.set(
+    "returnTo",
+    `${req.nextUrl.pathname}${req.nextUrl.search}`
+  )
   return NextResponse.redirect(login)
 }
 
-const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
-  // Skip auth for webhook routes (called by external services)
-  if (isWebhookRoute(req)) {
-    return NextResponse.next()
-  }
+async function clerkAuthMiddleware(req: NextRequest, event: NextFetchEvent) {
+  const publicOrigin = CLERK_APP_ORIGIN ?? req.nextUrl.origin
 
-  if (isCryptoHealthRoute(req)) {
-    return NextResponse.next()
-  }
-
-  // API before pages. An expired session on /api/* has to come back as a JSON
-  // 401 the client can recognise: fetch() follows a redirect, so answering with
-  // one returns the login page's HTML under a 200, which every JSON caller
-  // parses into null and then dereferences. The redirect branch below is for
-  // navigations only.
-  if (isApiRoute(req)) {
-    try {
-      await auth.protect()
-    } catch {
-      if (req.nextUrl.pathname.startsWith("/api/crypto/")) {
-        return NextResponse.json(
-          { success: false, error: { code: "UNAUTHORIZED", message: "Unauthorized" } },
-          { status: 401 },
-        )
+  return clerkMiddleware(
+    async (auth, req) => {
+      // The admin console has its own authentication and session cookie. Keep it
+      // outside Clerk's protect() branch even though the rest of this app remains
+      // Clerk-authenticated.
+      if (isAdminPageRoute(req) || isAdminApiRoute(req)) {
+        return NextResponse.next()
       }
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-    return NextResponse.next()
-  }
 
-  if (!isPublicRoute(req)) {
-    try {
-      await auth.protect()
-    } catch {
-      // Token invalid/expired/missing → redirect to login
-      if (isProduction) {
-        return NextResponse.redirect(LOGIN_URL)
+      // Skip auth for webhook routes (called by external services)
+      if (isWebhookRoute(req)) {
+        return NextResponse.next()
       }
-      return NextResponse.redirect(new URL(LOGIN_URL, req.url))
+
+      if (isCryptoHealthRoute(req)) {
+        return NextResponse.next()
+      }
+
+      // API before pages. An expired session on /api/* has to come back as a JSON
+      // 401 the client can recognise: fetch() follows a redirect, so answering with
+      // one returns the login page's HTML under a 200, which every JSON caller
+      // parses into null and then dereferences. The redirect branch below is for
+      // navigations only.
+      if (isApiRoute(req)) {
+        try {
+          await auth.protect()
+        } catch {
+          if (req.nextUrl.pathname.startsWith("/api/crypto/")) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+              },
+              { status: 401 }
+            )
+          }
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
+        return NextResponse.next()
+      }
+
+      if (!isPublicRoute(req)) {
+        try {
+          await auth.protect()
+        } catch {
+          // Token invalid/expired/missing → redirect to login
+          const returnTo = `${publicOrigin}${req.nextUrl.pathname}${req.nextUrl.search}`
+          return NextResponse.redirect(clerkLoginUrl(returnTo, publicOrigin))
+        }
+      }
+    },
+    {
+      domain: CLERK_DOMAIN,
+      isSatellite: CLERK_IS_SATELLITE,
+      signInUrl: LOGIN_URL,
+      signUpUrl: CLERK_SIGN_UP_URL,
     }
-  }
-})
+  )(req, event)
+}
 
 // Under the dev bypass, clerkMiddleware() must never wrap the request: with a
 // domain-locked production key it dead-ends every route at /login before the
 // handler's own checks could run. Every request waves through — the mocked
 // server seams answer downstream. (Inert outside development builds.)
-export default SERVER_DASHBOARD_TEST_MODE
-  ? dashboardTestMiddleware
-  : DEV_AUTH_BYPASS
-    ? () => NextResponse.next()
-    : clerkAuthMiddleware
+export default async function middleware(
+  req: NextRequest,
+  event: NextFetchEvent
+) {
+  // Keep the separate admin identity plane outside Clerk entirely. This check
+  // must happen before invoking clerkMiddleware, whose initialization can
+  // reject a customer Clerk key even when the callback would later bypass the
+  // route.
+  if (isAdminPageRoute(req) || isAdminApiRoute(req)) return NextResponse.next()
+  if (SERVER_DASHBOARD_TEST_MODE) return dashboardTestMiddleware(req)
+  if (DEV_AUTH_BYPASS) return NextResponse.next()
+  return clerkAuthMiddleware(req, event)
+}
 
 export const config = {
   matcher: [

@@ -111,6 +111,7 @@ describe("proxy allowlist — existing non-fiat entries unchanged", () => {
     ["GET", "wallets/me"],
     ["GET", "transactions/abc"],
     ["POST", "transactions/intents"],
+    ["POST", "transactions/intents/66f000000000000000000061/fee-routing"],
     ["POST", "launchpad/launches"],
     ["GET", "bridge/intertrain/usdc/status"],
     ["POST", "bridge/intertrain/usdc/intents"],

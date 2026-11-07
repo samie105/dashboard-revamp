@@ -25,7 +25,7 @@ export const SEND_STAGES = [
 export function sendStageIndex(status: string): number {
   switch (status) {
     case "created": case "simulated": case "validated": return 0
-    case "signed": case "submitted": case "pending": case "unknown": return 1
+    case "signed": case "submitting": case "submitted": case "pending": case "unknown": return 1
     case "confirmed": return SEND_STAGES.length
     case "failed": case "expired": return 1
     default: return 1
