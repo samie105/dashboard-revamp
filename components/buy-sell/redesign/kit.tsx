@@ -22,19 +22,17 @@
 import * as React from "react"
 import Link from "next/link"
 import { motion } from "motion/react"
-import { AlertCircleIcon, Clock01Icon, Shield01Icon, Wallet02Icon } from "@hugeicons/core-free-icons"
+import { AlertCircleIcon, Wallet02Icon } from "@hugeicons/core-free-icons"
 
 import { cn } from "@/lib/utils"
 import { DashScope } from "@/components/dash"
-import { Rise } from "@/components/ui/system"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
-import { Icon, Panel, PanelTitle, SLIDE, type IconSvg } from "@/components/dashboard/redesign/ui"
+import { Icon, Panel, SLIDE } from "@/components/dashboard/redesign/ui"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { useFiatConfig } from "@/hooks/crypto/useFiatConfig"
 import { useFiatOrders } from "@/hooks/crypto/useFiatOrders"
 import { humanizeValue } from "@/lib/crypto-backend/fiat-display"
 import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
-import { MINIMUM_BUY_USD } from "@/lib/crypto-backend/fiat-onramp"
 import { FIAT_ORDER_PAUSE_STATES, FIAT_ORDER_TERMINAL_STATES } from "@/lib/crypto-backend/fiat-poll-schedule"
 import type { FiatOrder } from "@/lib/crypto-backend/types"
 
@@ -45,41 +43,27 @@ const PAGE: Record<TradeMode, { title: string; subtitle: string }> = {
   sell: { title: "Sell crypto", subtitle: "Send crypto from your Worldstreet wallet and get paid to your bank account" },
 }
 
-/** Display-only per-order cap, agreed with the owner. Not enforced. */
-const DISPLAY_MAX_USD = 5000
-
 /* ── Page frame ───────────────────────────────────────────────────────── */
 
 /**
- * The page: heading, then the ticket beside the side column. `tabs` puts the
- * Buy | Sell switch at the top of the ticket (the order screen goes without,
- * as in the preview); `head` sits to its right (the quote clock).
+ * The page: one centered column. The Buy | Sell switch leads the card, the
+ * task sits under it with room around it, and recent orders follow below, out
+ * of the way. `tabs` hides the switch on the order screen. `head` is kept for
+ * callers but no longer drawn: the quote's clock lives in the quote itself.
  */
-export function TradeFrame({ mode, tabs = true, head, children }: { mode: TradeMode; tabs?: boolean; head?: React.ReactNode; children: React.ReactNode }) {
+export function TradeFrame({ mode, tabs = true, children }: { mode: TradeMode; tabs?: boolean; head?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <DashScope className="ws-icon-mono [&_button:not(:disabled)]:cursor-pointer [&_[role=option]]:cursor-pointer mx-auto flex w-full max-w-[1720px] flex-col gap-4 p-4 pb-28 md:gap-5 md:p-6 md:pb-6">
-      <Rise>
-        <div className="flex flex-col gap-1.5 px-1">
-          <h1 className="font-display text-[28px] font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-[32px]">{PAGE[mode].title}</h1>
-          <p className="text-[14px] text-muted-foreground">{PAGE[mode].subtitle}</p>
-        </div>
-      </Rise>
-      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
-        <div className="rise min-w-0" style={{ "--rise-delay": "60ms" } as React.CSSProperties}>
-          {/* overflow-visible: the pickers drop out of their rows. */}
-          <Panel className="overflow-visible p-4 sm:p-6">
-            <div className="flex flex-col gap-5">
-              {tabs && (
-                <div className="flex items-center justify-between gap-3">
-                  <TradeTabs mode={mode} />
-                  {head}
-                </div>
-              )}
-              {children}
-            </div>
-          </Panel>
-        </div>
-        <SideColumn mode={mode} />
+    <DashScope className="ws-icon-mono [&_button:not(:disabled)]:cursor-pointer [&_[role=option]]:cursor-pointer mx-auto flex w-full max-w-[560px] flex-col gap-10 px-4 pb-32 pt-6 md:px-6 md:pb-16 md:pt-10">
+      <h1 className="sr-only">{PAGE[mode].title}</h1>
+      <div className="rise flex flex-col gap-8" style={{ "--rise-delay": "40ms" } as React.CSSProperties}>
+        {tabs && <TradeTabs mode={mode} />}
+        {/* overflow-visible: pickers can drop out of their rows. */}
+        <Panel className="overflow-visible p-5 sm:p-8">
+          <div className="flex flex-col gap-8">{children}</div>
+        </Panel>
+      </div>
+      <div className="rise" style={{ "--rise-delay": "140ms" } as React.CSSProperties}>
+        <RecentOrders />
       </div>
     </DashScope>
   )
@@ -88,7 +72,7 @@ export function TradeFrame({ mode, tabs = true, head, children }: { mode: TradeM
 /** Buy | Sell — links between the two routes. */
 export function TradeTabs({ mode }: { mode: TradeMode }) {
   return (
-    <div role="tablist" className="grid w-[220px] shrink-0 grid-cols-2 gap-1 rounded-2xl border border-foreground/[0.06] bg-foreground/[0.025] p-1">
+    <div role="tablist" className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-foreground/[0.07] bg-foreground/[0.03] p-1">
       {(["buy", "sell"] as const).map((m) => (
         <Link
           key={m}
@@ -97,7 +81,7 @@ export function TradeTabs({ mode }: { mode: TradeMode }) {
           href={m === "buy" ? "/buy" : "/sell"}
           scroll={false}
           className={cn(
-            "relative flex h-10 items-center justify-center rounded-xl text-[14px] font-semibold capitalize transition-colors",
+            "relative flex h-11 items-center justify-center rounded-xl text-[15px] font-semibold capitalize transition-colors",
             m === mode ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -240,83 +224,10 @@ export function TradeGhost({ label, onClick, disabled }: { label: string; onClic
   )
 }
 
-/* ── Side column ──────────────────────────────────────────────────────── */
-
-function SideColumn({ mode }: { mode: TradeMode }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-4 md:gap-5">
-      <div className="rise grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5" style={{ "--rise-delay": "180ms" } as React.CSSProperties}>
-        <LimitsCard mode={mode} />
-        <WhyCard mode={mode} />
-      </div>
-      <div className="rise" style={{ "--rise-delay": "240ms" } as React.CSSProperties}>
-        <RecentOrders />
-      </div>
-    </div>
-  )
-}
-
-/** The $5 minimum is Buy's (MINIMUM_BUY_USD); there's no sell minimum in the code, so Sell doesn't show one. */
-function LimitsCard({ mode }: { mode: TradeMode }) {
-  return (
-    <Panel className="flex flex-col gap-4 p-5">
-      <div className="flex items-center justify-between">
-        <PanelTitle className="text-[16px]">Order limits</PanelTitle>
-        {/* No usage data exists, so no percentage is claimed. */}
-        <span className="text-[12px] font-semibold tabular-nums text-muted-foreground">— used</span>
-      </div>
-      <span className="font-display text-[22px] font-semibold tracking-[-0.02em] tabular-nums">
-        ${DISPLAY_MAX_USD.toLocaleString("en-US")}
-        <span className="ml-1.5 text-[13px] font-medium text-muted-foreground">per order</span>
-      </span>
-      {/* The preview's usage bar, as an empty track: nothing reports what's been used. */}
-      <span aria-hidden className="relative h-2 overflow-hidden rounded-full bg-foreground/[0.07]" />
-      <div className="mt-auto flex justify-between text-[12px] text-muted-foreground">
-        {mode === "buy" ? <span>Min ${MINIMUM_BUY_USD} per order</span> : <span />}
-        <span>Max ${DISPLAY_MAX_USD.toLocaleString("en-US")} per order</span>
-      </div>
-    </Panel>
-  )
-}
-
-const REASONS: Record<TradeMode, { icon: IconSvg; title: string; body: string }[]> = {
-  buy: [
-    { icon: Shield01Icon, title: "See the price first", body: "Rate, fees and expiry are shown before you order." },
-    { icon: Wallet02Icon, title: "Straight to your wallet", body: "Crypto lands in your Worldstreet wallet." },
-    { icon: Clock01Icon, title: "Track every step", body: "Your order updates until it's done." },
-  ],
-  sell: [
-    { icon: Shield01Icon, title: "Review before you sign", body: "Check the amount and destination before anything is sent." },
-    { icon: Wallet02Icon, title: "Signed from your wallet", body: "You approve the transfer in your Worldstreet wallet." },
-    { icon: Clock01Icon, title: "Track every step", body: "Your order updates until it's done." },
-  ],
-}
-
-function WhyCard({ mode }: { mode: TradeMode }) {
-  return (
-    <Panel className="flex flex-col gap-4 p-5">
-      <PanelTitle className="text-[16px]">{mode === "buy" ? "Why buy here" : "Why sell here"}</PanelTitle>
-      <ul className="flex flex-col gap-3.5">
-        {REASONS[mode].map((r) => (
-          <li key={r.title} className="flex gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/[0.08] text-primary">
-              <Icon icon={r.icon} className="size-4" />
-            </span>
-            <span className="flex flex-col gap-0.5">
-              <span className="text-[13.5px] font-semibold text-foreground">{r.title}</span>
-              <span className="text-[12.5px] leading-snug text-muted-foreground">{r.body}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </Panel>
-  )
-}
-
 /* ── Recent orders (GET /fiat/orders) ─────────────────────────────────── */
 
 const RECENT_LIMIT = 50
-const RECENT_SHOWN = 5
+const RECENT_SHOWN = 3
 
 function statusTone(state: string): string {
   if (state === "completed") return "bg-credit/[0.1] text-credit"
@@ -347,16 +258,13 @@ function RecentOrders() {
     .slice(0, RECENT_SHOWN)
 
   return (
-    <Panel className="flex flex-col gap-3 px-3 pb-3 pt-5 sm:px-4">
-      <div className="flex items-baseline justify-between px-2">
-        <PanelTitle className="text-[16px]">Recent orders</PanelTitle>
-        <span className="text-[12px] text-muted-foreground">Buy &amp; sell</span>
-      </div>
+    <section aria-label="Recent orders" className="flex flex-col gap-3">
+      <h2 className="px-1 text-[15px] font-semibold text-foreground">Recent orders</h2>
       {orders.isLoading ? (
         <ul className="flex flex-col" aria-busy aria-label="Loading orders">
           {[0, 1, 2].map((i) => (
-            <li key={i} className="flex items-center gap-3 px-2 py-2.5">
-              <span className="skel size-9 rounded-full" />
+            <li key={i} className="flex items-center gap-3 px-1 py-3">
+              <span className="skel size-10 rounded-full" />
               <span className="flex flex-1 flex-col gap-1.5">
                 <span className="skel h-3.5 w-40 rounded" />
                 <span className="skel h-3 w-24 rounded" />
@@ -365,20 +273,20 @@ function RecentOrders() {
           ))}
         </ul>
       ) : orders.error && !orders.data ? (
-        <div className="flex flex-col gap-3 px-2 pb-2">
+        <div className="flex flex-col gap-3 px-1">
           <FiatErrorDetail error={describeFiatError(orders.error)} />
           <button type="button" onClick={() => void orders.refetch()} className="self-start text-[13px] font-semibold text-foreground underline-offset-2 hover:underline">
             Try again
           </button>
         </div>
       ) : rows.length === 0 ? (
-        <p className="px-2 pb-3 text-[13px] text-muted-foreground">No orders yet. Your buys and sells will show here.</p>
+        <p className="px-1 text-[14px] text-muted-foreground">Nothing yet. Your orders will show up here.</p>
       ) : (
-        <ul className="flex flex-col">
+        <ul className="flex flex-col divide-y divide-foreground/[0.05]">
           {rows.map((o) => <OrderRow key={o.id} order={o} symbol={symbolOf(o.asset)} now={now} />)}
         </ul>
       )}
-    </Panel>
+    </section>
   )
 }
 

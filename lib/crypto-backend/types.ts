@@ -303,6 +303,29 @@ export interface FiatCapabilitySnapshot {
   }>
 }
 
+/** One payout choice from a compare. It never names the provider behind it. */
+export interface PayoutOption {
+  optionId: string
+  label: string
+  sendAmount: string
+  /** Extra fee on top of sendAmount, in the sent asset. "0" when none. */
+  feeAmount: string
+  /** Everything that leaves the wallet. */
+  totalDebit: string
+  receiveAmount: string
+  receiveCurrency: string
+  effectiveRate: number
+  estimatedSeconds?: number
+  rateGuaranteed: boolean
+  expiresAt: string
+  tags: Array<"best_rate" | "fastest">
+}
+
+export interface PayoutBank {
+  id: string
+  name: string
+}
+
 export interface FiatQuote {
   id: string
   provider: "onswitch" | "bridge"
@@ -333,7 +356,7 @@ export interface FiatQuote {
 export interface FiatOrder {
   id: string
   publicReference: string
-  provider: "onswitch" | "bridge"
+  provider: "onswitch" | "bridge" | "breet"
   direction: "onramp" | "offramp"
   country: string
   currency: string

@@ -15,8 +15,10 @@ function CountryFlag({ flag }: { flag?: string }) {
   return <img src={`https://flagcdn.com/w40/${code}.png`} width={24} height={18} alt="" className="h-[18px] w-6 shrink-0 rounded-sm object-cover" onError={() => setFailed(true)} />
 }
 
-export function FiatSelect({ label, value, options, onChange, disabled = false }: {
+export function FiatSelect({ label, value, options, onChange, disabled = false, large = false }: {
   label: string; value: string; options: FiatSelectOption[]; onChange: (value: string) => void; disabled?: boolean
+  /** Matches the large form fields on the Buy and Sell pages. */
+  large?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
@@ -24,9 +26,9 @@ export function FiatSelect({ label, value, options, onChange, disabled = false }
   const selected = options.find((option) => option.value === value)
   const filtered = options.filter((option) => `${option.label} ${option.meta ?? ""}`.toLowerCase().includes(search.toLowerCase()))
   return <div className="min-w-0 space-y-2">
-    <span id={id} className="block text-xs font-semibold text-muted-foreground">{label}</span>
+    <span id={id} className={large ? "block text-[13px] font-medium text-foreground/90" : "block text-xs font-semibold text-muted-foreground"}>{label}</span>
     <Popover open={open} onOpenChange={(next) => { setOpen(next); setSearch("") }}>
-      <PopoverTrigger disabled={disabled || options.length === 0} aria-labelledby={id} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-left text-sm outline-none transition hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
+      <PopoverTrigger disabled={disabled || options.length === 0} aria-labelledby={id} className={`flex w-full items-center gap-3 border border-border/60 ${large ? "min-h-14 rounded-2xl px-4 text-[16px]" : "min-h-12 rounded-xl"} bg-background/50 ${large ? "py-2" : "px-3 py-2 text-sm"} text-left outline-none transition hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50`}>
         <CountryFlag key={selected?.flag} flag={selected?.flag} />
         <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{selected?.label ?? `Choose ${label.toLowerCase()}`}</span>{selected?.meta && <span className="block truncate text-xs text-muted-foreground">{selected.meta}</span>}</span>
         <span aria-hidden className="text-muted-foreground">⌄</span>

@@ -13,11 +13,13 @@ import * as React from "react"
 
 import { BridgeUsdSell } from "@/components/fiat/sell/BridgeUsdSell"
 import { FiatSellFlow } from "@/components/fiat/sell/FiatSellFlow"
+import { NeutralSellFlow } from "@/components/fiat/sell/NeutralSellFlow"
 import { Segments } from "@/components/buy-sell/redesign/kit"
 import { ChoiceRow } from "@/components/ui/flow"
 import { Eyebrow } from "@/components/ui/system"
 import { useFiatConfig } from "@/hooks/crypto/useFiatConfig"
 import { isBridgeWithdrawalAvailable } from "@/lib/crypto-backend/fiat-capabilities"
+import { isPayoutCompareEnabled } from "@/lib/crypto-backend/fiat-compare"
 import { offrampOptions } from "@/lib/crypto-backend/fiat-offramp"
 import { readPendingFlow } from "@/lib/pending-flow"
 
@@ -37,6 +39,11 @@ export function FiatSellRouter(props: Props) {
     typeof window !== "undefined" && readPendingFlow("fiat-bridge-sell") ? "usd" : "local"
   ))
   const activeRail = availableRails.includes(rail) ? rail : availableRails[0] ?? rail
+
+  // The neutral picker covers the first stages only. An order in progress, or
+  // a choice to use another currency, goes to the existing flow, which already
+  // tracks the order and signs the wallet transaction.
+  const [handedOver, setHandedOver] = React.useState(() => typeof window !== "undefined" && Boolean(readPendingFlow("fiat-sell")))
 
   // The redesign's switch: same rails and state, no provider names.
   const railSwitcher = availableRails.length > 1 && props.variant === "redesign" ? (
@@ -67,6 +74,17 @@ export function FiatSellRouter(props: Props) {
 
   if (activeRail === "usd") {
     return <BridgeUsdSell {...props} railSwitcher={railSwitcher} />
+  }
+
+  if (isPayoutCompareEnabled() && !handedOver) {
+    return (
+      <NeutralSellFlow
+        variant={props.variant}
+        railSwitcher={railSwitcher}
+        onOrderPlaced={() => setHandedOver(true)}
+        onUseOtherCurrency={() => setHandedOver(true)}
+      />
+    )
   }
 
   return <FiatSellFlow {...props} railSwitcher={railSwitcher} />
