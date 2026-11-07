@@ -49,6 +49,8 @@ import type {
   FiatKycLinkResult,
   FiatQuote,
   FiatOrder,
+  PayoutBank,
+  PayoutOption,
   FiatVirtualAccountActivity,
   FiatVirtualAccount,
 } from "./types"
@@ -360,6 +362,28 @@ export class CryptoBackendClient {
     channel: "ach" | "ach_same_day" | "wire" | "fednow"
   }, idempotencyKey: string, signal?: AbortSignal): Promise<FiatOrder> {
     return this.request<FiatOrder>("/fiat/orders", { method: "POST", body: JSON.stringify(input) }, { signal, idempotencyKey })
+  }
+
+  async compareFiatQuotes(input: {
+    amount: string
+    asset: string
+    network: string
+    country?: string
+    currency?: string
+  }, idempotencyKey: string, signal?: AbortSignal): Promise<{ options: PayoutOption[] }> {
+    return this.request<{ options: PayoutOption[] }>("/fiat/quotes/compare", { method: "POST", body: JSON.stringify(input) }, { signal, idempotencyKey })
+  }
+
+  async listFiatPayoutBanks(quoteId: string, signal?: AbortSignal): Promise<PayoutBank[]> {
+    return this.request<PayoutBank[]>(`/fiat/quotes/${encodeURIComponent(quoteId)}/payout-banks`, {}, { signal })
+  }
+
+  async createFiatOrderFromQuote(input: {
+    walletId: string
+    quoteId: string
+    payout: { bankId: string; accountNumber: string; holderName?: string }
+  }, idempotencyKey: string, signal?: AbortSignal): Promise<FiatOrder> {
+    return this.request<FiatOrder>("/fiat/orders/from-quote", { method: "POST", body: JSON.stringify(input) }, { signal, idempotencyKey })
   }
 
   async listFiatOrders(limit = 50, signal?: AbortSignal): Promise<FiatOrder[]> {

@@ -296,6 +296,27 @@ export async function respondFromFiatFixtures(
     return requireIdempotencyKey(request, () => null)
   }
 
+  // Neutral payout comparison: two options, no provider named in either.
+  if (method === "POST" && path === "fiat/quotes/compare") {
+    const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString()
+    return idempotentCreate(request, () => ({
+      options: [
+        { optionId: "mock-option-a", label: "Option A", sendAmount: "100", feeAmount: "0", totalDebit: "100", receiveAmount: "137916.93", receiveCurrency: "NGN", effectiveRate: 1379.1693, rateGuaranteed: false, expiresAt, tags: ["best_rate"] },
+        { optionId: "mock-option-b", label: "Option B", sendAmount: "100", feeAmount: "1.2", totalDebit: "101.2", receiveAmount: "138000", receiveCurrency: "NGN", effectiveRate: 1363.6364, estimatedSeconds: 120, rateGuaranteed: true, expiresAt, tags: ["fastest"] },
+      ],
+    }))
+  }
+  if (method === "GET" && /^fiat\/quotes\/[^/]+\/payout-banks$/.test(path)) {
+    return envelope([
+      { id: "044", name: "Access Bank" },
+      { id: "058", name: "Guaranty Trust Bank" },
+      { id: "057", name: "Zenith Bank" },
+    ])
+  }
+  if (method === "POST" && path === "fiat/orders/from-quote") {
+    return idempotentCreate(request, () => freshenOfframpOrder(FIAT_ORDER_ONSWITCH_OFFRAMP))
+  }
+
   // §9 quotes and orders
   if (method === "POST" && path === "fiat/quotes") {
     const body = await readJson(request)
