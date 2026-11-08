@@ -134,6 +134,8 @@ export function describeFiatError(
     case "BENEFICIARY_REQUIRED":
     case "INVALID_REQUEST":
       return userMessage("Check the details and try again.", "fix-input", requestId)
+    case "INTENT_EXPIRED":
+      return userMessage(error.message || "This transaction has expired. Start the order again.", "stop", requestId)
     case "INSUFFICIENT_FUNDS": {
       // Our own backend writes this sentence for the user (e.g. "Add about
       // 0.005 SOL..."), so it is the exact thing to show. Raw payloads never are.
