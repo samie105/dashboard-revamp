@@ -69,6 +69,7 @@ import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
 import { isBridgeWithdrawalAvailable } from "@/lib/crypto-backend/fiat-capabilities"
 import { getUnlockedWalletState } from "@/lib/crypto-wallet/unlock-state"
 import type { BridgeWithdrawalChannel, FiatOrder } from "@/lib/crypto-backend/types"
+import { discardOfframpOrder } from "@/lib/crypto-backend/fiat-offramp"
 import { clearPendingFlow, readPendingFlow, savePendingFlow } from "@/lib/pending-flow"
 import { TradeCta, TradeFrame, TradeNotice, TradeSkeleton, TradeUnavailable } from "@/components/buy-sell/redesign/kit"
 import { RedesignUsdWithdrawalOrder } from "@/components/buy-sell/redesign/sell-order"
@@ -91,12 +92,18 @@ function BridgeWithdrawalOrderStatus({
   onSign,
   onRefresh,
   onStartOver,
+  onDiscard,
+  discarding,
+  discardError,
   canSign,
   signing,
   signError,
   variant = "classic",
 }: {
   variant?: "classic" | "redesign"
+  onDiscard: () => void
+  discarding: boolean
+  discardError?: unknown
   order: FiatOrder
   onSign: () => void
   onRefresh: () => void
@@ -106,6 +113,8 @@ function BridgeWithdrawalOrderStatus({
   signError: unknown
 }) {
   const view = bridgeWithdrawalOrderView(order)
+  // Nothing has been sent from the wallet yet, so the order can be dropped; an expired intent is the case the user cannot sign out of.
+  const canDiscard = (order.state === "awaiting_crypto_deposit" || order.state === "crypto_intent_ready") && !order.observedDepositTxHash
   const stageIndex = selectStageIndex(order.state)
   const stageProgress = useStageProgress(stageIndex ?? 0, order.id)
   const figure = order.cryptoIntent?.normalizedSummary?.amount
@@ -136,6 +145,10 @@ function BridgeWithdrawalOrderStatus({
         onSign={onSign}
         onRefresh={onRefresh}
         onStartOver={onStartOver}
+        canDiscard={canDiscard}
+        onDiscard={onDiscard}
+        discarding={discarding}
+        discardError={discardError}
       />
     )
   }
@@ -177,6 +190,8 @@ function BridgeWithdrawalOrderStatus({
           busy={signing}
         />
         <Button variant="outline" onClick={onRefresh} disabled={signing}>Refresh order</Button>
+        {discardError ? <FiatErrorDetail error={describeFiatError(discardError)} /> : null}
+        {canDiscard && <Button variant="outline" onClick={onDiscard} disabled={signing || discarding}>{discarding ? "Discarding…" : "Discard order & start over"}</Button>}
       </div>
     )
   }
@@ -347,6 +362,15 @@ export function BridgeUsdSell({
     },
   })
 
+  const discardMutation = useMutation({
+    mutationFn: (currentOrderId: string) => discardOfframpOrder(cryptoBackendClient, currentOrderId),
+    retry: false,
+    onSuccess: (discarded) => {
+      queryClient.setQueryData(cryptoQueryKeys.fiatOrder(userId, discarded.id), discarded)
+      startOver()
+    },
+  })
+
   React.useEffect(() => {
     if (selectedNetwork && networkId !== selectedNetwork.networkId) setNetworkId(selectedNetwork.networkId)
   }, [networkId, selectedNetwork])
@@ -426,11 +450,12 @@ export function BridgeUsdSell({
     setOrderId(null)
     setSignError(null)
     orderMutation.reset()
+    discardMutation.reset()
     transfer.reset()
     adoptedIntentId.current = null
   }
 
-  const inFlight = orderMutation.isPending || (showingOrder && !bridgeOrderTerminal(order.data?.state)) || transfer.isSubmitting
+  const inFlight = orderMutation.isPending || (showingOrder && !bridgeOrderTerminal(order.data?.state)) || discardMutation.isPending || transfer.isSubmitting
   React.useEffect(() => onInFlightChange?.(inFlight), [inFlight, onInFlightChange])
   React.useEffect(() => onCompactChange?.(!showingOrder), [showingOrder, onCompactChange])
 
@@ -481,6 +506,9 @@ export function BridgeUsdSell({
           onSign={pressSign}
           onRefresh={order.refresh}
           onStartOver={startOver}
+          onDiscard={() => { if (orderId) discardMutation.mutate(orderId) }}
+          discarding={discardMutation.isPending}
+          discardError={discardMutation.error}
           canSign={canSign}
           signing={transfer.isSubmitting}
           signError={signError ?? transfer.error}

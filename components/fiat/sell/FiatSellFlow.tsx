@@ -144,8 +144,9 @@ function OfframpOrderStatus({
     totalDebit: order.totalDebit,
   })
   const canDiscard = ["failed", "reversed", "refunded", "expired"].includes(order.state)
-    || (order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash)
-  const stuckBeforeSigning = order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash
+    || (order.state === "awaiting_crypto_deposit" && !order.observedDepositTxHash)
+  // Nothing has been sent yet, so the order can always be dropped. An intent that expired still counts: it is the case the user cannot sign their way out of.
+  const stuckBeforeSigning = order.state === "awaiting_crypto_deposit" && !order.observedDepositTxHash
   const problemCaption = discardError ? <><FiatErrorDetail error={describeFiatError(discardError)} />{reasonCaption}</> : reasonCaption
 
   if (variant === "redesign") {
