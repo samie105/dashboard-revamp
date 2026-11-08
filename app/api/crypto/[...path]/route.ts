@@ -93,6 +93,7 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^fiat\/quotes$/,
     /^fiat\/orders$/,
     /^fiat\/orders\/[^/]+\/confirm$/,
+    /^fiat\/orders\/[^/]+\/discard$/,
     /^fiat\/bridge\/virtual-accounts$/,
     /^bridge\/intertrain\/usdc\/intents$/,
     /^launchpad\/launches$/,
