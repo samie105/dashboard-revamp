@@ -134,6 +134,9 @@ export function describeFiatError(
     case "BENEFICIARY_REQUIRED":
     case "INVALID_REQUEST":
       return userMessage("Check the details and try again.", "fix-input", requestId)
+    case "FIAT_ORDER_NOT_DISCARDABLE":
+    case "FIAT_ORDER_STATE_CHANGED":
+      return userMessage(error.message || "This order can't be discarded right now.", "stop", requestId)
     case "INTENT_EXPIRED":
       return userMessage(error.message || "This transaction has expired. Start the order again.", "stop", requestId)
     case "INSUFFICIENT_FUNDS": {

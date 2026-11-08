@@ -130,6 +130,7 @@ export function RedesignOfframpOrder({
         ]}
         notice="Approving sends the crypto from your wallet. Your money follows once it arrives."
         signError={signError}
+        discardError={discardError}
         intentNotice={
           !order.cryptoIntent?.id ? (
             <TradeNotice
