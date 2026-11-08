@@ -99,7 +99,8 @@ export function onrampOptions(config: FiatCapabilitySnapshot | undefined): Onram
       }
     }
   }
-  return options
+  // Nigeria first: it is the default corridor everywhere a first option is picked.
+  return options.sort((a, b) => Number(b.currencyCode === "NGN") - Number(a.currencyCode === "NGN"))
 }
 
 /* ── Quote (guide §9.1 lines 641-705) ─────────────────────────────────── */

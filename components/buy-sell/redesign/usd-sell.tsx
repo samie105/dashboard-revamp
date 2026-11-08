@@ -182,7 +182,7 @@ export function UsdSellVerify({
         <span className="text-[13.5px] text-muted-foreground">Approval is required before a USD withdrawal can be created.</span>
       </div>
       {complianceError && <FiatErrorDetail error={complianceError} />}
-      {showRecord && (record ? <ComplianceRows record={record} /> : <p className="text-[13px] text-muted-foreground">No verification on file yet.</p>)}
+      {!kyc && showRecord && (record ? <ComplianceRows record={record} /> : <p className="text-[13px] text-muted-foreground">No verification on file yet.</p>)}
       {kyc ?? <TradeNotice tone="info" title="Your USD payout profile isn't approved yet. Refresh after onboarding is complete." />}
       <TradeGhost label="Refresh status" onClick={onRefresh} />
     </div>

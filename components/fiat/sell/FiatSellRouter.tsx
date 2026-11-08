@@ -73,7 +73,7 @@ export function FiatSellRouter(props: Props) {
   ) : undefined
 
   if (activeRail === "usd") {
-    return <BridgeUsdSell {...props} railSwitcher={railSwitcher} />
+    return <BridgeUsdSell {...props} railSwitcher={railSwitcher} onOrderGone={() => setRail("local")} />
   }
 
   if (isPayoutCompareEnabled() && !handedOver) {

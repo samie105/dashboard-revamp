@@ -82,6 +82,8 @@ type Props = {
   onInFlightChange?: (inFlight: boolean) => void
   onCompactChange?: (compact: boolean) => void
   railSwitcher?: React.ReactNode
+  /** Fired when a remembered order no longer exists, so the host can leave this rail. */
+  onOrderGone?: () => void
 }
 
 function BridgeWithdrawalOrderStatus({
@@ -277,6 +279,7 @@ export function BridgeUsdSell({
   onInFlightChange,
   onCompactChange,
   railSwitcher,
+  onOrderGone,
 }: Props) {
   const isModal = variant === "modal"
   const isRedesign = variant === "redesign"
@@ -375,8 +378,10 @@ export function BridgeUsdSell({
   }, [order.data, queryClient, userId])
 
   React.useEffect(() => {
-    if (orderMissing) clearPendingFlow("fiat-bridge-sell")
-  }, [orderMissing])
+    if (!orderMissing) return
+    clearPendingFlow("fiat-bridge-sell")
+    onOrderGone?.()
+  }, [orderMissing, onOrderGone])
 
   const canSign = Boolean(
     wallet.data?.id &&
