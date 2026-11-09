@@ -88,6 +88,12 @@ export interface CryptoBalanceSnapshot {
   results: CryptoBalanceSnapshotItem[]
 }
 
+/** The wallet service fee on a withdrawal or swap, in the asset being sent. */
+export interface ServiceFeeQuote {
+  amount: string
+  percent: number
+}
+
 export interface CryptoTransactionIntent {
   id: string
   status: string

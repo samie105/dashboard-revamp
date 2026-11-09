@@ -3,6 +3,7 @@ import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass"
 import { FIAT_MOCKS_ENABLED } from "@/lib/fiat-mocks"
 import { DASHBOARD_TEST_MODE } from "@/lib/dashboard-test-mode"
 import type {
+  ServiceFeeQuote,
   CryptoBalance,
   CryptoBalanceSnapshot,
   Device,
@@ -699,6 +700,27 @@ export class CryptoBackendClient {
       sponsorship: response.sponsorship,
       feeMode: response.feeMode,
     }
+  }
+
+  /** What a withdrawal would be charged, for the review screen. `fee: null` means none applies. */
+  async quoteServiceFee(input: { family: string; amount: string }, signal?: AbortSignal): Promise<{ fee: ServiceFeeQuote | null }> {
+    return this.request<{ fee: ServiceFeeQuote | null }>(
+      "/transactions/service-fee/quote",
+      { method: "POST", body: JSON.stringify(input) },
+      { signal },
+    )
+  }
+
+  /** The fee transfer for an intent that has already been sent. `intent: null` means no fee applies. */
+  async createServiceFeeIntent(
+    intentId: string,
+    signal?: AbortSignal,
+  ): Promise<{ fee: ServiceFeeQuote | null; intent: CryptoTransactionIntent | null }> {
+    return this.request<{ fee: ServiceFeeQuote | null; intent: CryptoTransactionIntent | null }>(
+      `/transactions/intents/${encodeURIComponent(intentId)}/service-fee`,
+      { method: "POST" },
+      { signal },
+    )
   }
 
   async simulateIntent(

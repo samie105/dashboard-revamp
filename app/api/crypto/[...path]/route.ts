@@ -77,6 +77,8 @@ const ALLOWED_PATHS: Record<string, RegExp[]> = {
     /^transactions\/intents\/[^/]+\/fallback-direct$/,
     /^transactions\/intents\/[^/]+\/fee-routing$/,
     /^transactions\/intents\/[^/]+\/submit$/,
+    /^transactions\/intents\/[^/]+\/service-fee$/,
+    /^transactions\/service-fee\/quote$/,
     /^sponsorship\/quote$/,
     /^sponsorship\/operations\/[^/]+\/prepare$/,
     /^sponsorship\/operations\/[^/]+\/submit$/,

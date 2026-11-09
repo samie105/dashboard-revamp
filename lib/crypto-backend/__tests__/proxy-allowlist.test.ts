@@ -59,6 +59,8 @@ const DOCUMENTED: Array<[string, string]> = [
   ["GET", "fiat/orders/66f000000000000000000051"],
   ["POST", "fiat/orders/66f000000000000000000052/confirm"],
   ["POST", "fiat/orders/66f000000000000000000052/discard"],
+  ["POST", "transactions/intents/66f000000000000000000052/service-fee"],
+  ["POST", "transactions/service-fee/quote"],
   ["POST", "fiat/bridge/virtual-accounts"],
   ["GET", "fiat/bridge/virtual-accounts"],
   ["GET", "fiat/bridge/virtual-accounts/66f000000000000000000071"],

@@ -181,7 +181,7 @@ export function useSwapTicket({ coins, prices, mode }: { coins: CoinData[]; pric
   const [quoteData, setQuoteData] = React.useState<QuoteData | null>(null)
   const [quoteError, setQuoteError] = React.useState<string | null>(null)
   const [swapLoading, setSwapLoading] = React.useState(false)
-  const [swapResult, setSwapResult] = React.useState<{ success: boolean; txHash?: string; error?: string; status?: string } | null>(null)
+  const [swapResult, setSwapResult] = React.useState<{ success: boolean; txHash?: string; error?: string; status?: string; intentId?: string; feeSymbol?: string } | null>(null)
 
   // A token belongs to the chain selected beside it. Keep this derived rather
   // than passing the global market list to both dialogs; otherwise BTC/ETH/etc.
@@ -446,7 +446,7 @@ export function useSwapTicket({ coins, prices, mode }: { coins: CoinData[]; pric
               ? await signTronIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
               : await signEvmIntent(user.userId, modernWallet.data.id, modernPackage.data, intent, account.id)
       const submitted = await cryptoBackendClient.submitIntent(intent.id, signed)
-      setSwapResult({ success: true, status: "PENDING", txHash: submitted.txHash })
+      setSwapResult({ success: true, status: "PENDING", txHash: submitted.txHash, intentId: intent.id, feeSymbol: fromCoin?.symbol })
       // Balance snapshots are intentionally cached between explicit refreshes.
       // Refresh immediately after broadcast, then retry while the chain/provider
       // catches up so a newly bought token appears without a page reload.
