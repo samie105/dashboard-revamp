@@ -25,8 +25,6 @@
  * the full view.
  */
 
-import { ServiceFeeCard } from "@/components/crypto/ServiceFeeCard"
-import { ServiceFeeNote } from "@/components/crypto/ServiceFeeNote"
 import * as React from "react"
 import Link from "next/link"
 import { AnimatePresence, motion } from "motion/react"
@@ -45,7 +43,7 @@ import { useCryptoBalances, formatCryptoAmount } from "@/hooks/crypto/useCryptoB
 import { useLedgerRecords } from "@/hooks/useLedgerRecords"
 import { acceptAmountInput } from "@/lib/wallet-view"
 import { balanceOf, durationLabel, optionKey, quoteFigures, tokenOptions, type RouteStep } from "@/lib/swap-redesign"
-import { chainMeta, familyFor, QUOTE_TTL_SECONDS, swapAssetForToken, type SwapChainId } from "@/components/swap/swap-model"
+import { chainMeta, QUOTE_TTL_SECONDS, swapAssetForToken } from "@/components/swap/swap-model"
 import { looksLikeTokenIdentifier, tokenIdentifier, type SwapTicketState } from "@/components/swap/use-swap-ticket"
 
 /* ── Token picker ─────────────────────────────────────────────────────── */
@@ -304,7 +302,6 @@ export type PlacedSwap = {
   toAmount: number
   steps: RouteStep[]
   txHash?: string
-  intentId?: string
 }
 
 function SwapProgress({ placed, onReset }: { placed: PlacedSwap; onReset: () => void }) {
@@ -359,8 +356,6 @@ function SwapProgress({ placed, onReset }: { placed: PlacedSwap; onReset: () => 
               : `Swap sent — it usually lands within a minute. Safe to leave this page.${placed.txHash ? ` Reference ${placed.txHash.slice(0, 10)}…${placed.txHash.slice(-6)}.` : ""}`}
         </span>
       </div>
-
-      <ServiceFeeCard parentIntentId={placed.intentId ?? null} symbol={placed.fromSymbol} />
 
       <ol className="flex flex-col rounded-2xl border border-foreground/[0.06] bg-foreground/[0.02] p-4">
         {steps.map((s, i) => {
@@ -424,7 +419,7 @@ export function SwapTicket({ t, error, steps }: { t: SwapTicketState; error?: st
   // The submit landed: move to the staged screen with what was swapped.
   React.useEffect(() => {
     if (t.swapResult?.success && pending.current) {
-      setPlaced({ ...pending.current, txHash: t.swapResult.txHash, intentId: t.swapResult.intentId })
+      setPlaced({ ...pending.current, txHash: t.swapResult.txHash })
       pending.current = null
     }
   }, [t.swapResult])
@@ -611,7 +606,6 @@ export function SwapTicket({ t, error, steps }: { t: SwapTicketState; error?: st
                   <dt className="text-muted-foreground">Fees</dt>
                   <dd className="font-semibold tabular-nums text-foreground">{figures.feesUsd === null ? "—" : usd(figures.feesUsd)}</dd>
                 </div>
-                {t.fromCoin && n > 0 && <ServiceFeeNote variant="row" family={familyFor(t.fromChain as SwapChainId)} amount={String(n)} symbol={t.fromCoin.symbol} />}
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted-foreground">Arrives in</dt>
                   <dd className="font-semibold text-foreground">{figures.arrivesSeconds === null ? "—" : durationLabel(figures.arrivesSeconds)}</dd>

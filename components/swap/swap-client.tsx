@@ -26,7 +26,6 @@
  * differ is which mode each one starts in, and why: see `compactMode` below.
  */
 
-import { ServiceFeeCard } from "@/components/crypto/ServiceFeeCard"
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
@@ -803,7 +802,6 @@ export function SwapClient({ coins, prices, error, compact }: SwapClientProps) {
                   : swapResult.error}
               </div>
             )}
-            {swapResult?.success && swapResult.intentId ? <ServiceFeeCard parentIntentId={swapResult.intentId} symbol={swapResult.feeSymbol ?? ""} /> : null}
 
             {/* Quote error */}
             {quoteError && !quoteLoading && numericFrom > 0 && (
