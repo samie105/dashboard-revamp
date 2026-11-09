@@ -36,6 +36,7 @@ function SignScreen({
   onSign,
   onRefresh,
   discard,
+  discardError,
 }: {
   title: string
   subtitle: string
@@ -48,6 +49,7 @@ function SignScreen({
   onSign: () => void
   onRefresh: () => void
   discard?: { label: string; onClick: () => void; disabled: boolean }
+  discardError?: unknown
 }) {
   return (
     <section aria-live="polite" className="flex flex-col gap-8">
@@ -58,6 +60,7 @@ function SignScreen({
       <RowsCard rows={rows} />
       <p className="text-[13.5px] leading-relaxed text-muted-foreground">{notice}</p>
       {Boolean(signError) && <FiatErrorDetail error={describeFiatError(signError)} />}
+      {Boolean(discardError) && <FiatErrorDetail error={describeFiatError(discardError)} />}
       {intentNotice}
       <TradeCta label={signing ? "Signing and submitting…" : "Unlock and sign"} onClick={onSign} disabled={!canSign || signing} busy={signing} />
       <div className={cn("grid gap-2.5", discard ? "grid-cols-2" : "grid-cols-1")}>
@@ -127,6 +130,7 @@ export function RedesignOfframpOrder({
         ]}
         notice="Approving sends the crypto from your wallet. Your money follows once it arrives."
         signError={signError}
+        discardError={discardError}
         intentNotice={
           !order.cryptoIntent?.id ? (
             <TradeNotice
@@ -227,10 +231,18 @@ export function RedesignUsdWithdrawalOrder({
   onSign,
   onRefresh,
   onStartOver,
+  canDiscard,
+  onDiscard,
+  discarding,
+  discardError,
 }: {
   order: FiatOrder
   view: View
   figure?: string
+  canDiscard: boolean
+  onDiscard: () => void
+  discarding: boolean
+  discardError?: unknown
   stages: string[]
   stageIndex: number | null
   stageProgress: { index: number; since: number }
@@ -261,6 +273,7 @@ export function RedesignUsdWithdrawalOrder({
         ]}
         notice="This isn't a quote. The USDC amount above is what's sent; the payout provider controls final USD settlement timing and any payout terms."
         signError={signError}
+        discardError={discardError}
         intentNotice={
           !order.cryptoIntent?.id ? (
             <TradeNotice tone="error" title="The signing intent is not available yet. Refresh this order to continue." />
@@ -272,6 +285,7 @@ export function RedesignUsdWithdrawalOrder({
         signing={signing}
         onSign={onSign}
         onRefresh={onRefresh}
+        discard={canDiscard ? { label: discarding ? "Discarding…" : "Discard order & start over", onClick: onDiscard, disabled: signing || discarding } : undefined}
       />
     )
   }
@@ -299,6 +313,7 @@ export function RedesignUsdWithdrawalOrder({
         caption={reasonCaption}
         reference={order.publicReference}
         autoUpdating={!view.terminal}
+        notice={discardError ? <FiatErrorDetail error={describeFiatError(discardError)} /> : undefined}
         primary={{ label: "Start a new USD withdrawal", onClick: onStartOver }}
       />
     )

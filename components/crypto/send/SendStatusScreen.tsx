@@ -27,6 +27,7 @@ export function SendStatusScreen({
   onTryAgain,
   onLeave,
   errorSlot,
+  feeSlot,
 }: {
   state: "processing" | "success" | "failure"
   amount: string
@@ -45,6 +46,8 @@ export function SendStatusScreen({
    *  thing behind the popup. */
   onLeave?: () => void
   errorSlot?: React.ReactNode
+  /** The service fee for the transfer that just went through. */
+  feeSlot?: React.ReactNode
 }) {
   const figure = `-${amount} ${symbol}`
   const headline =
@@ -89,6 +92,7 @@ export function SendStatusScreen({
         }
         secondary={onLeave ? { label: "Back to wallet", onClick: onLeave } : { label: "Back to wallet", href: "/wallet/modern" }}
       />
+      {feeSlot}
       {errorSlot}
     </div>
   )

@@ -175,4 +175,11 @@ describe("fiatReadRetry — React Query retry option for fiat reads", () => {
   it.each([400, 401, 403, 404, 409, 422])("never retries status %i (guide §12.1)", (status) => {
     expect(fiatReadRetry(0, new CryptoBackendError("x", status, "ANY"))).toBe(false)
   })
+
+  it("shows the backend's own sentence for INSUFFICIENT_FUNDS, but never a raw payload", () => {
+    const stated = "Not enough SOL to pay the network fee. Add about 0.005 SOL to your wallet and try again."
+    expect(describeFiatError(new CryptoBackendError(stated, 400, "INSUFFICIENT_FUNDS")).message).toBe(stated)
+    const raw = describeFiatError(new CryptoBackendError('{"InstructionError":[0,{"Custom":1}]}', 400, "INSUFFICIENT_FUNDS"))
+    expect(raw.message).not.toContain("InstructionError")
+  })
 })

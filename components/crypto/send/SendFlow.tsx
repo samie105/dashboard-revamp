@@ -30,6 +30,8 @@ import { useAuth } from "@/components/auth-provider"
 import { useCryptoContext } from "@/components/crypto/CryptoProvider"
 import { SectionMessage } from "@/components/crypto/primitives"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
+import { ServiceFeeCard } from "@/components/crypto/ServiceFeeCard"
+import { ServiceFeeNote } from "@/components/crypto/ServiceFeeNote"
 import {
   FlowHeader,
   FlowShell,
@@ -766,6 +768,7 @@ export function SendFlow({
         // (refreshQuote leaves this screen before it starts), but if one ever
         // reaches this branch it must be readable rather than invisible.
         errorSlot={renderError(signError ?? createError, () => void runSubmit(), () => void runSubmit())}
+        feeSlot={statusState === "success" ? <ServiceFeeCard parentIntentId={intentId ?? null} symbol={committed?.symbol ?? symbol} /> : undefined}
       />,
     )
   }
@@ -807,6 +810,7 @@ export function SendFlow({
         ctaBusy={transfer.isSimulating || transfer.isSubmitting || transfer.isLoading}
         onSign={expired ? () => void refreshQuote() : pressSign}
         onEdit={() => setStep("form")}
+        feeSlot={<ServiceFeeNote family={family} amount={committed.amount} symbol={committed.symbol} />}
         errorSlot={renderError(
           createError ?? packageQuery.error,
           () => void refreshQuote(),

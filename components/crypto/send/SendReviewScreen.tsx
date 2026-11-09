@@ -46,6 +46,7 @@ export function SendReviewScreen({
   onSign,
   onEdit,
   errorSlot,
+  feeSlot,
 }: {
   fromAddress: string
   toAddress: string
@@ -72,6 +73,8 @@ export function SendReviewScreen({
   onSign: () => void
   onEdit: () => void
   errorSlot?: React.ReactNode
+  /** What the WorldStreet service fee will be, so it is never a surprise after signing. */
+  feeSlot?: React.ReactNode
 }) {
   const rows: { label: string; value: React.ReactNode; strong?: boolean }[] = [
     { label: "Network", value: networkLabel },
@@ -162,6 +165,7 @@ export function SendReviewScreen({
         </InlineNotice>
       )}
 
+      {feeSlot}
       {errorSlot}
     </div>
   )

@@ -109,7 +109,7 @@ const CHAIN_FAILURES: readonly [RegExp, string][] = [
 ]
 
 /** Does this read like a machine payload rather than a sentence? */
-function looksLikeRawPayload(message: string): boolean {
+export function looksLikeRawPayload(message: string): boolean {
   const trimmed = message.trim()
   return (
     trimmed.startsWith("{") ||

@@ -91,6 +91,9 @@ type Props = {
 const sameRequest = (a: OfframpQuoteRequest | null, b: OfframpQuoteRequest | null) =>
   Boolean(a && b) && JSON.stringify(a) === JSON.stringify(b)
 
+/** States where nothing has left the wallet yet, so the order can still be dropped. */
+const PRE_SIGNING_STATES = ["awaiting_crypto_deposit", "crypto_intent_ready"]
+
 function requirementIsInstitutionField(requirement: FiatBeneficiaryRequirement): boolean {
   return /(?:bank|institution|branch).*?(?:code|id)|bank_code|nuban_code/i.test(requirement.path)
 }
@@ -144,8 +147,9 @@ function OfframpOrderStatus({
     totalDebit: order.totalDebit,
   })
   const canDiscard = ["failed", "reversed", "refunded", "expired"].includes(order.state)
-    || (order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash)
-  const stuckBeforeSigning = order.state === "awaiting_crypto_deposit" && !order.cryptoIntent?.id && !order.observedDepositTxHash
+    || (PRE_SIGNING_STATES.includes(order.state) && !order.observedDepositTxHash)
+  // Nothing has been sent yet, so the order can always be dropped. An intent that expired still counts: it is the case the user cannot sign their way out of.
+  const stuckBeforeSigning = PRE_SIGNING_STATES.includes(order.state) && !order.observedDepositTxHash
   const problemCaption = discardError ? <><FiatErrorDetail error={describeFiatError(discardError)} />{reasonCaption}</> : reasonCaption
 
   if (variant === "redesign") {

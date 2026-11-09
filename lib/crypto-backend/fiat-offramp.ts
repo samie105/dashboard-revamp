@@ -56,7 +56,8 @@ export function offrampOptions(config: FiatCapabilitySnapshot | undefined): Offr
       }
     }
   }
-  return options
+  // Nigeria first: it is the default corridor everywhere a first option is picked.
+  return options.sort((a, b) => Number(b.currencyCode === "NGN") - Number(a.currencyCode === "NGN"))
 }
 
 export type OfframpAvailability = "loading" | "disabled" | "blocked" | "discovery_only" | "unavailable" | "available"
