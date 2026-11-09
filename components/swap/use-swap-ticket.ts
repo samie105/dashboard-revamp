@@ -237,10 +237,6 @@ export function useSwapTicket({ coins, prices, mode }: { coins: CoinData[]; pric
      from the two live prices. It is indicative only, and nothing can be
      submitted on it — the button gates on `executionData` from the quote, not
      on this. Once the quote arrives it replaces this outright. */
-  const estimatedToFallback = toPrice > 0 ? (numericFrom * fromPrice) / toPrice : 0
-  const estimatedTo = quoteData?.toAmount
-    ? parseFloat(quoteData.toAmount) / Math.pow(10, quoteData.toToken.decimals)
-    : estimatedToFallback
   const usdValue = numericFrom * fromPrice
 
   // Look up the wallet balance for the "from" coin on the selected chain.
@@ -271,6 +267,13 @@ export function useSwapTicket({ coins, prices, mode }: { coins: CoinData[]; pric
     return source?.capabilities?.providerSwap === true && destination?.capabilities?.providerSwap === true
   }, [networks.data, fromChain, toChain, selectedRouter])
   const canQuote = fromSupported && toSupported && !!selectedRouter && providerRouteEnabled && isCryptoBackendEnabled
+
+  /* An indicative figure is only honest for a pair that can really be quoted.
+     For one that cannot, a number here reads as an offer the button then refuses. */
+  const estimatedToFallback = canQuote && toPrice > 0 ? (numericFrom * fromPrice) / toPrice : 0
+  const estimatedTo = quoteData?.toAmount
+    ? parseFloat(quoteData.toAmount) / Math.pow(10, quoteData.toToken.decimals)
+    : estimatedToFallback
 
   /* Simple has no slippage dial. It is not therefore unprotected: the house
      default rides on every quote and every intent it sends. */
@@ -500,7 +503,7 @@ export function useSwapTicket({ coins, prices, mode }: { coins: CoinData[]; pric
      our plumbing and not about their money. */
   const buttonText = React.useMemo(() => {
     if (!fromCoin || !toCoin) return "Choose two coins"
-    if (!canQuote) return unavailablePairMessage(fromChain, toChain)
+    if (!canQuote) return fromChain === toChain ? `Swaps on ${chainMeta(fromChain).label} aren't available yet.` : unavailablePairMessage(fromChain, toChain)
     if (!fromAmount || numericFrom <= 0) return "Enter an amount"
     if (insufficientBalance) return isSimple ? `Not enough ${fromCoin.symbol}` : "Insufficient balance"
     if (swapLoading) return "Confirming…"
