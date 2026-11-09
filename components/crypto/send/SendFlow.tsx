@@ -768,7 +768,7 @@ export function SendFlow({
         // (refreshQuote leaves this screen before it starts), but if one ever
         // reaches this branch it must be readable rather than invisible.
         errorSlot={renderError(signError ?? createError, () => void runSubmit(), () => void runSubmit())}
-        feeSlot={statusState === "success" ? <ServiceFeeCard parentIntentId={intentId ?? null} symbol={committed?.symbol ?? symbol} /> : undefined}
+        feeSlot={statusState === "success" || (statusState === "processing" && Boolean(txHash)) ? <ServiceFeeCard parentIntentId={intentId ?? null} symbol={committed?.symbol ?? symbol} /> : undefined}
       />,
     )
   }
