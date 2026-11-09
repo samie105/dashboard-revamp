@@ -810,7 +810,7 @@ export function SendFlow({
         ctaBusy={transfer.isSimulating || transfer.isSubmitting || transfer.isLoading}
         onSign={expired ? () => void refreshQuote() : pressSign}
         onEdit={() => setStep("form")}
-        feeSlot={<ServiceFeeNote family={family} amount={committed.amount} symbol={committed.symbol} />}
+        feeSlot={<ServiceFeeNote family={family} amount={committed.amount} symbol={committed.symbol} bundled={family === "solana"} />}
         errorSlot={renderError(
           createError ?? packageQuery.error,
           () => void refreshQuote(),

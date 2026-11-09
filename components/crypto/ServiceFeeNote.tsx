@@ -15,11 +15,14 @@ export function ServiceFeeNote({
   amount,
   symbol,
   variant = "line",
+  bundled = false,
 }: {
   family: string
   amount: string
   symbol: string
   variant?: "line" | "row"
+  /** The fee rides in the same transaction (Solana sends), so there is no second approval. */
+  bundled?: boolean
 }) {
   const clean = amount.trim()
   const quote = useQuery({
@@ -41,7 +44,8 @@ export function ServiceFeeNote({
   }
   return (
     <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-      Service fee ({fee.percent}%): <span className="font-semibold tabular-nums text-foreground">{fee.amount} {symbol}</span>. You&apos;ll approve it as a small separate transfer after this one is sent.
+      Service fee ({fee.percent}%): <span className="font-semibold tabular-nums text-foreground">{fee.amount} {symbol}</span>.{" "}
+      {bundled ? "It is included in this transfer, so you approve once." : "You\u2019ll approve it as a small separate transfer after this one is sent."}
     </p>
   )
 }
