@@ -3960,3 +3960,73 @@ tr:hover > .ds-cell { background: color-mix(in oklab, var(--foreground) 2.5%, tr
 .ds-lift:hover {
   transform: none;
 }
+
+/* CRISP, continued: the dash-* and ds-* surface families (overview, wallet,
+   tables, the frame). Same rules: solid fills, hard lines, flat gold, no glow. */
+.dash-panel,
+.ds-panel {
+  background: var(--card) !important;
+  border: 1px solid var(--crisp-line-soft) !important;
+  box-shadow: none !important;
+}
+.dash-inset,
+.ds-inset,
+.dash-promo,
+.ds-promo,
+.ds-well {
+  background: color-mix(in oklab, var(--foreground) 3%, var(--card)) !important;
+  border: 1px solid var(--crisp-line-soft) !important;
+  box-shadow: none !important;
+}
+.dash-topbar,
+.ds-topbar,
+.dash-rail,
+.ds-rail {
+  background: var(--background) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.dash-topbar,
+.ds-topbar {
+  border-bottom: 1px solid var(--crisp-line-soft) !important;
+}
+.dash-rail,
+.ds-rail {
+  border-right: 1px solid var(--crisp-line-soft) !important;
+}
+.dash-rail-active,
+.ds-rail-active {
+  background: color-mix(in oklab, var(--primary) 12%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent) !important;
+}
+.dash-rail-active::before,
+.ds-rail-active::before {
+  box-shadow: none !important;
+}
+/* Gold: one flat colour. No lit face, no lip, no bloom. */
+.dash-gold-btn,
+.ds-gold,
+.dash-gold-tile {
+  background: var(--primary) !important;
+  box-shadow: none !important;
+}
+.dash-gold-btn:hover,
+.ds-gold:hover:not(:disabled),
+.dash-gold-tile:hover {
+  filter: brightness(1.06);
+  box-shadow: none !important;
+}
+.dash-gold-btn:active,
+.ds-gold:active:not(:disabled) {
+  transform: none;
+}
+.dash-cell,
+.ds-cell {
+  border-top-color: var(--crisp-line-soft);
+  transition-duration: var(--crisp-fast);
+}
+.dash-lift,
+.dash-lift:hover {
+  transition-duration: var(--crisp-fast);
+  transform: none;
+}
