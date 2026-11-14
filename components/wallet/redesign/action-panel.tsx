@@ -151,7 +151,7 @@ function DepositPane({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <FieldLabel aside="One address per network">Network</FieldLabel>
-        <div role="radiogroup" aria-label="Network" className="grid grid-cols-3 gap-2">
+        <div role="radiogroup" aria-label="Network" className="flex flex-wrap gap-2">
           {chains.map((c) => {
             const on = c.key === chain.key
             return (
@@ -162,60 +162,48 @@ function DepositPane({
                 aria-checked={on}
                 onClick={() => setChainKey(c.key)}
                 className={cn(
-                  "relative flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl border px-2 text-[12.5px] font-semibold transition-colors",
-                  on ? "border-primary/55 text-foreground" : "border-foreground/[0.07] text-muted-foreground hover:border-foreground/[0.14] hover:text-foreground",
+                  "flex h-9 min-w-0 items-center gap-2 rounded-md border px-3 text-[12.5px] font-semibold transition-colors",
+                  on ? "border-primary bg-primary/10 text-foreground" : "border-foreground/[0.14] text-muted-foreground hover:border-foreground/30 hover:text-foreground",
                 )}
               >
-                {on && <motion.span layoutId="deposit-chain" transition={SLIDE} className="absolute inset-0 rounded-xl bg-primary/[0.08]" />}
-                <CoinAvatar symbol={c.symbol} src={c.icon} size="sm" className="relative" />
-                <span className="relative truncate">{c.name}</span>
+                <CoinAvatar symbol={c.symbol} src={c.icon} size="sm" />
+                <span className="truncate">{c.name}</span>
               </button>
             )
           })}
         </div>
       </div>
 
-      <div className="flex flex-col items-center gap-4 rounded-2xl border border-foreground/[0.07] bg-[radial-gradient(120%_90%_at_50%_0%,color-mix(in_oklab,var(--primary)_7%,transparent),transparent_60%)] p-5">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={chain.key}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="size-[176px] text-foreground"
-          >
-            <QrCode value={chain.address} title={`${chain.name} deposit address`} className="size-full" />
-          </motion.div>
-        </AnimatePresence>
-        <span className="text-center text-[12px] font-medium text-muted-foreground">{chain.caption}</span>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <FieldLabel
-          aside={
-            chain.explorer ? (
-              <a href={chain.explorer.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 transition-colors hover:text-foreground">
+      <div className="flex flex-col gap-4 rounded-md border border-foreground/[0.12] p-4 sm:flex-row sm:items-start sm:gap-5">
+        <div key={chain.key} className="mx-auto size-[168px] shrink-0 rounded-sm bg-white p-2.5 text-black sm:mx-0">
+          <QrCode value={chain.address} title={`${chain.name} deposit address`} className="size-full" />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{chain.name} deposit address</span>
+            <span className="break-all font-mono text-[13.5px] leading-snug text-foreground">{chain.address}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => copy(chain.address)}
+              className={cn(
+                "flex h-9 items-center gap-1.5 rounded-md border px-3 text-[12.5px] font-semibold transition-colors",
+                copied ? "border-credit text-credit" : "border-foreground/[0.14] text-foreground hover:border-primary",
+              )}
+            >
+              <Icon icon={copied ? Tick02Icon : Copy01Icon} className="size-4" />
+              {copied ? "Copied" : "Copy address"}
+            </button>
+            {chain.explorer && (
+              <a href={chain.explorer.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-md px-1 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground">
                 View on {chain.explorer.name}
-                <Icon icon={LinkSquare02Icon} className="size-3" />
+                <Icon icon={LinkSquare02Icon} className="size-3.5" />
               </a>
-            ) : undefined
-          }
-        >
-          Your {chain.name} address
-        </FieldLabel>
-        <button
-          type="button"
-          onClick={() => copy(chain.address)}
-          title={chain.address}
-          className="group flex h-12 items-center gap-3 rounded-xl border border-foreground/[0.08] bg-foreground/[0.025] px-3.5 text-left transition-colors hover:border-primary/35"
-        >
-          <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-foreground">{truncateAddress(chain.address)}</span>
-          <span className={cn("flex items-center gap-1.5 text-[12.5px] font-semibold transition-colors", copied ? "text-credit" : "text-primary")}>
-            <Icon icon={copied ? Tick02Icon : Copy01Icon} className="size-4" />
-            {copied ? "Copied" : "Copy"}
-          </span>
-        </button>
+            )}
+          </div>
+          <span className="text-[12px] text-muted-foreground">{chain.caption}</span>
+        </div>
       </div>
 
       <dl className="grid grid-cols-2 gap-2">
@@ -223,7 +211,7 @@ function DepositPane({
           { k: "Minimum deposit", v: "—" },
           { k: "Credited after", v: "—" },
         ].map((d) => (
-          <div key={d.k} className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] px-3.5 py-2.5">
+          <div key={d.k} className="rounded-md border border-foreground/[0.12] px-3.5 py-2.5">
             <dt className="text-[11.5px] text-muted-foreground">{d.k}</dt>
             <dd className="text-[13px] font-semibold tabular-nums text-foreground">{d.v}</dd>
           </div>
@@ -548,7 +536,7 @@ export function ActionPanel({
         <span className="text-[12px] font-medium text-muted-foreground">Only you can sign</span>
       </div>
 
-      <div role="tablist" className="grid grid-cols-3 gap-1 rounded-2xl border border-foreground/[0.06] bg-foreground/[0.025] p-1">
+      <div role="tablist" className="flex gap-6 border-b border-foreground/[0.1]">
         {ACTIONS.map((a) => {
           const on = a.key === action
           const locked = inFlight && !on
@@ -562,13 +550,12 @@ export function ActionPanel({
               title={locked ? "Finish the transfer in progress first" : undefined}
               onClick={() => setAction(a.key)}
               className={cn(
-                "relative flex h-10 items-center justify-center gap-2 rounded-xl text-[13.5px] font-semibold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40",
-                on ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground ",
+                "-mb-px flex h-10 items-center gap-2 border-b-2 text-[13.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                on ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
-              {on && <motion.span layoutId="wallet-action" transition={SLIDE} className="ds-gold absolute inset-0 rounded-xl" />}
-              <Icon icon={a.icon} className="relative size-4" strokeWidth={on ? 2 : 1.8} />
-              <span className="relative">{a.label}</span>
+              <Icon icon={a.icon} className="size-4" strokeWidth={on ? 2 : 1.8} />
+              <span>{a.label}</span>
             </button>
           )
         })}
