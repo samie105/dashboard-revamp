@@ -38,6 +38,13 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clerkEnabled = useClerkEnabled()
 
+  // The dev bypass and the test host come first. ConditionalClerkProvider
+  // leaves Clerk out under both (clerkEnabled is false), so checking
+  // clerkEnabled first reported "signed out" and AuthGate sent every local
+  // page to the real login. The flags are module-level constants, so the same
+  // branch mounts for the app's lifetime.
+  if (DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE) return <BypassAuthProvider>{children}</BypassAuthProvider>
+
   // Admin authentication is intentionally independent of Clerk. Keep the
   // customer auth hooks out of this subtree so an admin page can render even
   // when the customer Clerk configuration is unavailable or domain-locked.
@@ -50,10 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   // Two components, not one branch: under the bypass ClerkProvider isn't in
-  // the tree at all (see app/layout.tsx), so Clerk's hooks would throw before
-  // clerk-js even got the chance to fail its domain check. The flag is a
-  // module-level constant, so the same component mounts for the app's lifetime.
-  if (DEV_AUTH_BYPASS || DASHBOARD_TEST_MODE) return <BypassAuthProvider>{children}</BypassAuthProvider>
+  // the tree at all, so Clerk's hooks would throw (handled above).
   return <ClerkAuthProvider>{children}</ClerkAuthProvider>
 }
 
