@@ -81,7 +81,7 @@
     --chart-3: oklch(0.681 0.162 75.834);
     --chart-4: oklch(0.554 0.135 66.442);
     --chart-5: oklch(0.476 0.114 61.907);
-    --radius: 0.45rem;
+    --radius: 0.25rem;
     --sidebar: oklch(0.986 0.002 67.8);
     --sidebar-foreground: oklch(0.147 0.004 49.3);
     --sidebar-primary: oklch(0.681 0.162 75.834);
@@ -221,11 +221,10 @@
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) * 1.4);
-    /* Cards are 20px — the hub renders them as `rounded-[20px]`, softer than
-       the 13px the --radius ladder would give. Everything else keeps the
-       ladder, so only the card corner changes. */
-    --radius-2xl: 20px;
-    --radius-3xl: calc(var(--radius) * 2.2);
+    /* Crisp corners: an exchange panel is a hard-edged rectangle, not a soft
+       card. 2xl is the largest panel radius; nothing here exceeds 8px. */
+    --radius-2xl: 8px;
+    --radius-3xl: 8px;
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
@@ -3811,4 +3810,153 @@ tr:hover > .ds-cell { background: color-mix(in oklab, var(--foreground) 2.5%, tr
     padding: 8px 9px;
     font-size: 10px;
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CRISP — exchange-grade surface.
+
+   The app had drifted soft: pill-shaped controls, a "liquid glass" layer of
+   translucent panels with blur and specular edges, yellow glow shadows,
+   ambient haze, 6%-opacity borders nobody can see, and slow springy motion.
+   This block is the single place that undoes it, so it is easy to tune or
+   remove. It is deliberately unlayered, which makes it win over Tailwind's
+   utilities without !important. The rules: hard 1px lines, solid surfaces,
+   small radii, no glow, instant motion.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --crisp-line: color-mix(in oklab, var(--foreground) 15%, transparent);
+  --crisp-line-soft: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --crisp-radius: 4px;
+  --crisp-panel-radius: 6px;
+  --crisp-fast: 110ms;
+}
+
+/* 1 · Shape. Pills become rectangles; circles (avatars, dots, icon discs,
+   anything sized with a size class or an equal height and width) stay round. A pill is a
+   rounded-full element that carries horizontal padding. */
+.rounded-full:is([class*="px-"], [class*="pl-"], [class*="pr-"]):not([class*="size-"]):not(img):not(svg) {
+  border-radius: var(--crisp-radius);
+}
+/* A highlight laid over a pill (the active nav item) takes the pill's new shape. */
+.rounded-full:is([class*="px-"], [class*="pl-"], [class*="pr-"]):not([class*="size-"]) > .rounded-full[class*="inset-0"] {
+  border-radius: var(--crisp-radius);
+}
+/* Arbitrary radii (rounded-[14px] and the like) collapse to the panel radius.
+   [50%] circles are left alone. */
+[class*="rounded-["]:not([class*="rounded-[50%]"]):not([class*="rounded-[999"]) {
+  border-radius: var(--crisp-panel-radius);
+}
+
+/* 2 · Surfaces. Solid, flat, bordered. Glass, lens, specular edge, aurora
+   and haze are all off. */
+.ws-glass,
+.ws-card-glass,
+.ds-panel {
+  background-color: var(--card) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 1px solid var(--crisp-line-soft) !important;
+  box-shadow: none !important;
+}
+.ws-glass::before,
+.ws-glass::after,
+.ws-glass-edge::before,
+.ws-glass-edge::after,
+.ws-card-glass::before,
+.ws-card-glass::after,
+.ws-aurora-a,
+.ws-aurora-b {
+  display: none !important;
+}
+[class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+/* Ambient yellow haze behind pages and cards. */
+[class*="bg-[radial-gradient"],
+[class*="bg-gradient-to-"][class*="from-primary"],
+[class*="bg-gradient-to-"][class*="to-primary"] {
+  background-image: none;
+}
+
+/* 3 · Lines. The 4–9% borders read as a smudge; give them a real edge. Exact
+   class tokens only, so hover and focus variants keep their own colour. */
+[class~="border-foreground/[0.04]"],
+[class~="border-foreground/[0.05]"],
+[class~="border-foreground/[0.06]"],
+[class~="border-foreground/[0.07]"],
+[class~="border-foreground/[0.08]"],
+[class~="border-foreground/[0.09]"],
+[class~="border-border/40"],
+[class~="border-border/45"],
+[class~="border-border/50"],
+[class~="border-border/60"] {
+  border-color: var(--crisp-line-soft);
+}
+[class~="border-foreground/[0.1]"],
+[class~="border-foreground/10"],
+[class~="border-foreground/[0.12]"] {
+  border-color: var(--crisp-line);
+}
+
+/* 4 · Light. No glow, no inset highlight, no coloured drop shadow. Floating
+   layers (menus, modals) keep a plain dark shadow so they still separate. */
+[class*="shadow-[0_0_"],
+[class*="shadow-[inset_"],
+[class*="shadow-[0_8px_24px_color-mix"],
+[class*="shadow-[0_10px_28px_-10px_color-mix"],
+[class*="shadow-[0_10px_24px_rgba(250"],
+[class*="shadow-[0_0_0_4px"],
+.ws-glow-breathe,
+.ws-core-breathe,
+.ws-cta-breathe,
+.ws-modal-glow,
+.ws-stage-halo {
+  box-shadow: none;
+  animation: none;
+}
+[class*="shadow-[0_20px_50px"],
+[class*="shadow-[0_24px_60px"],
+[class*="shadow-[0_12px_32px"],
+[class*="shadow-[0_8px_40px"],
+[class*="shadow-[0_-20px_60px"] {
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.55);
+}
+
+/* 5 · Motion. Nothing drifts into place and nothing bounces. State changes
+   are near-instant; the only long animations left are spinners, shimmer and
+   live price ticks, which carry information. */
+.rise,
+.ws-casc,
+.ws-casc-pop,
+.ws-row-in,
+.ws-card-deal,
+.ws-card-face-in,
+.ws-badge-pop {
+  animation: none !important;
+  opacity: 1;
+  transform: none;
+}
+.ws-pop-in,
+.ws-sheet-in,
+.ws-modal-in,
+.ws-backdrop-in {
+  animation-duration: var(--crisp-fast) !important;
+  animation-timing-function: ease-out !important;
+}
+[class~="duration-200"],
+[class~="duration-300"],
+[class~="duration-500"],
+[class~="duration-700"],
+[class*="transition-"] {
+  transition-duration: var(--crisp-fast);
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+.ds-lift {
+  transition-duration: var(--crisp-fast);
+}
+.ds-lift:hover {
+  transform: none;
 }
