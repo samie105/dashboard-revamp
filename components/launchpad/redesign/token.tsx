@@ -35,8 +35,12 @@ import { Rise } from "@/components/ui/system"
 import { DashScope } from "@/components/dash"
 import { WalletUnlockDialog } from "@/components/crypto/WalletUnlockDialog"
 import { Icon, Panel, PanelTitle, PillTabs, SLIDE } from "@/components/dashboard/redesign/ui"
-import { cryptoBackendClient, isCryptoBackendEnabled } from "@/lib/crypto-backend"
-import type { LaunchpadCurve, LaunchpadToken } from "@/lib/crypto-backend/types"
+import { isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { launchpadMarket } from "@/lib/launchpad-market/source"
+import { isMarketUnavailable, type LaunchMarketStats } from "@/lib/launchpad-market/types"
+import { compactCount, compactUsd } from "@/lib/launchpad-market/view"
+import { launchpadKeys, useLaunchStats } from "@/hooks/launchpad/useLaunchpadMarket"
+import type { LaunchpadCurve, LaunchpadNetworkId, LaunchpadToken } from "@/lib/crypto-backend/types"
 import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
 import { acceptAmountInput } from "@/lib/wallet-view"
 import { agoFrom, cardView, progressLabel } from "@/lib/launchpad-view"
@@ -45,6 +49,8 @@ import { formatTinyPrice } from "../curve-chart"
 import { explorerUrl } from "../address-row"
 import { NetworkBadge } from "../network"
 import { LaunchAvatar, PausedNotice, ProgressBar, StatusPill, useLaunchAvailability } from "./ui"
+import { ChangeText, TestTag } from "./board"
+import { ActivityPanel, ChartPanel, WindowStats } from "./market"
 
 function useNow() {
   const [now, setNow] = React.useState(0)
@@ -77,7 +83,7 @@ function CopyChip({ value, label }: { value: string; label?: string }) {
 
 /* ── Header ───────────────────────────────────────────────────────────── */
 
-function TokenHeader({ t, price }: { t: LaunchpadToken; price: number | null }) {
+function TokenHeader({ t, price, stats }: { t: LaunchpadToken; price: number | null; stats: LaunchMarketStats | null }) {
   const v = cardView(t)
   const now = useNow()
   const links = [
@@ -103,6 +109,7 @@ function TokenHeader({ t, price }: { t: LaunchpadToken; price: number | null }) 
                 <span className="font-display text-[18px] font-semibold text-muted-foreground">${t.symbol}</span>
                 <StatusPill status={v.status} raw={t.status} />
                 <NetworkBadge networkId={t.networkId} className="px-2 py-0.5 text-[10px]" />
+                {t.networkId === "solana-devnet" && <TestTag />}
               </div>
               <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
                 <span>Launched {agoFrom(t.createdAt, now) || "—"}</span>
@@ -124,15 +131,21 @@ function TokenHeader({ t, price }: { t: LaunchpadToken; price: number | null }) 
             </div>
           </div>
 
-          <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-foreground/[0.06] bg-foreground/[0.06] lg:ml-auto lg:min-w-[380px]">
+          <dl className={cn("grid gap-px overflow-hidden rounded-2xl border border-foreground/[0.06] bg-foreground/[0.06] lg:ml-auto", stats ? "grid-cols-2 sm:grid-cols-4 lg:min-w-[520px]" : "grid-cols-2 lg:min-w-[300px]")}>
             {[
-              { k: "Market cap", v: "—", title: "Needs a per-token USD price, which isn't served yet" },
-              { k: "Price", v: price === null ? "—" : `${formatTinyPrice(price)} SOL`, title: "The curve's current price" },
+              ...(stats
+                ? [
+                    { k: "Market cap", v: compactUsd(stats.marketCapUsd), title: "Price × total supply, in USD" },
+                    { k: "Price", v: price === null ? "—" : `${formatTinyPrice(price)} SOL`, title: "The current price", extra: <ChangeText value={stats.changePct["24h"]} className="text-[11.5px] font-semibold" /> },
+                    { k: "Holders", v: compactCount(stats.holders), title: "Wallets holding the token" },
+                  ]
+                : [{ k: "Price", v: price === null ? "—" : `${formatTinyPrice(price)} SOL`, title: "The curve's current price" }]),
               { k: "Creator holds", v: `${(t.allocation.creatorBps / 100).toFixed(1)}%`, warn: t.allocation.creatorBps >= 1000, title: "Share of supply the creator bought at launch" },
-            ].map((s) => (
+            ].map((s: { k: string; v: string; title: string; warn?: boolean; extra?: React.ReactNode }) => (
               <div key={s.k} title={s.title} className="flex flex-col gap-0.5 bg-card px-4 py-3 dark:bg-[color-mix(in_oklab,var(--card)_55%,var(--background))]">
                 <dt className="text-[11.5px] text-muted-foreground">{s.k}</dt>
                 <dd className={cn("truncate font-display text-[17px] font-semibold tabular-nums", s.warn ? "text-warning" : "text-foreground")}>{s.v}</dd>
+                {s.extra && <dd>{s.extra} <span className="text-[11px] text-muted-foreground">24h</span></dd>}
               </div>
             ))}
           </dl>
@@ -173,7 +186,8 @@ const PAD_L = 4
 const PAD_R = 76
 const PAD_B = 26
 
-function CurveChart({ curve, loading, error, graduationLamports }: { curve: LaunchpadCurve | undefined; loading: boolean; error: string | null; graduationLamports: string }) {
+/** `bare`: inside the chart panel's "Bonding curve" tab, so no panel or title of its own. */
+function CurveChart({ curve, loading, error, graduationLamports, bare = false }: { curve: LaunchpadCurve | undefined; loading: boolean; error: string | null; graduationLamports: string; bare?: boolean }) {
   const wrap = React.useRef<HTMLDivElement>(null)
   const [w, setW] = React.useState(0)
   const [hover, setHover] = React.useState<number | null>(null)
@@ -197,10 +211,11 @@ function CurveChart({ curve, loading, error, graduationLamports }: { curve: Laun
   const fillPath = now && filled.length > 0 ? `${filled.map((p, i) => `${i ? "L" : "M"}${x(p.sol).toFixed(1)},${y(p.price).toFixed(1)}`).join(" ")} L${x(now.sol)},${y(now.price)} L${x(now.sol)},${H - PAD_B} L${x(0)},${H - PAD_B} Z` : ""
   const hp = hover !== null ? pts[hover] : null
 
+  const Frame = bare ? "div" : Panel
   return (
-    <Panel className="flex flex-col gap-3 p-4 sm:p-5">
+    <Frame className={cn("flex flex-col gap-3", !bare && "p-4 sm:p-5")}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <PanelTitle className="text-[16px]">Bonding curve</PanelTitle>
+        {!bare && <PanelTitle className="text-[16px]">Bonding curve</PanelTitle>}
         <span className="text-[12px] text-muted-foreground">Price rises as SOL comes in — set by the curve, not an order book</span>
       </div>
       <div
@@ -302,7 +317,7 @@ function CurveChart({ curve, loading, error, graduationLamports }: { curve: Laun
           </span>
         )}
       </div>
-    </Panel>
+    </Frame>
   )
 }
 
@@ -588,18 +603,21 @@ function AddressesCard({ t }: { t: LaunchpadToken }) {
 
 export function LaunchTokenPage({ launchId }: { launchId: string }) {
   const availability = useLaunchAvailability()
+  // Through the market source, so local demo launches open too.
   const token = useQuery({
-    queryKey: ["launchpad", "token", launchId],
-    queryFn: ({ signal }) => cryptoBackendClient.getLaunchpadToken(launchId, signal),
-    enabled: isCryptoBackendEnabled,
+    queryKey: launchpadKeys.token(launchId),
+    queryFn: ({ signal }) => launchpadMarket.token(launchId, { signal }),
+    enabled: launchpadMarket.isMock || isCryptoBackendEnabled,
     refetchInterval: 30_000,
   })
   const curve = useQuery({
-    queryKey: ["launchpad", "curve", launchId],
-    queryFn: ({ signal }) => cryptoBackendClient.getLaunchpadCurve(launchId, signal),
-    enabled: isCryptoBackendEnabled && token.data?.data.status === "live",
+    queryKey: launchpadKeys.curve(launchId),
+    queryFn: ({ signal }) => launchpadMarket.curve(launchId, { signal }),
+    enabled: (launchpadMarket.isMock || isCryptoBackendEnabled) && token.data?.token.status === "live",
     refetchInterval: 30_000,
   })
+  const stats = useLaunchStats((token.data?.token.networkId as LaunchpadNetworkId | undefined) ?? null)
+  const now = useNow()
 
   const shell = "ws-icon-mono [&_button:not(:disabled)]:cursor-pointer mx-auto flex w-full max-w-[1720px] flex-col gap-4 p-4 md:gap-5 md:p-6"
 
@@ -631,30 +649,48 @@ export function LaunchTokenPage({ launchId }: { launchId: string }) {
     )
   }
 
-  const { data: launch, platformFeeBps, tokenDecimals } = token.data
+  const { token: launch, platformFeeBps, tokenDecimals } = token.data
+  const marketStats = stats.data?.[launch.launchId] ?? null
+  const statsUnavailable = isMarketUnavailable(stats.error)
+  const devnet = launch.networkId === "solana-devnet"
   const live = launch.status === "live"
 
   return (
     <DashScope className={shell}>
       <Rise>
-        <TokenHeader t={launch} price={curve.data?.current?.price ?? null} />
+        <TokenHeader t={launch} price={marketStats?.priceSol ?? curve.data?.current?.price ?? null} stats={marketStats} />
       </Rise>
       <Rise delay={60}>
         <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
           <div className="order-2 flex min-w-0 flex-col gap-4 md:gap-5 xl:order-1">
-            {live && (
-              <CurveChart
-                curve={curve.data}
-                loading={curve.isLoading}
-                error={curve.error ? formatWalletActionError(curve.error, "solana") : null}
-                graduationLamports={launch.curve?.graduationLamports ?? "0"}
-              />
-            )}
+            <ChartPanel
+              launchId={launch.launchId}
+              live={live}
+              curve={
+                <CurveChart
+                  curve={curve.data}
+                  loading={curve.isLoading}
+                  error={curve.error ? formatWalletActionError(curve.error, "solana") : null}
+                  graduationLamports={launch.curve?.graduationLamports ?? "0"}
+                  bare
+                />
+              }
+            />
+            <ActivityPanel launchId={launch.launchId} symbol={launch.symbol} devnet={devnet} now={now} />
             <AboutCard t={launch} platformFeeBps={platformFeeBps} />
             <AddressesCard t={launch} />
           </div>
           <div className="order-1 flex min-w-0 flex-col gap-4 md:gap-5 xl:sticky xl:top-4 xl:order-2">
             <PausedNotice availability={availability.data} compact />
+            {devnet && (
+              <p role="note" className="flex items-center gap-2 rounded-2xl border border-warning/30 bg-warning/[0.07] px-3.5 py-2.5 text-[12px] text-foreground/85">
+                <TestTag />
+                Devnet test token. It has no value.
+              </p>
+            )}
+            {launchpadMarket.isMock && (
+              <p role="note" className="rounded-2xl border border-foreground/[0.08] bg-foreground/[0.03] px-3.5 py-2.5 text-[12px] text-muted-foreground">Demo data: quotes and trades won&apos;t go through for this launch.</p>
+            )}
             {live ? (
               <CurveTicket token={launch} platformFeeBps={platformFeeBps} tokenDecimals={tokenDecimals} />
             ) : launch.status === "graduated" || launch.status === "graduating" ? (
@@ -662,6 +698,7 @@ export function LaunchTokenPage({ launchId }: { launchId: string }) {
             ) : (
               <NotOpenCard />
             )}
+            <WindowStats stats={marketStats} loading={stats.isLoading} unavailable={statsUnavailable || Boolean(stats.error)} />
           </div>
         </div>
       </Rise>
