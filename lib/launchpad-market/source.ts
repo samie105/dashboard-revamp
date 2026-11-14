@@ -3,7 +3,7 @@
  *
  * `launchpadMarket` is what every launchpad screen reads. The launch list,
  * one launch and its curve come from the real backend today
- * (cryptoBackendClient). Stats, candles, trades, holders and portfolio
+ * (cryptoBackendClient). Stats, candles, trades, network activity, holders and portfolio
  * aren't served yet: they throw MarketUnavailableError, and the screens show
  * "coming soon" in their place. When an endpoint lands, replace its throw
  * with the call and map the response onto lib/launchpad-market/types.ts.
@@ -33,6 +33,7 @@ const live: LaunchpadMarketSource = {
   stats: unavailable("Market stats"),
   candles: unavailable("Price history"),
   trades: unavailable("The trade feed"),
+  activity: unavailable("Live trades"),
   holders: unavailable("Holders"),
   portfolio: unavailable("Your launches and holdings"),
 }
@@ -51,6 +52,7 @@ const mock: LaunchpadMarketSource = {
   stats: async (n, o) => (await loadMock()).stats(n, o),
   candles: async (id, r, o) => (await loadMock()).candles(id, r, o),
   trades: async (id, o) => (await loadMock()).trades(id, o),
+  activity: async (n, o) => (await loadMock()).activity(n, o),
   holders: async (id, o) => (await loadMock()).holders(id, o),
   portfolio: async (n, o) => (await loadMock()).portfolio(n, o),
 }

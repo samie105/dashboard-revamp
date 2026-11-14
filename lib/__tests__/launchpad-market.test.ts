@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { __mockLaunchesAt, candlesFor, curveFor, holdersFor, priceAt, tradesFor, parseLaunchMockState, mockLaunchpadMarket } from "@/lib/launchpad-market/mock"
+import { __mockLaunchesAt, activityFor, candlesFor, curveFor, holdersFor, priceAt, tradesFor, parseLaunchMockState, mockLaunchpadMarket } from "@/lib/launchpad-market/mock"
 import { buyShare, compactUsd, searchBoard, signedPct, sortBoard, tinyPrice, type BoardRow } from "@/lib/launchpad-market/view"
 import { cardView } from "@/lib/launchpad-view"
 import { MarketUnavailableError, type LaunchMarketStats } from "@/lib/launchpad-market/types"
@@ -37,7 +37,7 @@ describe("live source", () => {
   it("in production says market data isn't available instead of inventing it", async () => {
     const { launchpadMarket } = await importUnderEnv({ NODE_ENV: "production", NEXT_PUBLIC_LAUNCHPAD_MOCKS: "true" }, () => import("@/lib/launchpad-market/source"))
     expect(launchpadMarket.isMock).toBe(false)
-    const results = await Promise.allSettled([launchpadMarket.stats("solana-mainnet-beta"), launchpadMarket.candles("x", "24h"), launchpadMarket.trades("x"), launchpadMarket.holders("x"), launchpadMarket.portfolio("solana-devnet")])
+    const results = await Promise.allSettled([launchpadMarket.stats("solana-mainnet-beta"), launchpadMarket.candles("x", "24h"), launchpadMarket.trades("x"), launchpadMarket.activity("solana-mainnet-beta"), launchpadMarket.holders("x"), launchpadMarket.portfolio("solana-devnet")])
     // The module was re-imported, so compare by name rather than class identity.
     for (const r of results) expect(r).toMatchObject({ status: "rejected", reason: { name: "MarketUnavailableError" } })
     expect(new MarketUnavailableError("x").name).toBe("MarketUnavailableError")
@@ -45,6 +45,15 @@ describe("live source", () => {
 })
 
 describe("mock market", () => {
+  it("ticker activity stays on its network, newest first, and names its launch", () => {
+    const feed = activityFor(launches, "solana-devnet", NOW)
+    expect(feed.length).toBeGreaterThan(0)
+    expect(feed.every((t) => t.launchId.startsWith("mock-dev-"))).toBe(true)
+    for (let i = 1; i < feed.length; i++) expect(Date.parse(feed[i - 1]!.at)).toBeGreaterThanOrEqual(Date.parse(feed[i]!.at))
+    const owner = launches.find((l) => l.token.launchId === feed[0]!.launchId)!
+    expect(feed[0]!.symbol).toBe(owner.token.symbol)
+  })
+
   it("keeps mainnet and devnet launches apart", () => {
     const nets = new Set(launches.map((l) => l.token.networkId))
     expect(nets).toEqual(new Set(["solana-mainnet-beta", "solana-devnet"]))

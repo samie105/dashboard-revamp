@@ -17,6 +17,7 @@ import {
   MarketUnavailableError,
   type Candle,
   type ChartRange,
+  type LaunchActivity,
   type LaunchHolder,
   type LaunchMarketStats,
   type LaunchpadMarketSource,
@@ -258,6 +259,15 @@ export function tradesFor(l: MockLaunch, now: number, count = 40): LaunchTrade[]
   return out
 }
 
+/** The network's latest trades across all its launches, newest first. */
+export function activityFor(all: MockLaunch[], networkId: LaunchpadNetworkId, now: number, count = 30): LaunchActivity[] {
+  return all
+    .filter((l) => l.token.networkId === networkId && l.token.status !== "graduated")
+    .flatMap((l) => tradesFor(l, now, 6).map((t) => ({ ...t, launchId: l.token.launchId, name: l.token.name, symbol: l.token.symbol, iconUrl: l.token.iconUrl ?? null, mint: l.token.mint ?? null })))
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+    .slice(0, count)
+}
+
 export function holdersFor(l: MockLaunch): LaunchHolder[] {
   const progress = Math.min(1, l.seed.progress)
   const graduated = l.token.status === "graduated"
@@ -347,6 +357,7 @@ export const mockLaunchpadMarket: LaunchpadMarketSource = {
   stats: (networkId, o) => respond((all, now) => Object.fromEntries(all.filter((l) => l.token.networkId === networkId).map((l) => [l.token.launchId, statsFor(l, now)])), o?.signal),
   candles: (launchId, range, o) => respond((all, now) => candlesFor(find(all, launchId), range, now), o?.signal),
   trades: (launchId, o) => respond((all, now) => tradesFor(find(all, launchId), now), o?.signal),
+  activity: (networkId, o) => respond((all, now, empty) => (empty ? [] : activityFor(all, networkId, now)), o?.signal),
   holders: (launchId, o) => respond((all) => holdersFor(find(all, launchId)), o?.signal),
   portfolio: (networkId, o) =>
     respond((all, now, empty): LaunchPortfolio => {

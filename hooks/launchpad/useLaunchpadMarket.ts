@@ -21,6 +21,7 @@ export const launchpadKeys = {
   stats: (n: LaunchpadNetworkId | null) => ["launchpad", "stats", n, launchpadMarket.isMock] as const,
   candles: (id: string, r: ChartRange) => ["launchpad", "candles", id, r, launchpadMarket.isMock] as const,
   trades: (id: string) => ["launchpad", "trades", id, launchpadMarket.isMock] as const,
+  activity: (n: LaunchpadNetworkId | null) => ["launchpad", "activity", n, launchpadMarket.isMock] as const,
   holders: (id: string) => ["launchpad", "holders", id, launchpadMarket.isMock] as const,
   portfolio: (n: LaunchpadNetworkId | null) => ["launchpad", "portfolio", n, launchpadMarket.isMock] as const,
 }
@@ -58,6 +59,11 @@ export function useLaunchCandles(launchId: string, range: ChartRange) {
 
 export function useLaunchTrades(launchId: string) {
   return useQuery({ queryKey: launchpadKeys.trades(launchId), queryFn: ({ signal }) => launchpadMarket.trades(launchId, { signal }), enabled, refetchInterval: 10_000, retry })
+}
+
+/** The board's live ticker: latest trades across the network. */
+export function useLaunchActivity(networkId: LaunchpadNetworkId | null) {
+  return useQuery({ queryKey: launchpadKeys.activity(networkId), queryFn: ({ signal }) => launchpadMarket.activity(networkId!, { signal }), enabled: enabled && Boolean(networkId), refetchInterval: 10_000, retry })
 }
 
 export function useLaunchHolders(launchId: string) {

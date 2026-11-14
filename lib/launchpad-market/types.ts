@@ -51,6 +51,9 @@ export type LaunchTrade = {
   txHash: string | null
 }
 
+/** One trade in the network-wide feed (the board's ticker): the trade plus which launch it was on. */
+export type LaunchActivity = LaunchTrade & { launchId: string; name: string; symbol: string; iconUrl: string | null; mint: string | null }
+
 export type LaunchHolder = {
   /** Shortened address, or a role name ("Bonding curve"). */
   label: string
@@ -82,6 +85,8 @@ export interface LaunchpadMarketSource {
   stats(networkId: LaunchpadNetworkId, o?: MarketRequest): Promise<Record<string, LaunchMarketStats>>
   candles(launchId: string, range: ChartRange, o?: MarketRequest): Promise<Candle[]>
   trades(launchId: string, o?: MarketRequest): Promise<LaunchTrade[]>
+  /** The latest trades across every launch on a network, newest first. */
+  activity(networkId: LaunchpadNetworkId, o?: MarketRequest): Promise<LaunchActivity[]>
   holders(launchId: string, o?: MarketRequest): Promise<LaunchHolder[]>
   portfolio(networkId: LaunchpadNetworkId, o?: MarketRequest): Promise<LaunchPortfolio>
 }
