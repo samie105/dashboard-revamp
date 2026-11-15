@@ -106,33 +106,43 @@ export function KingOfTheHill({ v, stats, devnet, now }: { v: LaunchCardView; st
   return (
     <Link href={tokenHref(v.id)} className="group block rounded-[24px] outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label={`King of the hill: ${v.name} (${v.symbol})`}>
       <article className="ds-panel ds-lift relative overflow-hidden rounded-[24px] transition-colors group-hover:border-primary/30">
-        <div className="relative flex flex-col gap-5 p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-5">
-          <LaunchArt v={v} className="aspect-square w-full max-w-[200px] shrink-0 self-center rounded-[18px] sm:w-[168px] sm:self-auto" />
-          <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-            <span className="flex items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-[0.14em] text-primary">
-              <Icon icon={Crown02Icon} className="size-4" strokeWidth={2} />
-              King of the hill
-            </span>
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-              <h2 className="truncate font-display text-[26px] font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-[30px]">{v.name}</h2>
-              <span className="font-display text-[18px] font-semibold text-muted-foreground">${v.symbol}</span>
-              {devnet && <TestTag />}
-            </div>
-            <p className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-muted-foreground">
-              {v.creator && (
-                <span>
-                  by <span className="font-mono text-[11.5px] text-foreground/80">{short(v.creator)}</span>
+        <div className="flex flex-col gap-5 p-4 sm:flex-row sm:items-stretch sm:gap-6 sm:p-6">
+          <LaunchArt v={v} className="aspect-square w-24 shrink-0 self-start rounded-[16px] sm:w-[176px] sm:rounded-[18px]" />
+          {/* Three groups, 16 apart: who it is · what it is · how far it's got. */}
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-4">
+                <span className="flex items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-[0.14em] text-primary">
+                  <Icon icon={Crown02Icon} className="size-4" strokeWidth={2} />
+                  King of the hill
                 </span>
-              )}
-              {agoFrom(v.createdAt, now) && <span>· {agoFrom(v.createdAt, now)}</span>}
-            </p>
-            {v.description && <p className="line-clamp-2 max-w-[70ch] text-[13.5px] leading-relaxed text-foreground/75">{v.description}</p>}
-            <div className="mt-1 flex flex-col gap-2">
-              <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+                <span className="hidden items-center gap-1.5 text-[13px] font-semibold text-primary sm:flex">
+                  Trade ${v.symbol}
+                  <Icon icon={ArrowRight02Icon} className="size-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2} />
+                </span>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h2 className="truncate font-display text-[26px] font-semibold leading-none tracking-[-0.03em] text-foreground md:text-[30px]">{v.name}</h2>
+                <span className="font-display text-[18px] font-semibold leading-none text-muted-foreground">${v.symbol}</span>
+                {devnet && <TestTag className="self-center" />}
+              </div>
+              <p className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-muted-foreground">
+                {v.creator && (
+                  <span>
+                    by <span className="font-mono text-[11.5px] text-foreground/80">{short(v.creator)}</span>
+                  </span>
+                )}
+                {v.creator && agoFrom(v.createdAt, now) && <span aria-hidden>·</span>}
+                {agoFrom(v.createdAt, now) && <span>{agoFrom(v.createdAt, now)}</span>}
+              </p>
+            </div>
+            {v.description && <p className="line-clamp-2 max-w-[68ch] text-[13.5px] leading-relaxed text-foreground/75">{v.description}</p>}
+            <div className="mt-auto flex flex-col gap-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
                 {stats ? (
                   <span className="flex items-baseline gap-2">
-                    <span className="text-[12px] text-muted-foreground">Market cap</span>
-                    <span className="font-display text-[22px] font-semibold tabular-nums text-foreground">{compactUsd(stats.marketCapUsd)}</span>
+                    <span className="text-[12.5px] text-muted-foreground">Market cap</span>
+                    <span className="font-display text-[22px] font-semibold leading-none tabular-nums text-foreground">{compactUsd(stats.marketCapUsd)}</span>
                     <ChangeText value={stats.changePct["24h"]} className="text-[13px] font-semibold" />
                   </span>
                 ) : (
@@ -140,17 +150,14 @@ export function KingOfTheHill({ v, stats, devnet, now }: { v: LaunchCardView; st
                     <span className="font-semibold tabular-nums text-foreground">{v.solRaised === null ? "—" : v.solRaised.toFixed(1)}</span> of {v.graduationSol === null ? "—" : v.graduationSol.toLocaleString("en-US")} SOL raised
                   </span>
                 )}
-                <span className="text-[12.5px] text-muted-foreground">
-                  <span className="font-display text-[17px] font-semibold tabular-nums text-primary">{progressLabel(v.progressBps, v.status)}</span> to graduation
+                <span className="flex items-baseline gap-1.5 text-[12.5px] text-muted-foreground">
+                  <span className="font-display text-[17px] font-semibold leading-none tabular-nums text-primary">{progressLabel(v.progressBps, v.status)}</span>
+                  to graduation
                 </span>
               </div>
               <ProgressBar bps={v.progressBps} status={v.status} size="lg" />
             </div>
           </div>
-          <span className="ds-gold hidden h-11 shrink-0 items-center gap-2 self-center rounded-xl px-4 text-[13.5px] font-semibold lg:flex">
-            Trade ${v.symbol}
-            <Icon icon={ArrowRight02Icon} className="size-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2} />
-          </span>
         </div>
       </article>
     </Link>
@@ -171,7 +178,7 @@ export function LaunchCard({ v, now, preview = false, stats, window = "24h", dev
     <article className={cn("ds-panel flex h-full flex-col overflow-hidden rounded-[20px]", !preview && "transition-[border-color,transform] duration-200 group-hover:-translate-y-0.5 group-hover:border-foreground/[0.16]")}>
       <div className="relative">
         <LaunchArt v={v} className="aspect-[5/4] w-full" zoom={!preview} />
-        <div className="absolute inset-x-2 top-2 flex items-start justify-between gap-2">
+        <div className="absolute inset-x-2.5 top-2.5 flex items-start justify-between gap-2">
           <span className="flex gap-1">
             {devnet && <TestTag className="border-warning/50 bg-black/60 backdrop-blur" />}
             {!live && <StatusPill status={v.status} raw={v.rawStatus} className="bg-black/60 text-white backdrop-blur" />}
@@ -179,16 +186,17 @@ export function LaunchCard({ v, now, preview = false, stats, window = "24h", dev
           {when && <span className="rounded-md bg-black/55 px-1.5 py-0.5 text-[10.5px] font-semibold text-white/90 backdrop-blur">{when}</span>}
         </div>
         {change !== undefined && change !== null && (
-          <span className={cn("absolute bottom-2 right-2 rounded-md px-1.5 py-0.5 text-[11.5px] font-bold tabular-nums text-white backdrop-blur", change >= 0 ? "bg-credit/85" : "bg-debit/85")}>
+          <span className={cn("absolute bottom-2.5 right-2.5 rounded-md px-1.5 py-0.5 text-[11.5px] font-bold tabular-nums text-white backdrop-blur", change >= 0 ? "bg-credit/85" : "bg-debit/85")}>
             {signedPct(change)} <span className="font-semibold opacity-80">{window}</span>
           </span>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <div className="flex min-w-0 flex-col">
+      {/* Three groups, 12 apart: who it is · its market · what it is. */}
+      <div className="flex flex-1 flex-col gap-3 p-3 sm:p-4">
+        <div className="flex min-w-0 flex-col gap-1">
           <span className="truncate font-display text-[15px] font-semibold leading-tight text-foreground">{v.name}</span>
-          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
+          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] leading-none text-muted-foreground">
             <span className="font-semibold text-foreground/75">${v.symbol}</span>
             {v.creator && (
               <>
@@ -199,27 +207,29 @@ export function LaunchCard({ v, now, preview = false, stats, window = "24h", dev
           </span>
         </div>
 
-        <div className="flex items-baseline justify-between gap-2">
-          {stats ? (
-            <span className="text-[11.5px] text-muted-foreground">
-              MC <span className="font-display text-[15px] font-semibold tabular-nums text-foreground">{compactUsd(stats.marketCapUsd)}</span>
-            </span>
-          ) : live ? (
-            <span className="text-[11.5px] tabular-nums text-muted-foreground">
-              <span className="font-semibold text-foreground/85">{v.solRaised === null ? "—" : v.solRaised.toFixed(1)}</span> / {v.graduationSol === null ? "—" : v.graduationSol.toLocaleString("en-US")} SOL
-            </span>
-          ) : (
-            <span className="text-[11.5px] text-muted-foreground">{v.status === "graduated" ? "On the open market" : "Curve full"}</span>
-          )}
-          {stats && <span className="text-[11px] tabular-nums text-muted-foreground">{compactCount(stats.holders)} holders</span>}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-2">
+            {stats ? (
+              <span className="text-[11.5px] text-muted-foreground">
+                MC <span className="font-display text-[15px] font-semibold tabular-nums text-foreground">{compactUsd(stats.marketCapUsd)}</span>
+              </span>
+            ) : live ? (
+              <span className="text-[11.5px] tabular-nums text-muted-foreground">
+                <span className="font-semibold text-foreground/85">{v.solRaised === null ? "—" : v.solRaised.toFixed(1)}</span> / {v.graduationSol === null ? "—" : v.graduationSol.toLocaleString("en-US")} SOL
+              </span>
+            ) : (
+              <span className="text-[11.5px] text-muted-foreground">{v.status === "graduated" ? "On the open market" : "Curve full"}</span>
+            )}
+            {stats && <span className="hidden text-[11px] tabular-nums text-muted-foreground sm:inline">{compactCount(stats.holders)} holders</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            <ProgressBar bps={v.progressBps} status={v.status} size="sm" className="flex-1" />
+            <span className={cn("min-w-[2.8em] text-right text-[11px] font-semibold tabular-nums", !live ? "text-credit" : v.progressBps >= 7500 ? "text-primary" : "text-muted-foreground")}>{progressLabel(v.progressBps, v.status)}</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <ProgressBar bps={v.progressBps} status={v.status} size="sm" className="flex-1" />
-          <span className={cn("w-[4.2em] text-right text-[11px] font-semibold tabular-nums", !live ? "text-credit" : v.progressBps >= 7500 ? "text-primary" : "text-muted-foreground")}>{progressLabel(v.progressBps, v.status)}</span>
-        </div>
-
-        {v.description && <p className="line-clamp-2 text-[12px] leading-[1.45] text-muted-foreground">{v.description}</p>}
+        {/* Two lines reserved, so cards in a row end on the same line. */}
+        <p className="line-clamp-2 min-h-[calc(2.9em+0.75rem+1px)] border-t border-foreground/[0.06] pt-3 text-[12px] leading-[1.45] text-muted-foreground">{v.description ?? ""}</p>
       </div>
     </article>
   )

@@ -35,7 +35,7 @@ import { Cancel01Icon, Rocket01Icon, Search01Icon } from "@hugeicons/core-free-i
 import { cn } from "@/lib/utils"
 import type { LaunchpadFeedFilter, LaunchpadNetworkId } from "@/lib/crypto-backend/types"
 import { formatWalletActionError } from "@/lib/crypto-wallet/action-errors"
-import { Icon, Panel, PillTabs } from "@/components/dashboard/redesign/ui"
+import { Icon, Panel } from "@/components/dashboard/redesign/ui"
 import { Chip, DashScope } from "@/components/dash"
 import { Rise } from "@/components/ui/system"
 import { cardView, type LaunchCardView } from "@/lib/launchpad-view"
@@ -95,7 +95,7 @@ function NetworkTabs({ networks, networkId, onChange }: { networks: Array<{ netw
 
 function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <label className="group flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-foreground/[0.07] bg-foreground/[0.025] px-3.5 transition-colors focus-within:border-primary/40 md:w-[280px] md:flex-none">
+    <label className="group flex h-11 w-full min-w-0 items-center gap-2 rounded-xl border border-foreground/[0.07] bg-foreground/[0.025] px-3.5 transition-colors focus-within:border-primary/40 md:w-[280px]">
       <Icon icon={Search01Icon} className="size-4 text-muted-foreground group-focus-within:text-primary" />
       <span className="sr-only">Search launches</span>
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search name, ticker or mint" className="min-w-0 flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground/70" />
@@ -110,18 +110,18 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
 
 function Header({ paused, network, availability, query, onQuery }: { paused: boolean; network: ReturnType<typeof useLaunchNetwork>; availability: ReturnType<typeof useLaunchAvailability>["data"]; query: string; onQuery: (v: string) => void }) {
   return (
-    <header className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-      <div className="flex min-w-0 flex-col gap-1.5">
+    <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between xl:gap-8">
+      <div className="flex min-w-0 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="font-display text-[26px] font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-[30px]">Launchpad</h1>
           {launchpadMarket.isMock && <Chip>Demo data</Chip>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ChainChips availability={availability} />
-          <a href="#how-it-works" className="text-[12.5px] font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">How it works</a>
+          <a href="#how-it-works" className="hidden text-[12.5px] font-medium md:inline text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">How it works</a>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
+      <div className="flex flex-wrap items-center gap-3 md:flex-nowrap">
         <SearchBox value={query} onChange={onQuery} />
         <NetworkTabs networks={network.networks} networkId={network.networkId} onChange={network.setNetworkId} />
         {paused ? (
@@ -129,8 +129,8 @@ function Header({ paused, network, availability, query, onQuery }: { paused: boo
             Launches paused
           </span>
         ) : (
-          <Link href="/launchpad/create" className="ds-gold group flex h-11 items-center gap-2 rounded-xl px-4 text-[14px] font-semibold">
-            <Icon icon={Rocket01Icon} className="size-[18px] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" strokeWidth={2} />
+          <Link href="/launchpad/create" className="ds-gold group flex h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-[14px] font-semibold md:flex-none">
+            <Icon icon={Rocket01Icon} className="hidden size-[18px] transition-transform sm:block duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" strokeWidth={2} />
             Launch a token
           </Link>
         )}
@@ -152,26 +152,26 @@ function YourLaunches({ networkId, byId, devnet }: { networkId: LaunchpadNetwork
       ].filter((x) => byId.has(x.id))
     : null
   return (
-    <section aria-labelledby="your-launches" className="flex flex-col gap-2.5">
+    <section aria-labelledby="your-launches" className="flex flex-col gap-3">
       <h2 id="your-launches" className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
         Your launches &amp; holdings{items && items.length > 0 && <span className="ml-1.5 font-semibold normal-case tracking-normal">· {items.length}</span>}
       </h2>
       {portfolio.error ? (
         <p className="text-[13px] text-debit">Couldn&apos;t load your launches. {formatWalletActionError(portfolio.error, "solana")}</p>
       ) : !items ? (
-        <div className="flex gap-2.5 overflow-hidden">{[0, 1, 2].map((i) => <span key={i} className="skel h-[58px] w-[230px] shrink-0 rounded-2xl" />)}</div>
+        <div className="flex gap-3 overflow-hidden">{[0, 1, 2].map((i) => <span key={i} className="skel h-[62px] w-[240px] shrink-0 rounded-2xl" />)}</div>
       ) : items.length === 0 ? (
         <p className="text-[13px] text-muted-foreground">
           You haven&apos;t launched or bought a token on {devnet ? "devnet" : "mainnet"} yet.{" "}
           <Link href="/launchpad/create" className="font-semibold text-primary hover:underline">Launch your first</Link>
         </p>
       ) : (
-        <ul className="scrollbar-none -mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-1">
+        <ul className="scrollbar-none flex snap-x gap-3 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-48px),transparent)]">
           {items.map((x) => {
             const v = byId.get(x.id)!
             return (
               <li key={x.id} className="snap-start">
-                <Link href={`/launchpad/${encodeURIComponent(v.id)}`} className="ds-panel flex w-[230px] items-center gap-2.5 rounded-2xl px-3 py-2.5 outline-none transition-colors hover:border-foreground/[0.16] focus-visible:ring-2 focus-visible:ring-primary/50">
+                <Link href={`/launchpad/${encodeURIComponent(v.id)}`} className="ds-panel flex w-[240px] items-center gap-3 rounded-2xl px-3.5 py-3 outline-none transition-colors hover:border-foreground/[0.16] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50">
                   <LaunchAvatar symbol={v.symbol} iconUrl={v.iconUrl} mint={v.mint} size="sm" />
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="flex items-center gap-1.5">
@@ -237,9 +237,9 @@ function Board({ networkId, networkError, stats, statsUnavailable, devnet, now, 
   )
 
   return (
-    <section aria-label="Launches" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div role="tablist" aria-label="Board" className="scrollbar-none -mx-1 flex gap-1.5 overflow-x-auto px-1">
+    <section aria-label="Launches" className="flex flex-col gap-4 md:gap-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-6">
+        <div role="tablist" aria-label="Board" className="scrollbar-none flex gap-2 overflow-x-auto">
           {TABS.map((t) => {
             const on = t.key === tab
             return (
@@ -262,12 +262,25 @@ function Board({ networkId, networkError, stats, statsUnavailable, devnet, now, 
         </div>
         {!statsUnavailable && (
           <div className="flex items-center gap-2">
-            <span className="text-[12px] text-muted-foreground">Change over</span>
-            <PillTabs id="lp-window" size="sm" options={MARKET_WINDOWS.map((w) => ({ key: w, label: w }))} value={window} onChange={setWindow} />
+            <span className="text-[12.5px] text-muted-foreground">Change over</span>
+            <div role="tablist" aria-label="Change window" className="flex h-9 items-center gap-0.5 rounded-full bg-foreground/[0.05] p-1">
+              {MARKET_WINDOWS.map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  role="tab"
+                  aria-selected={window === w}
+                  onClick={() => setWindow(w)}
+                  className={cn("h-7 rounded-full px-3 text-[12.5px] font-semibold tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/60", window === w ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
-      {statsUnavailable && <p className="-mt-1 text-[12px] text-muted-foreground">Market caps, price changes and trending are coming soon. Until then each card shows its curve.</p>}
+      {statsUnavailable && <p className="text-[12.5px] text-muted-foreground">Market caps, price changes and trending are coming soon. Until then each card shows its curve.</p>}
 
       {networkError ? (
         <Panel className="px-6 py-8 text-center text-[13px] text-debit">{formatWalletActionError(networkError, "solana")}</Panel>
@@ -333,27 +346,34 @@ export function LaunchpadDiscoveryPage() {
   const target = [...(onCurveCards ?? []), ...(graduatedCards ?? [])].find((v) => v.graduationSol !== null)?.graduationSol ?? null
 
   return (
-    <DashScope className="ws-icon-mono [&_button:not(:disabled)]:cursor-pointer mx-auto flex w-full max-w-[1720px] flex-col gap-5 p-4 md:gap-6 md:p-6">
-      {!activity.error && <TradeTicker trades={activity.data} loading={activity.isLoading && Boolean(networkId)} />}
-      <PausedNotice availability={availability.data} />
-      <Rise>
-        <Header paused={paused} network={network} availability={availability.data} query={query} onQuery={setQuery} />
-      </Rise>
-      {devnet && (
-        <p role="note" className="flex items-center gap-2 rounded-2xl border border-warning/30 bg-warning/[0.07] px-4 py-2.5 text-[12.5px] text-foreground/85">
-          <TestTag />
-          You&apos;re on devnet. These are test tokens: they have no value and can&apos;t be moved to mainnet.
-        </p>
-      )}
-      {king && !query.trim() && (
-        <Rise delay={50}>
-          <KingOfTheHill v={king} stats={stats.data?.[king.id] ?? null} devnet={devnet} now={now} />
+    // Spacing follows one scale (4·8·12·16·24·32·40·48): related blocks sit close
+    // (masthead 16, featured 24), separate groups far apart (40), and the
+    // explainer is set off by a rule with 48 either side.
+    <DashScope className="ws-icon-mono [&_button:not(:disabled)]:cursor-pointer mx-auto flex w-full max-w-[1720px] flex-col gap-8 px-4 pb-12 pt-4 md:gap-10 md:px-8 md:pb-16 md:pt-6">
+      <div className="flex flex-col gap-4">
+        {!activity.error && <TradeTicker trades={activity.data} loading={activity.isLoading && Boolean(networkId)} />}
+        <PausedNotice availability={availability.data} />
+        <Rise>
+          <Header paused={paused} network={network} availability={availability.data} query={query} onQuery={setQuery} />
         </Rise>
-      )}
-      {onCurve.isLoading && <span className="skel h-[208px] rounded-[24px]" aria-hidden />}
-      <Rise delay={90}>
-        <YourLaunches networkId={networkId} byId={byId} devnet={devnet} />
-      </Rise>
+        {devnet && (
+          <p role="note" className="flex items-center gap-2 rounded-2xl border border-warning/30 bg-warning/[0.07] px-4 py-3 text-[12.5px] text-foreground/85">
+            <TestTag />
+            You&apos;re on devnet. These are test tokens: they have no value and can&apos;t be moved to mainnet.
+          </p>
+        )}
+      </div>
+      <div className="flex flex-col gap-6 empty:hidden">
+        {king && !query.trim() && (
+          <Rise delay={50}>
+            <KingOfTheHill v={king} stats={stats.data?.[king.id] ?? null} devnet={devnet} now={now} />
+          </Rise>
+        )}
+        {onCurve.isLoading && <span className="skel h-[208px] rounded-[24px]" aria-hidden />}
+        <Rise delay={90}>
+          <YourLaunches networkId={networkId} byId={byId} devnet={devnet} />
+        </Rise>
+      </div>
       <Rise delay={120}>
         <Board key={networkId ?? "none"} networkId={networkId} networkError={network.error} stats={stats.data} statsUnavailable={statsUnavailable} devnet={devnet} now={now} query={query} />
       </Rise>

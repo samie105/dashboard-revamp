@@ -33,8 +33,8 @@ import { cn } from "@/lib/utils"
 /* ── Geometry ─────────────────────────────────────────────────────────── */
 
 /** Where the stages meet, as a share of the track's width. */
-const LAUNCH_END = 0.2
-const TARGET = 0.76
+const LAUNCH_END = 0.3
+const TARGET = 0.72
 const ZONES = [
   [0, LAUNCH_END],
   [LAUNCH_END, TARGET],
@@ -47,8 +47,8 @@ const shape = (x: number) => (Math.pow(1 + 2.4 * x, 2) - 1) / (Math.pow(3.4, 2) 
 const level = (p: number) => shape(Math.min(1, p / TARGET))
 
 // The track's vertical frame, in % of its height.
-const TOP = 14
-const SPAN = 66
+const TOP = 16
+const SPAN = 68
 const yPct = (p: number) => TOP + (1 - level(p)) * SPAN
 
 const curvePath = Array.from({ length: 49 }, (_, i) => (i / 48) * TARGET)
@@ -125,8 +125,8 @@ function ZoneBand({ i, phase }: { i: number; phase: Phase | null }) {
   const [a, b] = ZONES[i]!
   return (
     <span
-      className={cn("absolute inset-y-0 transition-colors duration-500", phase === i ? (i === 2 ? "bg-credit/[0.035]" : "bg-primary/[0.035]") : "bg-transparent")}
-      style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%` }}
+      className={cn("absolute -bottom-5 -top-6 transition-colors duration-500", phase === i ? (i === 2 ? "bg-credit/[0.035]" : "bg-primary/[0.035]") : "bg-transparent")}
+      style={{ left: i === 0 ? "calc(-1 * var(--hiw-pad))" : `${a * 100}%`, right: i === 2 ? "calc(-1 * var(--hiw-pad))" : `${(1 - b) * 100}%` }}
     />
   )
 }
@@ -138,22 +138,22 @@ function StageNote({ i, p, phase, onPick }: { i: number; p: MotionValue<number>;
   const active = phase === i
   const lit = phase === null || active
   return (
-    <li className={cn(i === 1 && "lg:px-8", i === 2 && "lg:pl-5")}>
+    <li className={cn(i < 2 && "lg:pr-8")}>
       <button
         type="button"
         onClick={() => onPick(i)}
         aria-pressed={active}
-        className="group flex w-full flex-col gap-1.5 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        className="group flex w-full flex-col rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-4 focus-visible:ring-offset-card"
       >
         <span className="relative block h-[2px] w-full overflow-hidden rounded-full bg-foreground/[0.07]">
           <motion.span className={cn("absolute inset-0 origin-left rounded-full", i === 2 ? "bg-credit" : "bg-primary")} style={{ scaleX: fill }} />
         </span>
-        <span className="mt-2.5 flex items-baseline gap-2">
+        <span className="mt-4 flex items-baseline gap-2">
           <span className={cn("font-mono text-[11.5px] font-semibold tabular-nums transition-colors duration-300", active ? (i === 2 ? "text-credit" : "text-primary") : "text-muted-foreground/70")}>{s.n}</span>
           <span className={cn("font-display text-[17px] font-semibold tracking-[-0.02em] transition-colors duration-300 group-hover:text-foreground", lit ? "text-foreground" : "text-foreground/60")}>{s.title}</span>
         </span>
-        <span className="text-[13px] leading-relaxed text-muted-foreground">{s.body}</span>
-        <span className="mt-1 text-[12px] font-medium text-foreground/75">{s.fact}</span>
+        <span className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{s.body}</span>
+        <span className="mt-3 text-[12px] font-medium text-foreground/75">{s.fact}</span>
       </button>
     </li>
   )
@@ -164,6 +164,7 @@ function StageNote({ i, p, phase, onPick }: { i: number; p: MotionValue<number>;
 export function HowItWorks({ target, paused }: { target: number | null; paused: boolean }) {
   const reduce = Boolean(useReducedMotion())
   const track = React.useRef<HTMLDivElement>(null)
+  const plot = React.useRef<HTMLDivElement>(null)
   const inView = useInView(track, { margin: "-60px" })
   const t = useMotionValue(reduce ? 1 : 0)
   const p = useTransform(t, posAt)
@@ -204,7 +205,7 @@ export function HowItWorks({ target, paused }: { target: number | null; paused: 
   }
 
   const scrubTo = (clientX: number) => {
-    const box = track.current?.getBoundingClientRect()
+    const box = plot.current?.getBoundingClientRect()
     if (!box) return
     hold(2500)
     t.set(timeAt((clientX - box.left) / box.width))
@@ -231,9 +232,9 @@ export function HowItWorks({ target, paused }: { target: number | null; paused: 
   const graduated = shown === null || shown === 2
 
   return (
-    <section id="how-it-works" aria-labelledby="how-it-works-title" className="flex scroll-mt-6 flex-col gap-5 border-t border-foreground/[0.06] pt-7">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <div className="flex flex-col gap-1">
+    <section id="how-it-works" aria-labelledby="how-it-works-title" className="mt-2 flex scroll-mt-6 flex-col gap-6 border-t border-foreground/[0.06] pt-10 md:pt-12">
+      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+        <div className="flex flex-col gap-2">
           <h2 id="how-it-works-title" className="font-display text-[20px] font-semibold tracking-[-0.02em] text-foreground">How a launch works</h2>
           <p className="text-[13px] text-muted-foreground">Same curve, same rules for every token, the creator included. Drag across the curve to play it.</p>
         </div>
@@ -250,16 +251,16 @@ export function HowItWorks({ target, paused }: { target: number | null; paused: 
         <div
           ref={track}
           aria-hidden
-          className="relative h-[210px] w-full cursor-ew-resize touch-pan-y select-none overflow-hidden md:h-[250px]"
+          className="relative h-[232px] w-full cursor-ew-resize touch-pan-y select-none overflow-hidden [--hiw-pad:16px] md:h-[272px] md:[--hiw-pad:24px]"
           onPointerMove={(e) => scrubTo(e.clientX)}
           onPointerDown={(e) => scrubTo(e.clientX)}
         >
-          {[0, 1, 2].map((i) => <ZoneBand key={i} i={i} phase={shown} />)}
-          <div className="absolute inset-x-4 inset-y-0 md:inset-x-6">
+          <div ref={plot} className="absolute inset-x-[var(--hiw-pad)] bottom-5 top-6">
+            {[0, 1, 2].map((i) => <ZoneBand key={i} i={i} phase={shown} />)}
             {[LAUNCH_END, TARGET].map((x) => (
-              <span key={x} className={cn("absolute bottom-[14%] top-[4%] w-px", x === TARGET ? "bg-[repeating-linear-gradient(to_bottom,var(--credit)_0_4px,transparent_4px_8px)] opacity-70" : "bg-foreground/[0.07]")} style={{ left: `${x * 100}%` }} />
+              <span key={x} className={cn("absolute bottom-[12%] top-[10%] w-px", x === TARGET ? "bg-[repeating-linear-gradient(to_bottom,var(--credit)_0_4px,transparent_4px_8px)] opacity-70" : "bg-foreground/[0.07]")} style={{ left: `${x * 100}%` }} />
             ))}
-            <span className="absolute top-[3%] hidden -translate-x-full whitespace-nowrap pr-2 text-[10.5px] sm:block font-semibold tabular-nums text-credit" style={{ left: `${TARGET * 100}%` }}>
+            <span className="absolute top-0 hidden -translate-x-full whitespace-nowrap pr-2 text-[10.5px] sm:block font-semibold tabular-nums text-credit" style={{ left: `${TARGET * 100}%` }}>
               {target !== null ? `${target.toLocaleString("en-US")} SOL target` : "Target"}
             </span>
 
@@ -281,7 +282,7 @@ export function HowItWorks({ target, paused }: { target: number | null; paused: 
             </motion.div>
 
             {/* Past the target: the pool. It fills as the curve's SOL pours in, then locks. */}
-            <div className="absolute flex flex-col" style={{ left: `calc(${TARGET * 100}% + 12px)`, right: 0, top: `calc(${yPct(1)}% - 18px)`, bottom: "14%" }}>
+            <div className="absolute flex flex-col" style={{ left: `calc(${TARGET * 100}% + 16px)`, right: 0, top: `calc(${yPct(1)}% - 18px)`, height: 96 }}>
               <div className={cn("relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border transition-colors duration-500", graduated ? "border-credit/45" : "border-foreground/[0.1] border-dashed")}>
                 <motion.span className="absolute inset-x-0 bottom-0 h-full origin-bottom bg-[linear-gradient(to_top,color-mix(in_oklab,var(--credit)_32%,transparent),color-mix(in_oklab,var(--credit)_8%,transparent))]" style={{ scaleY: pour }} />
                 <span className="relative flex items-center justify-center gap-2 px-2.5 pt-2.5 sm:justify-start">
@@ -311,16 +312,16 @@ export function HowItWorks({ target, paused }: { target: number | null; paused: 
               style={{ left: dotLeft, top: dotTop, opacity: dotOpacity }}
             />
             {/* Live readout of where the curve is. */}
-            <span className="pointer-events-none absolute left-0 top-[3%] flex items-center gap-2 text-[11px] tabular-nums">
+            <span className="pointer-events-none absolute left-0 top-0 flex items-center gap-2 text-[11px] tabular-nums">
               <span className={cn("rounded-md px-1.5 py-0.5 font-bold uppercase tracking-[0.08em] transition-colors duration-300", shown === 2 ? "bg-credit/[0.14] text-credit" : "bg-primary/[0.14] text-primary")}>{shown === 0 ? "Launch" : shown === 2 ? "Graduated" : "Trading"}</span>
               <motion.span className="font-semibold text-foreground/85">{readout}</motion.span>
             </span>
 
-            <span className="absolute bottom-[3%] left-0 text-[10.5px] font-medium text-muted-foreground/70">SOL raised →</span>
+            <span className="absolute bottom-0 left-0 text-[10.5px] font-medium text-muted-foreground/70">SOL raised →</span>
           </div>
         </div>
 
-        <ol className="grid grid-cols-1 gap-6 border-t border-foreground/[0.06] px-4 pb-6 pt-5 md:px-6 lg:gap-0 lg:[grid-template-columns:20fr_56fr_24fr]">
+        <ol className="grid grid-cols-1 gap-8 border-t border-foreground/[0.06] px-4 py-6 md:px-6 lg:gap-0 lg:[grid-template-columns:30fr_42fr_28fr]">
           {[0, 1, 2].map((i) => <StageNote key={i} i={i} p={p} phase={shown} onPick={pick} />)}
         </ol>
       </div>
