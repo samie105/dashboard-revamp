@@ -4030,3 +4030,9 @@ tr:hover > .ds-cell { background: color-mix(in oklab, var(--foreground) 2.5%, tr
   transition-duration: var(--crisp-fast);
   transform: none;
 }
+
+/* CRISP, density: exchange tables are 40-44px rows, not 56-64px. */
+.ds-cell,
+.dash-cell {
+  height: 44px !important;
+}

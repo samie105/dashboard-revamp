@@ -104,17 +104,17 @@ function StatCard({
   children: React.ReactNode
 }) {
   return (
-    <Panel as="article" className={cn("dash-lift flex min-w-0 flex-col justify-between gap-4 p-4 sm:p-5", className)}>
+    <Panel as="article" className={cn("dash-lift flex min-w-0 flex-col justify-between gap-2 p-3 sm:p-3.5", className)}>
       <div className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
+        <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="font-display text-[20px] font-semibold leading-none sm:text-[23px] tracking-[-0.03em] tabular-nums text-foreground">
+          <span className="font-display text-[20px] font-semibold leading-none sm:text-[19px] tracking-[-0.03em] tabular-nums text-foreground">
             {value}
           </span>
           {aside}
         </span>
       </div>
-      <div className="min-h-[34px]">{children}</div>
+      <div className="min-h-[24px]">{children}</div>
     </Panel>
   )
 }
@@ -130,9 +130,9 @@ export function MarketStats() {
     // Two up on a phone with the cap curve spanning the top row; six tracks
     // from lg so 5 cards land as 2 + 3 without a ragged hole; five across
     // once there is room.
-    <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-6 2xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-6 xl:grid-cols-5">
       <StatCard
-        className="col-span-2 lg:col-span-3 2xl:col-span-1"
+        className="col-span-2 lg:col-span-3 xl:col-span-1"
         label="Market cap"
         value={formatUSD(STATS.marketCapUsd, { compact: true })}
         aside={
@@ -145,7 +145,7 @@ export function MarketStats() {
         <Spark points={CAP_SERIES} width={240} height={34} fluid />
       </StatCard>
 
-      <StatCard className="lg:col-span-3 2xl:col-span-1" label="24h volume" value={formatUSD(STATS.volumeUsd, { compact: true })} aside={<span className="text-[12.5px] font-medium text-muted-foreground">7 days</span>}>
+      <StatCard className="lg:col-span-3 xl:col-span-1" label="24h volume" value={formatUSD(STATS.volumeUsd, { compact: true })} aside={<span className="text-[12.5px] font-medium text-muted-foreground">7 days</span>}>
         <div className="flex h-[34px] items-end gap-1.5">
           {VOLUME_DAYS.map((v, i) => (
             <motion.span
@@ -162,7 +162,7 @@ export function MarketStats() {
         </div>
       </StatCard>
 
-      <StatCard className="lg:col-span-2 2xl:col-span-1" label="BTC dominance" value={`${STATS.btcDominancePct.toFixed(1)}%`}>
+      <StatCard className="lg:col-span-2 xl:col-span-1" label="BTC dominance" value={`${STATS.btcDominancePct.toFixed(1)}%`}>
         <div className="flex flex-col gap-2.5">
           <div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
             {DOMINANCE_SPLIT.map((d, i) => (
@@ -187,7 +187,7 @@ export function MarketStats() {
       </StatCard>
 
       <StatCard
-        className="lg:col-span-2 2xl:col-span-1"
+        className="lg:col-span-2 xl:col-span-1"
         label="Fear & Greed"
         value={SENTIMENT.score}
         aside={<span className="rounded-md bg-credit/[0.13] px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.05em] text-credit">{SENTIMENT.label}</span>}
@@ -209,7 +209,7 @@ export function MarketStats() {
       </StatCard>
 
       <StatCard
-        className="lg:col-span-2 2xl:col-span-1"
+        className="lg:col-span-2 xl:col-span-1"
         label="Breadth"
         value={
           <>

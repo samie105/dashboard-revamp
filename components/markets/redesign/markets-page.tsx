@@ -263,10 +263,12 @@ export function MarketsPage({ coins, globalStats, error }: { coins: CoinData[]; 
           <Rise delay={80}>
             {isFutures ? <FuturesStats markets={futuresMarkets} loading={futuresLoading} /> : <MarketStats coins={source} changeOf={changeOf} globalStats={globalStats} movesKnown={movesKnown} />}
           </Rise>
-          <Rise delay={140}>
-            <Movers gainers={movers.gainers} losers={movers.losers} active={movers.active} window={isFutures ? "24h" : "7d"} loading={isFutures ? futuresLoading : !movesKnown} />
-          </Rise>
-          <Rise delay={200}>{table}</Rise>
+          <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <Rise delay={140}>{table}</Rise>
+            <Rise delay={200}>
+              <Movers gainers={movers.gainers} losers={movers.losers} active={movers.active} window={isFutures ? "24h" : "7d"} loading={isFutures ? futuresLoading : !movesKnown} stacked />
+            </Rise>
+          </div>
           <Rise delay={240}>
             {isFutures ? (
               <MyPositions positions={positions} loading={positionsLoading} />

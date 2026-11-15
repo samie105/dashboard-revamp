@@ -29,12 +29,14 @@ export default function MarketsUnauthPage() {
       <Rise delay={80}>
         <MarketStats />
       </Rise>
-      <Rise delay={140}>
-        <Movers />
-      </Rise>
-      <Rise delay={200}>
-        <MarketTable />
-      </Rise>
+      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <Rise delay={140}>
+          <MarketTable />
+        </Rise>
+        <Rise delay={200}>
+          <Movers stacked />
+        </Rise>
+      </div>
     </div>
   )
 }
