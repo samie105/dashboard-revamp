@@ -50,6 +50,8 @@ export type LaunchCardView = {
   graduationSol: number | null
   remainingSol: number | null
   creatorBps: number
+  /** Creator's wallet; null for a draft. */
+  creator: string | null
   createdAt: string
 }
 
@@ -70,6 +72,7 @@ export function cardView(t: LaunchpadToken): LaunchCardView {
     graduationSol: target,
     remainingSol: raised !== null && target !== null ? Math.max(0, target - raised) : null,
     creatorBps: t.allocation.creatorBps,
+    creator: t.creatorAddress || null,
     createdAt: t.createdAt,
   }
 }

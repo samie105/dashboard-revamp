@@ -206,6 +206,7 @@ function draftView(f: ReturnType<typeof useLaunchForm>): LaunchCardView {
     graduationSol: target,
     remainingSol: target,
     creatorBps: f.form.creatorBps,
+    creator: null,
     createdAt: "",
   }
 }
