@@ -25,6 +25,8 @@ import type {
 
 interface UseUnifiedTransactionsOptions {
   pollInterval?: number
+  /** Rows per request; the backend caps GET /transactions at 100. */
+  limit?: number
 }
 
 interface UseUnifiedTransactionsReturn {
@@ -257,7 +259,7 @@ function getCryptoStats(transactions: UnifiedTransaction[]): TransactionStats {
 export function useUnifiedTransactions(
   options: UseUnifiedTransactionsOptions = {}
 ): UseUnifiedTransactionsReturn {
-  const { pollInterval = 30000 } = options
+  const { pollInterval = 30000, limit = 30 } = options
   const { user, isLoaded, isSignedIn } = useAuth()
   const queryClient = useQueryClient()
   const userId = user?.userId ?? "anonymous"
@@ -276,7 +278,7 @@ export function useUnifiedTransactions(
   const [hasMore, setHasMore] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | undefined>()
 
-  const [filters, setFiltersState] = useState<TransactionFilters>({ limit: 30 })
+  const [filters, setFiltersState] = useState<TransactionFilters>({ limit })
   const observerRef = useRef<IntersectionObserver | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
