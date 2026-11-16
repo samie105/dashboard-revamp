@@ -23,18 +23,18 @@ const LISTS: { key: string; title: string; hint: string; icon: IconSvg; tone: st
   { key: "hot", title: "Hot right now", hint: "Most traded today", icon: FireIcon, tone: "text-primary border-primary/25 bg-primary/[0.08]", rows: HOT, meta: "volume" },
 ]
 
-export function Movers() {
+export function Movers({ stacked = false }: { stacked?: boolean }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-3">
+    <div className={stacked ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 gap-3 lg:grid-cols-3"}>
       {LISTS.map((list, li) => (
-        <Panel key={list.key} className="flex flex-col px-3 pb-2 pt-5">
-          <div className="flex items-center justify-between gap-3 px-2 pb-3">
+        <Panel key={list.key} className="flex flex-col px-2 pb-1 pt-3">
+          <div className="flex items-center justify-between gap-3 px-2 pb-2">
             <div className="flex flex-col gap-0.5">
-              <PanelTitle className="text-[16px]">{list.title}</PanelTitle>
+              <PanelTitle className="text-[14px]">{list.title}</PanelTitle>
               <span className="text-[12.5px] text-muted-foreground">{list.hint}</span>
             </div>
-            <span className={cn("flex size-10 items-center justify-center rounded-xl border", list.tone)}>
-              <Icon icon={list.icon} className="size-[19px]" />
+            <span className={cn("flex size-7 items-center justify-center rounded-md border", list.tone)}>
+              <Icon icon={list.icon} className="size-4" />
             </span>
           </div>
 
@@ -49,11 +49,11 @@ export function Movers() {
               >
                 <Link
                   href={tradeHref(m)}
-                  className="grid grid-cols-[20px_minmax(0,1fr)_auto_auto] items-center gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-white/[0.03]"
+                  className="grid grid-cols-[20px_minmax(0,1fr)_auto_auto] items-center gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-white/[0.03]"
                 >
                   <span className="text-[12.5px] font-medium tabular-nums text-muted-foreground/70">{i + 1}</span>
                   <span className="flex min-w-0 items-center gap-3">
-                    <CoinAvatar symbol={m.base} size="lg" className="size-9 ring-1 ring-white/10" />
+                    <CoinAvatar symbol={m.base} size="md" className="size-6 ring-1 ring-white/10" />
                     <span className="flex min-w-0 flex-col leading-tight">
                       <span className="truncate text-[13.5px] font-semibold text-foreground">
                         {m.base}

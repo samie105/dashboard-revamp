@@ -176,7 +176,7 @@ function DepositPane({
 
       <div className="flex flex-col gap-4 rounded-md border border-foreground/[0.12] p-4 sm:flex-row sm:items-start sm:gap-5">
         <div key={chain.key} className="mx-auto size-[168px] shrink-0 rounded-sm bg-white p-2.5 text-black sm:mx-0">
-          <QrCode value={chain.address} title={`${chain.name} deposit address`} className="size-full" />
+          <QrCode value={chain.address} title={`${chain.name} deposit address`} className="size-full text-black" />
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex flex-col gap-1.5">

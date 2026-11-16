@@ -122,15 +122,15 @@ function StatCard({
   children?: React.ReactNode
 }) {
   return (
-    <Panel as="article" className={cn("ds-lift flex min-w-0 flex-col justify-between gap-4 p-4 sm:p-5", className)}>
+    <Panel as="article" className={cn("ds-lift flex min-w-0 flex-col justify-between gap-2 p-3 sm:p-3.5", className)}>
       <div className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
+        <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="font-display text-[20px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground sm:text-[23px]">{value}</span>
+          <span className="font-display text-[20px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground sm:text-[19px]">{value}</span>
           {aside}
         </span>
       </div>
-      <div className="min-h-[34px]">{children}</div>
+      <div className="min-h-[24px]">{children}</div>
     </Panel>
   )
 }
@@ -184,9 +184,9 @@ function useMarketHistory() {
 
 /* The preview's grid: two up on a phone with market cap spanning the top
    row; six tracks from lg so 5 cards land as 2 + 3; five across from 2xl. */
-const GRID = "grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-6 2xl:grid-cols-5"
-const WIDE = "lg:col-span-3 2xl:col-span-1"
-const NARROW = "lg:col-span-2 2xl:col-span-1"
+const GRID = "grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-6 xl:grid-cols-5"
+const WIDE = "lg:col-span-3 xl:col-span-1"
+const NARROW = "lg:col-span-2 xl:col-span-1"
 
 export function MarketStats({ coins, changeOf, globalStats, movesKnown }: { coins: CoinData[]; changeOf: (c: CoinData) => number; globalStats: GlobalStats; movesKnown: boolean }) {
   const { sentiment, settled } = useSentiment()
