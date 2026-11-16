@@ -30,7 +30,7 @@ export const ANALYTICS_RANGES: { key: AnalyticsRange; label: string }[] = [
   { key: "all", label: "All" },
 ]
 
-const RANGE_DAYS: Record<AnalyticsRange, number> = { "7d": 7, "30d": 30, "90d": 90, all: Infinity }
+export const RANGE_DAYS: Record<AnalyticsRange, number> = { "7d": 7, "30d": 30, "90d": 90, all: Infinity }
 
 const DAY = 86_400_000
 
@@ -220,16 +220,30 @@ export type Outcomes = {
   /** Median seconds from created to confirmed, over rows that carry both. */
   medianSettleSeconds: number | null
   settledSample: number
+  /** How many confirmed within each SETTLE_BANDS band. */
+  settleBands: number[]
 }
 
+/** Upper bounds, in seconds, of the confirm-time bands; the last is open. */
+export const SETTLE_BANDS: { label: string; upTo: number }[] = [
+  { label: "Under 10s", upTo: 10 },
+  { label: "10–30s", upTo: 30 },
+  { label: "30s–1m", upTo: 60 },
+  { label: "1–5m", upTo: 300 },
+  { label: "Over 5m", upTo: Infinity },
+]
+
 export function outcomes(rows: UnifiedTransaction[]): Outcomes {
-  const o: Outcomes = { completed: 0, pending: 0, failed: 0, medianSettleSeconds: null, settledSample: 0 }
+  const o: Outcomes = { completed: 0, pending: 0, failed: 0, medianSettleSeconds: null, settledSample: 0, settleBands: SETTLE_BANDS.map(() => 0) }
   const durations: number[] = []
   for (const tx of rows) {
     o[statusGroup(tx.status)] += 1
     if (tx.status === "completed" && tx.completedAt) {
       const s = (Date.parse(tx.completedAt) - Date.parse(tx.createdAt)) / 1000
-      if (Number.isFinite(s) && s >= 0) durations.push(s)
+      if (Number.isFinite(s) && s >= 0) {
+        durations.push(s)
+        o.settleBands[SETTLE_BANDS.findIndex((b) => s < b.upTo)] += 1
+      }
     }
   }
   if (durations.length) {

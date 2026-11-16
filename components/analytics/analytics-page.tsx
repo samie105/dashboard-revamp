@@ -27,10 +27,11 @@ import {
 
 import { cn } from "@/lib/utils"
 import { DashScope, EmptyPanel, ErrorPanel, MoreLink, NeutralButton, NeutralLink, SkeletonBlock } from "@/components/dash"
-import { Figure, Icon, Panel, PillTabs, type IconSvg } from "@/components/dashboard/redesign/ui"
+import { Icon, Panel, PillTabs } from "@/components/dashboard/redesign/ui"
 import { Rise } from "@/components/ui/system"
-import { useUnifiedTransactions } from "@/hooks/use-unified-transactions"
-import { useFiatOrders } from "@/hooks/crypto/useFiatOrders"
+import { LEDGER_CAP, useAnalyticsData } from "@/hooks/useAnalyticsData"
+import { RANGE_NOUN, SectionPanel, Tile, TilesSkeleton, plural, usdTile } from "@/components/analytics/parts"
+import { TradingAnalytics } from "@/components/analytics/trading"
 import {
   ANALYTICS_RANGES,
   WEEKDAYS,
@@ -40,90 +41,19 @@ import {
   byNetwork,
   flowSeries,
   fmtDuration,
+  SETTLE_BANDS,
   inRange,
   outcomes,
   rhythm,
   totals,
   type AnalyticsRange,
   type BankSide,
-  type UsdFigure,
 } from "@/lib/analytics-view"
-import { FlowChart, FlowTable, RankedBars, RhythmGrid, SegmentBar, blockLabel, usd } from "@/components/analytics/charts"
+import { FlowChart, FlowTable, RankedBars, RhythmGrid, SegmentBar, blockLabel } from "@/components/analytics/charts"
 
-/** GET /transactions returns at most this many rows. */
-const LEDGER_CAP = 100
 
-const RANGE_NOUN: Record<AnalyticsRange, string> = {
-  "7d": "the last 7 days",
-  "30d": "the last 30 days",
-  "90d": "the last 90 days",
-  all: "all time",
-}
 
 /* ── Pieces ───────────────────────────────────────────────────────────── */
-
-function SectionPanel({ title, subtitle, action, className, children }: { title: string; subtitle?: React.ReactNode; action?: React.ReactNode; className?: string; children: React.ReactNode }) {
-  return (
-    <Panel className={cn("flex min-w-0 flex-col gap-5 p-4 sm:p-6", className)}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h2 className="font-display text-[16px] font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
-          {subtitle && <p className="text-[12.5px] text-muted-foreground">{subtitle}</p>}
-        </div>
-        {action}
-      </div>
-      {children}
-    </Panel>
-  )
-}
-
-function Tile({ label, icon, tone, value, sub }: { label: string; icon: IconSvg; tone: string; value: React.ReactNode; sub: React.ReactNode }) {
-  return (
-    <Panel as="article" className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
-        <span className={cn("flex size-8 items-center justify-center rounded-[10px] border", tone)}>
-          <Icon icon={icon} className="size-4" />
-        </span>
-      </div>
-      <div className="flex flex-col gap-1">
-        <span className="truncate font-display text-[20px] font-semibold leading-none tracking-[-0.03em] sm:text-[24px]">{value}</span>
-        <span className="text-[12px] leading-snug text-muted-foreground">{sub}</span>
-      </div>
-    </Panel>
-  )
-}
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
-
-/** A USD figure, or "—" until prices load. Partial sums say what they skipped. */
-function usdTile(f: UsdFigure, pricesReady: boolean, noun: string): { value: React.ReactNode; sub: string } {
-  if (!pricesReady) return { value: "—", sub: "Waiting for prices" }
-  if (f.count > 0 && f.unpriced === f.count) return { value: "—", sub: `${plural(f.count, noun)}, none priced yet` }
-  return {
-    value: <Figure>{usd(f.usd)}</Figure>,
-    sub: f.unpriced > 0 ? `${plural(f.count, noun)} · ${f.unpriced} not priced` : plural(f.count, noun),
-  }
-}
-
-function TilesSkeleton() {
-  return (
-    <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4" role="status" aria-label="Loading figures">
-      {Array.from({ length: 4 }, (_, i) => (
-        <Panel key={i} as="article" className="flex flex-col gap-4 p-4 sm:p-5" aria-hidden>
-          <div className="flex items-center justify-between">
-            <SkeletonBlock className="h-3 w-20" />
-            <SkeletonBlock className="size-8 rounded-[10px]" />
-          </div>
-          <div className="flex flex-col gap-2">
-            <SkeletonBlock className="h-6 w-28" />
-            <SkeletonBlock className="h-3 w-24" />
-          </div>
-        </Panel>
-      ))}
-    </div>
-  )
-}
 
 function BodySkeleton() {
   return (
@@ -159,6 +89,24 @@ function OutcomeLegend({ items }: { items: { key: string; label: string; value: 
   )
 }
 
+/** How long confirmed transactions took, in fixed bands: one series, one colour. */
+function SettleBands({ bands }: { bands: number[] }) {
+  const max = Math.max(1, ...bands)
+  return (
+    <ul className="flex flex-col gap-2" aria-label="Time to confirm, by band">
+      {SETTLE_BANDS.map((b, i) => (
+        <li key={b.label} className="grid grid-cols-[72px_1fr_28px] items-center gap-3 text-[12px]">
+          <span className="text-muted-foreground">{b.label}</span>
+          <span aria-hidden className="h-2 overflow-hidden rounded-full bg-foreground/[0.06]">
+            <span className="block h-full rounded-full bg-primary" style={{ width: bands[i] ? `${Math.max(3, (bands[i] / max) * 100)}%` : 0 }} />
+          </span>
+          <span className="text-right tabular-nums text-foreground">{bands[i]}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function BankRow({ label, side }: { label: string; side: BankSide }) {
   return (
     <div className="flex flex-col gap-2">
@@ -185,8 +133,10 @@ function BankRow({ label, side }: { label: string; side: BankSide }) {
 /* ── Page ─────────────────────────────────────────────────────────────── */
 
 export function AnalyticsPage() {
-  const model = useUnifiedTransactions({ pollInterval: 60_000, limit: LEDGER_CAP })
-  const orders = useFiatOrders(50)
+  const data = useAnalyticsData()
+  const model = data.wallet
+  const orders = data.orders
+  const [tab, setTab] = React.useState<"wallet" | "trading">("wallet")
   const [range, setRange] = React.useState<AnalyticsRange>("30d")
   const [view, setView] = React.useState<"chart" | "table">("chart")
 
@@ -194,9 +144,8 @@ export function AnalyticsPage() {
   const [now, setNow] = React.useState<Date | null>(null)
   React.useEffect(() => setNow(new Date()), [])
 
-  const all = model.transactions
-  // stats is null while the USD index loads; until then nothing is priced.
-  const pricesReady = model.stats !== null
+  const all = model.rows
+  const pricesReady = model.pricesReady
 
   const d = React.useMemo(() => {
     if (!now) return null
@@ -238,7 +187,7 @@ export function AnalyticsPage() {
           <SkeletonBlock className="h-10" />
         </div>
       ) : orders.error && !orders.data ? (
-        <ErrorPanel compact title="Couldn't load bank orders" onRetry={() => void orders.refetch()} />
+        <ErrorPanel compact title="Couldn't load bank orders" onRetry={orders.refetch} />
       ) : !bank || bank.buys.total + bank.sells.total === 0 ? (
         <div className="flex flex-col items-start gap-3">
           <span className="flex size-10 items-center justify-center rounded-2xl border border-foreground/[0.08] bg-foreground/[0.04] text-muted-foreground">
@@ -273,15 +222,48 @@ export function AnalyticsPage() {
     <DashScope className="ws-icon-mono mx-auto flex w-full max-w-[1720px] flex-col gap-8 px-4 pb-12 pt-4 md:gap-10 md:px-6 md:pb-16 md:pt-6">
       {/* Masthead */}
       <Rise>
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-8">
+        <div className="flex flex-col gap-4">
           <div className="flex min-w-0 flex-col gap-1.5 px-1">
-            <h1 className="font-display text-[28px] font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-[32px]">Analytics</h1>
-            <p className="max-w-[640px] text-[14px] text-muted-foreground">{loading ? "Your money in, money out, trades and habits, from your own transactions" : coverage}</p>
+            <div className="flex items-center gap-3">
+              <h1 className="font-display text-[28px] font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-[32px]">Analytics</h1>
+              {/* Dev sample data (NEXT_PUBLIC_ANALYTICS_MOCKS): never in a production build. */}
+              {data.isMock && (
+                <span
+                  title="Sample figures for local development. Your real records aren't shown."
+                  className="inline-flex h-6 items-center gap-1.5 rounded-full border border-warning/30 bg-warning/[0.1] px-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-warning"
+                >
+                  <span aria-hidden className="size-1.5 rounded-full bg-warning" />
+                  Demo
+                </span>
+              )}
+            </div>
+            <p className="max-w-[720px] text-[14px] text-muted-foreground">
+              {tab === "trading"
+                ? "Your futures results: realised profit and loss, win rate, fees, and the stops and targets on what's open"
+                : loading
+                  ? "Your money in, money out, trades and habits, from your own transactions"
+                  : coverage}
+            </p>
           </div>
-          <PillTabs id="analytics-range" options={ANALYTICS_RANGES} value={range} onChange={setRange} className="self-start md:self-auto" />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <PillTabs
+              id="analytics-tab"
+              options={[
+                { key: "wallet", label: "Wallet" },
+                { key: "trading", label: "Trading" },
+              ]}
+              value={tab}
+              onChange={setTab}
+            />
+            <PillTabs id="analytics-range" options={ANALYTICS_RANGES} value={range} onChange={setRange} />
+          </div>
         </div>
       </Rise>
 
+      {tab === "trading" ? (
+        <TradingAnalytics trading={data.trading} range={range} now={now} />
+      ) : (
+      <>
       {loading ? (
         <div className="flex flex-col gap-4 md:gap-5" role="status" aria-busy="true" aria-label="Loading analytics">
           <TilesSkeleton />
@@ -404,16 +386,19 @@ export function AnalyticsPage() {
                           ]}
                         />
                       </div>
-                      <div className="mt-auto flex items-end justify-between gap-3 border-t border-foreground/[0.06] pt-4">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[12px] text-muted-foreground">Typical time to confirm</span>
-                          <span className="font-display text-[22px] font-semibold leading-none text-foreground">
-                            {d.outcomes.medianSettleSeconds == null ? "—" : fmtDuration(d.outcomes.medianSettleSeconds)}
+                      <div className="flex flex-col gap-4 border-t border-foreground/[0.06] pt-5">
+                        <div className="flex items-end justify-between gap-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[12px] text-muted-foreground">Typical time to confirm</span>
+                            <span className="font-display text-[22px] font-semibold leading-none text-foreground">
+                              {d.outcomes.medianSettleSeconds == null ? "—" : fmtDuration(d.outcomes.medianSettleSeconds)}
+                            </span>
+                          </div>
+                          <span className="text-right text-[11.5px] text-muted-foreground">
+                            {d.outcomes.settledSample > 0 ? `Median of ${d.outcomes.settledSample}` : "No confirmation times yet"}
                           </span>
                         </div>
-                        <span className="text-right text-[11.5px] text-muted-foreground">
-                          {d.outcomes.settledSample > 0 ? `Median of ${d.outcomes.settledSample}` : "No confirmation times yet"}
-                        </span>
+                        {d.outcomes.settledSample > 0 && <SettleBands bands={d.outcomes.settleBands} />}
                       </div>
                     </SectionPanel>
                   </div>
@@ -453,12 +438,14 @@ export function AnalyticsPage() {
         )
       )}
       <p className="px-1 text-[12px] text-muted-foreground">
-        Figures come from the same records as{" "}
-        <Link href="/transactions" className="font-medium text-foreground underline-offset-2 hover:underline">
-          Transactions
-        </Link>
-        . Values use today&apos;s prices for assets the record doesn&apos;t price itself.
-      </p>
+          Figures come from the same records as{" "}
+          <Link href="/transactions" className="font-medium text-foreground underline-offset-2 hover:underline">
+            Transactions
+          </Link>
+          . Values use today&apos;s prices for assets the record doesn&apos;t price itself.
+        </p>
+      </>
+      )}
     </DashScope>
   )
 }

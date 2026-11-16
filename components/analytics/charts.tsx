@@ -21,9 +21,12 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Figure } from "@/components/dashboard/redesign/ui"
 import { BLOCKS, WEEKDAYS, type FlowBucket, type Slice } from "@/lib/analytics-view"
-import { fmtAmount } from "@/lib/transactions-view"
-
-export const usd = (n: number) => `$${fmtAmount(n)}`
+/** Dollars and cents, always: "$73,944.58", never a token's six decimals. */
+export const usd = (n: number) => {
+  const a = Math.abs(n)
+  if (a > 0 && a < 0.01) return `${n < 0 ? "−" : ""}<$0.01`
+  return `${n < 0 ? "−" : ""}$${a.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
 
 /** $1,240 / $12.4K / $1.2M for axis ends, where width is tight. */
 export function compactUsd(n: number) {
@@ -91,8 +94,9 @@ export function FlowChart({ buckets, className }: { buckets: FlowBucket[]; class
   const a = active != null ? buckets[active] : null
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex gap-3">
+    <div className={cn("flex flex-1 flex-col gap-2", className)}>
+      {/* Grows with its panel, so it never leaves a gap beside a taller neighbour. */}
+      <div className="flex min-h-[200px] flex-1 gap-3 md:min-h-[232px]">
         {/* Axis ends: the largest in and out, on the one scale. */}
         <div aria-hidden className="relative w-12 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
           {maxIn > 0 && <span className="absolute right-0 top-0 -translate-y-1/2"><Figure mask="•••">{compactUsd(maxIn)}</Figure></span>}
@@ -100,13 +104,13 @@ export function FlowChart({ buckets, className }: { buckets: FlowBucket[]; class
           {maxOut > 0 && <span className="absolute bottom-0 right-0 translate-y-1/2"><Figure mask="•••">{`−${compactUsd(maxOut)}`}</Figure></span>}
         </div>
         <div
-          role="img"
+          role="group"
           tabIndex={0}
           aria-label={`Money in and out, ${buckets.length} ${buckets[0]?.span ?? "day"}s. Use the arrow keys to read each one.`}
           onKeyDown={onKey}
           onBlur={() => setActive(null)}
           onMouseLeave={() => setActive(null)}
-          className="relative h-[200px] flex-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40 md:h-[232px]"
+          className="relative flex-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-foreground/[0.06]" />
           <span aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-foreground/[0.06]" />
@@ -135,8 +139,12 @@ export function FlowChart({ buckets, className }: { buckets: FlowBucket[]; class
               </div>
             ))}
           </div>
+          <span className="sr-only" aria-live="polite">
+            {a ? `${bucketLabel(a, true)}: in ${usd(a.in)}, out ${usd(a.out)}, ${a.count} transactions` : ""}
+          </span>
           {a && active != null && (
             <div
+              aria-hidden
               className="pointer-events-none absolute top-2 z-10"
               style={active < n / 2 ? { left: `calc(${((active + 1) / n) * 100}% + 8px)` } : { right: `calc(${((n - active) / n) * 100}% + 8px)` }}
             >
