@@ -21,7 +21,26 @@ import { Icon } from "@/components/dashboard/redesign/ui"
 import type { LaunchpadAvailability, LaunchpadToken } from "@/lib/crypto-backend/types"
 import { STATUS_LABEL, type ViewStatus } from "@/lib/launchpad-view"
 
-const AVATAR = { sm: "size-8 rounded-[9px]", md: "size-11 rounded-[12px]", lg: "size-16 rounded-[17px]", xl: "size-20 rounded-[21px]" } as const
+const AVATAR = { xs: "size-5 rounded-[6px]", sm: "size-8 rounded-[9px]", md: "size-11 rounded-[12px]", lg: "size-16 rounded-[17px]", xl: "size-20 rounded-[21px]" } as const
+
+/** A launch's art filling its box (cards, the king of the hill): the
+ *  uploaded icon, or the same generated mark as LaunchAvatar. `zoom` scales
+ *  it a little when the surrounding link (`.group`) is hovered. */
+export function LaunchArt({ v, className, zoom = false }: { v: { symbol: string; iconUrl: string | null; mint: string | null }; className?: string; zoom?: boolean }) {
+  return (
+    <span aria-hidden className={cn("relative block overflow-hidden bg-foreground/[0.04]", className)}>
+      <span className={cn("block size-full", zoom && "transition-transform duration-500 ease-out group-hover:scale-[1.04]")}>
+        {v.iconUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={v.iconUrl} alt="" className="size-full object-cover" />
+        ) : (
+          <TokenArt seed={v.mint || v.symbol || "draft"} className="size-full" />
+        )}
+      </span>
+      <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]" />
+    </span>
+  )
+}
 
 /** The uploaded icon, or a generated mark seeded from the mint (the one thing
  *  unique per token on Solana), falling back to the ticker. */
@@ -77,7 +96,7 @@ export function ProgressBar({ bps, status, size = "md", className }: { bps: numb
         transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
           "absolute inset-0 origin-left rounded-full",
-          status === "graduated" ? "bg-credit/80" : status === "graduating" ? "bg-warning" : pct >= 75 ? "bg-gradient-to-r from-primary to-[#ffb020] shadow-[0_0_12px_rgb(250_190_20/0.5)]" : "bg-primary",
+          status === "graduated" ? "bg-credit/80" : status === "graduating" ? "bg-warning" : pct >= 75 ? "bg-[linear-gradient(90deg,var(--primary),#ffb020)] shadow-[0_0_12px_rgb(250_190_20/0.5)]" : "bg-primary",
         )}
       />
     </span>

@@ -880,7 +880,24 @@ export function AppFrame({ children, onMainScroll }: { children: React.ReactNode
     if (!drawer) return
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(false)
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    // The drawer only exists below lg; widening past it closes the drawer so
+    // the page underneath isn't left locked.
+    const wide = window.matchMedia("(min-width: 1024px)")
+    const onWide = () => wide.matches && setDrawer(false)
+    wide.addEventListener("change", onWide)
+    // While the drawer is open the page behind it must not scroll. <main> is
+    // the scroller (locked through its class below); the document is locked
+    // too, so a swipe that reaches it can't move or rubber-band the page.
+    const html = document.documentElement
+    const prev = { html: html.style.overflow, body: document.body.style.overflow }
+    html.style.overflow = "hidden"
+    document.body.style.overflow = "hidden"
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      wide.removeEventListener("change", onWide)
+      html.style.overflow = prev.html
+      document.body.style.overflow = prev.body
+    }
   }, [drawer])
 
   return (
@@ -903,7 +920,7 @@ export function AppFrame({ children, onMainScroll }: { children: React.ReactNode
           {/* iOS scroll-edge: content frosts as it slides under the bar. */}
           <div aria-hidden className="ws-scroll-edge pointer-events-none absolute inset-x-0 top-0 z-20 h-16" />
           {/* pb-28: the phone's floating bottom bar needs clearance. */}
-          <main ref={mainRef} onScroll={onMainScroll} className="slim-scroll w-full min-w-0 flex-1 overflow-y-auto pb-28 lg:pb-[max(2.5rem,env(safe-area-inset-bottom))]">
+          <main ref={mainRef} onScroll={onMainScroll} className={cn("slim-scroll w-full min-w-0 flex-1 pb-28 lg:pb-[max(2.5rem,env(safe-area-inset-bottom))]", drawer ? "overflow-hidden" : "overflow-y-auto")}>
             {children}
           </main>
         </div>
@@ -919,7 +936,7 @@ export function AppFrame({ children, onMainScroll }: { children: React.ReactNode
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={() => setDrawer(false)}
-              className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-[60] touch-none bg-black/60 backdrop-blur-sm lg:hidden"
             />
             <motion.aside
               key="drawer"
@@ -927,7 +944,7 @@ export function AppFrame({ children, onMainScroll }: { children: React.ReactNode
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", stiffness: 420, damping: 40 }}
-              className={cn("slim-scroll fixed inset-y-0 left-0 z-[60] w-[288px] overflow-y-auto border-r border-foreground/[0.07] bg-background lg:hidden", CHROME_FONTS)}
+              className={cn("slim-scroll fixed inset-y-0 left-0 z-[60] w-[288px] overflow-y-auto overscroll-contain border-r border-foreground/[0.07] bg-background lg:hidden", CHROME_FONTS)}
               style={CHROME_FONT_STYLE}
             >
               <div className="flex h-[72px] items-center justify-between px-6">

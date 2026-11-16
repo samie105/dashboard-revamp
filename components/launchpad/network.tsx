@@ -13,10 +13,8 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Segmented } from "@/components/ui/system"
-import {
-  cryptoBackendClient,
-  isCryptoBackendEnabled,
-} from "@/lib/crypto-backend"
+import { isCryptoBackendEnabled } from "@/lib/crypto-backend"
+import { launchpadMarket } from "@/lib/launchpad-market/source"
 import type { LaunchpadNetworkId } from "@/lib/crypto-backend/types"
 import { cn } from "@/lib/utils"
 
@@ -42,9 +40,10 @@ function subscribe(onChange: () => void) {
 
 export function useLaunchNetwork() {
   const options = useQuery({
-    queryKey: ["launchpad", "networks"],
-    queryFn: ({ signal }) => cryptoBackendClient.getLaunchpadNetworks(signal),
-    enabled: isCryptoBackendEnabled,
+    queryKey: ["launchpad", "networks", launchpadMarket.isMock],
+    // Through the market source, so the local demo data offers both networks.
+    queryFn: ({ signal }) => launchpadMarket.networks({ signal }),
+    enabled: launchpadMarket.isMock || isCryptoBackendEnabled,
     staleTime: 5 * 60_000,
   })
   const stored = React.useSyncExternalStore(subscribe, read, () => null)

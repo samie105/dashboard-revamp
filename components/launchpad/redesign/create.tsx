@@ -206,6 +206,7 @@ function draftView(f: ReturnType<typeof useLaunchForm>): LaunchCardView {
     graduationSol: target,
     remainingSol: target,
     creatorBps: f.form.creatorBps,
+    creator: null,
     createdAt: "",
   }
 }
@@ -255,7 +256,7 @@ function CreatePage() {
             : Object.keys(problems).length > 0
               ? "Fix the fields marked in red"
               : f.total !== null && f.complete
-                ? `Launch for ${fromBaseUnits(f.total.toString(), SOL, 4)} SOL`
+                ? `Launch on ${isDevnet(f.networkId) ? "devnet" : "mainnet"} for ${fromBaseUnits(f.total.toString(), SOL, 4)} SOL`
                 : "Fill in a name and symbol"
 
   const checks = [
@@ -493,7 +494,7 @@ function CreatePage() {
                     <>
                       <StepHead title="Review and launch" body="Check everything once. You can jump back to any step — nothing is lost." />
                       <div className="xl:hidden">
-                        <LaunchCard v={draftView(f)} now={0} preview />
+                        <LaunchCard v={draftView(f)} now={0} preview devnet={isDevnet(f.networkId)} />
                       </div>
                       <dl className="flex flex-col divide-y divide-foreground/[0.05] rounded-2xl border border-foreground/[0.07]">
                         {[
@@ -570,7 +571,7 @@ function CreatePage() {
           <aside className="hidden min-w-0 flex-col gap-4 xl:sticky xl:top-4 xl:flex xl:self-start">
             <div className="flex flex-col gap-2">
               <span className="px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">How buyers will see it</span>
-              <LaunchCard v={draftView(f)} now={0} preview />
+              <LaunchCard v={draftView(f)} now={0} preview devnet={isDevnet(f.networkId)} />
             </div>
             <CostCard f={f} />
             <CurveTermsCard f={f} />
@@ -712,7 +713,7 @@ function StatusPage({ launchId }: { launchId: string }) {
 
         <aside className="flex min-w-0 flex-col gap-2 xl:self-start">
           <span className="px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">{onChain ? "Your launch" : "How it will appear once live"}</span>
-          <LaunchCard v={cardView(l)} now={0} preview />
+          <LaunchCard v={cardView(l)} now={0} preview devnet={isDevnet(l.networkId)} />
         </aside>
       </div>
       {st.signer.dialog}
