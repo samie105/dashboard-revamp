@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils"
 import { CoinAvatar } from "@/components/ui/coin-avatar"
 import { DashScope } from "@/components/dash"
 import { Figure, Icon, Panel, PanelTitle, PillTabs, UnderlineTabs } from "@/components/dashboard/redesign/ui"
-import { BankTag, GLYPH_ICON, StatusChip, TxDetail, fmtTime, kindTone, worthText, type OrderRefresh } from "@/components/transactions/redesign/detail"
+import { BankTag, GLYPH_ICON, StatusChip, TxDetail, UnlistedTag, fmtTime, kindTone, worthText, type OrderRefresh } from "@/components/transactions/redesign/detail"
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
 import { networkLabel, orderAmountText, orderToRow, type HistoryRow } from "@/lib/fiat-history"
@@ -42,7 +42,9 @@ import {
   filterKind,
   glyphOf,
   isStopped,
+  isUnlisted,
   labelOf,
+  subjectOf,
   transactionsCsv,
   type HistoryRange,
   type KindKey,
@@ -80,9 +82,11 @@ function TxRow({ tx, selected, onSelect }: { tx: HistoryRow; selected: boolean; 
   // The order's reference stays in its detail panel (it is what support asks
   // for); the row says how it is paid.
   const peer = order ? `${order.currency} · ${order.channel}` : counterparty(tx)
-  const worth = order ? null : tx.type === "swap" && tx.toToken && tx.toAmount != null ? `→ ${tx.toAmount} ${tx.toToken}` : worthText(tx)
-  const showTo = !order && tx.type === "swap" && tx.toToken && tx.toToken !== tx.token
+  const unlisted = !order && isUnlisted(tx)
+  // An unlisted token has no price here: say so rather than leave a blank.
+  const worth = order ? null : (worthText(tx) ?? (unlisted ? "No price yet" : null))
   const amount = order ? (orderAmountText(order) ?? "—") : amountText(tx)
+  const subject = order ? null : subjectOf(tx)
   return (
     <button
       type="button"
@@ -101,7 +105,12 @@ function TxRow({ tx, selected, onSelect }: { tx: HistoryRow; selected: boolean; 
           <span className={cn("flex size-10 items-center justify-center rounded-xl border", kindTone(tx))}>
             <Icon icon={GLYPH_ICON[glyphOf(tx)]} className="size-[18px]" strokeWidth={2} />
           </span>
-          <CoinAvatar symbol={tx.token} size="sm" className="absolute -bottom-1 -right-1 size-[18px] ring-2 ring-card dark:ring-[color-mix(in_oklab,var(--card)_40%,var(--background))]" />
+          <CoinAvatar
+            symbol={tx.tokenInfo?.symbol ?? tx.token}
+            src={tx.tokenInfo?.icon}
+            size="sm"
+            className="absolute -bottom-1 -right-1 size-[18px] ring-2 ring-card dark:ring-[color-mix(in_oklab,var(--card)_40%,var(--background))]"
+          />
         </span>
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-foreground">
@@ -112,11 +121,12 @@ function TxRow({ tx, selected, onSelect }: { tx: HistoryRow; selected: boolean; 
               </>
             ) : (
               <>
-                {labelOf(tx)}
-                <span className="font-medium text-muted-foreground">
-                  {tx.token}
-                  {showTo && <> → {tx.toToken}</>}
+                <span className="shrink-0">{labelOf(tx)}</span>
+                <span className="truncate font-medium text-muted-foreground" title={tx.tokenInfo?.name ?? tx.tokenInfo?.address ?? undefined}>
+                  {subject}
                 </span>
+                {/* On a phone the name wins the space; the detail panel still tags it. */}
+                {unlisted && <UnlistedTag className="shrink-0 max-sm:hidden" />}
               </>
             )}
           </span>
@@ -146,13 +156,14 @@ function TxRow({ tx, selected, onSelect }: { tx: HistoryRow; selected: boolean; 
             isStopped(tx.status) ? "text-muted-foreground line-through decoration-debit/60" : d === "in" && (!order || tx.status === "completed") ? "text-credit" : "text-foreground",
           )}
         >
-          <Figure mask="••••">{amount}</Figure>
+          {amount ? <Figure mask="••••">{amount}</Figure> : <span className="font-medium text-muted-foreground">{tx.token}</span>}
         </span>
-        {(worth || tx.status !== "completed") && (
+        {(worth || !amount || tx.status !== "completed") && (
           <span className="flex items-center gap-1.5 whitespace-nowrap text-[12px] text-muted-foreground">
             {/* On a phone the status column is gone, so non-routine states ride here. */}
             {tx.status !== "completed" && <StatusChip tx={tx} className="md:hidden" />}
-            {worth && <Figure mask="••••">{worth}</Figure>}
+            {!amount && !order && <span>Amount unavailable</span>}
+            {worth && amount && <Figure mask="••••">{worth}</Figure>}
           </span>
         )}
       </span>

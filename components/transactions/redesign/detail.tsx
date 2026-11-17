@@ -38,7 +38,10 @@ import {
   fmtFiat,
   glyphOf,
   isStopped,
+  isUnlisted,
   stepsFor,
+  subjectOf,
+  tokenExplorerUrl,
   truncateMiddle,
   typeLabel,
   type KindGlyph,
@@ -46,6 +49,7 @@ import {
 import { FiatErrorDetail } from "@/components/fiat/shared/FiatErrorDetail"
 import { describeFiatError } from "@/lib/crypto-backend/fiat-errors"
 import type { FiatOrder } from "@/lib/crypto-backend/types"
+import type { TokenInfo } from "@/types/transactions"
 import { savePendingFlow } from "@/lib/pending-flow"
 import { useFiatQuote } from "@/hooks/crypto/useFiatQuote"
 import {
@@ -121,6 +125,18 @@ export function BankTag({ className }: { className?: string }) {
   return (
     <span className={cn("rounded-[5px] border border-primary/25 bg-primary/[0.08] px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.06em] text-primary", className)}>
       Bank
+    </span>
+  )
+}
+
+/** A token WorldStreet doesn't list: real, but unpriced and untradeable here. */
+export function UnlistedTag({ className }: { className?: string }) {
+  return (
+    <span
+      title="Not listed on WorldStreet markets, so there's no price for it here yet"
+      className={cn("rounded-[5px] border border-foreground/[0.1] bg-foreground/[0.04] px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground", className)}
+    >
+      Unlisted
     </span>
   )
 }
@@ -233,6 +249,59 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
+/**
+ * The token(s) behind a row that names them by contract: what it's called
+ * (as far as anything could resolve it), its address to copy, and a link to
+ * its page on the chain's explorer, so an unfamiliar token can be checked.
+ */
+function TokenFacts({ tokens }: { tokens: TokenInfo[] }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">{tokens.length > 1 ? "Tokens" : "Token"}</span>
+      <ul className="flex flex-col gap-2">
+        {tokens.map((t) => {
+          const link = tokenExplorerUrl(t.networkId, t.address)
+          const label = t.symbol ?? truncateMiddle(t.address ?? "", 4, 4)
+          return (
+            <li key={`${t.networkId}:${t.address}`} className="flex flex-col gap-3 rounded-2xl border border-foreground/[0.06] bg-foreground/[0.015] p-4">
+              <div className="flex items-center gap-3">
+                <CoinAvatar symbol={label} src={t.icon} size="lg" className="size-9 ring-1 ring-foreground/10" />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex items-center gap-1.5 text-[14px] font-semibold text-foreground">
+                    <span className="truncate">{t.name ?? label}</span>
+                    {t.name && t.symbol && <span className="shrink-0 font-medium text-muted-foreground">{t.symbol}</span>}
+                  </span>
+                  <span className="text-[12px] text-muted-foreground">
+                    {t.listed ? "Listed on WorldStreet" : t.symbol ? "Not listed on WorldStreet: no price here yet" : "Unrecognised token: check it before you trust it"}
+                  </span>
+                </span>
+                {!t.listed && t.role === "token" && <UnlistedTag className="shrink-0" />}
+              </div>
+              <dl className="flex flex-col">
+                <Row label="Contract">
+                  <CopyValue value={t.address!} display={truncateMiddle(t.address!, 6, 6)} />
+                </Row>
+                <Row label="Network">{chainLabel(t.networkId)}</Row>
+              </dl>
+              {link && (
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline"
+                >
+                  <Icon icon={LinkSquare02Icon} className="size-4" />
+                  View token on {link.name}
+                </a>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 /* ── Panel ─────────────────────────────────────────────────────────────── */
 
 export type OrderRefresh = { isLoading: boolean; error: unknown }
@@ -245,8 +314,15 @@ export function TxDetail({ tx, onClose, refresh }: { tx: HistoryRow; onClose?: (
 function WalletDetail({ tx, onClose }: { tx: UnifiedTransaction; onClose?: () => void }) {
   const d = directionOf(tx)
   const stopped = isStopped(tx.status)
-  const twoLeg = tx.type === "swap" && Boolean(tx.toToken) && tx.toToken !== tx.token
+  const twoLeg = tx.type === "swap" && Boolean(tx.fromToken) && Boolean(tx.toToken)
   const worth = worthText(tx)
+  const unlisted = isUnlisted(tx)
+  const amount = amountText(tx)
+  // The token section is for contract tokens: the subject, or both legs of a swap.
+  const tokens = (tx.type === "swap" ? [tx.fromInfo, tx.toInfo] : [tx.tokenInfo]).filter(
+    // Stablecoins and native coins need no checking; any other contract token does.
+    (t): t is TokenInfo => Boolean(t && t.address && t.role === "token"),
+  )
   const noRoute = !tx.chain && !tx.fromAddress && !tx.toAddress && !tx.bankDetails && !tx.direction
 
   return (
@@ -257,7 +333,10 @@ function WalletDetail({ tx, onClose }: { tx: UnifiedTransaction; onClose?: () =>
             <Icon icon={GLYPH_ICON[glyphOf(tx)]} className="size-5" strokeWidth={2} />
           </span>
           <span className="flex flex-col gap-1">
-            <span className="font-display text-[16px] font-semibold text-foreground">{typeLabel(tx)}</span>
+            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 font-display text-[16px] font-semibold text-foreground">
+              {typeLabel(tx)} <span className="text-muted-foreground">{subjectOf(tx)}</span>
+              {unlisted && <UnlistedTag />}
+            </span>
             <StatusChip tx={tx} className="w-fit" />
           </span>
         </div>
@@ -276,28 +355,32 @@ function WalletDetail({ tx, onClose }: { tx: UnifiedTransaction; onClose?: () =>
       {/* Amount — one leg, or both legs of a swap. */}
       <div className="rounded-2xl border border-foreground/[0.06] bg-[radial-gradient(120%_100%_at_0%_0%,color-mix(in_oklab,var(--primary)_5%,transparent),transparent_60%)] p-4">
         {twoLeg ? (
+          /* Both legs. Only the received amount is on the record; the paid
+             amount isn't stored, so it's named, never invented. */
           <div className="flex items-center gap-3">
             <span className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
-              <CoinAvatar symbol={tx.token} size="lg" className="size-8 ring-1 ring-foreground/10" />
-              <span className={cn("font-display text-[17px] font-semibold tabular-nums", stopped && "text-muted-foreground line-through decoration-debit/60")}>
-                <Figure mask="••••">{`${fmtAmount(tx.amount)} ${tx.token}`}</Figure>
-              </span>
-              {worth && <span className="text-[12px] text-muted-foreground"><Figure mask="••••">{worth}</Figure></span>}
+              <span className="text-[11.5px] font-medium text-muted-foreground">You paid with</span>
+              <CoinAvatar symbol={tx.fromInfo?.symbol ?? tx.fromToken!} src={tx.fromInfo?.icon} size="lg" className="size-8 ring-1 ring-foreground/10" />
+              <span className={cn("max-w-full truncate font-display text-[17px] font-semibold", stopped && "text-muted-foreground line-through decoration-debit/60")}>{tx.fromToken}</span>
             </span>
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-foreground/[0.08] bg-foreground/[0.03] text-primary">
               <Icon icon={ArrowRight01Icon} className="size-4" strokeWidth={2} />
             </span>
             <span className="flex min-w-0 flex-1 flex-col items-end gap-1.5 text-right">
-              <CoinAvatar symbol={tx.toToken!} size="lg" className="size-8 ring-1 ring-foreground/10" />
-              <span className="font-display text-[17px] font-semibold tabular-nums text-credit">
+              <span className="text-[11.5px] font-medium text-muted-foreground">You received</span>
+              <CoinAvatar symbol={tx.toInfo?.symbol ?? tx.toToken!} src={tx.toInfo?.icon} size="lg" className="size-8 ring-1 ring-foreground/10" />
+              <span className={cn("max-w-full truncate font-display text-[17px] font-semibold tabular-nums", stopped ? "text-muted-foreground line-through decoration-debit/60" : "text-credit")}>
                 {/* The received amount is only shown once its precision is known. */}
-                {tx.toAmount != null ? <Figure mask="••••">{`${fmtAmount(Number(tx.toAmount))} ${tx.toToken}`}</Figure> : tx.toToken}
+                {amount ? <Figure mask="••••">{`${fmtAmount(tx.amount)} ${tx.toToken}`}</Figure> : tx.toToken}
+              </span>
+              <span className="text-[12px] text-muted-foreground">
+                {!amount ? "Amount unavailable" : worth ? <Figure mask="••••">{worth}</Figure> : unlisted ? "No price yet" : null}
               </span>
             </span>
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <CoinAvatar symbol={tx.token} size="lg" className="size-10 ring-1 ring-foreground/10" />
+            <CoinAvatar symbol={tx.tokenInfo?.symbol ?? tx.token} src={tx.tokenInfo?.icon} size="lg" className="size-10 ring-1 ring-foreground/10" />
             <span className="flex flex-col">
               <span
                 className={cn(
@@ -305,13 +388,21 @@ function WalletDetail({ tx, onClose }: { tx: UnifiedTransaction; onClose?: () =>
                   stopped ? "text-muted-foreground line-through decoration-debit/60" : d === "in" ? "text-credit" : "text-foreground",
                 )}
               >
-                <Figure mask="••••">{amountText(tx)}</Figure>
+                {amount ? <Figure mask="••••">{amount}</Figure> : tx.token}
               </span>
-              {worth && <span className="text-[12.5px] text-muted-foreground"><Figure mask="••••">{worth}</Figure></span>}
+              {!amount ? (
+                <span className="text-[12.5px] text-muted-foreground">Amount unavailable</span>
+              ) : worth ? (
+                <span className="text-[12.5px] text-muted-foreground"><Figure mask="••••">{worth}</Figure></span>
+              ) : unlisted ? (
+                <span className="text-[12.5px] text-muted-foreground">No price yet</span>
+              ) : null}
             </span>
           </div>
         )}
       </div>
+
+      {tokens.length > 0 && <TokenFacts tokens={tokens} />}
 
       <div className="flex flex-col gap-3">
         <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">Progress</span>
@@ -334,7 +425,7 @@ function WalletDetail({ tx, onClose }: { tx: UnifiedTransaction; onClose?: () =>
             <CopyValue value={tx.toAddress} />
           </Row>
         )}
-        {tx.direction && !tx.fromAddress && !tx.toAddress && (
+        {tx.direction?.includes("-to-") && !tx.fromAddress && !tx.toAddress && (
           <Row label="Route">{tx.direction.replace(/-/g, " → ")}</Row>
         )}
         {tx.bankDetails && (

@@ -52,6 +52,13 @@ const NATIVE: Record<string, { sentinels: string[]; token: NativeToken }> = {
 /**
  * The native coin this address stands for, or `null` if it names a real token.
  */
+/** The native coin whose WRAPPED form this address is (WSOL → SOL), if any. */
+export function wrappedNativeFor(networkId: string, address: string | null): NativeToken | null {
+  if (!address) return null
+  const token = NATIVE[networkId]?.token
+  return token && token.wrapped.toLowerCase() === address.toLowerCase() ? token : null
+}
+
 export function nativeTokenFor(networkId: string, address: string | null): NativeToken | null {
   if (!address) return null
   const entry = NATIVE[networkId]
