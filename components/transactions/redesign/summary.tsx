@@ -17,10 +17,10 @@ import { ArrowDownLeft01Icon, ArrowUpRight01Icon, ArrowLeftRightIcon, CoinsDolla
 
 import { cn } from "@/lib/utils"
 import { Figure, Icon, Panel, type IconSvg } from "@/components/dashboard/redesign/ui"
-import { fmtAmount, netByDay, tradedSummary } from "@/lib/transactions-view"
+import { fmtFiat, netByDay, tradedSummary } from "@/lib/transactions-view"
 import type { TransactionStats, UnifiedTransaction } from "@/types/transactions"
 
-const usd = (n: number) => `$${fmtAmount(n)}`
+const usd = (n: number) => fmtFiat(n)
 
 function Card({
   label,
@@ -104,13 +104,20 @@ export function Summary({ stats, transactions }: { stats: TransactionStats | nul
     )
   }
 
-  const netKnown = stats.valuationComplete !== false
+  /* A token WorldStreet doesn't list never gets a price, so waiting for every
+     row to be priced left these cards on "—" for good once one arrived. The
+     figures now add up the priced rows and say how many they had to leave
+     out; a side with NOTHING priced still reads "—". */
+  const inMissing = stats.depositValuationMissing ?? 0
+  const outMissing = stats.withdrawalValuationMissing ?? 0
+  const inKnown = !(stats.totalDeposits > 0 && inMissing >= stats.totalDeposits)
+  const outKnown = !(stats.totalWithdrawals > 0 && outMissing >= stats.totalWithdrawals)
+  const netKnown = inKnown || outKnown
+  const missing = inMissing + outMissing
   const netUp = stats.netVolume >= 0
-  const inKnown = !(stats.depositValuationComplete === false && stats.totalDeposits > 0)
-  const outKnown = !(stats.withdrawalValuationComplete === false && stats.totalWithdrawals > 0)
-  // While a row has no price the figure reads "—"; the bars wait with it
-  // rather than drawing a shape the figure can't vouch for.
+  // The bars come from the same priced rows (netByDay skips unpriced ones).
   const bars = netKnown && days ? days : zeros
+  const notPriced = (n: number) => (n > 0 ? ` · ${n} not priced` : "")
   const max = Math.max(...bars.map(Math.abs), 1)
   const traded = tradedSummary(transactions)
 
@@ -130,7 +137,7 @@ export function Summary({ stats, transactions }: { stats: TransactionStats | nul
             "—"
           )
         }
-        sub={netKnown ? "Money in minus money out" : "Waiting for asset prices"}
+        sub={netKnown ? (missing > 0 ? `Priced moves only · ${missing} not priced` : "Money in minus money out") : "No priced moves yet"}
       >
         {/* Centre-baseline bars: up days rise, down days hang. */}
         <div className="relative flex h-9 items-center gap-[3px]" aria-label="Net flow, last 14 days" role="img">
@@ -160,7 +167,7 @@ export function Summary({ stats, transactions }: { stats: TransactionStats | nul
         icon={ArrowDownLeft01Icon}
         tone="border-credit/25 bg-credit/[0.08] text-credit"
         value={inKnown ? <span className="text-credit"><Figure>{usd(stats.depositVolume)}</Figure></span> : "—"}
-        sub={`${stats.totalDeposits} deposit${stats.totalDeposits === 1 ? "" : "s"}`}
+        sub={`${stats.totalDeposits} deposit${stats.totalDeposits === 1 ? "" : "s"}${notPriced(inMissing)}`}
       />
       <Card
         className={SLOTS.out}
@@ -168,7 +175,7 @@ export function Summary({ stats, transactions }: { stats: TransactionStats | nul
         icon={ArrowUpRight01Icon}
         tone="border-debit/25 bg-debit/[0.08] text-debit"
         value={outKnown ? <Figure>{usd(stats.withdrawalVolume)}</Figure> : "—"}
-        sub={`${stats.totalWithdrawals} withdrawal${stats.totalWithdrawals === 1 ? "" : "s"}`}
+        sub={`${stats.totalWithdrawals} withdrawal${stats.totalWithdrawals === 1 ? "" : "s"}${notPriced(outMissing)}`}
       />
       <Card
         className={SLOTS.traded}
@@ -176,7 +183,7 @@ export function Summary({ stats, transactions }: { stats: TransactionStats | nul
         icon={Exchange01Icon}
         tone="border-foreground/[0.08] bg-foreground/[0.04] text-foreground/80"
         value={traded.usd != null ? <Figure>{usd(traded.usd)}</Figure> : "—"}
-        sub={`${traded.trades} trade${traded.trades === 1 ? "" : "s"} · ${traded.swaps} swap${traded.swaps === 1 ? "" : "s"}`}
+        sub={`${traded.trades} trade${traded.trades === 1 ? "" : "s"} · ${traded.swaps} swap${traded.swaps === 1 ? "" : "s"}${notPriced(traded.unpriced)}`}
       />
       <Card
         className={SLOTS.fees}

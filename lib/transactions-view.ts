@@ -67,7 +67,8 @@ export function typeLabel(tx: UnifiedTransaction) {
     case "spot_order":
       return tx.pair ? `Trade ${tx.pair}` : "Spot trade"
     case "swap":
-      return "Swap"
+      // The side is read from what changed hands (lib/ledger-rows.ts).
+      return tx.subType === "buy" ? "Bought" : tx.subType === "sell" ? "Sold" : "Swapped"
     case "transfer":
       if (isInternal(tx)) return "Internal transfer"
       return directionOf(tx) === "in" ? "Received" : "Sent"
@@ -90,19 +91,47 @@ const CHAIN_LABELS: Record<string, string> = {
   tron: "Tron",
 }
 
-export function chainLabel(chain?: string) {
+/**
+ * The chain a network id belongs to. The ledger sends full ids
+ * ("ethereum-mainnet", "arbitrum-one", "solana-mainnet-beta", "sui-mainnet",
+ * "tron-mainnet": components/swap/swap-model.ts BALANCE_NETWORK_ID), while
+ * older rows carry the bare chain name. Both map to the same key.
+ */
+export function chainKey(chain?: string): string | undefined {
   if (!chain) return undefined
-  return CHAIN_LABELS[chain] ?? chain.charAt(0).toUpperCase() + chain.slice(1)
+  const lower = chain.toLowerCase()
+  return Object.keys(CHAIN_LABELS).find((k) => lower === k || lower.startsWith(`${k}-`)) ?? lower
 }
 
-/** Unchanged from the previous page, including its Solscan fallback. */
+export function chainLabel(chain?: string) {
+  if (!chain) return undefined
+  const key = chainKey(chain)!
+  return CHAIN_LABELS[key] ?? chain.charAt(0).toUpperCase() + chain.slice(1)
+}
+
+/** The transaction on its chain's explorer. Solscan stays the fallback, as before. */
 export function explorerUrl(chain: string | undefined, txHash: string) {
-  switch (chain) {
+  switch (chainKey(chain)) {
     case "ethereum": return `https://etherscan.io/tx/${txHash}`
     case "arbitrum": return `https://arbiscan.io/tx/${txHash}`
     case "sui": return `https://suiscan.xyz/mainnet/tx/${txHash}`
     case "tron": return `https://tronscan.org/#/transaction/${txHash}`
+    case "ton": return `https://tonviewer.com/transaction/${txHash}`
     default: return `https://solscan.io/tx/${txHash}`
+  }
+}
+
+/** A token's own page on its chain's explorer, or null where we don't know the URL shape. */
+export function tokenExplorerUrl(chain: string | undefined, address: string | null): { url: string; name: string } | null {
+  if (!address) return null
+  const a = encodeURIComponent(address)
+  switch (chainKey(chain)) {
+    case "solana": return { url: `https://solscan.io/token/${a}`, name: "Solscan" }
+    case "ethereum": return { url: `https://etherscan.io/token/${a}`, name: "Etherscan" }
+    case "arbitrum": return { url: `https://arbiscan.io/token/${a}`, name: "Arbiscan" }
+    case "sui": return { url: `https://suiscan.xyz/mainnet/coin/${a}`, name: "Suiscan" }
+    case "tron": return { url: `https://tronscan.org/#/token20/${a}`, name: "Tronscan" }
+    default: return null
   }
 }
 
@@ -116,15 +145,24 @@ export function fmtAmount(n: number, digits = 2) {
 
 const CURRENCY_SYMBOLS: Record<string, string> = { NGN: "₦", USD: "$", GBP: "£", EUR: "€" }
 
+/**
+ * Money: cents from a unit up ("$450.46", never "$450.4625"); below one unit
+ * enough places to stay non-zero, so a memecoin's price still reads.
+ */
 export function fmtFiat(amount: number, currency = "USD") {
-  return `${CURRENCY_SYMBOLS[currency] || ""}${fmtAmount(amount)}${currency === "USD" ? "" : ` ${currency}`}`
+  const digits = Math.abs(amount) >= 1 || amount === 0 ? 2 : 6
+  const text = amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: digits })
+  return `${CURRENCY_SYMBOLS[currency] || ""}${text}${currency === "USD" ? "" : ` ${currency}`}`
 }
 
 /** Who it was with, for the row's second column. Same rules as before. */
 export function counterparty(tx: UnifiedTransaction): string | null {
-  if (tx.type === "swap" && tx.toToken) {
-    const to = tx.toAmount != null ? `${fmtAmount(Number(tx.toAmount))} ${tx.toToken}` : tx.toToken
-    return `→ ${to}`
+  if (tx.type === "swap") {
+    // What the other side was: paid with on a buy, paid out in on a sale.
+    if (tx.subType === "buy" && tx.fromToken) return `with ${tx.fromToken}`
+    if (tx.subType === "sell" && tx.toToken) return `for ${tx.toToken}`
+    if (tx.fromToken && tx.toToken) return `${tx.fromToken} → ${tx.toToken}`
+    if (tx.toToken) return `→ ${tx.toToken}`
   }
   if (tx.bankDetails) return `to ${tx.bankDetails.bankName}`
   if (tx.pair) return tx.pair
@@ -136,11 +174,30 @@ export function counterparty(tx: UnifiedTransaction): string | null {
   return null
 }
 
-/** Signed amount for the primary leg: "+12.50 USDT", "−0.10 ETH". */
-export function amountText(tx: UnifiedTransaction) {
-  const d = directionOf(tx)
+/**
+ * Signed amount for the primary leg: "+12.50 USDT", "−0.10 ETH". A swap shows
+ * what was RECEIVED, the one leg on record, as a credit. Null when the amount
+ * can't be stated (its token's precision is unknown).
+ */
+export function amountText(tx: UnifiedTransaction): string | null {
+  if (tx.amountKnown === false) return null
+  const d = tx.type === "swap" ? "in" : directionOf(tx)
   const sign = d === "in" ? "+" : d === "out" ? "−" : ""
   return `${sign}${fmtAmount(tx.amount)} ${tx.token}`
+}
+
+/** The row's title subject: the bought token, the sold token, or "A → B". */
+export function subjectOf(tx: UnifiedTransaction): string {
+  if (tx.type !== "swap") return tx.token
+  if (tx.subType === "sell") return tx.fromToken ?? tx.token
+  if (tx.subType === "buy") return tx.toToken ?? tx.token
+  return tx.fromToken && tx.toToken ? `${tx.fromToken} → ${tx.toToken}` : tx.token
+}
+
+/** True when the row is about a token WorldStreet doesn't list. */
+export function isUnlisted(tx: UnifiedTransaction): boolean {
+  const t = tx.tokenInfo
+  return Boolean(t && t.role === "token" && !t.listed && t.address)
 }
 
 const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
@@ -233,9 +290,14 @@ export function tradedSummary(transactions: UnifiedTransaction[]) {
   const legs = transactions.filter(
     (tx) => !isStopped(tx.status) && (tx.type === "swap" || tx.type === "spot_trade" || tx.type === "spot_order"),
   )
-  const usd = legs.every((tx) => tx.valueUsd != null) ? legs.reduce((s, tx) => s + (tx.valueUsd ?? 0), 0) : null
+  /* Summed over the priced legs, with the unpriced ones counted. Waiting for
+     every leg to be priced left the card on "—" for good once a token
+     WorldStreet doesn't list was traded; null now means nothing is priced. */
+  const priced = legs.filter((tx) => tx.valueUsd != null)
+  const usd = legs.length > 0 && priced.length === 0 ? null : priced.reduce((s, tx) => s + (tx.valueUsd ?? 0), 0)
   return {
     usd,
+    unpriced: legs.length - priced.length,
     trades: legs.filter((tx) => tx.type !== "swap").length,
     swaps: legs.filter((tx) => tx.type === "swap").length,
   }
@@ -245,7 +307,7 @@ export function tradedSummary(transactions: UnifiedTransaction[]) {
    The preview's Export CSV, with the record's real fields. Cells that a
    spreadsheet would run as a formula are prefixed with a quote. */
 
-const CSV_HEAD = ["Reference", "Date", "Type", "Status", "Asset", "Amount", "To asset", "To amount", "Network", "From", "To", "Hash", "USD value"]
+const CSV_HEAD = ["Reference", "Date", "Type", "Status", "Asset", "Amount", "To asset", "To amount", "Network", "From", "To", "Hash", "USD value", "Token address"]
 
 function csvCell(v: unknown) {
   let s = v == null ? "" : String(v)
@@ -254,25 +316,28 @@ function csvCell(v: unknown) {
 }
 
 export function transactionsCsv(rows: HistoryRow[]): string {
-  const body = rows.map((tx) =>
-    [
+  const body = rows.map((tx) => {
+    const swap = !tx.order && tx.type === "swap"
+    return [
       tx.order?.publicReference ?? tx.id,
       tx.createdAt,
       labelOf(tx),
       tx.order ? orderStateLabel(tx.order.state) : tx.status,
-      tx.token,
-      tx.order ? orderAmountText(tx.order) : tx.amount,
-      tx.toToken,
-      tx.toAmount,
+      // A swap's pay leg has no amount on record; its received leg goes in "To".
+      swap ? (tx.fromToken ?? "") : tx.token,
+      tx.order ? orderAmountText(tx.order) : swap || tx.amountKnown === false ? "" : tx.amount,
+      swap ? tx.toToken : "",
+      swap && tx.amountKnown !== false ? tx.amount : "",
       tx.order ? tx.order.network : chainLabel(tx.chain),
       tx.fromAddress,
       tx.toAddress,
       tx.txHash,
       tx.valueUsd != null ? tx.valueUsd.toFixed(2) : "",
+      tx.tokenInfo?.address ?? "",
     ]
       .map(csvCell)
-      .join(","),
-  )
+      .join(",")
+  })
   return [CSV_HEAD.join(","), ...body].join("\n")
 }
 
@@ -345,7 +410,7 @@ export function filterBase<T extends HistoryRow>(
       (f.status === "any" || statusGroup(tx.status) === f.status) &&
       daysAgo(tx.createdAt, now) < RANGE_DAYS[f.range] &&
       (!q ||
-        [tx.id, tx.token, tx.fromToken, tx.toToken, tx.txHash, tx.fromAddress, tx.toAddress, chainLabel(tx.chain), labelOf(tx), tx.order?.publicReference, tx.fiatCurrency]
+        [tx.id, tx.token, tx.fromToken, tx.toToken, tx.tokenInfo?.name, tx.tokenInfo?.address, tx.txHash, tx.fromAddress, tx.toAddress, chainLabel(tx.chain), labelOf(tx), tx.order?.publicReference, tx.fiatCurrency]
           .filter(Boolean)
           .some((v) => v!.toLowerCase().includes(q))),
   )

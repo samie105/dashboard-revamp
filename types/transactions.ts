@@ -19,6 +19,19 @@ export type UnifiedTransactionStatus =
   | "cancelled"
   | "expired"
 
+/** A token as the ledger names it (by address) plus what could be resolved. */
+export interface TokenInfo {
+  networkId: string
+  address: string | null
+  /** null when nothing could name it; show the address instead. */
+  symbol: string | null
+  name: string | null
+  icon: string | null
+  /** Traded on WorldStreet's spot markets. */
+  listed: boolean
+  role: "stable" | "native" | "token"
+}
+
 export interface UnifiedTransaction {
   id: string
   type: UnifiedTransactionType
@@ -64,6 +77,18 @@ export interface UnifiedTransaction {
 
   // Transfer direction
   direction?: string
+
+  /**
+   * What the app could resolve about the row's token(s), for tokens that are
+   * named by address on the ledger. `tokenInfo` is the token the row is
+   * about; a swap also carries both legs. Only the received leg of a swap has
+   * an amount on record.
+   */
+  tokenInfo?: TokenInfo
+  fromInfo?: TokenInfo
+  toInfo?: TokenInfo
+  /** False when the amount can't be stated (its token's precision is unknown). */
+  amountKnown?: boolean
 
   /** Product surface where the movement is visible to the user. */
   location?: "wallet" | "spot" | "futures" | "fiat"

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
   keepPreviousData,
   useMutation,
@@ -15,9 +15,12 @@ import {
 } from "@/lib/crypto-backend"
 import type { CryptoTransactionRecord } from "@/lib/crypto-backend"
 import { describeLedgerRecord } from "@/lib/ledger-rows"
+import { cleanSymbol, shortAddress, tokenLabel, walletTokensFrom, type ResolvedToken, type WalletTokens } from "@/lib/token-resolver"
+import { useCryptoBalances } from "@/hooks/crypto/useCryptoBalances"
 import { useSpotRegistry } from "@/hooks/useSpotRegistry"
 import { useUsdIndex } from "@/hooks/crypto/useUsdIndex"
 import type {
+  TokenInfo,
   UnifiedTransaction,
   TransactionStats,
   TransactionFilters,
@@ -67,12 +70,19 @@ function fallbackUsdPrice(token: string): number | undefined {
     : undefined
 }
 
+/** The resolver's token, trimmed to what a row carries. */
+function infoOf(t: ResolvedToken | undefined): TokenInfo | undefined {
+  if (!t) return undefined
+  return { networkId: t.networkId, address: t.address, symbol: t.symbol, name: t.name, icon: t.icon, listed: t.listed, role: t.role }
+}
+
 function mapCryptoTransaction(
   transaction: CryptoTransactionRecord,
   registry: ReturnType<typeof useSpotRegistry>,
-  usdPrices: Record<string, number> | null
+  usdPrices: Record<string, number> | null,
+  wallet: WalletTokens
 ): UnifiedTransaction {
-  const described = describeLedgerRecord(transaction, registry)
+  const described = describeLedgerRecord(transaction, registry, wallet)
   const summary = transaction.summary ?? {}
   const action =
     typeof summary.action === "string" ? summary.action : "transfer"
@@ -80,14 +90,14 @@ function mapCryptoTransaction(
   const asset = transaction.assetSummary
   // Never render an intent's base-unit amount while token precision is still
   // loading. That was the source of the huge value/P&L flash on first paint.
-  const amount = described?.amountText
-    ? Number(described.amountText.split(" ")[0].replaceAll(",", ""))
-    : 0
-  const token =
-    described?.symbol ||
-    (isSwap
-      ? String(summary.buyToken ?? asset?.identifier ?? "Unknown")
-      : (asset?.identifier ?? "Unknown"))
+  const amountKnown = described ? described.amount !== null : false
+  const amount = described?.amount ?? 0
+  /* A swap's amount is the RECEIVED leg (the only one on record), so the row's
+     token is the received token's label; the side and subject ride on
+     subType and tokenInfo. Addresses never reach the screen as symbols. */
+  const token = isSwap
+    ? (described?.unit ?? shortAddress(String(summary.buyToken ?? asset?.identifier ?? "")))
+    : (described?.symbol || cleanSymbol(asset?.identifier) || shortAddress(asset?.identifier ?? null))
   const indexedPrice =
     usdPrices?.[token] ??
     usdPrices?.[token.toUpperCase()] ??
@@ -99,7 +109,7 @@ function mapCryptoTransaction(
   const valueUsd =
     described?.valueUsd ??
     explicitUsd ??
-    (Number.isFinite(amount) &&
+    (amountKnown &&
     amount > 0 &&
     typeof indexedPrice === "number" &&
     indexedPrice > 0
@@ -116,6 +126,8 @@ function mapCryptoTransaction(
         : isSwap || /spot/i.test(`${action} ${summaryText}`)
           ? "spot"
           : "wallet"
+  const paid = described?.paid
+  const received = described?.received
   return {
     id: transaction.id,
     type: isSwap
@@ -124,14 +136,16 @@ function mapCryptoTransaction(
         ? "deposit"
         : "transfer",
     subType: isSwap
-      ? "spot"
+      ? (described?.side ?? "swap")
       : transaction.direction === "incoming"
         ? "receive"
         : transaction.direction === "internal"
           ? "internal"
           : "send",
     amount,
+    amountKnown,
     token,
+    tokenInfo: infoOf(described?.token),
     chain: transaction.networkId ?? transaction.chainFamily,
     status: mapCryptoStatus(transaction.status),
     fromAddress: transaction.fromAddress,
@@ -142,15 +156,13 @@ function mapCryptoTransaction(
     valueUsd: valueUsd ?? undefined,
     ...(isSwap
       ? {
-          fromToken:
-            typeof summary.sellToken === "string"
-              ? summary.sellToken
-              : undefined,
-          toToken:
-            typeof summary.buyToken === "string" ? summary.buyToken : undefined,
-          // The backend stores this as the received token's base units. Keep the
-          // row honest until both sides have independently known precision.
-          toAmount: undefined,
+          fromToken: paid ? tokenLabel(paid) : undefined,
+          toToken: received ? tokenLabel(received) : undefined,
+          fromInfo: infoOf(paid),
+          toInfo: infoOf(received),
+          // `amount` above is already the received leg; the pay leg's amount
+          // isn't on the record, so nothing is shown for it.
+          toAmount: amountKnown ? amount : undefined,
           fromChain: transaction.networkId ?? transaction.chainFamily,
           toChain:
             typeof summary.destinationNetworkId === "string"
@@ -267,6 +279,10 @@ export function useUnifiedTransactions(
   const backendEnabled = isCryptoBackendEnabled && isLoaded && isSignedIn
   const registry = useSpotRegistry(backendEnabled)
   const usdPrices = useUsdIndex()
+  // Held tokens the registry doesn't list still have a name, logo and
+  // precision in the balance feed: the same cached snapshot the wallet reads.
+  const { balances } = useCryptoBalances()
+  const walletTokens = useMemo(() => walletTokensFrom(balances), [balances])
 
   const [transactions, setTransactions] = useState<UnifiedTransaction[]>([])
   const [stats, setStats] = useState<TransactionStats | null>(null)
@@ -430,7 +446,7 @@ export function useUnifiedTransactions(
 
   const backendTransactions = (cryptoQuery.data ?? [])
     .map((transaction) =>
-      mapCryptoTransaction(transaction, registry, usdPrices)
+      mapCryptoTransaction(transaction, registry, usdPrices, walletTokens)
     )
     .filter((transaction) => matchesCryptoFilters(transaction, filters))
   const visibleTransactions = backendEnabled

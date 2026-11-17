@@ -56,7 +56,10 @@ describe("direction, glyph and label", () => {
   it("signs the amount by direction", () => {
     expect(amountText(tx({ type: "deposit", amount: 12.5 }))).toBe("+12.50 USDT")
     expect(amountText(tx({ type: "transfer", subType: "send", amount: 0.1, token: "ETH" }))).toBe("−0.10 ETH")
-    expect(amountText(tx({ type: "swap", amount: 2 }))).toBe("2.00 USDT")
+    // A swap shows the received leg, the one on record, as a credit.
+    expect(amountText(tx({ type: "swap", amount: 2 }))).toBe("+2.00 USDT")
+    // ...and nothing at all when that token's precision is unknown.
+    expect(amountText(tx({ type: "swap", amount: 0, amountKnown: false }))).toBeNull()
   })
 })
 
@@ -138,10 +141,13 @@ describe("traded", () => {
       tx({ type: "swap", valueUsd: 99, status: "failed" }),
       tx({ type: "deposit", valueUsd: 1000 }),
     ])
-    expect(t).toEqual({ usd: 15, trades: 1, swaps: 1 })
+    expect(t).toEqual({ usd: 15, unpriced: 0, trades: 1, swaps: 1 })
   })
-  it("is unknown while a leg has no valuation", () => {
-    expect(tradedSummary([tx({ type: "swap", valueUsd: 10 }), tx({ type: "swap" })]).usd).toBeNull()
+  it("sums the priced legs and counts the rest, so one unlisted token can't blank it", () => {
+    expect(tradedSummary([tx({ type: "swap", valueUsd: 10 }), tx({ type: "swap" })])).toMatchObject({ usd: 10, unpriced: 1 })
+  })
+  it("is unknown only when no leg has a valuation", () => {
+    expect(tradedSummary([tx({ type: "swap" })]).usd).toBeNull()
   })
 })
 
@@ -151,7 +157,8 @@ describe("csv", () => {
     const [head, line] = csv.split("\n")
     expect(head.startsWith("Reference,Date,Type,Status")).toBe(true)
     expect(line).toContain('"a,b"')
-    expect(line.endsWith("5.00")).toBe(true)
+    // USD value, then the token address column (empty for a named asset).
+    expect(line.endsWith("5.00,")).toBe(true)
   })
   it("defuses formula-looking cells", () => {
     expect(transactionsCsv([tx({ token: "=HYPERLINK(1)" })])).toContain("'=HYPERLINK(1)")
