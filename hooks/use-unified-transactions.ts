@@ -17,6 +17,7 @@ import type { CryptoTransactionRecord } from "@/lib/crypto-backend"
 import { describeLedgerRecord } from "@/lib/ledger-rows"
 import { cleanSymbol, shortAddress, tokenLabel, walletTokensFrom, type ResolvedToken, type WalletTokens } from "@/lib/token-resolver"
 import { useCryptoBalances } from "@/hooks/crypto/useCryptoBalances"
+import { TRANSACTIONS_MOCKS_ENABLED } from "@/lib/transactions-mocks"
 import { useSpotRegistry } from "@/hooks/useSpotRegistry"
 import { useUsdIndex } from "@/hooks/crypto/useUsdIndex"
 import type {
@@ -25,6 +26,22 @@ import type {
   TransactionStats,
   TransactionFilters,
 } from "@/types/transactions"
+
+type DemoLedger = { records: CryptoTransactionRecord[]; wallet: ReturnType<typeof walletTokensFrom> }
+
+/* Dev sample data (lib/transactions-mocks.ts). The import sits behind
+   NODE_ENV, a build-time literal, so production bundles never contain it. */
+const loadDemoLedger: () => Promise<DemoLedger> =
+  process.env.NODE_ENV === "development"
+    ? () =>
+        import("@/lib/transactions-mock").then((m) => ({
+          records: m.mockLedgerRecords(Date.now()),
+          wallet: walletTokensFrom(m.mockWalletBalances()),
+        }))
+    : () => Promise.reject(new Error("Sample data is only available in development"))
+
+/** True while the transactions page is showing dev sample data. */
+export const TRANSACTIONS_DEMO = TRANSACTIONS_MOCKS_ENABLED
 
 interface UseUnifiedTransactionsOptions {
   pollInterval?: number
@@ -277,12 +294,26 @@ export function useUnifiedTransactions(
   // which wallet UI the user last opened. Legacy outgoing activity is never
   // mixed into this page; legacy -> modern arrives as a modern deposit.
   const backendEnabled = isCryptoBackendEnabled && isLoaded && isSignedIn
+  // In demo mode the ledger is sample data: nothing is fetched or synced.
+  const demo = TRANSACTIONS_MOCKS_ENABLED
+  const [demoLedger, setDemoLedger] = useState<DemoLedger | null>(null)
+  useEffect(() => {
+    if (!demo) return
+    let live = true
+    void loadDemoLedger().then((d) => live && setDemoLedger(d))
+    return () => {
+      live = false
+    }
+  }, [demo])
   const registry = useSpotRegistry(backendEnabled)
   const usdPrices = useUsdIndex()
   // Held tokens the registry doesn't list still have a name, logo and
   // precision in the balance feed: the same cached snapshot the wallet reads.
   const { balances } = useCryptoBalances()
-  const walletTokens = useMemo(() => walletTokensFrom(balances), [balances])
+  const walletTokens = useMemo(() => {
+    const real = walletTokensFrom(balances)
+    return demoLedger ? new Map([...real, ...demoLedger.wallet]) : real
+  }, [balances, demoLedger])
 
   const [transactions, setTransactions] = useState<UnifiedTransaction[]>([])
   const [stats, setStats] = useState<TransactionStats | null>(null)
@@ -300,7 +331,7 @@ export function useUnifiedTransactions(
     queryKey: cryptoQueryKeys.transactions(userId, filters),
     queryFn: ({ signal }) =>
       cryptoBackendClient.listTransactions(filters.limit || 30, signal),
-    enabled: backendEnabled,
+    enabled: backendEnabled && !demo,
     staleTime: 15_000,
     refetchInterval: 30_000,
     placeholderData: keepPreviousData,
@@ -318,7 +349,7 @@ export function useUnifiedTransactions(
   })
 
   useEffect(() => {
-    if (!backendEnabled || syncMutation.isPending) return
+    if (!backendEnabled || demo || syncMutation.isPending) return
     syncMutation.mutate()
     // The backend has its own per-user lock and 15-second cooldown.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -444,24 +475,24 @@ export function useUnifiedTransactions(
     fetchTransactions(false)
   }, [backendEnabled, cryptoQuery, fetchTransactions])
 
-  const backendTransactions = (cryptoQuery.data ?? [])
+  const backendTransactions = (demo ? (demoLedger?.records ?? []) : (cryptoQuery.data ?? []))
     .map((transaction) =>
       mapCryptoTransaction(transaction, registry, usdPrices, walletTokens)
     )
     .filter((transaction) => matchesCryptoFilters(transaction, filters))
-  const visibleTransactions = backendEnabled
+  const visibleTransactions = backendEnabled || demo
     ? backendTransactions
     : transactions
 
   return {
     transactions: visibleTransactions,
     // Do not print a false $0 while the valuation index is still loading.
-    stats: backendEnabled
+    stats: backendEnabled || demo
       ? usdPrices === null
         ? null
         : getCryptoStats(visibleTransactions)
       : stats,
-    isLoading: backendEnabled ? cryptoQuery.isLoading : isLoading,
+    isLoading: demo ? !demoLedger : backendEnabled ? cryptoQuery.isLoading : isLoading,
     isLoadingMore: backendEnabled ? false : isLoadingMore,
     error: backendEnabled
       ? cryptoQuery.error instanceof Error

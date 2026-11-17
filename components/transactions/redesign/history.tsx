@@ -125,7 +125,8 @@ function TxRow({ tx, selected, onSelect }: { tx: HistoryRow; selected: boolean; 
                 <span className="truncate font-medium text-muted-foreground" title={tx.tokenInfo?.name ?? tx.tokenInfo?.address ?? undefined}>
                   {subject}
                 </span>
-                {unlisted && <UnlistedTag className="shrink-0" />}
+                {/* On a phone the name wins the space; the detail panel still tags it. */}
+                {unlisted && <UnlistedTag className="shrink-0 max-sm:hidden" />}
               </>
             )}
           </span>

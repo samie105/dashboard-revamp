@@ -15,7 +15,7 @@ import * as React from "react"
 
 import { DashScope } from "@/components/dash"
 import { Rise } from "@/components/ui/system"
-import { useUnifiedTransactions } from "@/hooks/use-unified-transactions"
+import { TRANSACTIONS_DEMO, useUnifiedTransactions } from "@/hooks/use-unified-transactions"
 import { useFiatOrders } from "@/hooks/crypto/useFiatOrders"
 import { mergeHistory } from "@/lib/fiat-history"
 import { Summary } from "@/components/transactions/redesign/summary"
@@ -35,9 +35,21 @@ export function TransactionsPage() {
     <DashScope className="ws-icon-mono mx-auto flex w-full max-w-[1720px] flex-col gap-4 md:gap-5">
       <Rise>
         <div className="flex flex-col gap-1.5 px-1">
-          <h1 className="font-display text-[28px] font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-[32px]">
-            Transactions
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="font-display text-[28px] font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-[32px]">
+              Transactions
+            </h1>
+            {/* Dev sample data (NEXT_PUBLIC_TRANSACTIONS_MOCKS): never in a production build. */}
+            {TRANSACTIONS_DEMO && (
+              <span
+                title="Sample wallet transactions for local development. Your real records aren't shown."
+                className="inline-flex h-6 items-center gap-1.5 rounded-full border border-warning/30 bg-warning/[0.1] px-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-warning"
+              >
+                <span aria-hidden className="size-1.5 rounded-full bg-warning" />
+                Demo
+              </span>
+            )}
+          </div>
           <p className="text-[14px] text-muted-foreground">
             Every deposit, withdrawal, swap and transfer, across all your accounts
             {!isLoading && pending > 0 && (
